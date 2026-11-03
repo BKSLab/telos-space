@@ -14,7 +14,7 @@ export function RiskFieldAssistant({ projectId, field, draft, onAccept, disabled
         onSuccess: result => setProposal(result.text),
     });
     return <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" variant="ghost" disabled={disabled || generate.isPending} onClick={() => generate.mutate()}>
+        <Button type="button" size="sm" variant="ai" disabled={disabled || generate.isPending} onClick={() => generate.mutate()}>
             <WandSparkles size={13} />{generate.isPending ? "Формулируем…" : "Помочь сформулировать"}
         </Button>
         {generate.error && <ErrorMessage message={(generate.error as Error).message} />}

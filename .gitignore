@@ -222,3 +222,6 @@ __marimo__/
 # Локальные артефакты тестов и отладки backend
 backend/pytest-tmp-*/
 backend/hypercorn_debug.log
+
+# Local agent settings and separate worktree checkouts.
+/.claude/

@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { Users } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { calendarDaysBetween, type TimelineRange } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
 import type { TimelineGroupBy } from "@/lib/timelineGroups";
@@ -55,7 +58,7 @@ export function TimelineGroupSwitch({
                         title={item.title}
                         onClick={() => onChange(item.value)}
                         className={cn(
-                            "flex h-6 items-center rounded-[5px] px-2 text-[11px] transition-colors",
+                            "flex h-11 items-center rounded-[5px] px-2 text-[12px] transition-colors lg:h-6 lg:text-[11px]",
                             value === item.value ? "bg-elevated text-primary shadow-card" : "text-muted hover:text-primary",
                         )}
                     >
@@ -71,7 +74,7 @@ export function TimelineGroupSwitch({
 export function WorkloadLegend({ truncated }: { truncated?: boolean }) {
     return (
         <div
-            className="flex flex-wrap items-center gap-2 px-1 pb-1.5 text-[10px] text-muted"
+            className="scrollbar-thin flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-1 pb-1.5 text-[10px] whitespace-nowrap text-muted lg:flex-wrap [&>span]:shrink-0"
             title={WORKLOAD_LEGEND_HINT}
             data-testid="workload-legend"
         >
@@ -86,7 +89,7 @@ export function WorkloadLegend({ truncated }: { truncated?: boolean }) {
                 <span aria-hidden="true" className="inline-block h-1 w-4 rounded-full bg-line-strong" />
                 другие проекты
             </span>
-            <span className="text-muted/80">· наведите на день — список задач</span>
+            <span className="text-muted/80">· нажмите на день — список задач</span>
             {truncated && <span className="text-danger">· задач слишком много, загрузка посчитана не полностью</span>}
         </div>
     );
@@ -107,7 +110,9 @@ export function WorkloadStrip({
     dayWidth: number;
     height: number;
 }) {
+    const [selectedHint, setSelectedHint] = useState<string | null>(null);
     return (
+        <>
         <div className="pointer-events-none absolute inset-0" aria-label={`Загрузка: ${person.name}`} role="list">
             {person.days.map((day) => {
                 if (day.date < range.dateFrom || day.date > range.dateTo) return null;
@@ -125,14 +130,17 @@ export function WorkloadStrip({
                         className="pointer-events-auto absolute top-1"
                         style={{ left, width: dayWidth, height: height - 8 }}
                     >
-                        <div
+                        <button
+                            type="button"
+                            aria-label={`Показать загрузку ${person.name} на ${day.date}`}
+                            onClick={() => setSelectedHint(hint)}
                             className={cn(
-                                "mx-px flex h-[calc(100%-6px)] items-center justify-center rounded-[3px] font-mono text-[9px] leading-none",
+                                "mx-px flex h-[calc(100%-6px)] w-[calc(100%-2px)] items-center justify-center rounded-[3px] font-mono text-[9px] leading-none focus-visible:outline-2 focus-visible:outline-accent",
                                 LEVEL_CLASS[day.level],
                             )}
                         >
                             {dayWidth >= 18 && total > 0 ? total : ""}
-                        </div>
+                        </button>
                         {day.other_tasks > 0 && (
                             <div
                                 className="mx-px mt-[2px] h-1 rounded-full bg-line-strong"
@@ -143,5 +151,9 @@ export function WorkloadStrip({
                 );
             })}
         </div>
+        {selectedHint !== null && <Modal title={`Загрузка: ${person.name}`} isOpen onOpenChange={(open) => { if (!open) setSelectedHint(null); }} footer={<Button onClick={() => setSelectedHint(null)}>Закрыть</Button>}>
+            <p className="text-[13px] whitespace-pre-line text-secondary">{selectedHint}</p>
+        </Modal>}
+        </>
     );
 }

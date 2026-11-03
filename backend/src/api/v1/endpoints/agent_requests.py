@@ -44,8 +44,8 @@ ERRORS = {
 @router.post(
     "/ask",
     response_model=AgentRequestResultSchema,
-    summary="Спросить Веру — проектного менеджера",
-    description="Вопрос Вере с правами локального пользователя. Изменения разрешены только дословным user_text; request_id обеспечивает безопасный повтор отправки.",
+    summary="Спросить Ариса — проектного менеджера",
+    description="Вопрос Арису с правами локального пользователя. Изменения разрешены только дословным user_text; request_id обеспечивает безопасный повтор отправки.",
     response_description="Ответ либо состояние вопроса в очереди.",
     operation_id="askTrackerAgent",
     responses={**ERRORS, 409: CONFLICT_RESPONSE, 422: VALIDATION_RESPONSE},
@@ -91,7 +91,7 @@ async def ask_tracker_agent(
 @router.get(
     "/requests/{request_id}",
     response_model=AgentRequestResultSchema,
-    summary="Результат вопроса Вере",
+    summary="Результат вопроса Арису",
     description=(
         "Состояние и результат вопроса: полный текст ответа, ссылки на задачи, выполненные "
         "действия (done) и действия, которые ждут решения пользовательа по ссылке confirm_url "

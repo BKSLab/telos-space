@@ -12,7 +12,7 @@ export function ColorModeSelect({ value, modes, onChange }: { value: ColorMode; 
                 aria-label="Цвет карточек по"
                 value={value}
                 onChange={(event) => onChange(event.target.value as ColorMode)}
-                className="h-7 w-auto py-0 text-[12px]"
+                className="h-11 w-auto py-0 text-[16px] lg:h-7 lg:text-[12px]"
             >
                 {modes.map((mode) => (
                     <option key={mode} value={mode}>

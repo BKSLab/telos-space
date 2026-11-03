@@ -33,7 +33,7 @@ export function GridWeek({
 
     if (isPhone) {
         return (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 p-2">
                 {days.map((day, index) => {
                     // Многодневная задача — один раз: в день начала или в понедельник, если началась раньше.
                     const starting = multi.filter((task) => {
@@ -181,13 +181,13 @@ function PhoneDay({ day, env, index, count, children }: { day: string; env: Grid
             )}
         >
             <header className="mb-1.5 flex items-center gap-2">
-                <button type="button" onClick={() => env.onOpenPeriod("day", day)} className="flex items-baseline gap-1.5 text-left" title="Открыть день">
+                <button type="button" onClick={() => env.onOpenPeriod("day", day)} className="flex min-h-11 items-center gap-1.5 text-left" title="Открыть день">
                     <span className="text-[10px] font-semibold text-muted uppercase">{WEEKDAYS[index]}</span>
                     <span className={cn("text-[13px] font-semibold", day === env.today ? "text-accent" : "text-primary")}>{shortDate(day)}</span>
                 </button>
                 {off.title && <span className="truncate text-[10px] text-muted">{off.title}</span>}
                 {env.onCreate && (
-                    <button type="button" onClick={() => env.onCreate?.(day)} className="ml-auto grid size-7 place-items-center rounded text-muted hover:bg-hover" aria-label={`Новая задача на ${shortDate(day)}`} title="Новая задача с этим сроком">
+                    <button type="button" onClick={() => env.onCreate?.(day)} className="ml-auto grid size-11 shrink-0 place-items-center rounded text-muted hover:bg-hover" aria-label={`Новая задача на ${shortDate(day)}`} title="Новая задача с этим сроком">
                         <Plus size={14} aria-hidden="true" />
                     </button>
                 )}

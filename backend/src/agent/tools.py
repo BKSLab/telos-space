@@ -89,7 +89,7 @@ class AgentToolExecutor:
 
         Args:
             include_parameters: Включать ли JSON-схемы аргументов.
-            mode: Режим Веры; None — все инструменты реестра.
+            mode: Режим Ариса; None — все инструменты реестра.
         """
         return [
             {

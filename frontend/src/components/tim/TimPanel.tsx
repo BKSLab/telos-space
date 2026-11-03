@@ -1,6 +1,6 @@
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, Paperclip, Plus, Send, X } from "lucide-react";
+import { ArrowDown, Eye, Paperclip, Plus, Send, X } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import type { AgentMessage, Project, Task } from "@/lib/types";
 import { useTimConversations } from "@/lib/useTimConversations";
@@ -13,12 +13,16 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/States";
 import { AgentActionCard } from "@/components/projects/AgentActionCard";
 import { AgentEntityCard } from "@/components/agent/AgentEntityCard";
+import { AgentAvatar } from "@/components/brand/AgentAvatar";
 import { TimMarkdown, TimThinking } from "@/components/chat/TimChatReply";
 import { newUuid } from "@/lib/uuid";
 import { TimAvatar } from "./TimAvatar";
+import { isTouchChatInput, shouldSubmitChat, useChatInput } from "@/components/chat/useChatInput";
+import { useChatHistory } from "@/components/chat/useChatHistory";
+import "@/components/chat/chat.css";
 
-/** Панель личного диалога с Верой (docs/tim-agent.md, 3). */
-export function TimPanel({ userId, onClose }: { userId: number; onClose: () => void }) {
+/** Панель личного диалога с Арисом (docs/tim-agent.md, 3). */
+export function TimPanel({ userId, onClose, embedded = false }: { userId: number; onClose?: () => void; embedded?: boolean }) {
     const context = useTimPageContext();
     const projects = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()) }).data ?? [];
     const task = useQuery({ queryKey: queryKeys.task(context.task_id ?? 0), queryFn: () => api.get<Task>(endpoints.task(context.task_id!)), enabled: context.task_id != null }).data;
@@ -47,11 +51,10 @@ export function TimPanel({ userId, onClose }: { userId: number; onClose: () => v
     const chatError = chat.conversations.error || chat.messages.error || chat.create.error || chat.send.error || chat.retry.error || chat.decide.error || chat.upload.error || chat.removeUpload.error;
     const lastMessage = messages.at(-1);
     const panel = useRef<HTMLElement>(null);
-    const endRef = useRef<HTMLDivElement>(null);
-    const input = useRef<HTMLTextAreaElement>(null);
+    const input = useChatInput(question);
+    const { viewportRef, contentRef, atBottom, onScroll, scrollToLatest } = useChatHistory(draftKey, messages.map(message => `${message.id}:${message.status}:${message.content.length}`).join("|"));
     const fileInput = useRef<HTMLInputElement>(null);
-    useEffect(() => { input.current?.focus(); }, []);
-    useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [conversationId, lastMessage?.id, lastMessage?.status]);
+    useEffect(() => { if (!isTouchChatInput()) input.current?.focus(); }, [input]);
 
     function resetErrors() {
         chat.send.reset(); chat.retry.reset(); chat.decide.reset(); chat.upload.reset(); chat.removeUpload.reset(); chat.create.reset();
@@ -69,6 +72,7 @@ export function TimPanel({ userId, onClose }: { userId: number; onClose: () => v
         const normalized = value.trim();
         if (normalized.length < 2 || sending || sendingRef.current || busy || loading || chat.messages.isError) return;
         sendingRef.current = true;
+        scrollToLatest();
         const requestId = draft?.content.trim() === normalized ? draft.requestId : newUuid();
         updateDraft(draftKey, { content: normalized, files: selectedFiles, requestId });
         try {
@@ -113,7 +117,7 @@ export function TimPanel({ userId, onClose }: { userId: number; onClose: () => v
     }
 
     function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-        if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); }
+        if (shouldSubmitChat(event)) { event.preventDefault(); void submit(); }
     }
 
     /** Проект карточек ответа — со страницы, откуда задан вопрос (у ответа контекста нет). */
@@ -134,38 +138,41 @@ export function TimPanel({ userId, onClose }: { userId: number; onClose: () => v
         "Что у меня в работе и что стоит сделать первым?",
     ];
 
-    return <section ref={panel} role="dialog" aria-modal="false" aria-label={TIM_PERSONA} tabIndex={-1} className="tt-tim-panel"
-        onKeyDown={(event) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
-        <header className="material-glass flex shrink-0 items-center gap-2 border-b border-line-subtle px-3 py-2.5">
+    return <section ref={panel} role={embedded ? undefined : "dialog"} aria-modal={embedded ? undefined : "false"} aria-label={TIM_PERSONA} tabIndex={-1} className={embedded ? "flex h-full min-h-0 flex-col" : "tt-tim-panel"}
+        onKeyDown={(event) => { if (!embedded && event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); onClose?.(); } }}>
+        <header className="chat-personal-header brand-ai-header flex shrink-0 items-center gap-2 border-b border-line-subtle px-3 py-2.5">
             <TimAvatar />
             <div className="min-w-0 flex-1">
                 <h2 className="text-[13px] font-semibold text-primary">{TIM_NAME}<span className="font-normal text-muted"> — проектный менеджер</span></h2>
                 <p className="flex min-w-0 items-center gap-1 text-[11px] text-muted" data-testid="tim-context"
-                    title={seen ? "Вера учитывает эту страницу: можно спросить «что с этой задачей?»" : "Вера видит ваши задачи и проекты, в которых вы участвуете"}>
+                    title={seen ? "Арис учитывает эту страницу: можно спросить «что с этой задачей?»" : "Арис видит ваши задачи и проекты, в которых вы участвуете"}>
                     <Eye size={11} className="shrink-0" aria-hidden="true" />
                     <span className="truncate">{seen || "Личный помощник: ваши задачи и проекты"}</span>
                 </p>
             </div>
-            <IconButton label="Новый диалог с Верой — прежние останутся в списке" disabled={sending || loading} onClick={() => void newConversation()}><Plus size={16} /></IconButton>
-            <IconButton label="Закрыть окно Веры" onClick={onClose}><X size={16} /></IconButton>
+            <IconButton label="Новый диалог с Арисом — прежние останутся в списке" disabled={sending || loading} onClick={() => void newConversation()}><Plus size={16} /></IconButton>
+            {!embedded && <IconButton label="Закрыть окно Ариса" onClick={onClose}><X size={16} /></IconButton>}
         </header>
 
         {conversations.length > 0 && <div className="flex shrink-0 items-center gap-2 border-b border-line-subtle px-3 py-1.5">
-            <select aria-label="Диалог с Верой" title="Прежние диалоги с Верой — от недавних к старым" value={conversationId ?? ""} disabled={sending} onChange={(event) => choose(Number(event.target.value))}
-                className="min-w-0 flex-1 rounded-[var(--radius-control)] border border-line bg-surface px-2 py-1 text-[12px] text-primary">
+            <select aria-label="Диалог с Арисом" title="Прежние диалоги с Арисом — от недавних к старым" value={conversationId ?? ""} disabled={sending} onChange={(event) => choose(Number(event.target.value))}
+                className="min-h-9 min-w-0 flex-1 rounded-[var(--radius-control)] border border-line bg-surface px-2 py-1 text-[12px] text-primary">
                 {conversationId != null && !conversations.some((item) => item.id === conversationId) && <option value={conversationId}>Текущий диалог</option>}
                 {conversations.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
             </select>
             {chat.conversations.hasNextPage && <Button size="sm" variant="ghost" disabled={chat.conversations.isFetchingNextPage} onClick={() => void chat.conversations.fetchNextPage()}>Ещё</Button>}
         </div>}
 
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4" aria-live="polite">
+        <div className="relative min-h-0 flex-1">
+        <div ref={viewportRef} onScroll={onScroll} aria-label="История личного диалога" className="chat-history scrollbar-thin h-full overflow-y-auto px-3 py-4" aria-live="polite">
+            <div ref={contentRef}>
             {loading ? <p className="text-[13px] text-muted">Загружаю переписку…</p> : messages.length === 0 ? (
                 <div className="flex flex-col gap-3 py-4 text-center">
-                    <p className="text-[13px] text-secondary">Спросите Веру о своих задачах, сроках и проектах. Обращаться «Вера, …» здесь не нужно — этот диалог видите только вы.</p>
+                    <AgentAvatar size={48} className="self-center" />
+                    <p className="text-[13px] text-secondary">Спросите Ариса о своих задачах, сроках и проектах. Обращаться «Арис, …» здесь не нужно — этот диалог видите только вы.</p>
                     <div className="grid border-y border-line-subtle">
                         {starters.map((starter) => <button key={starter} type="button" disabled={sending || Boolean(chatError)} onClick={() => void submit(starter)}
-                            className="px-3 py-2 text-left text-[12px] text-secondary transition-colors hover:bg-ai-soft hover:text-primary">{starter}</button>)}
+                            className="chat-starter px-3 py-2 text-left text-[12px] text-secondary transition-colors hover:bg-ai-soft hover:text-primary">{starter}</button>)}
                     </div>
                 </div>
             ) : <div className="flex flex-col gap-3">
@@ -174,18 +181,18 @@ export function TimPanel({ userId, onClose }: { userId: number; onClose: () => v
                     const project = message.role === "assistant" ? answerProject(message) : null;
                     const actions = message.actions ?? [];
                     const asked = message.role === "user" && message.page_context ? describePageContext(message.page_context) : "";
-                    return <div key={message.id} className={cn("flex gap-2", message.role === "user" ? "justify-end" : "justify-start")}>
+                    return <div key={message.id} data-chat-message={message.id} className={cn("flex gap-2", message.role === "user" ? "justify-end" : "justify-start")}>
                         {message.role === "assistant" && <TimAvatar className="mt-1" />}
-                        <div data-role={message.role} className={cn("min-w-0 max-w-[92%] rounded-lg px-3 py-2.5", message.role === "user" ? "bg-accent/85 text-on-accent" : "tt-tim-message text-secondary")}>
+                        <div data-role={message.role} className={cn("chat-content chat-personal-message min-w-0 max-w-[92%] rounded-lg px-3 py-2.5", message.role === "user" ? "bg-accent/85 text-on-accent" : "tt-tim-message text-secondary")}>
                             {message.status === "queued" || message.status === "processing" ? <TimThinking progress={message.progress} />
                                 : message.status === "failed" ? <div className="space-y-2 text-[12px]">
                                     <p className="text-danger">{message.error || "Не получилось ответить."}</p>
-                                    {message.id === lastMessage?.id && <Button size="sm" disabled={sending} title="Вера попробует ответить на тот же вопрос ещё раз" onClick={() => chat.retry.mutate({ id: conversationId!, messageId: message.id })}>Повторить</Button>}
+                                    {message.id === lastMessage?.id && <Button size="sm" variant="ai" disabled={sending} title="Арис попробует ответить на тот же вопрос ещё раз" onClick={() => chat.retry.mutate({ id: conversationId!, messageId: message.id })}>Повторить</Button>}
                                 </div>
                                 : message.role === "assistant" ? (message.content.trim() ? <TimMarkdown content={message.content} /> : null)
-                                : <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{message.content}</p>}
-                            {asked && <p className="mt-1 text-[10px] opacity-75" title="Страница, с которой задан вопрос — её видела Вера">{asked}</p>}
-                            {(message.files ?? []).map((file) => <p key={file.id} className="mt-2 flex items-center gap-1 text-[12px]"><Paperclip size={12} />{file.original_name}</p>)}
+                                : <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{message.content}</p>}
+                            {asked && <p className="mt-1 text-[10px] opacity-75" title="Страница, с которой задан вопрос — её видел Арис">{asked}</p>}
+                            {(message.files ?? []).map((file) => <p key={file.id} className="mt-2 flex min-w-0 items-center gap-1 text-[12px]"><Paperclip size={12} className="shrink-0" /><span className="min-w-0 break-words">{file.original_name}</span></p>)}
                             {actions.map((action) => <AgentActionCard key={action.id} action={action} project={project} sources={message.sources}
                                 pending={chat.decide.isPending && chat.decide.variables?.actionId === action.id}
                                 onDecision={(decision) => chat.decide.mutate({ id: conversationId!, actionId: action.id, decision })}
@@ -198,27 +205,29 @@ export function TimPanel({ userId, onClose }: { userId: number; onClose: () => v
                         </div>
                     </div>;
                 })}
-                <div ref={endRef} />
             </div>}
+            </div>
+        </div>
+        {!atBottom && <Button size="sm" className="material-glass absolute right-3 bottom-3 shadow-panel" icon={<ArrowDown size={14} />} onClick={scrollToLatest}>К последним сообщениям</Button>}
         </div>
 
-        <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }} className="shrink-0 border-t border-line-subtle px-3 py-2.5">
-            {chatError && <ErrorMessage title="Вера сейчас недоступна" message={(chatError as Error).message} />}
-            {selectedFiles.length > 0 && <ul className="mb-2 flex flex-wrap gap-1.5 text-[11px]">{selectedFiles.map((file) => <li key={file.id} className="flex items-center gap-1 rounded bg-sunken px-2 py-1 text-secondary">
-                <Paperclip size={11} /><span className="max-w-40 truncate">{file.original_name}</span>
+        <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }} className="chat-personal-composer shrink-0 border-t border-line-subtle px-3 py-2.5">
+            {chatError && <ErrorMessage title="Арис сейчас недоступен" message={(chatError as Error).message} />}
+            {selectedFiles.length > 0 && <ul aria-label="Файлы для отправки" className="chat-draft-items mb-2 flex flex-wrap gap-1.5 text-[11px]">{selectedFiles.map((file) => <li key={file.id} className="chat-draft-chip flex items-center gap-1 rounded bg-sunken px-2 py-1 text-secondary">
+                <Paperclip size={11} className="shrink-0" /><span className="max-w-40 truncate">{file.original_name}</span>
                 <button type="button" aria-label={`Убрать ${file.original_name}`} title="Не отправлять этот файл" disabled={sending || busy} onClick={() => void removeFile(file.id)}><X size={11} /></button>
             </li>)}</ul>}
             <div className="flex items-end gap-1.5 rounded-[var(--radius-card)] border border-ai-border bg-surface p-1.5 focus-within:border-ai-blue/55">
-                <input type="file" multiple ref={fileInput} aria-label="Файлы для Веры" className="hidden" onChange={(event) => { void uploadFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
-                <IconButton label="Приложить файл для Веры: до 5 штук, до 10 МБ каждый" disabled={sending || busy || loading || selectedFiles.length >= 5} onClick={() => fileInput.current?.click()}><Paperclip size={15} /></IconButton>
-                <textarea ref={input} value={question} rows={2} maxLength={2000}
+                <input type="file" multiple ref={fileInput} aria-label="Файлы для Ариса" className="hidden" onChange={(event) => { void uploadFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
+                <IconButton label="Приложить файл для Ариса: до 5 штук, до 10 МБ каждый" disabled={sending || busy || loading || selectedFiles.length >= 5} onClick={() => fileInput.current?.click()}><Paperclip size={15} /></IconButton>
+                <textarea ref={input} value={question} rows={1} maxLength={2000}
                     onChange={(event) => updateDraft(draftKey, { content: event.target.value })} onKeyDown={onKeyDown}
-                    placeholder={busy ? "Вера отвечает — дождитесь ответа, чтобы задать следующий вопрос" : "Спросите Веру о задачах, сроках, проектах…"} aria-label="Вопрос Вере"
-                    disabled={sending || busy || loading}
-                    className="scrollbar-thin min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1 py-1 text-[13px] text-primary outline-none placeholder:text-faint" />
-                <IconButton label="Отправить Вере (Enter)" variant="primary" type="submit" disabled={question.trim().length < 2 || sending || busy || loading || chat.messages.isError}><Send size={14} /></IconButton>
+                    placeholder={busy ? "Арис отвечает — можно подготовить следующий вопрос…" : "Спросите Ариса о задачах, сроках, проектах…"} aria-label="Вопрос Арису"
+                    disabled={sending || loading}
+                    className="chat-input scrollbar-thin min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1 py-1 text-[14px] leading-relaxed text-primary outline-none placeholder:text-faint" />
+                <IconButton label="Отправить Арису (Enter)" title="Отправить Арису" variant="ai" type="submit" disabled={question.trim().length < 2 || sending || busy || loading || chat.messages.isError}><Send size={14} /></IconButton>
             </div>
-            <p className="mt-1 text-[10px] text-muted">Видите только вы. Enter — отправить, Shift+Enter — новая строка. Изменения Вера выполняет по вашему поручению; опасные действия требуют подтверждения.</p>
+            <p className="chat-personal-help mt-1 text-[10px] text-muted">Видите только вы.<span className="chat-keyboard-hint hidden sm:inline"> Enter — отправить, Shift+Enter — новая строка.</span><span className="chat-personal-help-detail"> Изменения Арис выполняет по вашему поручению; опасные действия требуют подтверждения.</span></p>
         </form>
     </section>;
 }

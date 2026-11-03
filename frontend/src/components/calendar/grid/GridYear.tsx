@@ -37,13 +37,13 @@ export function GridYear({
 
     return (
         <div className="flex flex-col gap-3 p-3 sm:p-4">
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(236px,1fr))] gap-x-6 gap-y-4">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-x-6 gap-y-4 lg:grid-cols-[repeat(auto-fill,minmax(236px,1fr))]">
                 {months.map(({ month, first, days }) => (
                     <section key={month} className="min-w-0" aria-label={MONTH_NAMES[month]}>
                         <button
                             type="button"
                             onClick={() => env.onOpenPeriod("month", first)}
-                            className="mb-1 text-[12px] font-semibold text-primary hover:text-accent"
+                            className="mb-1 min-h-11 text-[13px] font-semibold text-primary hover:text-accent lg:min-h-0 lg:text-[12px]"
                             title="Открыть месяц"
                         >
                             {MONTH_NAMES[month]}
@@ -80,7 +80,7 @@ export function GridYear({
                                         title={tooltip}
                                         aria-label={tooltip.split("\n").slice(0, -1).join(", ")}
                                         className={cn(
-                                            "relative grid h-[22px] place-items-center rounded-[4px] font-mono text-[10px] hover:ring-1 hover:ring-accent",
+                                            "relative grid h-10 place-items-center rounded-[4px] font-mono text-[12px] hover:ring-1 hover:ring-accent lg:h-[22px] lg:text-[10px]",
                                             level === 0 && (off.isOff ? "text-disabled" : "text-secondary"),
                                             day === env.today && "ring-2 ring-accent",
                                             overdue.has(day) && "outline outline-1 -outline-offset-1 outline-danger",

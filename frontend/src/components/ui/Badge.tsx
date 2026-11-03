@@ -72,10 +72,10 @@ export function PriorityBadge({ priority, showLow = false, className }: Priority
 
 const STATUS_VARIANTS: Record<ProjectStatus, string> = {
     PLANNING: "border-line-subtle bg-white/[0.025] text-secondary",
-    ACTIVE: "border-accent-border bg-accent-soft text-accent",
+    ACTIVE: "border-accent-border bg-accent-soft text-accent-hover",
     PAUSED: "border-warning/30 bg-warning/10 text-warning",
     COMPLETED: "border-success/30 bg-success/10 text-success",
-    ARCHIVED: "border-line-subtle bg-white/[0.02] text-disabled",
+    ARCHIVED: "border-line-subtle bg-white/[0.02] text-muted",
 };
 
 export function ProjectStatusBadge({

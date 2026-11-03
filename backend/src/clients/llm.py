@@ -1,8 +1,9 @@
 import json
 import logging
 import re
+from copy import deepcopy
 from time import perf_counter
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -33,8 +34,9 @@ class LlmClient:
         url: str,
         headers: dict[str, str],
         model: str,
-        timeout: int,
+        timeout: float,
         retries: int,
+        request_fields: dict[str, Any] | None = None,
     ) -> None:
         self.http_client = http_client
         self.url = url
@@ -42,6 +44,7 @@ class LlmClient:
         self.model = model
         self.timeout = timeout
         self.retries = retries
+        self.request_fields = deepcopy(request_fields or {})
 
     @property
     def worst_case_seconds(self) -> float:
@@ -75,6 +78,7 @@ class LlmClient:
             LlmClientError: Если API недоступен или ответ не разобран.
         """
         payload = {
+            **self.request_fields,
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -104,6 +108,10 @@ class LlmClient:
                 usage = usage if isinstance(usage, dict) else {}
                 details = usage.get("prompt_tokens_details")
                 details = details if isinstance(details, dict) else {}
+                completion_details = usage.get("completion_tokens_details")
+                completion_details = (
+                    completion_details if isinstance(completion_details, dict) else {}
+                )
                 logger.info(
                     "Метрики LLM: %s",
                     json.dumps(
@@ -117,6 +125,9 @@ class LlmClient:
                             "prompt_tokens": usage.get("prompt_tokens"),
                             "completion_tokens": usage.get("completion_tokens"),
                             "cached_tokens": details.get("cached_tokens"),
+                            "reasoning_tokens": completion_details.get("reasoning_tokens"),
+                            "cost_rub": usage.get("cost_rub", usage.get("cost")),
+                            "provider": data.get("provider"),
                         },
                         ensure_ascii=False,
                     ),

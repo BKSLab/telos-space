@@ -21,7 +21,7 @@ const TONES = {
 export function CalendarPulseChips({ chips }: { chips: PulseChip[] }) {
     if (chips.length === 0) return null;
     return (
-        <div className="scrollbar-thin flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto sm:flex-wrap" aria-label="Пульс периода">
+        <div className="scrollbar-thin flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto lg:flex-wrap" aria-label="Пульс периода">
             {chips.map((chip) => {
                 const className = cn(
                     "flex h-6 shrink-0 items-center gap-1 rounded-full border border-line bg-surface px-2 text-[11px] whitespace-nowrap",

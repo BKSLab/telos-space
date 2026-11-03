@@ -17,11 +17,11 @@ export function ChatEntityCard({ entity, projectId }: { entity: ChatEntity; proj
         else if (entity.entity_type === "RISK") openRisk({ projectId, riskId: entity.entity_id });
         else if (entity.href) navigate(entity.href);
     };
-    return <button type="button" disabled={!entity.available} onClick={open} aria-label={`${LABELS[entity.entity_type]}: ${entity.title}`} className="material-mineral flex min-w-0 max-w-sm items-start gap-2.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-hover disabled:opacity-55">
-        <Icon size={16} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
-        <span className="min-w-0">
+    return <button type="button" disabled={!entity.available} onClick={open} aria-label={`${LABELS[entity.entity_type]}: ${entity.title}`} className="surface-card flex min-w-0 max-w-sm items-start gap-3 rounded-lg border border-line px-3.5 py-3 text-left shadow-card transition-colors hover:border-line-strong hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 disabled:opacity-55">
+        <Icon size={16} className="mt-0.5 shrink-0 text-secondary" aria-hidden="true" />
+        <span className="min-w-0 [overflow-wrap:anywhere]">
             <span className="block text-[10px] text-muted">{entity.subtitle ?? LABELS[entity.entity_type]}{entity.status && ` · ${entity.status}`}</span>
-            <span className="line-clamp-2 text-[13px] text-primary">{entity.title}</span>
+            <span className="mt-1 line-clamp-2 text-[13px] font-medium leading-relaxed text-primary">{entity.title}</span>
         </span>
     </button>;
 }

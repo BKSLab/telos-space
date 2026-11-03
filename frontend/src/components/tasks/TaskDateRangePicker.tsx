@@ -151,7 +151,7 @@ export function TaskDateRangePicker({
                                     onFocus={() => anchorDate && setHoverDate(iso)}
                                     onKeyDown={(event) => moveFocus(event, iso)}
                                     className={cn(
-                                        "relative flex h-9 items-center justify-center text-[12px] text-secondary outline-none",
+                                        "relative flex h-11 items-center justify-center text-[12px] text-secondary outline-none sm:h-9",
                                         "transition-colors duration-[var(--duration-fast)] hover:bg-white/[0.055] focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-accent/70",
                                         outside && "text-disabled/60",
                                         inRange && "bg-accent/[0.09]",

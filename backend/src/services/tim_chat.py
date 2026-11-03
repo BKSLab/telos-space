@@ -1,7 +1,7 @@
-"""Вера в общем чате проекта: очередь ходов и ответ обычным сообщением чата.
+"""Арис в общем чате проекта: очередь ходов и ответ обычным сообщением чата.
 
-Сообщение участника, адресованное Вере, сохраняет ``ProjectChatService.send``
-вместе с пустым ответом Веры и строкой хода (одна транзакция). Этот сервис
+Сообщение участника, адресованное Арису, сохраняет ``ProjectChatService.send``
+вместе с пустым ответом Ариса и строкой хода (одна транзакция). Этот сервис
 забирает ход из постоянной очереди, собирает контекст (проект, последние
 сообщения чата, цитируемое сообщение), вызывает модель с правами позвавшего и
 записывает ответ в то же сообщение. Все изменения видны команде событием
@@ -43,14 +43,14 @@ class TimChatUnavailableError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class TimChatConfig:
-    """Бюджеты ответа Веры в чате."""
+    """Бюджеты ответа Ариса в чате."""
 
     turn_timeout_seconds: float
     history_messages: int = 30
 
 
 class TimChatService:
-    """Исполняет ходы Веры в чатах проектов; БД не удерживается во время вызова модели."""
+    """Исполняет ходы Ариса в чатах проектов; БД не удерживается во время вызова модели."""
 
     def __init__(
         self, *, scope: TimChatScopeFactory, agent: ProjectAgentService, config: TimChatConfig
@@ -75,18 +75,18 @@ class TimChatService:
                     sources=[],
                 )
                 await db.unit_of_work.commit()
-                logger.warning("⚠️ Ход Веры id=%s завершён по таймауту.", expired.id)
+                logger.warning("⚠️ Ход Ариса id=%s завершён по таймауту.", expired.id)
                 return True
             turn = await db.turns.claim_next(uuid4())
             await db.unit_of_work.commit()
         if turn is None:
             return False
-        logger.info("🤖 Вера отвечает в чате проекта id=%s, ход=%s.", turn.project_id, turn.id)
+        logger.info("🤖 Арис отвечает в чате проекта id=%s, ход=%s.", turn.project_id, turn.id)
         try:
             async with asyncio.timeout(self.config.turn_timeout_seconds):
                 answer = await self._generate(turn)
             await self._finish(turn, answer=answer)
-            logger.info("✅ Ответ Веры в чате, ход=%s.", turn.id)
+            logger.info("✅ Ответ Ариса в чате, ход=%s.", turn.id)
         except asyncio.CancelledError:
             try:
                 await self._finish(turn, error="подготовка ответа прервалась")
@@ -104,8 +104,8 @@ class TimChatService:
             await self._finish(turn, error="модель сейчас недоступна")
         except Exception:
             # Граница фонового задания: любая ошибка становится видимым сообщением
-            # в чате, а не вечным «Вера печатает».
-            logger.error("❌ Ход Веры id=%s не выполнен.", turn.id, exc_info=True)
+            # в чате, а не вечным «Арис печатает».
+            logger.error("❌ Ход Ариса id=%s не выполнен.", turn.id, exc_info=True)
             await self._finish(turn, error="внутренняя ошибка")
         return True
 
@@ -265,5 +265,5 @@ class TimChatService:
             async with self.scope() as db:
                 yield db
         except (RepositoryError, AccessServiceError):
-            logger.error("❌ Хранилище ходов Веры недоступно.", exc_info=True)
+            logger.error("❌ Хранилище ходов Ариса недоступно.", exc_info=True)
             raise

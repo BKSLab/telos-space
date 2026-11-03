@@ -38,6 +38,7 @@ import { SuggestionPanel } from "@/components/wbs/SuggestionPanel";
 import { TASK_DRAG_TYPE, TaskPool } from "@/components/wbs/TaskPool";
 import type { TaskCompact } from "@/lib/types";
 import { buildSuggestionPreview, removeSuggestedNode } from "@/lib/wbsSuggestion";
+import "@/components/wbs/wbs.css";
 
 type MenuState =
     | { kind: "section"; nodeId: number; anchor: { x: number; y: number } }
@@ -67,6 +68,7 @@ export function StructurePage() {
     const [isCreateTaskOpen, setCreateTaskOpen] = useState(false);
     const [isPoolDropTarget, setPoolDropTarget] = useState(false);
     const [draft, setDraft] = useState<WbsSuggestion | null>(null);
+    const [mobileView, setMobileView] = useState<"canvas" | "tasks" | "suggestion">("canvas");
 
     const structureQuery = useQuery({
         queryKey: queryKeys.wbs(project.id),
@@ -280,9 +282,9 @@ export function StructurePage() {
     }
 
     return (
-        <div className="flex h-full min-w-0 flex-col">
-            <div className="material-metal flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line-subtle px-4 py-2">
-                <div className="flex items-center gap-2 text-[12px] text-muted">
+        <div className="wbs-page flex h-full min-h-0 min-w-0 flex-col" data-mobile-view={mobileView === "suggestion" && !draft ? "canvas" : mobileView}>
+            <div className="wbs-page-toolbar material-metal flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line-subtle px-4 py-2">
+                <div className="wbs-page-stats flex items-center gap-2 text-[12px] text-muted">
                     <span>
                         {structureQuery.data?.stats.total_nodes ?? 0} разделов ·{" "}
                         {structureQuery.data?.stats.assigned_tasks ?? 0} распределено ·{" "}
@@ -290,7 +292,7 @@ export function StructurePage() {
                     </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="wbs-page-actions flex flex-wrap items-center gap-1.5">
                     <div
                         className="flex rounded-[var(--radius-control)] border border-line-subtle bg-app/20 p-0.5"
                         role="group"
@@ -334,13 +336,14 @@ export function StructurePage() {
                     </Button>
 
                     <Button
+                        variant="ai"
                         size="sm"
                         icon={<Sparkles size={14} />}
                         disabled={mutations.suggest.isPending || draft !== null}
                         title="Модель разложит задачи проекта по разделам; изменения применяются вручную"
                         onClick={() =>
                             mutations.suggest.mutate(undefined, {
-                                onSuccess: (suggestion) => setDraft(suggestion),
+                                onSuccess: (suggestion) => { setDraft(suggestion); setMobileView("suggestion"); },
                             })
                         }
                     >
@@ -358,8 +361,14 @@ export function StructurePage() {
                 </div>
             </div>
 
+            <nav className="wbs-mobile-nav" aria-label="Представление ИСР">
+                <button type="button" aria-pressed={mobileView === "canvas" || (mobileView === "suggestion" && !draft)} onClick={() => setMobileView("canvas")}>Холст</button>
+                <button type="button" aria-pressed={mobileView === "tasks"} onClick={() => setMobileView("tasks")}>Задачи · {tasks.length}</button>
+                {draft && <button type="button" aria-pressed={mobileView === "suggestion"} onClick={() => setMobileView("suggestion")}>Предложение</button>}
+            </nav>
+
             <div
-                className="flex min-h-0 flex-1 flex-col lg:flex-row"
+                className="wbs-workspace flex min-h-0 flex-1 flex-col lg:flex-row"
                 // Страховка: если браузер не прислал dragend, подсказка не должна залипнуть.
                 onDrop={() => setDraggingTask(null)}
                 onDragEnd={() => setDraggingTask(null)}
@@ -384,7 +393,7 @@ export function StructurePage() {
                             handlePlaceTask(dropped.id, { wbsNodeId: null });
                         }
                     }}
-                    className="flex shrink-0"
+                    className="wbs-pool-area flex min-h-0 shrink-0"
                 >
                     <TaskPool
                         // Пока открыт черновик, список показывает то же, что и
@@ -404,7 +413,7 @@ export function StructurePage() {
                     />
                 </div>
 
-                <div className="min-h-80 min-w-0 flex-1">
+                <div className="wbs-canvas-area min-h-0 min-w-0 flex-1">
                     <StructureCanvas
                         project={project}
                         nodes={preview.nodes}

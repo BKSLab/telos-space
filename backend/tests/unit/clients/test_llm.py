@@ -31,10 +31,13 @@ async def test_usage_metrics_include_tokens_but_not_document_text(monkeypatch):
             200,
             json={
                 "id": "gen-test",
+                "provider": "test-provider",
                 "usage": {
                     "prompt_tokens": 321,
                     "completion_tokens": 12,
                     "prompt_tokens_details": {"cached_tokens": 100},
+                    "completion_tokens_details": {"reasoning_tokens": 4},
+                    "cost_rub": 0.01234,
                 },
                 "choices": [{"message": {"content": '{"answer":"секретный текст документа"}'}}],
             },
@@ -45,6 +48,9 @@ async def test_usage_metrics_include_tokens_but_not_document_text(monkeypatch):
         record = json.loads(info.call_args.args[1])
         assert record["prompt_tokens"] == 321 and record["cached_tokens"] == 100
         assert record["provider_request_id"] == "gen-test"
+        assert record["reasoning_tokens"] == 4
+        assert record["cost_rub"] == 0.01234
+        assert record["provider"] == "test-provider"
         assert "секретный текст" not in info.call_args.args[1]
     finally:
         await client.http_client.aclose()
@@ -156,7 +162,7 @@ async def test_worst_case_budget_is_derived_from_timeout_and_attempts() -> None:
     with pytest.raises(ValueError):
         worst_case_seconds(timeout=5, attempts=0)
     # Синхронный LlmClient по умолчанию имеет worst case не менее 900 секунд.
-    # Ограничение HTTP и отдельный deadline очереди Веры описаны в docs/agent.md.
+    # Ограничение HTTP и отдельный deadline очереди Ариса описаны в docs/agent.md.
     assert worst_case_seconds(timeout=300, attempts=3) >= 900
 
 

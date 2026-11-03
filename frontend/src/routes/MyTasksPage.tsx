@@ -48,28 +48,28 @@ export function MyTasksPage() {
             <div><h1 className="text-[22px] font-semibold tracking-[-0.03em] text-primary">Мои задачи</h1><p className="text-[13px] text-muted">Проектные и разовые задачи, где вы исполнитель, постановщик или наблюдатель</p></div>
             <Button variant="primary" icon={<Plus size={15} />} onClick={() => setCreating(true)}>Новая задача</Button>
         </header>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Непросмотренные события задач">
+        <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto overscroll-x-contain px-1 pb-1" role="group" aria-label="Непросмотренные события задач">
             {([{ key: "all", label: "Все", count: undefined }, { key: "unread", label: "Требуют просмотра", count: attention?.total }, { key: "new", label: "Новые", count: attention?.new_tasks }, { key: "overdue", label: "Нарушен срок", count: attention?.overdue_tasks }, { key: "updated", label: "Комментарии и изменения", count: attention?.updated_tasks }]).map(item =>
-                <Button key={item.key} size="sm" variant={signal === item.key ? "primary" : "ghost"} disabled={item.key !== "all" && !attention} aria-pressed={signal === item.key} onClick={() => { setSearchParams(current => { const next = new URLSearchParams(current); if (item.key === "all") next.delete("attention"); else next.set("attention", item.key); return next; }, { replace: true }); if (item.key !== "all") setIncludeClosed(true); setPage(0); }}>{item.label}{item.count !== undefined && ` · ${item.count}`}</Button>)}
+                <Button key={item.key} size="sm" className="shrink-0 whitespace-nowrap" variant={signal === item.key ? "primary" : "ghost"} disabled={item.key !== "all" && !attention} aria-pressed={signal === item.key} onClick={() => { setSearchParams(current => { const next = new URLSearchParams(current); if (item.key === "all") next.delete("attention"); else next.set("attention", item.key); return next; }, { replace: true }); if (item.key !== "all") setIncludeClosed(true); setPage(0); }}>{item.label}{item.count !== undefined && ` · ${item.count}`}</Button>)}
         </div>
         {attentionError && <p role="alert" className="text-xs text-danger">Счётчики непросмотренных изменений недоступны.</p>}
         <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-1" role="group" aria-label="Моя роль в задаче">{MY_TASK_ROLES.map(item => <Button key={item.value} size="sm" variant={role === item.value ? "primary" : "ghost"} aria-pressed={role === item.value} onClick={() => { setRole(item.value); setPage(0); }}>{item.label}</Button>)}</div>
+            <div className="flex flex-wrap gap-1" role="group" aria-label="Моя роль в задаче">{MY_TASK_ROLES.map(item => <Button key={item.value} size="sm" variant={role === item.value ? "primary" : "ghost"} aria-pressed={role === item.value} onClick={() => { setRole(item.value); setPage(0); }}>{item.label}</Button>)}</div>
             <label className="flex items-center gap-2 text-[13px] text-secondary"><input type="checkbox" checked={includeClosed} onChange={event => { setIncludeClosed(event.target.checked); setPage(0); }} />Показывать закрытые</label>
             <Input className="max-w-xs" aria-label="Поиск по моим задачам" placeholder="Номер, название или проект" value={search} onChange={event => { setSearch(event.target.value); setPage(0); }} />
         </div>
         {tasks.error && <ErrorMessage message={(tasks.error as Error).message} />}
         {tasks.isPending && <Skeleton className="h-48 w-full" />}
         {tasks.data && rows.length === 0 && <EmptyState icon={<ListChecks size={24} />} title="Задач пока нет" description="Создайте разовую задачу или смените фильтры." />}
-        {rows.length > 0 && <div className="overflow-x-auto rounded-lg border border-line-subtle"><table className="w-full min-w-[850px] text-left text-[13px]">
+        {rows.length > 0 && <div className="overflow-x-auto rounded-lg md:border md:border-line-subtle"><table className="mobile-data-table w-full text-left text-[13px] md:min-w-[850px]">
             <thead className="bg-surface/35 text-xs text-muted"><tr>{["Номер", "Задача", "Проект", "Статус", "Исполнитель", "Моя роль", "Срок"].map(label => <th key={label} className="p-3 font-medium">{label}</th>)}</tr></thead>
             <tbody>{rows.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE).map(task => {
                 const executor = executorOf(task); const item = signals.get(task.id);
                 return <tr key={task.id} onClick={() => setSelectedTaskId(task.id)} className={`cursor-pointer border-t border-line-subtle hover:bg-surface/35 ${selectedTaskId === task.id ? "bg-accent/10" : ""}`}>
                     <td className="p-3 font-mono text-xs text-muted">{task.key}{item && (item.is_new || item.is_updated || item.is_overdue) && <span title="Есть непросмотренные изменения" className="ml-1 text-accent">●</span>}</td>
                     <td className="max-w-sm p-3"><button type="button" onClick={event => { event.stopPropagation(); setSelectedTaskId(task.id); }} className="text-left font-medium text-primary">{task.title}</button><span className="ml-2"><PriorityBadge priority={task.priority} /></span></td>
-                    <td className="p-3"><TaskSourceLabel context={task.context} /></td><td className="p-3 text-secondary">{task.state_label}</td>
-                    <td className="p-3 text-secondary">{executor ? fullName(executor) : task.assignee || "—"}</td><td className="p-3 text-muted">{task.my_roles.map(value => MY_ROLE_LABELS[value]).join(", ")}</td><td className="p-3"><DueDate value={task.due_date} isDone={isClosedStatus(task.state)} /></td>
+                    <td data-label="Проект" className="p-3"><TaskSourceLabel context={task.context} /></td><td data-label="Статус" className="p-3 text-secondary">{task.state_label}</td>
+                    <td data-label="Исполнитель" className="p-3 text-secondary">{executor ? fullName(executor) : task.assignee || "—"}</td><td data-label="Моя роль" className="p-3 text-muted">{task.my_roles.map(value => MY_ROLE_LABELS[value]).join(", ")}</td><td className="p-3"><DueDate value={task.due_date} isDone={isClosedStatus(task.state)} /></td>
                 </tr>;
             })}</tbody>
         </table></div>}

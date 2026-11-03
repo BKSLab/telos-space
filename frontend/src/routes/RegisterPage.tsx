@@ -13,10 +13,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { ErrorMessage } from "@/components/ui/States";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 export function RegisterPage() {
     const navigate = useNavigate();
     const register = useRegister();
+    const touch = useMediaQuery("(pointer: coarse)");
     const [values, setValues] = useState<RegisterFormValues>(EMPTY_REGISTER_FORM);
     const [touched, setTouched] = useState(false);
 
@@ -38,10 +41,10 @@ export function RegisterPage() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-app px-4 py-10">
-            <div className="flex w-full max-w-md flex-col gap-6">
+        <div className="brand-entry flex h-full min-h-0 flex-col items-center overflow-y-auto overscroll-y-contain bg-app px-4 py-6 sm:py-10">
+            <div className="my-auto flex w-full max-w-md shrink-0 flex-col gap-6">
                 <header className="flex flex-col gap-1 text-center">
-                    <span aria-hidden="true" className="mx-auto mb-2 size-2 rotate-45 rounded-[2px] bg-accent/80" />
+                    <BrandLogo variant="tagline" className="mx-auto mb-4 w-[340px]" />
                     <h1 className="text-xl font-semibold tracking-[-0.025em] text-primary">
                         Регистрация
                     </h1>
@@ -70,7 +73,7 @@ export function RegisterPage() {
                                 {(id) => (
                                     <Input
                                         id={id}
-                                        autoFocus
+                                        autoFocus={!touch}
                                         value={values.lastName}
                                         onChange={(event) => update({ lastName: event.target.value })}
                                     />

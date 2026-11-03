@@ -37,23 +37,23 @@ export function TaskLine({
             type="button"
             onClick={onOpen}
             className={cn(
-                "flex w-full min-w-0 items-center gap-3 rounded-md px-2.5 py-2 text-left",
+                "grid w-full min-w-0 grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 rounded-md px-2.5 py-3 text-left sm:flex sm:py-2",
                 "transition-colors duration-[var(--duration-fast)] ease-[var(--ease-standard)]",
                 "hover:bg-hover",
             )}
         >
-            {dotColor ? <StatusDot color={dotColor} /> : null}
-            <span className="w-20 shrink-0 truncate font-mono text-[11px] text-muted">
+            <span className="col-start-1 row-start-1 flex min-w-0 shrink-0 items-center gap-2 truncate font-mono text-[11px] text-muted sm:w-20">
+                {dotColor ? <StatusDot color={dotColor} /> : null}
                 {taskKey}
             </span>
-            <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">{title}</span>
-            <span className="hidden w-24 shrink-0 truncate text-right text-[11px] text-muted sm:inline">
+            <span className="col-span-2 row-start-2 line-clamp-2 min-w-0 flex-1 text-[14px] break-words text-secondary sm:line-clamp-none sm:truncate sm:text-[13px]">{title}</span>
+            <span className="col-start-1 row-start-3 min-w-0 truncate text-[11px] text-muted sm:w-24 sm:shrink-0 sm:text-right">
                 {stage ?? ""}
             </span>
-            <span className="hidden w-[5.5rem] shrink-0 justify-end sm:flex">
+            <span className="col-start-2 row-start-3 flex justify-end sm:w-[5.5rem] sm:shrink-0">
                 {priority ? <PriorityBadge priority={priority} /> : null}
             </span>
-            <span className="w-24 shrink-0 text-right text-[11px] text-muted">{meta}</span>
+            <span className="col-start-2 row-start-1 text-right text-[11px] text-muted sm:w-24 sm:shrink-0">{meta}</span>
         </button>
     );
 }

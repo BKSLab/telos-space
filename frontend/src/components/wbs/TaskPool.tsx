@@ -95,7 +95,7 @@ export function TaskPool({
             aria-label="Задачи проекта"
             {...{ [POOL_DROP_ATTRIBUTE]: "" }}
             className={cn(
-                "relative flex w-full shrink-0 flex-col border-r bg-sidebar lg:w-72",
+                "wbs-task-pool relative flex min-h-0 w-full shrink-0 flex-col border-r bg-sidebar lg:w-72",
                 "transition-[background-color,border-color] duration-[var(--duration-fast)]",
                 // Карточку, поднесённую к списку, обрезает граница холста,
                 // поэтому готовность принять её показывает сам список.
@@ -267,7 +267,7 @@ export function TaskPool({
                                 type="button"
                                 onClick={() => onMoveTask(task.id)}
                                 className={cn(
-                                    "mt-1.5 w-full rounded-sm border border-line-subtle px-2 py-1 text-[10px]",
+                                    "wbs-pool-move mt-1.5 w-full rounded-sm border border-line-subtle px-2 py-1 text-[10px]",
                                     "text-muted opacity-0 transition-opacity hover:text-primary",
                                     "group-hover:opacity-100 focus-visible:opacity-100",
                                 )}

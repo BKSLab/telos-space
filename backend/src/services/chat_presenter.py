@@ -73,9 +73,29 @@ class ChatPresenter:
         files = await db.attachments.get_many(ids)
         reactions = await db.reactions.get_many(ids)
         agent_ids = [row.id for row in rows if getattr(row, "author_kind", "user") == "agent"]
-        turns = {row.reply_message_id: row for row in (await db.turns.get_by_replies(agent_ids) if agent_ids else [])}
+        turns = {
+            row.reply_message_id: row
+            for row in (await db.turns.get_by_replies(agent_ids) if agent_ids else [])
+        }
+        stale_reply_ids = [
+            row.id
+            for row in rows
+            if row.revision == 1
+            and row.id in turns
+            and turns[row.id].status in {"completed", "failed"}
+        ]
+        if stale_reply_ids:
+            # При READ COMMITTED ход мог завершиться после чтения страницы.
+            # Обновляем и identity map: обычный SELECT оставит старую заглушку.
+            fresh_replies = await db.messages.get_many(
+                rows[0].chat_id, stale_reply_ids, populate_existing=True
+            )
+            fresh_by_id = {row.id: row for row in fresh_replies}
+            rows = [fresh_by_id.get(row.id, row) for row in rows]
         actions_by_turn = defaultdict(list)
-        for run in (await db.runs.get_for_turns([turn.id for turn in turns.values()]) if turns else []):
+        for run in (
+            await db.runs.get_for_turns([turn.id for turn in turns.values()]) if turns else []
+        ):
             actions_by_turn[run.chat_turn_id].append(AgentToolRunSchema.model_validate(run))
         user_ids = (
             {row.author_user_id for row in [*rows, *replies] if row.author_user_id}
@@ -128,7 +148,9 @@ class ChatPresenter:
                     chat_id=row.chat_id,
                     project_id=row.project_id,
                     seq=row.seq,
-                    author_type="AGENT" if getattr(row, "author_kind", "user") == "agent" else "USER",
+                    author_type="AGENT"
+                    if getattr(row, "author_kind", "user") == "agent"
+                    else "USER",
                     author=users.get(row.author_user_id),
                     client_message_id=row.client_message_id,
                     content="" if deleted else row.content,
@@ -139,7 +161,9 @@ class ChatPresenter:
                     reply=ChatReplyView(
                         id=reply.id,
                         seq=reply.seq,
-                        author_type="AGENT" if getattr(reply, "author_kind", "user") == "agent" else "USER",
+                        author_type="AGENT"
+                        if getattr(reply, "author_kind", "user") == "agent"
+                        else "USER",
                         author=users.get(reply.author_user_id),
                         content="Сообщение удалено" if reply.deleted_at else reply.content[:240],
                         deleted=reply.deleted_at is not None,
@@ -162,7 +186,7 @@ class ChatPresenter:
 
     @staticmethod
     def _agent(turn, users, actions_by_turn) -> ChatAgentView | None:
-        """Карточка ответа Веры; у людских сообщений — None."""
+        """Карточка ответа Ариса; у людских сообщений — None."""
         if turn is None:
             return None
         return ChatAgentView(

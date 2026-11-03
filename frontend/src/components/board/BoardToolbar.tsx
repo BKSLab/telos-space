@@ -11,12 +11,13 @@ interface BoardToolbarProps {
     onSelectTool: (tool: BoardTool, lock: boolean) => void;
     onUndo: () => void;
     onRedo: () => void;
+    horizontal?: boolean;
 }
 
 /** Панель инструментов слева на холсте. Подсказка каждой кнопки — с клавишей. */
-export function BoardToolbar({ tool, locked, canUndo, canRedo, onSelectTool, onUndo, onRedo }: BoardToolbarProps) {
+export function BoardToolbar({ tool, locked, canUndo, canRedo, onSelectTool, onUndo, onRedo, horizontal = false }: BoardToolbarProps) {
     return (
-        <div className="board-toolbar" role="toolbar" aria-label="Инструменты доски" aria-orientation="vertical">
+        <div className="board-toolbar" role="toolbar" aria-label="Инструменты доски" aria-orientation={horizontal ? "horizontal" : "vertical"}>
             {TOOLS.map((item) => {
                 const active = tool === item.tool;
                 return (
@@ -34,6 +35,7 @@ export function BoardToolbar({ tool, locked, canUndo, canRedo, onSelectTool, onU
                         onDoubleClick={() => onSelectTool(item.tool, true)}
                     >
                         {item.icon}
+                        <span className="board-tool__label" aria-hidden="true">{item.tool === "hand" ? "Холст" : item.tool === "select" ? "Выбор" : item.tool === "rect" ? "Фигура" : item.label}</span>
                         <span className="board-tool__key" aria-hidden="true">{item.key}</span>
                     </button>
                 );

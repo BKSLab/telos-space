@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none"><defs>
+  <linearGradient id="ts-spectrum" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#00d5ed"/><stop offset=".45" stop-color="#4199ff"/><stop offset="1" stop-color="#cd58f4"/></linearGradient>
+  <linearGradient id="ts-left" x1="0" y1="0" x2=".5" y2="1"><stop stop-color="#b9eaff"/><stop offset=".56" stop-color="#1685ff"/><stop offset="1" stop-color="#075583"/></linearGradient>
+  <linearGradient id="ts-right" x1="0" y1="0" x2=".5" y2="1"><stop stop-color="#b9b6ff"/><stop offset=".55" stop-color="#a552ed"/><stop offset="1" stop-color="#513487"/></linearGradient>
+  <linearGradient id="ts-dot" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00c9fa"/><stop offset="1" stop-color="#9ab9ff"/></linearGradient>
+  <linearGradient id="ts-wordmark" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="321" y2="0"><stop stop-color="#00c8f4"/><stop offset=".45" stop-color="#577bff"/><stop offset="1" stop-color="#cf58f1"/></linearGradient>
+</defs><path d="M18 91C-4 52 10 6 64 6S132 52 110 91C124 48 103 18 64 18S4 48 18 91Z" fill="url(#ts-spectrum)"/><circle cx="64" cy="44" r="8" fill="url(#ts-dot)"/>
+<path d="M64 57 8 116H35L64 85Z" fill="url(#ts-left)"/>
+<path d="M64 57 120 116H93L64 85Z" fill="url(#ts-right)"/></svg>

@@ -12,7 +12,7 @@ from src.services.agent_tool_scope import AgentProjectToolScope
 from src.services.tasks import build_task_key
 from src.utils.checklists import checklist_context
 
-# Те же срезы текста, что видела модель в контексте легаси-планировщика Веры.
+# Те же срезы текста, что видела модель в контексте легаси-планировщика Ариса.
 TEXT_FRAGMENT_LIMIT = 1200
 
 

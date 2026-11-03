@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { addDateDays, dayOffInfo } from "@/lib/calendar";
 import {
     coversDate,
@@ -67,9 +68,9 @@ export function GridMonth({
     });
 
     if (isPhone) {
-        const selected = phoneDay !== null && phoneDay >= range.dateFrom && phoneDay <= range.dateTo ? phoneDay : null;
+        const selected = phoneDay !== null && phoneDay >= range.dateFrom && phoneDay <= range.dateTo ? phoneDay : date;
         return (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 p-2">
                 <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-muted uppercase">
                     {WEEKDAYS.map((name) => (
                         <span key={name} className="py-1">{name}</span>
@@ -115,11 +116,11 @@ export function GridMonth({
                         }),
                     )}
                 </div>
-                {selected === null ? (
-                    <p className="text-center text-[12px] text-muted">Нажмите на день, чтобы увидеть его задачи.</p>
-                ) : (
-                    <DayItemsList date={selected} tasks={tasks} milestones={milestones} env={env} />
-                )}
+                <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-[13px] font-semibold text-primary">{shortDate(selected)}</h3>
+                    {env.onCreate && <Button size="sm" icon={<Plus size={16} aria-hidden="true" />} onClick={() => env.onCreate?.(selected)}>Новая задача</Button>}
+                </div>
+                <DayItemsList date={selected} tasks={tasks} milestones={milestones} env={env} />
             </div>
         );
     }

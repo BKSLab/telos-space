@@ -268,7 +268,7 @@ class AgentMessagesRepository:
         Args:
             message_id: Ответ задания.
             run_id: Владелец попытки.
-            progress: Что Вера делает сейчас.
+            progress: Что Арис делает сейчас.
         Returns:
             True, если статус записан.
         Raises:

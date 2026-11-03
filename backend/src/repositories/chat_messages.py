@@ -19,14 +19,16 @@ class ChatMessagesRepository(ChatRepository):
             )
         ).scalar_one_or_none()
 
-    async def get_many(self, chat_id: int, message_ids: list[int]):
-        """Пакетно читает сообщения и исходные реплики ответов."""
+    async def get_many(
+        self, chat_id: int, message_ids: list[int], *, populate_existing: bool = False
+    ):
+        """Пакетно читает сообщения; по запросу обновляет объекты текущей сессии."""
         return list(
             (
                 await self._execute(
-                    select(ChatMessage).where(
-                        ChatMessage.chat_id == chat_id, ChatMessage.id.in_(message_ids)
-                    )
+                    select(ChatMessage)
+                    .where(ChatMessage.chat_id == chat_id, ChatMessage.id.in_(message_ids))
+                    .execution_options(populate_existing=populate_existing)
                 )
             ).scalars()
         )

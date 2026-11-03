@@ -365,7 +365,7 @@ class RiskUpdateInput(RiskInput):
     changes: RiskChangesInput = Field(description="Изменяемые поля риска.")
 
 
-# Личные действия Веры вне проекта: мои задачи, потоки, разовые задачи.
+# Личные действия Ариса вне проекта: мои задачи и разовые задачи.
 
 
 class MyTasksInput(PageInput):

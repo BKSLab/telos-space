@@ -42,7 +42,7 @@ export function Popover({
     const rootRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState<{ left: number; top: number; width: number } | null>(
+    const [position, setPosition] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(
         null,
     );
 
@@ -54,27 +54,41 @@ export function Popover({
             if (!triggerElement || !panelElement) return;
             const triggerRect = triggerElement.getBoundingClientRect();
             const margin = 12;
-            const width = Math.min(panelWidth, window.innerWidth - margin * 2);
+            const viewport = window.visualViewport;
+            const viewportLeft = viewport?.offsetLeft ?? 0;
+            const viewportTop = viewport?.offsetTop ?? 0;
+            const viewportWidth = viewport?.width ?? window.innerWidth;
+            const viewportHeight = viewport?.height ?? window.innerHeight;
+            const width = Math.min(panelWidth, viewportWidth - margin * 2);
             const preferredLeft =
                 align === "end" ? triggerRect.right - width : triggerRect.left;
             const left = Math.max(
-                margin,
-                Math.min(preferredLeft, window.innerWidth - width - margin),
+                viewportLeft + margin,
+                Math.min(preferredLeft, viewportLeft + viewportWidth - width - margin),
             );
             const below = triggerRect.bottom + 6;
             const above = triggerRect.top - panelElement.offsetHeight - 6;
-            const top =
-                below + panelElement.offsetHeight <= window.innerHeight - margin || above < margin
+            const preferredTop =
+                below + panelElement.offsetHeight <= viewportTop + viewportHeight - margin || above < viewportTop + margin
                     ? below
                     : above;
-            setPosition({ left, top, width });
+            const maxHeight = Math.max(44, viewportHeight - margin * 2);
+            const top = Math.max(viewportTop + margin, Math.min(preferredTop, viewportTop + viewportHeight - Math.min(panelElement.offsetHeight, maxHeight) - margin));
+            setPosition({ left, top, width, maxHeight });
         };
         updatePosition();
         window.addEventListener("resize", updatePosition);
         window.addEventListener("scroll", updatePosition, true);
+        window.visualViewport?.addEventListener("resize", updatePosition);
+        window.visualViewport?.addEventListener("scroll", updatePosition);
+        const observer = new ResizeObserver(updatePosition);
+        if (panelRef.current) observer.observe(panelRef.current);
         return () => {
             window.removeEventListener("resize", updatePosition);
             window.removeEventListener("scroll", updatePosition, true);
+            window.visualViewport?.removeEventListener("resize", updatePosition);
+            window.visualViewport?.removeEventListener("scroll", updatePosition);
+            observer.disconnect();
         };
     }, [align, isOpen, panelWidth]);
 
@@ -143,7 +157,7 @@ export function Popover({
                     aria-label={label}
                     style={position ?? { visibility: "hidden" }}
                     className={cn(
-                        "material-glass fixed z-[60]",
+                        "material-glass fixed z-[60] overflow-y-auto overscroll-contain",
                         "rounded-[var(--radius-panel)] p-3 shadow-panel",
                         className,
                     )}

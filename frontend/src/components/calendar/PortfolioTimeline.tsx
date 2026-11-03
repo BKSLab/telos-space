@@ -6,9 +6,8 @@ import { calendarDaysBetween, type CalendarDayModel, type TimelineRange, type Ti
 import { cn } from "@/lib/cn";
 import { PROJECT_STATUS_LABELS, type PortfolioCalendarProject } from "@/lib/types";
 import { shortDate } from "@/components/calendar/grid/gridHelpers";
+import { useMediaQuery } from "@/lib/useCalendarView";
 
-const LABEL_WIDTH = 260;
-const ROW_HEIGHT = 44;
 const MONTH_SHORT = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
 
 const PORTFOLIO_DAY_WIDTH: Partial<Record<TimelineScale, number>> = { quarter: 12, year: 4 };
@@ -34,6 +33,9 @@ export function PortfolioTimeline({
     scale: TimelineScale;
     onOpenProject: (project: PortfolioCalendarProject) => void;
 }) {
+    const compact = useMediaQuery("(max-width: 1023px)");
+    const labelWidth = compact ? 168 : 260;
+    const rowHeight = compact ? 72 : 44;
     const dayWidth = PORTFOLIO_DAY_WIDTH[scale] ?? 12;
     const width = days.length * dayWidth;
     const bands = useMemo(() => {
@@ -51,8 +53,8 @@ export function PortfolioTimeline({
     useEffect(() => {
         const element = scrollRef.current;
         if (!element) return;
-        element.scrollLeft = todayIndex < 0 ? 0 : Math.max(0, todayIndex * dayWidth - (element.clientWidth - LABEL_WIDTH) / 3);
-    }, [dayWidth, range.dateFrom, todayIndex]);
+        element.scrollLeft = todayIndex < 0 ? 0 : Math.max(0, todayIndex * dayWidth - (element.clientWidth - labelWidth) / 3);
+    }, [dayWidth, labelWidth, range.dateFrom, todayIndex]);
 
     const x = (date: string) => calendarDaysBetween(range.dateFrom, date) * dayWidth;
 
@@ -67,10 +69,10 @@ export function PortfolioTimeline({
 
     return (
         <section className="instrument-surface flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius-panel)]" aria-label="Проекты на шкале">
-            <div ref={scrollRef} className="scrollbar-thin min-h-0 flex-1 overflow-auto">
-                <div className="relative" style={{ width: LABEL_WIDTH + width }}>
+            <div ref={scrollRef} className="scrollbar-thin min-h-0 flex-1 overflow-auto overscroll-contain" tabIndex={0} data-own-arrows="" aria-label="Шкала проектов, прокручивается по горизонтали">
+                <div className="relative" style={{ width: labelWidth + width }}>
                     <div className="sticky top-0 z-30 flex border-b border-line bg-surface-2" style={{ height: 32 }}>
-                        <div className="sticky left-0 z-40 flex items-center border-r border-line bg-surface-2 px-3 text-[11px] font-semibold tracking-[0.06em] text-muted uppercase" style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}>
+                        <div className="sticky left-0 z-40 flex items-center border-r border-line bg-surface-2 px-3 text-[11px] font-semibold tracking-[0.06em] text-muted uppercase" style={{ width: labelWidth, minWidth: labelWidth }}>
                             Проект · выполнено
                         </div>
                         <div className="relative flex">
@@ -87,7 +89,7 @@ export function PortfolioTimeline({
                         </div>
                     </div>
                     <div className="relative">
-                        <div className="pointer-events-none absolute inset-y-0 flex" style={{ left: LABEL_WIDTH, width }} aria-hidden="true">
+                        <div className="pointer-events-none absolute inset-y-0 flex" style={{ left: labelWidth, width }} aria-hidden="true">
                             {days.map((day) => (
                                 <span
                                     key={day.date}
@@ -97,7 +99,7 @@ export function PortfolioTimeline({
                             ))}
                         </div>
                         {todayIndex >= 0 && (
-                            <div className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-accent" style={{ left: LABEL_WIDTH + todayIndex * dayWidth + dayWidth / 2 }} aria-hidden="true" />
+                            <div className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-accent" style={{ left: labelWidth + todayIndex * dayWidth + dayWidth / 2 }} aria-hidden="true" />
                         )}
                         {projects.map((project) => {
                             const start = project.start_date ?? project.due_date;
@@ -116,15 +118,16 @@ export function PortfolioTimeline({
                                     title={tooltip}
                                     aria-label={`${project.name}: выполнено ${percent}%, ${dates}. Открыть календарь проекта`}
                                     className="group relative flex border-b border-line-subtle text-left hover:bg-hover/60"
-                                    style={{ height: ROW_HEIGHT, width: LABEL_WIDTH + width }}
+                                    style={{ height: rowHeight, width: labelWidth + width }}
                                 >
-                                    <span className="sticky left-0 z-20 flex items-center gap-2 border-r border-line bg-surface px-3 group-hover:bg-hover" style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}>
+                                    <span className="sticky left-0 z-20 flex items-center gap-2 border-r border-line bg-surface px-3 group-hover:bg-hover" style={{ width: labelWidth, minWidth: labelWidth }}>
                                         <ProjectIcon project={project} size={16} />
                                         <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-[12px] font-medium text-primary">{project.name}</span>
+                                            <span className={cn("text-[12px] font-medium text-primary", compact ? "line-clamp-2" : "block truncate")}>{project.name}</span>
                                             <span className="block font-mono text-[10px] text-muted">
                                                 {project.key} · {percent}%
                                             </span>
+                                            {compact && <span className="block truncate text-[10px] text-muted">{dates}</span>}
                                         </span>
                                         {project.overdue_tasks > 0 && (
                                             <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-danger/10 px-1.5 text-[10px] font-semibold text-danger" title={`Просроченных задач: ${project.overdue_tasks}`}>

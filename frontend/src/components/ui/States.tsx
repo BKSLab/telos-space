@@ -25,7 +25,7 @@ export function EmptyState({ title, description, action, icon, className }: Empt
                 className,
             )}
         >
-            {icon && <div className="text-disabled">{icon}</div>}
+            {icon && <div className="brand-empty-symbol">{icon}</div>}
             <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium text-secondary">{title}</p>
                 {description && <p className="max-w-sm text-[13px] text-muted">{description}</p>}

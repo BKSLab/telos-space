@@ -21,7 +21,7 @@ class AgentConversationsRepository:
         await self._execute(select(func.pg_advisory_xact_lock(func.hashtextextended(value, 0))))
 
     async def get_page(self, project_or_user_id: int, user_id: int | None = None, *, offset: int, limit: int, project_id: int | None = None) -> list[AgentConversation]:
-        """Возвращает страницу диалогов пользователя с Верой в виджете.
+        """Возвращает страницу диалогов пользователя с Арисом в виджете.
 
         Беседы внешнего клиента (канал ``api``) в список виджета не входят.
 
@@ -64,7 +64,7 @@ class AgentConversationsRepository:
         Args:
             conversation_id: ID диалога.
             user_id: Пользователь из серверного контекста.
-            channel: ``web`` — виджет Веры; ``api`` — беседа внешнего клиента;
+            channel: ``web`` — виджет Ариса; ``api`` — беседа внешнего клиента;
                 None — любой канал (решение по действию и попытка ответа worker-а).
                 Маршруты виджета беседу SD не находят.
             lock: Сериализовать изменение диалога до конца транзакции.

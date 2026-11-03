@@ -93,6 +93,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ErrorMessage } from "@/components/ui/States";
 import { wheelAction } from "@/lib/board/wheel";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 interface View {
     x: number;
@@ -202,6 +203,7 @@ export function BoardEditor({
     onReload,
 }: BoardEditorProps) {
     const toast = useToast();
+    const compact = useMediaQuery("(max-width: 1023px)");
     const projectId = project?.id ?? null;
     const setSelectedTaskId = useUiStore((state) => state.setSelectedTaskId);
     const setBoardSelection = useUiStore((state) => state.setBoardSelection);
@@ -219,6 +221,7 @@ export function BoardEditor({
     const sentEditorRef = useRef<LocalEditorValue | null>(null);
     const [actionsOpen, setActionsOpen] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
+    const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
     const [projectDialog, setProjectDialog] = useState(false);
     const interactionReadOnly = readOnly || !editorReady;
 
@@ -759,6 +762,10 @@ export function BoardEditor({
             startCenter: [(a[0] + b[0]) / 2 - (rect?.left ?? 0), (a[1] + b[1]) / 2 - (rect?.top ?? 0)],
             origin: { ...viewRef.current },
         };
+        viewportRef.current?.classList.add("is-panning");
+        for (const id of ids) {
+            try { viewportRef.current?.setPointerCapture(id); } catch { /* Touch may already have ended. */ }
+        }
     }
 
     function handleDoubleClick(key: string | null) {
@@ -783,6 +790,7 @@ export function BoardEditor({
             touchesRef.current.set(event.pointerId, [event.clientX, event.clientY]);
             if (touchesRef.current.size >= 2) {
                 startPinch();
+                event.preventDefault();
                 return;
             }
         }
@@ -1168,13 +1176,26 @@ export function BoardEditor({
     }
 
     function onPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
-        touchesRef.current.delete(event.pointerId);
         const gesture = gestureRef.current;
+        if (gesture?.type === "pinch") {
+            if (frameRef.current !== null) {
+                cancelAnimationFrame(frameRef.current);
+                frameRef.current = null;
+                const move = pendingMoveRef.current;
+                if (move && event.type !== "pointercancel") processMove(move);
+            }
+            pendingMoveRef.current = null;
+        }
+        touchesRef.current.delete(event.pointerId);
         if (!gesture) return;
         if (gesture.type === "pinch") {
             if (touchesRef.current.size < 2) {
-                gestureRef.current = null;
                 commitView();
+                const remaining = [...touchesRef.current.entries()][0];
+                gestureRef.current = remaining && event.type !== "pointercancel"
+                    ? { type: "pan", pointerId: remaining[0], startClient: remaining[1], origin: { ...viewRef.current } }
+                    : null;
+                if (!gestureRef.current) viewportRef.current?.classList.remove("is-panning");
             }
             return;
         }
@@ -1862,7 +1883,7 @@ export function BoardEditor({
     const connectorSelected = single && single.type === "shape" && isConnectorKind(single.kind) ? single : null;
 
     return (
-        <div className="board-editor">
+        <div className="board-editor" data-props-open={mobilePropsOpen || undefined}>
             {tasksError && (
                 <ErrorMessage
                     title="Не удалось загрузить задачи"
@@ -1977,7 +1998,7 @@ export function BoardEditor({
                         {ANCHORS.map((anchor) => <span key={anchor} data-anchor={anchor} className="board-anchor" />)}
                     </div>
 
-                    {editing && editingObject && editingObject.type === "shape" && (
+                    {!compact && editing && editingObject && editingObject.type === "shape" && (
                         <textarea
                             className={`board-editing board-editing--${isConnectorKind(editingObject.kind) ? "connector" : "shape"}`}
                             aria-label="Подпись фигуры"
@@ -2025,14 +2046,47 @@ export function BoardEditor({
                         {editorError ? <><p>{editorError}</p><Button onClick={onReload}>Повторить</Button></> : "Загрузка доски…"}
                     </div>
                 )}
+                {projectDialog && <BoardProjectDialog key={board.id} boardTitle={board.title} onCreate={promoteBoard} onClose={() => setProjectDialog(false)} />}
+
+                {isEmpty && (
+                    <div className="board-empty" aria-live="polite">
+                        <Shapes size={22} aria-hidden="true" />
+                        <p className="board-empty__title">{readOnly ? "На доске пока ничего нет" : "Доска пустая"}</p>
+                        <p className="board-empty__text">
+                            {readOnly
+                                ? readOnlyHint ?? "Участники проекта ещё ничего не добавили."
+                                : coarsePointer
+                                  ? "Выберите инструмент. Одним пальцем двигайте холст, двумя — меняйте масштаб. Выделите объект и откройте «Свойства», чтобы изменить его"
+                                  : "Выберите инструмент слева или нажмите S, чтобы поставить стикер. Двигать холст — зажатой правой кнопкой мыши"}
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {compact && editing && (
+                <Modal
+                    isOpen
+                    title="Редактировать подпись"
+                    onOpenChange={open => { if (!open) finishEditing(false); }}
+                    footer={<><Button onClick={() => finishEditing(false)}>Отмена</Button><Button variant="primary" onClick={() => finishEditing(true)}>Сохранить</Button></>}
+                >
+                    <textarea className="board-input board-label-input" aria-label="Подпись фигуры" autoFocus maxLength={2000} value={labelDraft} onChange={event => setLabelDraft(event.target.value)} />
+                </Modal>
+            )}
+
                 {editorReady && (
                     <div className="board-actions">
-                        <button type="button" className="board-actions-toggle board-button" aria-expanded={actionsOpen} aria-label="Инструменты доски" onClick={() => { setSearchOpen(false); setActionsOpen(open => !open); }}>
+                        <button type="button" className="board-actions-toggle board-button" aria-expanded={actionsOpen} aria-label="Инструменты доски" onClick={() => { setSearchOpen(false); setMobilePropsOpen(false); setActionsOpen(open => !open); }}>
                             Инструменты
                         </button>
-                        <button type="button" className="board-actions-toggle board-button" aria-expanded={searchOpen} aria-label="Поиск по доске" title="Найти объект (Ctrl+F)" onClick={() => { setActionsOpen(false); setSearchOpen(open => !open); }}>
+                        <button type="button" className="board-actions-toggle board-button" aria-expanded={searchOpen} aria-label="Поиск по доске" title="Найти объект (Ctrl+F)" onClick={() => { setActionsOpen(false); setMobilePropsOpen(false); setSearchOpen(open => !open); }}>
                             <Search size={15} aria-hidden="true" /> Найти
                         </button>
+                        {!interactionReadOnly && tool === "select" && selection.length > 0 && (
+                            <button type="button" className="board-mobile-props-toggle board-button" aria-label="Свойства выделенного" aria-expanded={mobilePropsOpen} onClick={() => { setActionsOpen(false); setSearchOpen(false); setMobilePropsOpen(open => !open); }}>
+                                Свойства · {selection.length}
+                            </button>
+                        )}
                         {searchOpen && <BoardSearch scene={scene} onChoose={focusSearchObject} onClose={() => setSearchOpen(false)} />}
                         {actionsOpen && <div className="board-actions-panel">
                             <BoardActions
@@ -2053,10 +2107,9 @@ export function BoardEditor({
                         </div>}
                     </div>
                 )}
-                {projectDialog && <BoardProjectDialog key={board.id} boardTitle={board.title} onCreate={promoteBoard} onClose={() => setProjectDialog(false)} />}
-
                 {!interactionReadOnly && (
                     <BoardToolbar
+                        horizontal={compact}
                         tool={tool}
                         locked={toolLocked}
                         canUndo={historyFlags.canUndo}
@@ -2107,20 +2160,6 @@ export function BoardEditor({
                     </button>
                 </div>
 
-                {isEmpty && (
-                    <div className="board-empty" aria-live="polite">
-                        <Shapes size={22} aria-hidden="true" />
-                        <p className="board-empty__title">{readOnly ? "На доске пока ничего нет" : "Доска пустая"}</p>
-                        <p className="board-empty__text">
-                            {readOnly
-                                ? readOnlyHint ?? "Участники проекта ещё ничего не добавили."
-                                : coarsePointer
-                                  ? "Выберите инструмент слева. Например, «Стикер», затем коснитесь холста"
-                                  : "Выберите инструмент слева или нажмите S, чтобы поставить стикер. Двигать холст — зажатой правой кнопкой мыши"}
-                        </p>
-                    </div>
-                )}
-            </div>
 
             {stickerEditor && (
                 <ProjectStickerDialog

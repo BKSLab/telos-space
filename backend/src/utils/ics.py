@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
-PRODID = "-//Vera//Task Tracker//RU"
+PRODID = "-//TELOS SPACE//Calendar//RU"
 LINE_LIMIT_OCTETS = 75
 
 

@@ -10,9 +10,9 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const VARIANTS: Record<CardVariant, string> = {
-    workspace: "border border-line-subtle bg-surface shadow-card",
-    interactive: "border border-line bg-surface-2 shadow-card",
-    inset: "border border-line-subtle bg-app/45",
+    workspace: "surface-card border border-line shadow-card",
+    interactive: "surface-card border border-line shadow-card",
+    inset: "control-surface border border-line-subtle",
     plain: "border border-transparent bg-transparent shadow-none",
     ai: "ai-surface border border-ai-border shadow-card",
 };

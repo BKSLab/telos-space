@@ -8,6 +8,7 @@ import { MIN_PASSWORD_LENGTH } from "@/lib/authForm";
 import { useCurrentUser } from "@/lib/useAuth";
 import { useToast } from "@/lib/toast";
 import { Page } from "@/components/layout/AppShell";
+import { InstallAppCard } from "@/components/layout/InstallAppCard";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Section } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
@@ -149,6 +150,8 @@ function ProfileForm({ user }: { user: User }) {
                     {formatFullDate(user.created_at)}
                 </p>
             </header>
+
+            <InstallAppCard />
 
             <Section title="Фотография">
                 <div className="flex flex-wrap items-center gap-5 rounded-[var(--radius-card)] bg-surface/40 px-4 py-4">

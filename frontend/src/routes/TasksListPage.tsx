@@ -67,9 +67,9 @@ export function TasksListPage() {
 
     return (
         <div className="scrollbar-thin h-full overflow-y-auto">
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-5 py-4">
+            <div className="mx-auto flex w-full min-w-0 max-w-none flex-col gap-4 px-3 py-4 pb-24 sm:px-5 sm:pb-4">
                 <div className="material-metal -mx-2 flex flex-wrap items-center gap-2 rounded-[var(--radius-card)] border border-line-subtle px-2 py-2 shadow-card">
-                    <div className="relative min-w-0 flex-1 sm:max-w-xs">
+                    <div className="relative w-full min-w-0 sm:max-w-xs sm:flex-1">
                         <Search
                             size={14}
                             aria-hidden="true"
@@ -86,7 +86,7 @@ export function TasksListPage() {
                     <Select
                         aria-label="Фильтр по стадии"
                         value={stageFilter}
-                        className="w-auto min-w-36"
+                        className="w-full min-w-0 sm:w-auto sm:min-w-36"
                         onChange={(event) => setStageFilter(event.target.value)}
                     >
                         <option value="">Все стадии</option>
@@ -99,7 +99,7 @@ export function TasksListPage() {
                     <Select
                         aria-label="Фильтр по приоритету"
                         value={priorityFilter}
-                        className="w-auto min-w-36"
+                        className="w-full min-w-0 sm:w-auto sm:min-w-36"
                         onChange={(event) => setPriorityFilter(event.target.value)}
                     >
                         <option value="">Все приоритеты</option>
@@ -141,8 +141,8 @@ export function TasksListPage() {
                 )}
 
                 {rows.length > 0 && (
-                    <div className="scrollbar-thin overflow-x-auto rounded-[var(--radius-card)] border border-line-subtle bg-surface/55 shadow-card">
-                        <table className="w-full min-w-[720px] border-collapse text-left">
+                    <div className="scrollbar-thin overflow-x-auto rounded-[var(--radius-card)] md:border md:border-line-subtle md:bg-surface/55 md:shadow-card">
+                        <table className="mobile-data-table w-full border-collapse text-left md:min-w-[720px]">
                             <thead>
                                 <tr className="border-b border-line-subtle bg-surface-2/65">
                                     {["ID", "Задача", "Стадия", "Приоритет", "Исполнитель", "Срок"].map(
@@ -186,7 +186,7 @@ export function TasksListPage() {
                                                     type="button"
                                                     onClick={() => setSelectedTaskId(task.id)}
                                                     className={cn(
-                                                        "block w-full truncate text-left text-[13px]",
+                                                        "block w-full text-left text-[14px] break-words md:truncate md:text-[13px]",
                                                         stage?.is_done_stage
                                                             ? "text-muted line-through"
                                                             : "text-secondary hover:text-primary",
@@ -197,7 +197,7 @@ export function TasksListPage() {
                                                     />
                                                 </button>
                                             </td>
-                                            <td className="px-3 py-2">
+                                            <td data-label="Стадия" className="px-3 py-2">
                                                 {stage && (
                                                     <span className="inline-flex items-center gap-1.5 text-[12px] text-muted">
                                                         <StatusDot color={stage.color} />
@@ -205,10 +205,10 @@ export function TasksListPage() {
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-3 py-2">
+                                            <td data-label="Приоритет" className="px-3 py-2">
                                                 <PriorityBadge priority={task.priority} showLow />
                                             </td>
-                                            <td className="px-3 py-2 text-[12px] text-muted">
+                                            <td data-label="Исполнитель" className="px-3 py-2 text-[12px] text-muted">
                                                 {task.assignee ?? "—"}
                                             </td>
                                             <td className="px-3 py-2">

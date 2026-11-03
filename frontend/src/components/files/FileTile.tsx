@@ -69,7 +69,7 @@ export function FileTile({
                 <button
                     type="button"
                     onClick={() => onPreview(file)}
-                    className={cn(contentClassName, onRemove && "pr-6")}
+                    className={cn(contentClassName, onRemove && "pr-11 sm:pr-6")}
                     aria-label={`Открыть изображение ${file.name}`}
                 >
                     {content}
@@ -79,20 +79,20 @@ export function FileTile({
                     href={file.url}
                     target="_blank"
                     rel="noreferrer"
-                    className={cn(contentClassName, onRemove && "pr-6")}
+                    className={cn(contentClassName, onRemove && "pr-11 sm:pr-6")}
                     aria-label={`Скачать файл ${file.name}`}
                 >
                     {content}
                 </a>
             ) : (
-                <div className={cn(contentClassName, onRemove && "pr-6")}>{content}</div>
+                <div className={cn(contentClassName, onRemove && "pr-11 sm:pr-6")}>{content}</div>
             )}
             {onRemove && (
                 <button
                     type="button"
                     onClick={onRemove}
                     disabled={removeDisabled}
-                    className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-danger/10 hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
+                    className="touch-target absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-danger/10 hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label={`Удалить файл ${file.name}`}
                     title="Удалить файл"
                 >

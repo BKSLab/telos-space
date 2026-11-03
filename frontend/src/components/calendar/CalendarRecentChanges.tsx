@@ -22,7 +22,7 @@ export function CalendarRecentChanges({ changes, onOpenTask }: CalendarRecentCha
                     Недавние переносы
                 </h3>
             </div>
-            <div className="flex max-h-52 flex-col gap-1 overflow-y-auto">
+            <div className="flex flex-col gap-1 lg:max-h-52 lg:overflow-y-auto">
                 {changes.map((change) => (
                     <button
                         key={change.id}
@@ -30,11 +30,11 @@ export function CalendarRecentChanges({ changes, onOpenTask }: CalendarRecentCha
                         onClick={() => onOpenTask(change.task_id)}
                         className="rounded-[var(--radius-control)] px-2 py-1.5 text-left transition-colors hover:bg-hover"
                     >
-                        <span className="block truncate text-[11px] text-primary">
+                        <span className="line-clamp-2 text-[12px] text-primary lg:line-clamp-none lg:truncate lg:text-[11px]">
                             <span className="font-mono text-accent">{change.task_key}</span>{" "}
                             {change.task_title}
                         </span>
-                        <span className="block truncate text-[10px] text-muted">
+                        <span className="block text-[11px] text-muted lg:truncate lg:text-[10px]">
                             {dateLabel(change.from_date)} → {dateLabel(change.to_date)}
                         </span>
                     </button>

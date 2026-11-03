@@ -46,14 +46,14 @@ describe("buildMcpConfig", () => {
             buildMcpConfig({ origin: "http://localhost:5173", secret: "tt_secret" }),
         );
 
-        expect(config.mcpServers["task-tracker"].headers.Authorization).toBe("Bearer tt_secret");
-        expect(config.mcpServers["task-tracker"].url).toBe("http://localhost:5173/mcp");
+        expect(config.mcpServers["telos-space"].headers.Authorization).toBe("Bearer tt_secret");
+        expect(config.mcpServers["telos-space"].url).toBe("http://localhost:5173/mcp");
     });
 
     it("ставит плейсхолдер, когда секрета нет", () => {
         const config = JSON.parse(buildMcpConfig({ origin: "http://localhost:5173" }));
 
-        expect(config.mcpServers["task-tracker"].headers.Authorization).toBe(
+        expect(config.mcpServers["telos-space"].headers.Authorization).toBe(
             `Bearer ${SECRET_PLACEHOLDER}`,
         );
     });
@@ -63,7 +63,7 @@ describe("buildMcpConfig", () => {
             buildMcpConfig({ origin: "http://localhost:5173", secret: "   " }),
         );
 
-        expect(config.mcpServers["task-tracker"].headers.Authorization).toContain(
+        expect(config.mcpServers["telos-space"].headers.Authorization).toContain(
             SECRET_PLACEHOLDER,
         );
     });

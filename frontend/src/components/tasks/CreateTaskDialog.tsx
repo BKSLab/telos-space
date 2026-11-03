@@ -252,7 +252,7 @@ export function CreateTaskDialog({
                         </label>
                         <Button
                             size="sm"
-                            variant="secondary"
+                            variant="ai"
                             icon={
                                 rephraseMutation.isPending ? (
                                     <LoaderCircle
@@ -264,7 +264,6 @@ export function CreateTaskDialog({
                                     <WandSparkles size={13} aria-hidden="true" />
                                 )
                             }
-                            className="border-ai-border bg-ai-soft text-ai-blue hover:border-ai-violet/40"
                             disabled={description.trim() === "" || isBusy}
                             onClick={() => rephraseMutation.mutate()}
                         >

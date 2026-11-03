@@ -36,7 +36,7 @@ export function DependencyPanel({
             {dependencies.length === 0 && (
                 <p className="py-2 text-[11px] text-muted">Связей между задачами пока нет.</p>
             )}
-            <div className="flex max-h-44 flex-col gap-1 overflow-y-auto">
+            <div className="flex flex-col gap-1 lg:max-h-44 lg:overflow-y-auto">
                 {dependencies.map((dependency) => {
                     const predecessor = tasksById.get(dependency.predecessor_task_id);
                     const successor = tasksById.get(dependency.successor_task_id);
@@ -48,10 +48,12 @@ export function DependencyPanel({
                         >
                             <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-secondary">
                                 {predecessor?.key ?? `#${dependency.predecessor_task_id}`}
+                                <span className="line-clamp-2 font-sans text-[11px] whitespace-normal text-muted lg:hidden">{predecessor?.title}</span>
                             </span>
                             <ArrowRight size={11} className="shrink-0 text-accent" />
                             <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-secondary">
                                 {successor?.key ?? `#${dependency.successor_task_id}`}
+                                <span className="line-clamp-2 font-sans text-[11px] whitespace-normal text-muted lg:hidden">{successor?.title}</span>
                             </span>
                             {dependency.lag_days > 0 && (
                                 <span className="shrink-0 text-[9px] text-muted">
@@ -62,7 +64,7 @@ export function DependencyPanel({
                                 label="Удалить зависимость"
                                 size="sm"
                                 disabled={isSaving}
-                                className="text-danger opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                                className="text-danger opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100"
                                 onClick={() => onDelete(dependency)}
                             >
                                 <Trash2 size={11} aria-hidden="true" />

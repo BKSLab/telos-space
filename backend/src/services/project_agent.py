@@ -220,7 +220,7 @@ class ProjectAgentService:
     ) -> KnowledgeAnswerSchema:
         """Ищет по всем источникам и позволяет модели дочитать текст и связи.
 
-        Это ответ Веры в проектном режиме: общий чат проекта или личный виджет
+        Это ответ Ариса в проектном режиме: общий чат проекта или личный виджет
         на странице проекта. ``mode`` выбирает секцию системного промпта и
         набор инструментов; ``extra_context`` добавляет контекст режима
         (page_context, quoted_message) без права менять проект запроса.
@@ -234,7 +234,7 @@ class ProjectAgentService:
             execution: Доверенная область инструментов и текущая попытка очереди.
             action_history: Сохранённые результаты действий и решений участника.
             uploaded_files: Файлы, отправленные участником в диалог.
-            mode: Режим Веры; только проектные режимы. Канал ``api`` идёт в режиме
+            mode: Режим Ариса; только проектные режимы. Канал ``api`` идёт в режиме
                 ``project_chat``: только инструменты проекта, без личных действий.
             extra_context: Дополнительные поля входного JSON модели.
             channel: ``web`` — ответ в интерфейсе трекера с карточками; ``api`` —
@@ -381,11 +381,13 @@ class ProjectAgentService:
                 progress=progress,
             )
             member_handles: list[str] = []
+            completed_actions: set[str] = set()
 
             async def register(tool: AgentTool, result: dict[str, Any]) -> None:
-                # Запись меняет источники проекта: каталог перечитывается перед
-                # следующей регистрацией, чтобы карточка созданной задачи прошла проверку.
-                if state["stale"]:
+                mutating = tool.mutating or tool.name == PROJECT_ACTION_TOOL
+                # Новая сущность должна получить проверенный handle уже в результате
+                # создавшего её инструмента, до следующего шага модели.
+                if state["stale"] or mutating:
                     async with self.scope() as db:
                         await self._require_project(db, project_id=project_id)
                         state["catalog"] = build_catalog(
@@ -400,7 +402,12 @@ class ProjectAgentService:
                             handle = registry.get_handle(source_id)
                             if handle and handle not in member_handles:
                                 member_handles.append(handle)
-                if tool.mutating or tool.name == PROJECT_ACTION_TOOL:
+                if mutating:
+                    action = result.get("action")
+                    if isinstance(action, dict) and action.get("status") == "completed":
+                        action_id = action.get("id")
+                        if isinstance(action_id, str) and action_id:
+                            completed_actions.add(action_id)
                     state["stale"] = True
 
             deps.on_result = register
@@ -447,6 +454,13 @@ class ProjectAgentService:
                 answer = output.answer.strip()
                 if run.output is None:
                     answer = INCOMPLETE_ANSWER
+                elif not answer and not selected and completed_actions:
+                    answer = (
+                        "Действие выполнено. Результат — в карточке действия."
+                        if len(completed_actions) == 1
+                        else f"Выполнено действий: {len(completed_actions)}. "
+                        "Результаты — в карточках действий."
+                    )
                 elif not answer and not selected:
                     answer = EMPTY_ANSWER
                 return KnowledgeAnswerSchema(answer=answer, sources=selected)
@@ -496,7 +510,7 @@ class ProjectAgentService:
         conversation_id: str | None = None,
         on_progress: ProgressSink | None = None,
     ) -> KnowledgeAnswerSchema:
-        """Ответ Веры в личном виджете, когда страница не указывает на проект.
+        """Ответ Ариса в личном виджете, когда страница не указывает на проект.
 
         Каталога и RAG проекта здесь нет: модель видит только результаты
         личных инструментов (мои задачи, поиск по всем проектам, потоки,
@@ -587,7 +601,7 @@ class ProjectAgentService:
                 deps.write_gate.close()
             await deps.progress.close()
             logger.info(
-                "Метрики Веры: %s",
+                "Метрики Ариса: %s",
                 json.dumps(
                     {
                         "event": "tim.ask_personal",

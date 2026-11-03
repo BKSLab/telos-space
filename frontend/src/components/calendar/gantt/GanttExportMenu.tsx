@@ -32,11 +32,11 @@ export function GanttExportMenu({
             {({ close }) => (
                 <div className="flex flex-col gap-2">
                     <p className="text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">Что выгрузить</p>
-                    <label className="flex items-center gap-2 text-[12px] text-secondary" title="От самого раннего начала до самого позднего срока задач, вех и проекта">
+                    <label className="flex min-h-11 items-center gap-2 text-[13px] text-secondary lg:min-h-0 lg:text-[12px]" title="От самого раннего начала до самого позднего срока задач, вех и проекта">
                         <input type="radio" name="gantt-export-scope" checked={scope === "project"} onChange={() => setScope("project")} />
                         Весь срок проекта
                     </label>
-                    <label className="flex items-center gap-2 text-[12px] text-secondary" title="Тот же период и масштаб, что сейчас на шкале, но целиком, без прокрутки">
+                    <label className="flex min-h-11 items-center gap-2 text-[13px] text-secondary lg:min-h-0 lg:text-[12px]" title="Тот же период и масштаб, что сейчас на шкале, но целиком, без прокрутки">
                         <input type="radio" name="gantt-export-scope" checked={scope === "screen"} onChange={() => setScope("screen")} />
                         Период как на шкале
                     </label>

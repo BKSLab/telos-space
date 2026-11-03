@@ -58,7 +58,7 @@ export function MilestonePanel({
             {!isLoading && !error && milestones.length === 0 && (
                 <p className="py-2 text-[11px] text-muted">Пользовательских вех пока нет.</p>
             )}
-            <div className="flex max-h-52 flex-col gap-1 overflow-y-auto">
+            <div className="flex flex-col gap-1 lg:max-h-52 lg:overflow-y-auto">
                 {milestones.map((milestone) => (
                     <div
                         key={milestone.id}
@@ -78,7 +78,7 @@ export function MilestonePanel({
                             className="min-w-0 flex-1 text-left"
                             onClick={() => onEdit(milestone)}
                         >
-                            <span className="block truncate text-[11px] text-primary">
+                            <span className="line-clamp-2 text-[12px] text-primary lg:line-clamp-none lg:truncate lg:text-[11px]">
                                 {milestone.title}
                             </span>
                             <time
@@ -92,7 +92,7 @@ export function MilestonePanel({
                             label={`Изменить веху «${milestone.title}»`}
                             size="sm"
                             disabled={isSaving}
-                            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                            className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100"
                             onClick={() => onEdit(milestone)}
                         >
                             <Pencil size={11} aria-hidden="true" />
@@ -101,7 +101,7 @@ export function MilestonePanel({
                             label={`Удалить веху «${milestone.title}»`}
                             size="sm"
                             disabled={isSaving}
-                            className="text-danger opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                            className="text-danger opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100"
                             onClick={() => onDelete(milestone)}
                         >
                             <Trash2 size={11} aria-hidden="true" />

@@ -1,4 +1,4 @@
-"""Модель PydanticAI для агента Веры поверх текущих настроек LLM.
+"""Модель PydanticAI для агента Ариса поверх текущих настроек LLM.
 
 Тот же провайдер (polza.ai, OpenAI-совместимый API), ключ и модель
 AGENT_MODEL, что и у прежнего JSON-цикла; меняется только способ вызова:
@@ -25,6 +25,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
+from src.clients.model_options import agent_request_fields
 from src.clients.request_routing import request_routing_fields
 from src.core.settings import LlmSettings
 
@@ -95,6 +96,10 @@ class GatewayChatModel(OpenAIChatModel):
                     "reasoning_tokens": usage.details.get("reasoning_tokens", 0),
                     "tools_offered": tools_offered,
                     "tool_calls": len(response.tool_calls),
+                    "provider_request_id": response.provider_response_id,
+                    "model": response.model_name,
+                    "provider": (response.provider_details or {}).get("gateway_provider"),
+                    "cost_rub": (response.provider_details or {}).get("cost_rub"),
                 }
             )
         return response
@@ -102,6 +107,15 @@ class GatewayChatModel(OpenAIChatModel):
     def _process_response(self, response: chat.ChatCompletion | str) -> ModelResponse:
         result = super()._process_response(response)
         raw = getattr(response, "usage", None)
+        if raw is not None:
+            cost_rub = getattr(raw, "cost_rub", None)
+            if cost_rub is None:
+                cost_rub = getattr(raw, "cost", None)
+            result.provider_details = {
+                **(result.provider_details or {}),
+                "cost_rub": cost_rub,
+                "gateway_provider": getattr(response, "provider", None),
+            }
         if raw is not None and not result.usage.input_tokens:
             details = getattr(raw, "prompt_tokens_details", None)
             result.usage = RequestUsage(
@@ -116,8 +130,9 @@ class GatewayChatModel(OpenAIChatModel):
 def build_agent_model(settings: LlmSettings, http_client: httpx.AsyncClient) -> OpenAIChatModel:
     """Создаёт модель агента на общем HTTP-клиенте приложения.
 
-    Повторы и таймаут — как у прежнего клиента: ``LLM_RETRIES`` попыток
-    (SDK OpenAI повторяет сеть, 429 и 5xx) и ``LLM_TIMEOUT`` на попытку.
+    Таймаут и число HTTP-попыток Ариса настраиваются отдельно от vision;
+    незаданные параметры сохраняют ``LLM_TIMEOUT``/``LLM_RETRIES``.
+    SDK повторяет только HTTP-запрос модели при сети, timeout, 429 и 5xx.
 
     Args:
         settings: Ключ, адрес и модель LLM.
@@ -129,7 +144,11 @@ def build_agent_model(settings: LlmSettings, http_client: httpx.AsyncClient) -> 
         base_url=settings.base_url,
         api_key=settings.llm_api_key.get_secret_value(),
         http_client=http_client,
-        timeout=float(settings.llm_timeout),
-        max_retries=max(0, settings.llm_retries - 1),
+        timeout=settings.agent_timeout_seconds,
+        max_retries=max(0, settings.agent_attempts - 1),
     )
-    return GatewayChatModel(settings.agent_model, provider=OpenAIProvider(openai_client=client))
+    return GatewayChatModel(
+        settings.agent_model,
+        provider=OpenAIProvider(openai_client=client),
+        settings=ModelSettings(extra_body=agent_request_fields(settings)),
+    )

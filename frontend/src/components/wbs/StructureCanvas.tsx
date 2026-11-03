@@ -20,7 +20,7 @@ import {
     type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Maximize2, Network, Plus, Search } from "lucide-react";
+import { Hand, Maximize2, MousePointer2, Network, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { Project, ProjectStage, TaskCompact, TaskDependency, WbsNode } from "@/lib/types";
 import { dueTone } from "@/lib/dates";
@@ -60,6 +60,7 @@ import { ProjectNode } from "@/components/wbs/nodes/ProjectNode";
 import { SectionNode } from "@/components/wbs/nodes/SectionNode";
 import { TaskCard } from "@/components/wbs/nodes/TaskCard";
 import { TaskNode } from "@/components/wbs/nodes/TaskNode";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 /** Пороги semantic zoom (§34 ТЗ): подобраны так, чтобы текст оставался читаемым. */
 const DETAIL_FULL_ZOOM = 0.75;
@@ -193,6 +194,9 @@ function CanvasInner({
     dependencies,
     handlers,
 }: StructureCanvasProps) {
+    const compact = useMediaQuery("(max-width: 1023px)");
+    const [touchEditing, setTouchEditing] = useState(false);
+    const canDragNodes = !compact || touchEditing;
     const { fitView, setCenter, getZoom, screenToFlowPosition, flowToScreenPosition } =
         useReactFlow();
     // Пока от раздела тянут стрелку, карточки задач подсвечиваются как цели.
@@ -407,6 +411,7 @@ function CanvasInner({
                     return [
                         {
                             ...node,
+                            draggable: node.draggable !== false && canDragNodes,
                             data: {
                                 section,
                                 isCollapsed: collapsed.has(parsed.nodeId),
@@ -437,6 +442,7 @@ function CanvasInner({
                     return [
                         {
                             ...node,
+                            draggable: node.draggable !== false && canDragNodes,
                             selected: task.id === selectedTaskId,
                             data: {
                                 task,
@@ -469,6 +475,7 @@ function CanvasInner({
             detail,
             isConnecting,
             handlers,
+            canDragNodes,
         ],
     );
 
@@ -986,7 +993,7 @@ function CanvasInner({
 
     return (
         <div
-            className="material-mineral relative h-full w-full"
+            className="wbs-canvas material-mineral relative h-full min-h-0 w-full"
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             onDragLeave={() => setDropTargetId(null)}
@@ -1006,7 +1013,8 @@ function CanvasInner({
                 isValidConnection={isValidConnection}
                 onEdgesDelete={handleEdgesDelete}
                 onMove={(_event, viewport) => setZoom(viewport.zoom)}
-                nodesConnectable
+                nodesConnectable={canDragNodes}
+                zoomOnPinch
                 // Пул стоит у левого края: авто-панорамирование при
                 // подтаскивании карточки к нему уводило бы структуру вправо.
                 autoPanOnNodeDrag={false}
@@ -1043,10 +1051,11 @@ function CanvasInner({
                 />
             </ReactFlow>
 
-            <div className="pointer-events-none absolute top-3 right-3 left-3 flex justify-between gap-2">
-                <div className="pointer-events-auto flex flex-col gap-1.5">
+            <div className="wbs-canvas-tools pointer-events-none absolute top-3 right-3 left-3 flex justify-between gap-2">
+                <div className="wbs-canvas-search pointer-events-auto flex flex-col gap-1.5">
                     {isSearchOpen ? (
-                        <div className="glass w-72 rounded-md p-1.5 shadow-panel">
+                        <div className="wbs-search-panel glass w-72 rounded-md p-1.5 shadow-panel">
+                            <div className="flex items-center gap-1">
                             <Input
                                 autoFocus
                                 value={search}
@@ -1063,6 +1072,8 @@ function CanvasInner({
                                     }
                                 }}
                             />
+                            <Button variant="ghost" size="sm" aria-label="Закрыть поиск" icon={<X size={16} />} onClick={() => { setSearchOpen(false); setSearch(""); }} />
+                            </div>
                             {searchResults.length > 0 && (
                                 <ul className="mt-1 flex flex-col">
                                     {searchResults.map((result) => (
@@ -1092,9 +1103,10 @@ function CanvasInner({
                 </div>
 
                 <div className="pointer-events-auto flex items-center gap-1.5">
+                    {compact && <Button size="sm" className="glass" aria-label="Перемещение объектов" aria-pressed={touchEditing} icon={touchEditing ? <MousePointer2 size={14} /> : <Hand size={14} />} onClick={() => setTouchEditing(value => !value)}>{touchEditing ? "Правка" : "Холст"}</Button>}
                     <span
                         className={cn(
-                            "glass rounded-md px-2 py-1 font-mono text-[11px] text-muted",
+                            "wbs-zoom-label glass rounded-md px-2 py-1 font-mono text-[11px] text-muted",
                             detail === "minimal" && "text-warning",
                         )}
                         title={

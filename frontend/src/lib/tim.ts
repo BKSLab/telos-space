@@ -1,22 +1,22 @@
-/** Вера — помощник личного трекера. */
+/** Арис — помощник личного трекера. */
 import type { TimPageContext } from "@/lib/types";
 
 /** Имя агента для людей: автор ответов, заголовок окна, кнопка. */
-export const TIM_NAME = "Вера";
-export const TIM_PERSONA = "Вера — проектный менеджер";
-/** Подсказка в поле ввода чата проекта: без неё обращение к Вере не найти. */
-export const TIM_CHAT_HINT = "Начните сообщение с «Вера, …», чтобы обратиться к проектному менеджеру";
+export const TIM_NAME = "Арис";
+export const TIM_PERSONA = "Арис — проектный менеджер";
+/** Подсказка в поле ввода чата проекта: без неё обращение к Арису не найти. */
+export const TIM_CHAT_HINT = "Начните сообщение с «Арис, …», чтобы обратиться к проектному менеджеру";
 
 /**
- * Адресовано ли сообщение Вере: после trim начинается со слова «Вера»,
- * за которым конец строки или не буква и не цифра. Только для подсказки —
+ * Адресовано ли сообщение Арису: после trim начинается со слова «Арис» или «ARIS»,
+ * за которым конец строки либо не буква, не цифра и не подчёркивание. Только для подсказки —
  * решает сервер.
  */
 export function isForTim(text: string | null | undefined): boolean {
-    return /^вера(?:$|[^\p{L}\p{N}])/iu.test((text ?? "").trim());
+    return /^(?:арис|aris)(?:$|[^\p{L}\p{N}_])/iu.test((text ?? "").trim());
 }
 
-/** Разбор адреса страницы в контекст для Веры: проект, доска и открытая задача. */
+/** Разбор адреса страницы в контекст для Ариса: проект, доска и открытая задача. */
 export function pageContext(pathname: string, search: string, openTaskId: number | null, selection: { boardId: number; objects: { type: "shape" | "sticker"; id: number }[] } | null = null): TimPageContext {
     const project = /^\/projects\/([^/]+)/.exec(pathname)?.[1];
     const params = new URLSearchParams(search);
@@ -42,7 +42,7 @@ export function pageContext(pathname: string, search: string, openTaskId: number
     };
 }
 
-/** Строка «что видит Вера» для шапки виджета: «Проект DEMO · задача DEMO-12». */
+/** Строка «что видит Арис» для шапки виджета: «Проект DEMO · задача DEMO-12». */
 export function describePageContext(
     context: TimPageContext,
     names: { project?: string | null; taskKey?: string | null } = {},

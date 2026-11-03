@@ -21,10 +21,10 @@ class TimBoardSelectionRefSchema(BaseModel):
 
 
 class TimPageContextSchema(BaseModel):
-    """Страница, с которой пользователь пишет Вере в виджете.
+    """Страница, с которой пользователь пишет Арису в виджете.
 
     Контекст — подсказка для «этот проект», «эта задача»: права на объект
-    сервер проверяет сам, недоступный объект Вере просто не показывается.
+    сервер проверяет сам, недоступный объект Арису просто не показывается.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -67,7 +67,7 @@ class TimPageContextSchema(BaseModel):
 
 
 class AgentConversationSchema(BaseModel):
-    """Диалог пользователя с Верой в виджете, без внутренней памяти модели."""
+    """Диалог пользователя с Арисом в виджете, без внутренней памяти модели."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -79,7 +79,7 @@ class AgentConversationSchema(BaseModel):
 
 
 class AgentConversationListSchema(BaseModel):
-    """Страница диалогов пользователя с Верой; первый — текущий."""
+    """Страница диалогов пользователя с Арисом; первый — текущий."""
 
     items: list[AgentConversationSchema] = Field(
         description="Диалоги от недавно изменённых к старым; первый — текущий диалог виджета."
@@ -104,7 +104,7 @@ class AgentMessageCreateSchema(BaseModel):
         description="До пяти собственных загрузок этого диалога.",
     )
     page_context: TimPageContextSchema | None = Field(
-        None, description="Страница, с которой отправлено сообщение; Вера учитывает её."
+        None, description="Страница, с которой отправлено сообщение; Арис учитывает её."
     )
 
     @field_validator("content")
@@ -145,7 +145,7 @@ class AgentMessageSchema(BaseModel):
     progress: str | None = Field(
         None,
         description=(
-            "Что Вера делает сейчас, пока готовит ответ («Читаю задачу EVL-1…»); "
+            "Что Арис делает сейчас, пока готовит ответ («Читаю задачу EVL-1…»); "
             "null — статуса нет или ответ завершён."
         ),
     )

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Live widget benchmark; synthetic fixture, real queue/LLM, no automatic approvals.
+"""TELOS SPACE / ARIS live benchmark; synthetic fixture, real queue/LLM, no automatic approvals.
 
 Run inside the existing backend container, without rebuilding the application:
-  Get-Content backend/scripts/vera_benchmark.py -Raw |
-    docker compose exec -T backend python - --output /tmp/vera-baseline.json
+  Get-Content backend/scripts/aris_benchmark.py -Raw |
+    docker compose exec -T backend python - --output /tmp/aris-baseline.json
 
 Repeat after changes with the SAME --as-of value and suite. Results contain only
 synthetic conversations. Never save cookies, tokens, environment, or passwords.
@@ -16,6 +16,7 @@ import json
 import re
 import statistics
 import time
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
 from importlib.metadata import version
 from pathlib import Path
@@ -25,9 +26,10 @@ from uuid import uuid4
 
 import httpx
 
+# Stable result IDs preserve comparison with earlier benchmark artifacts.
 SUITE = "vera-widget-v1"
-PROJECT = "VERAEVAL"
-USERNAME = "vera_eval_runner"
+PROJECT = "TELOSEVAL"
+USERNAME = "telos_eval_runner"
 MONTHS = "января февраля марта апреля мая июня июля августа сентября октября ноября декабря".split()
 
 
@@ -35,7 +37,7 @@ def cases(as_of: date) -> list[dict[str, str]]:
     result = []
     for repeat in (1, 2):
         for name, text in (
-            ("hello", "Вера, привет!"),
+            ("hello", "Арис, привет!"),
             ("how_are_you", "Как дела?"),
             ("identity", "Как тебя зовут и какая у тебя роль? Ответь кратко."),
         ):
@@ -60,7 +62,7 @@ def cases(as_of: date) -> list[dict[str, str]]:
             {
                 "id": "mixed",
                 "kind": "mixed",
-                "text": f"Вера, привет! Перенеси срок задачи {PROJECT}-2 на {(as_of + timedelta(days=10)).isoformat()}. Другие поля не меняй.",
+                "text": f"Арис, привет! Перенеси срок задачи {PROJECT}-2 на {(as_of + timedelta(days=10)).isoformat()}. Другие поля не меняй.",
             },
             {
                 "id": "report",
@@ -90,6 +92,20 @@ def cases(as_of: date) -> list[dict[str, str]]:
     return result
 
 
+def channel_cases(as_of: date, channel: str) -> list[dict[str, str]]:
+    """Для общего чата берёт приветствие и чтение из того же набора фактов."""
+    suite = cases(as_of)
+    if channel == "widget_project":
+        return suite
+    if channel != "project_chat":
+        raise ValueError("Unsupported benchmark channel")
+    result = [case for case in suite if case["id"] in {"hello_1", "read"}]
+    for case in result:
+        if not case["text"].startswith("Арис,"):
+            case["text"] = "Арис, " + case["text"]
+    return result
+
+
 def mentions_date(text: str, value: str) -> bool:
     parsed = date.fromisoformat(value)
     candidates = []
@@ -113,7 +129,14 @@ def checks(case, answer, before, after, fixture):
     """Observable postconditions, not a general-purpose quality score."""
     content = answer.get("content", "")
     actions = answer.get("actions", [])
-    result = {"completed": answer.get("status") == "completed", "nonempty": bool(content.strip())}
+    # TimAnswer допускает ответ только карточкой источника/текущего действия.
+    visible_cards = bool(answer.get("sources")) or any(
+        action.get("status") in {"completed", "pending"} for action in actions
+    )
+    result = {
+        "completed": answer.get("status") == "completed",
+        "nonempty": bool(content.strip()) or visible_cards,
+    }
     kind = case["kind"]
     if kind not in {"create", "mixed"}:
         result["tasks_unchanged"] = before == after
@@ -121,9 +144,9 @@ def checks(case, answer, before, after, fixture):
         result["no_saved_actions"] = not actions
     if kind == "smalltalk":
         result["russian"] = bool(re.search("[А-Яа-яЁё]", content))
-        result["no_old_name"] = not re.search(r"\bТим\b", content, re.I)
+        result["no_old_name"] = not re.search(r"\b(?:Тим|Вера)\b", content, re.I)
         if case["id"].startswith("identity"):
-            result["vera_name"] = "вера" in content.casefold()
+            result["aris_name"] = bool(re.search(r"\b(?:Арис|ARIS)\b", content, re.I))
     elif kind in {"read", "followup"}:
         result["correct_due_date"] = mentions_date(content, fixture["overdue_date"])
         if kind == "read":
@@ -248,7 +271,12 @@ def save(path: Path, payload):
     temporary.replace(path)
 
 
-async def run(args):
+async def run(
+    args,
+    *,
+    on_case: Callable[[str], None] | None = None,
+    before_cleanup: Callable[[], Awaitable[None]] | None = None,
+):
     from sqlalchemy import delete, select
 
     from src.core.settings import get_settings
@@ -258,12 +286,17 @@ async def run(args):
 
     settings = get_settings()
     as_of = date.fromisoformat(args.as_of)
-    suite = cases(as_of)
+    if as_of != date.today():
+        raise ValueError("--as-of must match the backend date; overdue checks use the real clock")
+    channel = getattr(args, "channel", "widget_project")
+    suite = channel_cases(as_of, channel)
     output = Path(args.output)
     if output.exists():
         raise RuntimeError("Output already exists; use a new artifact path")
     payload = {
-        "suite": SUITE,
+        "suite": SUITE if channel == "widget_project" else "vera-project-chat-v1",
+        "channel": channel,
+        "checks_version": 3,
         "label": args.label,
         "as_of": as_of.isoformat(),
         "backend_date": date.today().isoformat(),
@@ -273,8 +306,13 @@ async def run(args):
         "started_at": datetime.now(timezone.utc).isoformat(),
         "model": settings.llm.agent_model,
         "provider_host": urlsplit(settings.llm.base_url).hostname,
-        "llm_timeout": settings.llm.llm_timeout,
-        "llm_retries": settings.llm.llm_retries,
+        "llm_timeout": settings.llm.agent_timeout_seconds,
+        "llm_retries": settings.llm.agent_attempts,
+        "model_options": {
+            "provider": getattr(settings.llm, "agent_provider", ""),
+            "reasoning_enabled": getattr(settings.llm, "agent_reasoning_enabled", None),
+            "reasoning_effort": getattr(settings.llm, "agent_reasoning_effort", None),
+        },
         "versions": {
             name: version(name) for name in ("pydantic-ai-slim", "pydantic-graph", "openai")
         },
@@ -282,7 +320,7 @@ async def run(args):
         "poll_seconds": 0.25,
         "manual_rubric": [
             "уместность и краткость",
-            "Вера: имя, роль, женский род",
+            "Арис (ARIS): имя, роль в TELOS SPACE, мужской род",
             "факты совпадают с fixture",
             "нет выдуманных результатов действий",
         ],
@@ -302,7 +340,7 @@ async def run(args):
                 username=USERNAME,
                 password_hash="!",
                 first_name="Проверка",
-                last_name="Веры",
+                last_name="Ариса",
                 is_active=True,
             )
             db.add(user)
@@ -312,7 +350,9 @@ async def run(args):
         payload["fixture_user_id"] = user_id
         cookie = f"{settings.auth.session_cookie_name}={create_access_token(user_id)}"
         async with httpx.AsyncClient(
-            base_url="http://nginx", headers={"Cookie": cookie}, timeout=30
+            base_url=getattr(args, "base_url", "http://nginx"),
+            headers={"Cookie": cookie},
+            timeout=30,
         ) as http:
             project_attempted = True
             project = await api(
@@ -321,7 +361,7 @@ async def run(args):
                 "/projects",
                 json={
                     "key": PROJECT,
-                    "name": "Проверка Веры: синтетический проект",
+                    "name": "Проверка Ариса: синтетический проект",
                     "color": "#58a6ff",
                     "stages": [
                         {"name": "Запланировано"},
@@ -381,6 +421,8 @@ async def run(args):
             threads = {}
             failed_threads = set()
             for case in suite:
+                if on_case is not None:
+                    on_case(case["id"])
                 thread = case.get("thread", case["id"])
                 if thread in failed_threads:
                     payload["records"].append({**case, "status": "skipped_dependency"})
@@ -389,9 +431,11 @@ async def run(args):
                         json.dumps({"case": case["id"], "status": "skipped_dependency"}), flush=True
                     )
                     continue
-                if thread not in threads:
-                    threads[thread] = (await api(http, "POST", "/tim/conversations"))["id"]
-                conversation_id = threads[thread]
+                conversation_id = None
+                if channel == "widget_project":
+                    if thread not in threads:
+                        threads[thread] = (await api(http, "POST", "/tim/conversations"))["id"]
+                    conversation_id = threads[thread]
                 before = await snapshot(http, project_id)
                 record: dict[str, Any] = {
                     **case,
@@ -401,37 +445,59 @@ async def run(args):
                 payload["records"].append(record)
                 save(output, payload)
                 started = time.monotonic()
-                accepted = await api(
-                    http,
-                    "POST",
-                    f"/tim/conversations/{conversation_id}/messages",
-                    json={
-                        "request_id": str(uuid4()),
-                        "content": case["text"],
-                        "page_context": {
-                            "route": f"/projects/{PROJECT}/chat",
-                            "project_key": PROJECT,
-                        },
-                    },
-                )
                 active = True
-                record["accept_ms"] = round((time.monotonic() - started) * 1000, 1)
-                answer = accepted["assistant_message"]
-                record["message_id"] = answer["id"]
-                while answer["status"] in {"queued", "processing"}:
-                    if time.monotonic() - started > args.wait:
+                if channel == "project_chat":
+                    from scripts.aris_chat_probe import ask_project_chat
+
+                    try:
+                        message, request_message_id = await ask_project_chat(
+                            http, project_id, case["text"], wait=args.wait
+                        )
+                    except TimeoutError:
                         record["status"] = "timeout"
                         save(output, payload)
-                        raise TimeoutError(
-                            "Live turn did not finish; fixture retained to avoid deleting an active run"
+                        raise
+                    record["chat_request_message_id"] = request_message_id
+                    record["chat_message"] = message
+                    answer = {
+                        "id": message["id"],
+                        "content": message["content"],
+                        "status": message["agent"]["status"],
+                        "actions": message["agent"]["actions"],
+                        "sources": message["agent"]["sources"],
+                    }
+                    record["message_id"] = answer["id"]
+                else:
+                    accepted = await api(
+                        http,
+                        "POST",
+                        f"/tim/conversations/{conversation_id}/messages",
+                        json={
+                            "request_id": str(uuid4()),
+                            "content": case["text"],
+                            "page_context": {
+                                "route": f"/projects/{PROJECT}/chat",
+                                "project_key": PROJECT,
+                            },
+                        },
+                    )
+                    record["accept_ms"] = round((time.monotonic() - started) * 1000, 1)
+                    answer = accepted["assistant_message"]
+                    record["message_id"] = answer["id"]
+                    while answer["status"] in {"queued", "processing"}:
+                        if time.monotonic() - started > args.wait:
+                            record["status"] = "timeout"
+                            save(output, payload)
+                            raise TimeoutError(
+                                "Live turn did not finish; fixture retained to avoid deleting an active run"
+                            )
+                        await asyncio.sleep(0.25)
+                        messages = await api(
+                            http, "GET", f"/tim/conversations/{conversation_id}/messages?limit=100"
                         )
-                    await asyncio.sleep(0.25)
-                    messages = await api(
-                        http, "GET", f"/tim/conversations/{conversation_id}/messages?limit=100"
-                    )
-                    answer = next(
-                        item for item in messages["items"] if item["id"] == record["message_id"]
-                    )
+                        answer = next(
+                            item for item in messages["items"] if item["id"] == record["message_id"]
+                        )
                 active = False
                 record.update(
                     {
@@ -442,7 +508,18 @@ async def run(args):
                     }
                 )
                 async with async_session_factory() as db:
-                    row = await db.get(AgentMessage, record["message_id"])
+                    if channel == "project_chat":
+                        from src.db.models.chat_agent_turns import ChatAgentTurn
+
+                        row = await db.scalar(
+                            select(ChatAgentTurn).where(
+                                ChatAgentTurn.project_id == project_id,
+                                ChatAgentTurn.request_message_id
+                                == record["chat_request_message_id"],
+                            )
+                        )
+                    else:
+                        row = await db.get(AgentMessage, record["message_id"])
                     record["queue_ms"] = (
                         round((row.started_at - row.created_at).total_seconds() * 1000, 1)
                         if row.started_at
@@ -479,6 +556,10 @@ async def run(args):
                 if case["kind"] in {"create", "mixed"}:
                     if await wait_index(project_id, async_session_factory) != "ready":
                         raise RuntimeError("Index did not settle after an action")
+            if before_cleanup is not None:
+                await before_cleanup()
+            if on_case is not None:
+                on_case("fixture_cleanup")
             # Normal API deletion queues removal of this project's Qdrant collection.
             await api(http, "DELETE", f"/projects/{project_id}")
             project_id = None
@@ -523,6 +604,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True)
     parser.add_argument("--label", default="baseline")
+    parser.add_argument("--base-url", default="http://nginx")
+    parser.add_argument(
+        "--channel", choices=["widget_project", "project_chat"], default="widget_project"
+    )
     parser.add_argument(
         "--as-of", default=date.today().isoformat(), help="Reuse this date after changes"
     )

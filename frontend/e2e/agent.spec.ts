@@ -1,31 +1,53 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { AgentToolRun, AgentFile, KnowledgeSource } from "../src/lib/types";
+import type { AgentToolRun, AgentFile, KnowledgeSource, TimPageContext } from "../src/lib/types";
 
-test("окно агента сохраняет черновик, файлы и диалог при переходе во вкладку", async ({ page }) => {
+async function openPersonalWindow(page: Page) {
+    await page.getByRole("button", { name: "Открыть чаты", exact: true }).click();
+    const panel = page.getByRole("dialog", { name: "Чаты", exact: true });
+    await expect(panel).toBeVisible();
+    await panel.getByRole("combobox", { name: "Выбор чата", exact: true }).selectOption("personal");
+    await expect(panel.getByRole("textbox", { name: "Вопрос Арису", exact: true })).toBeVisible();
+    return panel;
+}
+
+async function openProjectPersonal(page: Page, key = "DEMO") {
+    await page.goto("/chat");
+    await page.getByRole("button", { name: "Проектные диалоги и знания", exact: true }).click();
+    await page.getByRole("link", { name: `${key} · Личные диалоги`, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${key}/chat\\?view=personal(?:&conversation=\\d+)?$`));
+    await expect(page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true })).toBeEnabled();
+}
+
+test("единое окно личного Ариса сохраняет черновик, файлы и диалог при переходе во вкладку", async ({ page }) => {
     const control = await installProjectApi(page);
     control.pending = true;
     await page.goto("/projects/DEMO/team");
-    await page.getByRole("button", { name: "Открыть чат агента", exact: true }).click();
-    const input = page.getByRole("textbox", { name: "Вопрос агенту" });
+    await openPersonalWindow(page);
+    const input = page.getByRole("textbox", { name: "Вопрос Арису", exact: true });
     await input.fill("Подготовь критерии приёмки");
     await page.getByRole("button", { name: "Свернуть чат" }).click();
-    await page.getByRole("button", { name: "Открыть чат агента", exact: true }).click();
+    await openPersonalWindow(page);
     await expect(input).toHaveValue("Подготовь критерии приёмки");
-    await page.getByLabel("Файлы для агента").setInputFiles({ name: "acceptance.md", mimeType: "text/markdown", buffer: Buffer.from("Критерии") });
+    await page.getByLabel("Файлы для Ариса", { exact: true }).setInputFiles({ name: "acceptance.md", mimeType: "text/markdown", buffer: Buffer.from("Критерии") });
     await expect(page.getByRole("button", { name: "Убрать acceptance.md" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Диалог с Арисом", exact: true })).toHaveValue("1");
     await page.getByRole("button", { name: "Открыть чат во вкладке" }).click();
-    await expect(page).toHaveURL(/\/agent\?conversation=1$/);
-    await expect(page.getByRole("button", { name: "Открыть чат агента", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Открыть чат команды", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/chat$/);
+    await expect(page.getByRole("button", { name: "Открыть чаты", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Чаты", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "Диалог с Арисом", exact: true })).toHaveValue("1");
     await expect(input).toHaveValue("Подготовь критерии приёмки");
     await expect(page.getByRole("button", { name: "Убрать acceptance.md" })).toBeVisible();
     await input.press("Enter");
-    await expect(page.getByText("Вопрос сохранён. Ожидаю ответа…")).toBeVisible();
-    await page.getByRole("link", { name: "Команда", exact: true }).click();
-    await page.getByRole("button", { name: "Открыть чат агента", exact: true }).click();
+    await expect(page.getByText("Арис думает…", { exact: true })).toBeVisible();
+    await page.goto("/projects/DEMO/team");
+    await openPersonalWindow(page);
+    await expect(page.getByText("Арис думает…", { exact: true })).toBeVisible();
     control.pending = false;
     await expect(page.getByText("Руководитель проекта — Анна Иванова.", { exact: true })).toBeVisible();
     expect(control.submissions).toHaveLength(1);
+    expect(control.submissions[0].file_ids).toEqual(["f918d205-2ced-48eb-85f4-19b8e55ef361"]);
+    expect(control.submissions[0].page_context).toEqual({ route: "/chat", project_key: null, task_id: null });
     await expect(page).toHaveURL(/\/team$/);
 });
 
@@ -36,9 +58,9 @@ test("карточка задачи показывает поля без пов�
         card: { key: "DEMO-42", status: "В работе", priority: "HIGH", assignee: "Анна Иванова", due_date: "2026-10-01", summary: "Проверить оплату картой и возврат средств." } }];
     control.action = { id: "create-42", tool_name: "create_task", title: "Создать задачу", arguments: { title: "Проверить оплату" }, status: "completed", result: { source_id: "task:42", task: { id: 42, key: "DEMO-42", title: "Проверить оплату" } }, created_at: "2026-09-22T10:00:00Z" };
     await page.goto("/projects/DEMO/team");
-    await page.getByRole("button", { name: "Открыть чат агента", exact: true }).click();
-    await page.getByRole("textbox", { name: "Вопрос агенту" }).fill("Создай задачу на проверку оплаты");
-    await page.getByRole("textbox", { name: "Вопрос агенту" }).press("Enter");
+    await openPersonalWindow(page);
+    await page.getByRole("textbox", { name: "Вопрос Арису", exact: true }).fill("Создай задачу на проверку оплаты");
+    await page.getByRole("textbox", { name: "Вопрос Арису", exact: true }).press("Enter");
     const card = page.getByRole("button", { name: "Задача: DEMO-42 · Проверить оплату", exact: true });
     await expect(card).toBeVisible();
     await expect(card).toContainText("В работе");
@@ -49,26 +71,26 @@ test("карточка задачи показывает поля без пов�
     await page.screenshot({ path: "test-results/floating-agent-card.png" });
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(card).toBeVisible();
-    const panel = await page.getByRole("dialog", { name: "Окно агента проекта" }).boundingBox();
+    const panel = await page.getByRole("dialog", { name: "Чаты", exact: true }).boundingBox();
     expect(panel!.x).toBeGreaterThanOrEqual(0);
     expect(panel!.x + panel!.width).toBeLessThanOrEqual(390);
     await page.screenshot({ path: "test-results/floating-agent-mobile.png" });
 });
 
-test("на общем экране проект выбирается явно, черновики проектов не смешиваются", async ({ page }) => {
+test("проектный личный диалог выбирается явно на общем экране, черновики проектов не смешиваются", async ({ page }) => {
     const control = await installProjectApi(page);
     control.projects.push({ ...control.projects[0], id: 2, key: "BETA", name: "Второй проект" });
-    await page.goto("/projects");
-    await page.getByRole("button", { name: "Открыть чат агента", exact: true }).click();
-    const input = page.getByRole("textbox", { name: "Вопрос агенту" });
+    await openProjectPersonal(page);
+    const input = page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true });
     await input.fill("Черновик первого проекта");
-    await page.getByRole("combobox", { name: "Проект для чата" }).selectOption("2");
+    await openProjectPersonal(page, "BETA");
     await expect(input).toHaveValue("");
     await input.fill("Черновик второго проекта");
-    await page.getByRole("combobox", { name: "Проект для чата" }).selectOption("1");
+    await openProjectPersonal(page);
     await expect(input).toHaveValue("Черновик первого проекта");
-    await page.getByRole("button", { name: "Открыть чат во вкладке" }).click();
-    await expect(page).toHaveURL(/\/projects\/DEMO\/agent$/);
+    await expect(page).toHaveURL(/\/projects\/DEMO\/chat\?view=personal$/);
+    await expect(page.getByRole("button", { name: "Открыть чаты", exact: true })).toHaveCount(0);
+    await page.reload();
     await expect(input).toHaveValue("Черновик первого проекта");
 });
 
@@ -76,12 +98,13 @@ async function installProjectApi(page: Page) {
     const stamp = "2026-09-21T10:00:00Z";
     const user = { id: 1, username: "anna", first_name: "Анна", last_name: "Иванова", middle_name: null, is_active: true, has_avatar: false };
     const project = { id: 1, owner_id: 1, key: "DEMO", name: "Знания проекта", description_md: "Паспорт", description_sections: null, due_date_has_been_set: false, status: "ACTIVE", color: "#7299cc", icon: null, start_date: null, due_date: null, order_index: 0, created_at: stamp, updated_at: stamp };
-    type Message = { id: number; conversation_id: number; request_id: string; role: string; content: string; sources: object[]; status: string; error: string | null; created_at: string; actions?: AgentToolRun[]; files?: AgentFile[] };
-    const conversations: { id: number; project_id: number; title: string; created_at: string; updated_at: string }[] = [];
+    type Message = { id: number; conversation_id: number; request_id: string; role: string; content: string; sources: object[]; status: string; error: string | null; created_at: string; actions?: AgentToolRun[]; files?: AgentFile[]; page_context?: TimPageContext };
+    const conversations: { id: number; project_id: number | null; title: string; created_at: string; updated_at: string }[] = [];
     const messages = new Map<number, Message[]>();
     const control = { projects: [project], answer: "Руководитель проекта — Анна Иванова.", sources: null as KnowledgeSource[] | null, pending: false, fail: false, submissions: [] as Record<string, unknown>[], action: null as AgentToolRun | null, decisions: [] as Record<string, unknown>[] };
     const uploaded: AgentFile = { id: "f918d205-2ced-48eb-85f4-19b8e55ef361", original_name: "acceptance.md", content_type: "text/markdown", size: 12, created_at: stamp };
     let messageId = 0;
+    await page.route(/https:\/\/fonts\.(?:googleapis|gstatic)\.com\//, route => route.abort());
     await page.route("**/api/v1/**", async (route) => {
         const path = new URL(route.request().url()).pathname;
         const method = route.request().method();
@@ -89,25 +112,26 @@ async function installProjectApi(page: Page) {
         const reply = (json: unknown, status = 200) => route.fulfill({ status, json, headers });
         if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
         if (path.endsWith("/auth/me")) return reply(user);
-            if (path.endsWith("/dashboard")) return reply({ totals: { total_projects: 1, total_tasks: 0, active_projects: 1, overdue_tasks: 0, in_progress_tasks: 0, done_tasks: 0 }, projects: [], attention_tasks: [], recent_tasks: [] });
+        if (path.endsWith("/dashboard")) return reply({ totals: { total_projects: 1, total_tasks: 0, active_projects: 1, overdue_tasks: 0, in_progress_tasks: 0, done_tasks: 0 }, projects: [], attention_tasks: [], recent_tasks: [] });
         if (path === "/api/v1/projects") return reply(control.projects);
-        if (path === "/api/v1/projects/1") return reply(project);
+        const projectPath = path.match(/^\/api\/v1\/projects\/(\d+)$/);
+        if (projectPath) return reply(control.projects.find((item) => item.id === Number(projectPath[1])));
         if (path.endsWith("/chat")) return reply({ detail: "Чат недоступен" }, 404);
         if (path.endsWith("/members")) return reply([{ id: 1, project_id: 1, role: "OWNER", user, created_at: stamp }]);
         if (path.endsWith("/knowledge/status")) return reply({ enabled: true, ready: false, points_count: 5, pending_jobs: 0, processing_jobs: 0, failed_jobs: 1, last_error: null, obsolete_points: 0,
             coverage: [{ entity_type: "project", total: 1, indexed: 1, missing: 0, stale: 0 }, { entity_type: "sticker", total: 2, indexed: 1, missing: 1, stale: 0 }, { entity_type: "member", total: 1, indexed: 1, missing: 0, stale: 0 }],
             file_issues: [{ source_id: "attachment:4", title: "scan.pdf", status: "empty", detail: "В файле нет текстового слоя." }] });
-        if (path.endsWith("/agent/conversations")) {
-            const projectId = Number(path.match(/projects\/(\d+)/)![1]);
+        if (path.endsWith("/agent/conversations") || path === "/api/v1/tim/conversations") {
+            const projectId = path.startsWith("/api/v1/tim/") ? null : Number(path.match(/projects\/(\d+)/)![1]);
             if (method === "GET") return reply({ items: conversations.filter((item) => item.project_id === projectId).slice().reverse(), next_offset: null });
             const conversation = { id: conversations.length + 1, project_id: projectId, title: "Новый диалог", created_at: stamp, updated_at: stamp };
             conversations.push(conversation);
             messages.set(conversation.id, []);
             return reply(conversation, 201);
         }
-        if (/\/agent\/conversations\/\d+\/files$/.test(path)) return reply(uploaded, 201);
-        if (/\/agent\/conversations\/\d+\/files\//.test(path) && method === "DELETE") return route.fulfill({ status: 204, headers });
-        const decisionPath = path.match(/\/agent\/conversations\/(\d+)\/actions\/([^/]+)\/decision$/);
+        if (/\/(?:agent|tim)\/conversations\/\d+\/files$/.test(path)) return reply(uploaded, 201);
+        if (/\/(?:agent|tim)\/conversations\/\d+\/files\//.test(path) && method === "DELETE") return route.fulfill({ status: 204, headers });
+        const decisionPath = path.match(/\/(?:agent|tim)\/conversations\/(\d+)\/actions\/([^/]+)\/decision$/);
         if (decisionPath) {
             const body = route.request().postDataJSON();
             control.decisions.push(body);
@@ -118,7 +142,7 @@ async function installProjectApi(page: Page) {
             assistant.status = "queued";
             return reply(action);
         }
-        const match = path.match(/\/agent\/conversations\/(\d+)\/messages(?:\/(\d+)\/retry)?$/);
+        const match = path.match(/\/(?:agent|tim)\/conversations\/(\d+)\/messages(?:\/(\d+)\/retry)?$/);
         if (match) {
             const id = Number(match[1]);
             const rows = messages.get(id)!;
@@ -141,7 +165,7 @@ async function installProjectApi(page: Page) {
             const data = route.request().postDataJSON();
             control.submissions.push(data);
             const common = { conversation_id: id, request_id: data.request_id, sources: [], error: null, created_at: stamp };
-            const question: Message = { ...common, id: ++messageId, role: "user", content: data.content, status: "completed", files: data.file_ids?.length ? [uploaded] : [] };
+            const question: Message = { ...common, id: ++messageId, role: "user", content: data.content, status: "completed", files: data.file_ids?.length ? [uploaded] : [], ...(data.page_context ? { page_context: data.page_context } : {}) };
             const assistant: Message = { ...common, id: ++messageId, role: "assistant", content: "", status: "queued" };
             rows.push(question, assistant);
             conversations.find((item) => item.id === id)!.title = data.content;
@@ -158,22 +182,23 @@ test("чат восстанавливает ожидающий ответ пос
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/projects/DEMO/knowledge");
-    await expect(page).toHaveURL(/\/agent$/);
-    await expect(page.getByText("Контекст неполный", { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/projects\/DEMO\/chat\?view=knowledge$/);
     await expect(page.getByText("1 / 2", { exact: true })).toBeVisible();
     await expect(page.getByText("В файле нет текстового слоя.", { exact: false })).toBeVisible();
-    await page.getByRole("textbox", { name: "Вопрос агенту" }).fill("Кто руководитель проекта?");
-    await page.getByRole("textbox", { name: "Вопрос агенту" }).press("Enter");
-    await expect(page.getByText("Вопрос сохранён. Ожидаю ответа…")).toBeVisible();
+    await openProjectPersonal(page);
+    await expect(page.getByText("Контекст неполный", { exact: true })).toBeVisible();
+    await page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true }).fill("Кто руководитель проекта?");
+    await page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true }).press("Enter");
+    await expect(page.getByText("Арис думает…", { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByText("Кто руководитель проекта?", { exact: true }).last()).toBeVisible();
-    await expect(page.getByText("Вопрос сохранён. Ожидаю ответа…")).toBeVisible();
+    await expect(page.getByText("Арис думает…", { exact: true })).toBeVisible();
     control.pending = false;
     await expect(page.getByText("Руководитель проекта — Анна Иванова.", { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByText("Руководитель проекта — Анна Иванова.", { exact: true })).toBeVisible();
     await page.screenshot({ path: "test-results/agent-dialog.png" });
-    await page.getByRole("button", { name: "Анна Иванова", exact: false }).click();
+    await page.getByRole("button", { name: "Участник: Анна Иванова", exact: true }).click();
     await expect(page).toHaveURL(/\/projects\/DEMO\/team$/);
     expect(control.submissions).toHaveLength(1);
     expect(Object.keys(control.submissions[0]).sort()).toEqual(["content", "file_ids", "request_id"]);
@@ -183,7 +208,8 @@ test("чат восстанавливает ожидающий ответ пос
 test("новый диалог имеет отдельную историю, прежний разговор можно продолжить", async ({ page }) => {
     const control = await installProjectApi(page);
     await page.goto("/projects/DEMO/agent");
-    const input = page.getByRole("textbox", { name: "Вопрос агенту" });
+    await expect(page).toHaveURL(/\/projects\/DEMO\/chat\?view=personal$/);
+    const input = page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true });
     await input.fill("Обсудим тестирование окна заказа");
     await input.press("Enter");
     await expect(page.getByText("Руководитель проекта — Анна Иванова.", { exact: true })).toBeVisible();
@@ -205,9 +231,9 @@ test("новый диалог имеет отдельную историю, пр
 test("ошибка ответа сохраняется и повтор не дублирует вопрос", async ({ page }) => {
     const control = await installProjectApi(page);
     control.fail = true;
-    await page.goto("/projects/DEMO/agent");
-    await page.getByRole("textbox", { name: "Вопрос агенту" }).fill("Расскажи о проекте");
-    await page.getByRole("textbox", { name: "Вопрос агенту" }).press("Enter");
+    await page.goto("/projects/DEMO/chat?view=personal");
+    await page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true }).fill("Расскажи о проекте");
+    await page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true }).press("Enter");
     await expect(page.getByRole("button", { name: "Повторить ответ" })).toBeVisible();
     await page.reload();
     control.fail = false;
@@ -223,8 +249,8 @@ for (const decision of ["approve", "reject"] as const) {
         control.action = { id: "5eea642e-3196-45c0-ac85-1286b0d3a81c", tool_name: "delete_task", title: "Удалить задачу",
             arguments: { task_id: 42, expected_updated_at: "2026-09-21T10:00:00Z" }, status: "pending",
             result: { preview: { task: { key: "DEMO-42", title: "Проверка окна заказа" } } }, created_at: "2026-09-21T10:00:00Z" };
-        await page.goto("/projects/DEMO/agent");
-        const input = page.getByRole("textbox", { name: "Вопрос агенту" });
+        await page.goto("/projects/DEMO/chat?view=personal");
+        const input = page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true });
         await input.fill("Удали задачу DEMO-42");
         await input.press("Enter");
         const card = page.getByRole("region", { name: "Действие: Удалить задачу" });
@@ -241,12 +267,12 @@ for (const decision of ["approve", "reject"] as const) {
 
 test("файл загружается в личный диалог и сохраняется вместе с вопросом", async ({ page }) => {
     const control = await installProjectApi(page);
-    await page.goto("/projects/DEMO/agent");
-    await expect(page.getByRole("button", { name: "Файл", exact: true })).toBeEnabled();
-    await page.getByLabel("Файлы для агента").setInputFiles({ name: "acceptance.md", mimeType: "text/markdown", buffer: Buffer.from("Проверка окна") });
+    await page.goto("/projects/DEMO/chat?view=personal");
+    await expect(page.getByRole("button", { name: "Добавить файл до 10 МБ", exact: true })).toBeEnabled();
+    await page.getByLabel("Файлы для Ариса", { exact: true }).setInputFiles({ name: "acceptance.md", mimeType: "text/markdown", buffer: Buffer.from("Проверка окна") });
     await expect(page.getByRole("button", { name: "Убрать acceptance.md" })).toBeVisible();
-    await page.getByRole("textbox", { name: "Вопрос агенту" }).fill("Прикрепи файл к задаче DEMO-42");
-    await page.getByRole("textbox", { name: "Вопрос агенту" }).press("Enter");
+    await page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true }).fill("Прикрепи файл к задаче DEMO-42");
+    await page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true }).press("Enter");
     await expect(page.getByRole("button", { name: "Убрать acceptance.md" })).toHaveCount(0);
     await page.reload();
     await expect(page.locator("p", { hasText: "acceptance.md" })).toBeVisible();

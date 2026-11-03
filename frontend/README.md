@@ -1,6 +1,6 @@
-# Frontend
+# TELOS SPACE — frontend
 
-React/TypeScript/Vite-интерфейс Project Task Tracker. Запуск, настройка API,
+React/TypeScript/Vite-интерфейс TELOS SPACE. Запуск, настройка API,
 проверки и карта документации находятся в [корневом README](../README.md).
 Правила UI — в [дизайн-гайде](../docs/DESIGN_GUIDE.md).
 

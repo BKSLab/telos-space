@@ -403,12 +403,12 @@ type TimMessage = {
     progress?: string | null;
 };
 
-/** Состояние мока личного Веры: диалоги, реплики и рычаги для тестов. */
+/** Состояние мока личного диалога с Арисом: диалоги, реплики и рычаги для тестов. */
 function timState() {
     return {
         conversations: [] as { id: number; title: string; created_at: string; updated_at: string }[],
         messages: new Map<number, TimMessage[]>(),
-        /** Ответ Веры; pending — ответ ещё готовится, fail — попытка упадёт. */
+        /** Ответ Ариса; pending — ответ ещё готовится, fail — попытка упадёт. */
         answer: "По задачам всё в порядке: просрочек нет.",
         sources: [] as Json[],
         action: null as Json | null,

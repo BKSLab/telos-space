@@ -48,7 +48,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 
-INSTRUCTIONS = """Личный трекер проектов и задач. Ключ проекта PROJ, задачи PROJ-142.
+INSTRUCTIONS = """TELOS SPACE — пространство проектов и задач с помощником Арисом (ARIS).
+Ключ проекта PROJ, задачи PROJ-142.
 Инструменты tt_ используют те же сервисы и права владельца ключа, что REST.
 Списки постраничные: учитывай limit, offset и next_offset. Не выдумывай ID.
 Поле url содержит проверенную ссылку. Каталог tt_list_project_tools раскрывает
@@ -57,8 +58,8 @@ INSTRUCTIONS = """Личный трекер проектов и задач. Кл
 
 
 mcp_server = MCPServer(
-    name="task-tracker",
-    title="Трекер задач",
+    name="telos-space",
+    title="TELOS SPACE",
     instructions=INSTRUCTIONS,
     version="2.0.0",
 )

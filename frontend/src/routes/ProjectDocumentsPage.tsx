@@ -46,7 +46,7 @@ export function ProjectDocumentsPage() {
 
     return (
         <div className="scrollbar-thin h-full overflow-y-auto">
-            <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-5 py-5">
+            <div className="mx-auto flex w-full min-w-0 max-w-none flex-col gap-4 px-3 py-4 pb-24 sm:px-5 sm:py-5">
                 <div className="material-metal -mx-2 flex flex-wrap items-center gap-2 rounded-[var(--radius-card)] border border-line-subtle px-2 py-2 shadow-card">
                     <div className="relative min-w-0 flex-1 sm:max-w-xs">
                         <Search

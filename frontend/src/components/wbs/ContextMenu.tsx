@@ -26,7 +26,9 @@ export function ContextMenu({ anchor, items, onClose, label }: ContextMenuProps)
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        menuRef.current?.querySelector("button")?.focus();
+        const trigger = document.activeElement;
+        menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+        return () => { if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus(); };
     }, []);
 
     useEffect(() => {
@@ -54,10 +56,16 @@ export function ContextMenu({ anchor, items, onClose, label }: ContextMenuProps)
             role="menu"
             aria-label={label}
             style={{
-                left: Math.min(anchor.x, window.innerWidth - 220),
-                top: Math.min(anchor.y, window.innerHeight - items.length * 34 - 16),
+                left: Math.max(8, Math.min(anchor.x, window.innerWidth - 220)),
+                top: Math.max(8, Math.min(anchor.y, window.innerHeight - (items.length + 1) * 44 - 16)),
             }}
-            className="glass fixed z-[70] flex w-52 flex-col rounded-md p-1 shadow-panel"
+            className="wbs-context-menu glass fixed z-[70] flex w-52 flex-col rounded-md p-1 shadow-panel"
+            onKeyDown={event => {
+                const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+                const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+                const next = event.key === "ArrowDown" ? (index + 1) % buttons.length : event.key === "ArrowUp" ? (index + buttons.length - 1) % buttons.length : event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : null;
+                if (next !== null) { event.preventDefault(); buttons[next]?.focus(); }
+            }}
         >
             {items.map((item) => (
                 <button
@@ -82,6 +90,7 @@ export function ContextMenu({ anchor, items, onClose, label }: ContextMenuProps)
                     {item.label}
                 </button>
             ))}
+            <button type="button" role="menuitem" className="wbs-menu-close rounded-sm px-2 py-2 text-left text-[13px] text-muted hover:bg-hover" onClick={onClose}>Закрыть меню</button>
         </div>
     );
 }

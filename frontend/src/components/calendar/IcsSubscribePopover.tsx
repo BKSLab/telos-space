@@ -65,7 +65,7 @@ export function IcsSubscribePopover() {
             trigger={
                 <>
                     <Rss size={13} aria-hidden="true" />
-                    <span className="hidden sm:inline">Подписаться в Outlook</span>
+                    <span>Подписаться в Outlook</span>
                 </>
             }
         >

@@ -685,7 +685,7 @@ def build_project_tool_executor(
     async def project_action(
         context: AgentToolContext, parameters: ProjectActionInput
     ) -> dict[str, Any]:
-        """Проектное действие в проекте по ключу — из личного виджета Веры."""
+        """Проектное действие в проекте по ключу — из личного виджета Ариса."""
         definition = actions.actions.get(parameters.name)
         if definition is None or not definition.needs_project:
             return {

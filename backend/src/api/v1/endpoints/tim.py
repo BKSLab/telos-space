@@ -1,4 +1,4 @@
-"""Вера: личный диалог виджета и решение по действиям, предложенным в чате проекта."""
+"""Арис: личный диалог виджета и решение по действиям, предложенным в чате проекта."""
 
 import logging
 from typing import Annotated
@@ -47,8 +47,8 @@ chat_router = APIRouter(
     "/{conversation_id}/actions/{action_id}/decision",
     dependencies=[Depends(require_write_scope)],
     response_model=AgentToolRunSchema,
-    summary="Решение по действию Веры в виджете",
-    description="Выполняет либо отклоняет действие, которое Вера предложила в личном диалоге. Параметры нельзя подменить при подтверждении; после решения Вера продолжает ответ (статус реплики снова queued).",
+    summary="Решение по действию Ариса в виджете",
+    description="Выполняет либо отклоняет действие, которое Арис предложил в личном диалоге. Параметры нельзя подменить при подтверждении; после решения Арис продолжает ответ (статус реплики снова queued).",
     response_description="Сохранённый результат решения.",
     operation_id="timDecideAgentAction",
     responses={
@@ -62,7 +62,7 @@ chat_router = APIRouter(
 )
 async def decide_agent_action(
     conversation_id: Annotated[int, Path(gt=0, description="ID диалога виджета.")],
-    action_id: Annotated[UUID, Path(description="ID действия из ответа Веры.")],
+    action_id: Annotated[UUID, Path(description="ID действия из ответа Ариса.")],
     data: AgentToolDecisionSchema,
     principal: PrincipalDep,
     service: AgentActionsServiceDep,
@@ -94,7 +94,7 @@ async def decide_agent_action(
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
-ConversationIdPath = Annotated[int, Path(gt=0, description="ID диалога виджета Веры.")]
+ConversationIdPath = Annotated[int, Path(gt=0, description="ID диалога виджета Ариса.")]
 ERRORS = {
     401: {
         "description": "Требуется вход.",
@@ -119,8 +119,8 @@ WRITE_ERRORS = {
     dependencies=[Depends(require_write_scope)],
     response_model=AgentFileSchema,
     status_code=status.HTTP_201_CREATED,
-    summary="Загрузить файл для сообщения Вере",
-    description="Принимает до 10 МБ в диалог виджета; до 20 загрузок на диалог. Файл ещё не прикреплён к задаче и не индексируется в общие знания проекта; прикрепить его Вера может в проекте открытой страницы.",
+    summary="Загрузить файл для сообщения Арису",
+    description="Принимает до 10 МБ в диалог виджета; до 20 загрузок на диалог. Файл ещё не прикреплён к задаче и не индексируется в общие знания проекта; прикрепить его Арис может в проекте открытой страницы.",
     operation_id="timUploadAgentFile",
     response_description="Приватная ссылка для последующей отправки сообщения.",
     responses=WRITE_ERRORS,
@@ -201,7 +201,7 @@ async def delete_agent_file_draft(
 @router.get(
     "",
     response_model=AgentConversationListSchema,
-    summary="Мои диалоги с Верой",
+    summary="Мои диалоги с Арисом",
     description="Диалоги виджета текущего пользователя от недавно изменённых к старым. Первый в списке — текущий диалог; пустой список — диалога ещё нет, создайте его.",
     response_description="Страница диалогов от недавних к ранним.",
     operation_id="timListAgentConversations",
@@ -213,7 +213,7 @@ async def list_agent_conversations(
     offset: Annotated[int, Query(ge=0, description="Смещение страницы.")] = 0,
     limit: Annotated[int, Query(ge=1, le=50, description="Число диалогов на странице.")] = 30,
 ) -> AgentConversationListSchema:
-    """Возвращает диалоги пользователя с Верой.
+    """Возвращает диалоги пользователя с Арисом.
 
     Args:
         principal: Аутентифицированный участник.
@@ -223,15 +223,15 @@ async def list_agent_conversations(
     Returns:
         Диалоги и продолжение списка.
     """
-    logger.info("🚀 Список диалогов Веры, пользователь=%s.", principal.user_id)
+    logger.info("🚀 Список диалогов Ариса, пользователь=%s.", principal.user_id)
     try:
         result = await service.list_conversations(
             user_id=principal.user_id, offset=offset, limit=limit
         )
-        logger.info("✅ Список диалогов Веры получен.")
+        logger.info("✅ Список диалогов Ариса получен.")
         return result
     except AgentConversationsServiceError as error:
-        logger.exception("❌ Не удалось прочитать диалоги Веры.")
+        logger.exception("❌ Не удалось прочитать диалоги Ариса.")
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
@@ -240,7 +240,7 @@ async def list_agent_conversations(
     dependencies=[Depends(require_write_scope)],
     status_code=status.HTTP_201_CREATED,
     response_model=AgentConversationSchema,
-    summary="Начать новый диалог с Верой",
+    summary="Начать новый диалог с Арисом",
     description="Создаёт новый диалог виджета; он становится текущим. Прежние диалоги остаются в списке.",
     response_description="Сохранённый пустой диалог.",
     operation_id="timCreateAgentConversation",
@@ -257,13 +257,13 @@ async def create_agent_conversation(
     Returns:
         Метаданные созданного разговора.
     """
-    logger.info("🚀 Новый диалог Веры, пользователь=%s.", principal.user_id)
+    logger.info("🚀 Новый диалог Ариса, пользователь=%s.", principal.user_id)
     try:
         result = await service.create_conversation(user_id=principal.user_id)
         logger.info("✅ Создан диалог id=%s.", result.id)
         return result
     except AgentConversationsServiceError as error:
-        logger.exception("❌ Не удалось создать диалог Веры.")
+        logger.exception("❌ Не удалось создать диалог Ариса.")
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
@@ -316,8 +316,8 @@ async def get_agent_messages(
     dependencies=[Depends(require_write_scope)],
     status_code=status.HTTP_202_ACCEPTED,
     response_model=AgentMessageAcceptedSchema,
-    summary="Написать Вере",
-    description="Сохраняет вопрос с контекстом страницы (page_context) и ставит ответ Веры в постоянную очередь. Повтор request_id с тем же текстом возвращает прежние сообщения. Клиент не передаёт историю или автора; готовый ответ — при чтении переписки.",
+    summary="Написать Арису",
+    description="Сохраняет вопрос с контекстом страницы (page_context) и ставит ответ Ариса в постоянную очередь. Повтор request_id с тем же текстом возвращает прежние сообщения. Клиент не передаёт историю или автора; готовый ответ — при чтении переписки.",
     response_description="Вопрос и ожидающий ответ; результат доступен при чтении переписки.",
     operation_id="timSendAgentMessage",
     responses=WRITE_ERRORS,
@@ -401,8 +401,8 @@ async def retry_agent_message(
     "/actions/{action_id}/decision",
     dependencies=[Depends(require_write_scope)],
     response_model=AgentToolRunSchema,
-    summary="Решение по действию Веры в чате проекта",
-    description="Подтверждает или отклоняет действие, которое Вера предложила в общем чате. Решить может автор просьбы или участник с правами на само действие; действие выполняется от имени решающего с его правами, параметры неизменны. Карточка обновится у всей команды событием message.updated.",
+    summary="Решение по действию Ариса в чате проекта",
+    description="Подтверждает или отклоняет действие, которое Арис предложил в общем чате. Решить может автор просьбы или участник с правами на само действие; действие выполняется от имени решающего с его правами, параметры неизменны. Карточка обновится у всей команды событием message.updated.",
     response_description="Сохранённый результат решения.",
     operation_id="timDecideTimChatAction",
     responses={
@@ -416,7 +416,7 @@ async def retry_agent_message(
 )
 async def decide_tim_chat_action(
     project_id: ProjectIdPath,
-    action_id: Annotated[UUID, Path(description="ID действия из карточки сообщения Веры.")],
+    action_id: Annotated[UUID, Path(description="ID действия из карточки сообщения Ариса.")],
     data: AgentToolDecisionSchema,
     principal: PrincipalDep,
     service: AgentActionsServiceDep,
@@ -433,7 +433,7 @@ async def decide_tim_chat_action(
         Состояние и результат действия.
     """
     logger.info(
-        "🚀 Решение по действию Веры в чате id=%s, участник=%s.", action_id, principal.user_id
+        "🚀 Решение по действию Ариса в чате id=%s, участник=%s.", action_id, principal.user_id
     )
     try:
         result = await service.decide_in_chat(
@@ -443,7 +443,7 @@ async def decide_tim_chat_action(
             action_id=action_id,
             decision=data.decision,
         )
-        logger.info("✅ Решение по действию Веры в чате id=%s сохранено.", action_id)
+        logger.info("✅ Решение по действию Ариса в чате id=%s сохранено.", action_id)
         return result
     except AgentToolsServiceError as error:
         logger.exception("❌ Не удалось принять решение по действию id=%s.", action_id)

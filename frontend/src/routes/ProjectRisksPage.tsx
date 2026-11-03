@@ -10,6 +10,7 @@ import { RISK_LEVEL_LABELS, RISK_STATUS_LABELS, riskQuery, type RiskPage, type R
 import { useUiStore } from "@/stores/ui";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
+import { ResponsiveFilters } from "@/components/ui/ResponsiveFilters";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 import { CreateRiskDialog } from "@/components/risks/CreateRiskDialog";
 import { RiskMatrix } from "@/components/risks/RiskMatrix";
@@ -69,7 +70,7 @@ function ProjectRisksContent({ projectId, initialParams }: { projectId: number; 
 
     return (
         <div className="scrollbar-thin h-full overflow-y-auto">
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-5 py-5">
+            <div className="mx-auto flex w-full min-w-0 max-w-none flex-col gap-5 px-3 py-4 pb-24 sm:px-5 sm:py-5">
                 <header className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <h1 className="text-xl font-semibold tracking-tight text-primary">Риски</h1>
@@ -86,6 +87,7 @@ function ProjectRisksContent({ projectId, initialParams }: { projectId: number; 
                     </>}
                 </div>
                 <RiskSuggestions projectId={projectId} />
+                <ResponsiveFilters active={filtered}>
                 <div className="grid gap-3 border-y border-line-subtle py-4 sm:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr_auto]">
                     <Field label="Поиск рисков">{(id) => <Input id={id} type="search" maxLength={255} placeholder="Название, описание или RISK-12" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />}</Field>
                     <Field label="Статус">{(id) => <Select id={id} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
@@ -102,6 +104,7 @@ function ProjectRisksContent({ projectId, initialParams }: { projectId: number; 
                 </div>
                 {members.error && <p role="alert" className="text-[12px] text-warning">Фильтр по ответственному недоступен. <button type="button" className="underline" onClick={() => void members.refetch()}>Повторить загрузку команды</button></p>}
                 <Field label="Связанная задача" className="max-w-sm">{(id) => <Select id={id} value={taskFilter} onChange={(e) => { setTaskFilter(e.target.value); setPage(1); }}><option value="">Все задачи</option>{tasks.data?.map((task) => <option key={task.id} value={task.id}>{task.key} · {task.title}</option>)}</Select>}</Field>
+                </ResponsiveFilters>
                 <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
                     <section aria-labelledby="risk-register-title" className="min-w-0">
                         <div className="mb-2 flex items-center justify-between px-3">

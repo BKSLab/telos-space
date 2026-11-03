@@ -2,7 +2,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { queryKeys } from "@/lib/api";
 import { ProjectLayout } from "./ProjectLayout";
 
@@ -11,7 +11,13 @@ vi.mock("@/lib/useProject", () => ({
 }));
 vi.mock("@/components/chat/ChatUnreadBadge", () => ({ ChatUnreadBadge: () => <span>2</span> }));
 
-afterEach(cleanup);
+beforeEach(() => {
+    vi.stubGlobal("ResizeObserver", class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+    });
+});
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 it("оставляет одну активную вкладку чата и сохраняет остальные разделы проекта", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });

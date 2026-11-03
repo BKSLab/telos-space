@@ -110,7 +110,6 @@ import type {
 } from "@/lib/types";
 import { PRIORITY_LABELS, PRIORITY_ORDER } from "@/lib/types";
 import {
-    PHONE_QUERY,
     readStored,
     useCalendarHotkeys,
     useCalendarViewState,
@@ -170,14 +169,14 @@ export function ProjectCalendarPage() {
     const setSelectedTaskId = useUiStore((state) => state.setSelectedTaskId);
     const [searchParams, setSearchParams] = useSearchParams();
     const today = localToday();
-    const isPhone = useMediaQuery(PHONE_QUERY);
+    const isPhone = useMediaQuery("(max-width: 1023px)");
+    const isTouch = useMediaQuery("(pointer: coarse)");
     const isWide = useMediaQuery(WIDE_QUERY);
     const isPresent = searchParams.get("present") === "1";
     const viewState = useCalendarViewState(
         isPhone ? "tt.calendar.project.view.phone" : "tt.calendar.project.view",
         { view: "grid", gridScale: isPhone ? "week" : "month", timelineScale: "month" },
         today,
-        isPhone ? "grid" : undefined,
     );
     // «Рядом» на узком экране не помещается — падаем на сетку, адрес не трогаем.
     const view = viewState.view === "split" && !isWide ? "grid" : viewState.view;
@@ -768,6 +767,7 @@ export function ProjectCalendarPage() {
                     : [...remaining, { task_id: task.id, start_date: startDate, due_date: dates.dueDate }];
             setScenarioInputs(next);
             requestScenarioPreview(next);
+            if (isPhone) togglePanel(true);
             return;
         }
         const save = () => deadlineMutation.mutate({ taskId: task.id, ...dates });
@@ -870,9 +870,10 @@ export function ProjectCalendarPage() {
         holidays,
         colorMode,
         stagesById,
-        canDrag: () => access.canEdit,
+        canDrag: () => access.canEdit && !isPhone && !isTouch,
         showSource: false,
         onOpenTask: setSelectedTaskId,
+        onScheduleTask: access.canEdit ? (task) => setDeadlineTask(taskWithScenario(task as CalendarTaskModel)) : undefined,
         onCreate: access.canEdit ? setCreateDate : undefined,
         onOpenPeriod: (scale, value) => openGrid(scale, value),
     };
@@ -997,11 +998,12 @@ export function ProjectCalendarPage() {
     );
 
     return (
-        <div className="instrument-surface flex h-full min-h-0 flex-col">
+        <div className="instrument-surface flex h-full min-h-0 flex-col [@media(max-height:500px)]:overflow-y-auto [@media(max-height:500px)]:overscroll-contain">
             <div className="flex shrink-0 flex-col gap-2 border-b border-line px-3 py-2 sm:px-4">
                 <CalendarToolbar
                     title={title}
-                    view={isPhone ? undefined : view}
+                    view={view}
+                    activeFilterCount={activeFilterCount}
                     onViewChange={changeView}
                     allowSplit={isWide}
                     scale={view === "timeline" ? timelineScale : gridScale}
@@ -1072,7 +1074,7 @@ export function ProjectCalendarPage() {
                             isFixingPlan={schedule.isFixingPlan}
                         />
                     )}
-                    {showTimeline && !isPhone && (
+                    {showTimeline && (
                         <TimelineGroupSwitch
                             value={groupBy}
                             onChange={(value) => {
@@ -1097,7 +1099,7 @@ export function ProjectCalendarPage() {
                         <div className="mb-3 flex items-center justify-between gap-3">
                             <p className="text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">Видимые задачи</p>
                             {hasFilters && (
-                                <button type="button" onClick={resetFilters} className="text-[11px] text-muted hover:text-accent">
+                                <button type="button" onClick={resetFilters} className="min-h-11 px-2 text-[12px] text-muted hover:text-accent lg:min-h-0 lg:px-0 lg:text-[11px]">
                                     Сбросить
                                 </button>
                             )}
@@ -1130,7 +1132,7 @@ export function ProjectCalendarPage() {
                             <Select aria-label="Фильтр календаря по ИСР" value={wbsFilter} onChange={event => setViewParam("wbs", event.target.value)}><option value="">Все разделы ИСР</option>{calendarQuery.data?.wbs_nodes.map(node => <option key={node.id} value={node.id}>{node.title}</option>)}</Select>
                         </div>
                     </Popover>
-                    {!isPhone && <GanttExportMenu busy={isExporting} onExport={(format, scope) => void startExport(format, scope)} onPresent={() => setPresent(true)} />}
+                    <GanttExportMenu busy={isExporting} onExport={(format, scope) => void startExport(format, scope)} onPresent={() => setPresent(true)} />
                     <IconButton
                         size="sm"
                         variant={showPanel ? "secondary" : "ghost"}
@@ -1152,7 +1154,7 @@ export function ProjectCalendarPage() {
                 onDragEnd={handleDragEnd}
                 onDragCancel={() => setActiveTask(null)}
             >
-                <div className="relative flex min-h-0 flex-1">
+                <div className="relative flex min-h-0 flex-1 [@media(max-height:500px)]:min-h-[180px] [@media(max-height:500px)]:shrink-0">
                     <div
                         className={view === "grid" ? "scrollbar-thin min-w-0 flex-1 overflow-auto" : "flex min-w-0 flex-1 flex-col p-2 sm:p-3"}
                         data-calendar-body={view}
@@ -1172,14 +1174,14 @@ export function ProjectCalendarPage() {
                         {!isLoading && view === "timeline" && timelineContent}
                         {!isLoading && isSplit && calendarQuery.data && <SplitCalendarLayout top={gridContent} bottom={timelineContent} />}
                     </div>
-                    {(showPanel || isScenarioMode) && calendarQuery.data && (
+                    {(showPanel || (isScenarioMode && !isPhone)) && calendarQuery.data && (
                         <CalendarSidePanel<PanelTab>
                             active={searchParams.has("milestone") ? "milestones" : panelTab}
                             onActiveChange={(tab) => {
                                 if (searchParams.has("milestone")) setViewParam("milestone", "");
                                 setPanelTab(tab);
                             }}
-                            onClose={() => (isScenarioMode ? stopScenario() : togglePanel(false))}
+                            onClose={() => (isScenarioMode && !isPhone ? stopScenario() : togglePanel(false))}
                             top={
                                 isScenarioMode ? (
                                     <ScenarioPanel

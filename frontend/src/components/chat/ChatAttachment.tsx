@@ -10,11 +10,11 @@ export function ChatAttachment({ file, projectId }: { file: Attachment; projectI
     const [preview, setPreview] = useState(false);
     const url = apiUrl(`${chatPath(projectId)}/attachments/${file.id}/content`);
     const isImage = ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.content_type);
-    return <div className="max-w-sm">
-        {isImage && <button type="button" aria-label={`Посмотреть изображение ${file.original_name}`} onClick={() => setPreview(true)} className="mb-1.5 block overflow-hidden rounded-md bg-black/15">
-            <img src={`${url}?inline=true`} width={260} height={160} loading="lazy" alt={file.original_name} className="h-40 w-65 object-contain" />
+    return <div className="w-full min-w-0 max-w-sm">
+        {isImage && <button type="button" aria-label={`Посмотреть изображение ${file.original_name}`} onClick={() => setPreview(true)} className="mb-1.5 block max-w-full overflow-hidden rounded-md bg-black/15 focus-visible:outline-2 focus-visible:outline-accent">
+            <img src={`${url}?inline=true`} width={260} height={160} loading="lazy" alt={file.original_name} className="h-40 max-w-full object-contain" />
         </button>}
-        <a href={url} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-secondary hover:bg-hover hover:text-primary" download={file.original_name}>
+        <a href={url} className="flex min-h-11 items-center gap-2 rounded px-2 py-1.5 text-xs text-secondary hover:bg-hover hover:text-primary focus-visible:outline-2 focus-visible:outline-accent" download={file.original_name} title={file.original_name}>
             <FileText size={14} className="shrink-0 text-muted" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate">{file.original_name}</span>
             <span className="shrink-0 text-[10px] text-muted">{sizeLabel(file.size_bytes)}</span>

@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { ErrorMessage } from "@/components/ui/States";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+import { PRODUCT_NAME } from "@/lib/brand";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 interface LocationState {
     from?: string;
@@ -15,6 +18,7 @@ export function LoginPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const login = useLogin();
+    const touch = useMediaQuery("(pointer: coarse)");
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
 
@@ -32,13 +36,12 @@ export function LoginPage() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-app px-4 py-10">
-            <div className="flex w-full max-w-sm flex-col gap-6">
-                <header className="flex flex-col gap-1 text-center">
-                    <span aria-hidden="true" className="mx-auto mb-2 size-2 rotate-45 rounded-[2px] bg-accent/80" />
-                    <h1 className="text-xl font-semibold tracking-[-0.025em] text-primary">
-                        Task Tracker
-                    </h1>
+        <div className="brand-entry flex h-full min-h-0 flex-col items-center overflow-y-auto overscroll-y-contain bg-app px-4 py-6 sm:py-10">
+            <div className="my-auto flex w-full max-w-sm shrink-0 flex-col gap-6">
+                <header className="flex flex-col items-center gap-4 text-center">
+                    <h1 className="sr-only">Вход в {PRODUCT_NAME}</h1>
+                    <BrandLogo variant="tagline" className="w-[340px]" />
+                    <p className="max-w-xs text-[13px] leading-relaxed text-secondary">Цели, знания, задачи и результаты — в одном пространстве с помощником Арисом.</p>
                     <p className="text-[13px] text-muted">Войдите, чтобы продолжить работу</p>
                 </header>
 
@@ -61,7 +64,7 @@ export function LoginPage() {
                             {(id) => (
                                 <Input
                                     id={id}
-                                    autoFocus
+                                    autoFocus={!touch}
                                     autoComplete="username"
                                     value={username}
                                     onChange={(event) => setUsername(event.target.value)}

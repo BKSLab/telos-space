@@ -3,7 +3,7 @@ import { api, ApiError, endpoints } from "@/lib/api";
 import { useCurrentUser } from "@/lib/useAuth";
 import type { AgentConversation, AgentConversationPage, AgentFile, AgentMessage, AgentMessageAccepted, AgentMessagePage, AgentToolRun, TimPageContext } from "@/lib/types";
 
-/** После выполненного действия Веры обновляем то, что она могла поменять: проекты, задачи, документы, ИСР и доски. */
+/** После выполненного действия Ариса обновляем то, что он мог поменять: проекты, задачи, документы, ИСР и доски. */
 export function invalidateAfterTimAction(queryClient: QueryClient) {
     void queryClient.invalidateQueries({ predicate: (query) => {
         const [kind] = query.queryKey;
@@ -11,7 +11,7 @@ export function invalidateAfterTimAction(queryClient: QueryClient) {
     } });
 }
 
-/** Личный диалог с Верой в виджете (docs/tim-agent.md, 3): не привязан к проекту, виден только владельцу. */
+/** Личный диалог с Арисом в виджете (docs/agent.md): не привязан к проекту, виден только владельцу. */
 export function useTimConversations(conversationId: number | null, enabled = true) {
     const queryClient = useQueryClient();
     const userId = useCurrentUser().data?.id;
@@ -35,7 +35,7 @@ export function useTimConversations(conversationId: number | null, enabled = tru
             `${endpoints.timMessages(conversationId!)}${pageParam == null ? "" : `?before_id=${pageParam}`}`,
         ),
         getNextPageParam: (lastPage) => lastPage.next_before_id ?? undefined,
-        // Ответ готовится в фоне: пока Вера думает — опрашиваем чаще.
+        // Ответ готовится в фоне: пока Арис думает — опрашиваем чаще.
         refetchInterval: (query) => query.state.data?.pages[0].items.some(
             (message) => message.status === "queued" || message.status === "processing",
         ) ? 1500 : 15000,
@@ -80,7 +80,7 @@ export function useTimConversations(conversationId: number | null, enabled = tru
         mutationFn: ({ id, actionId, decision }: { id: number; actionId: string; decision: "approve" | "reject" }) =>
             api.post<AgentToolRun>(endpoints.timActionDecision(id, actionId), { decision }),
         onSettled: (action, _error, { id }) => {
-            // После решения Вера снова дописывает ответ — продолжаем опрос. Даже при потере
+            // После решения Арис снова дописывает ответ — продолжаем опрос. Даже при потере
             // HTTP-ответа решение могло сохраниться на сервере.
             void queryClient.invalidateQueries({ queryKey: messageKey(id) });
             if (!action || action.status === "completed") invalidateAfterTimAction(queryClient);

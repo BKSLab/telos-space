@@ -84,7 +84,7 @@ function TaskChips({ tasks, onOpenTask }: TaskChipsProps) {
                     onClick={() => onOpenTask(task.id)}
                     className={cn(
                         "inline-flex max-w-full items-center gap-1 rounded-[5px] border border-line",
-                        "bg-surface px-1.5 py-0.5 font-mono text-[10.5px] text-muted",
+                        "bg-surface px-2 py-1 font-mono text-[12px] text-muted",
                         "transition-colors duration-[var(--duration-fast)]",
                         "hover:border-accent-border hover:text-accent",
                     )}
@@ -133,8 +133,7 @@ function InsightCard({
                 <div className="flex items-center gap-1.5">
                     <span
                         className={cn(
-                            "inline-flex items-center gap-1 text-[10px] font-semibold",
-                            "tracking-[0.06em] uppercase",
+                            "inline-flex items-center gap-1 text-[12px] font-semibold",
                             TONE_TEXT[tone],
                         )}
                     >
@@ -144,14 +143,14 @@ function InsightCard({
                     {projectKey && (
                         <span
                             title={projectName ?? projectKey}
-                            className="ml-auto shrink-0 font-mono text-[10px] text-muted"
+                            className="ml-auto shrink-0 font-mono text-[12px] text-muted"
                         >
                             {projectKey}
                         </span>
                     )}
                 </div>
-                <h4 className="text-[13px] leading-snug font-semibold text-primary">{title}</h4>
-                <p className="text-[12.5px] leading-relaxed text-muted">{detail}</p>
+                <h4 className="text-[14px] leading-snug font-semibold text-primary">{title}</h4>
+                <p className="text-[14px] leading-relaxed text-muted">{detail}</p>
                 <TaskChips tasks={tasks} onOpenTask={onOpenTask} />
             </div>
         </article>

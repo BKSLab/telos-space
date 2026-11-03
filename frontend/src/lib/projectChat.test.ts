@@ -24,18 +24,18 @@ describe("переносы и авторы чата", () => {
         expect(isTaskMove({ ...move, target_kind: "FLOW" } as unknown as ChatEvent["data"])).toBe(false);
     });
 
-    it("подписывает Веры, локального пользователя и старый ответ с отсутствующим автором", () => {
-        expect(chatAuthorName({ author_type: "AGENT", author: null })).toBe("Вера");
+    it("подписывает Ариса, локального пользователя и старый ответ с отсутствующим автором", () => {
+        expect(chatAuthorName({ author_type: "AGENT", author: null })).toBe("Арис");
         expect(chatAuthorName({ author: row().author })).toBe("Анна");
         expect(chatAuthorName({ author: { id: 1, username: "anna", display_name: " " } })).toBe("anna");
         expect(chatAuthorName({ author: null }, "Удалённый пользователь")).toBe("Удалённый пользователь");
     });
 
-    it("сохраняет тип автора Веры в preview после обновления исходного сообщения", () => {
+    it("сохраняет тип автора Ариса в preview после обновления исходного сообщения", () => {
         const original = row({ author_type: "AGENT", author: null });
         const reply = row({ id: 2, seq: 2, client_message_id: "reply", reply: { id: 1, seq: 1, author: null, content: "", deleted: false } });
         const history = applyChatMessage({ messages: [reply], has_more: false, event_cursor: 0 }, original);
-        expect(chatAuthorName(history.messages.find((message) => message.id === 2)!.reply!)).toBe("Вера");
+        expect(chatAuthorName(history.messages.find((message) => message.id === 2)!.reply!)).toBe("Арис");
     });
 });
 

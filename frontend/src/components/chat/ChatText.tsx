@@ -11,7 +11,7 @@ function inline(text: string): ReactNode[] {
 }
 
 export function ChatText({ content }: { content: string }) {
-    return <div className="space-y-0.5 text-[13px] leading-relaxed break-words whitespace-pre-wrap [overflow-wrap:anywhere]">
+    return <div className="space-y-0.5 text-[14px] leading-relaxed break-words whitespace-pre-wrap [overflow-wrap:anywhere]">
         {content.split("\n").map((line, index) => line.startsWith("> ") ? <blockquote key={index} className="border-l-2 border-line pl-3 text-secondary">{inline(line.slice(2))}</blockquote> : <div key={index} className="min-h-[1lh]">{inline(line)}</div>)}
     </div>;
 }

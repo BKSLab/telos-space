@@ -3,16 +3,17 @@ import { Link, type LinkProps } from "react-router-dom";
 import { cn } from "@/lib/cn";
 
 const base =
-    "inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] border border-transparent font-medium " +
+    "touch-target inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] border border-transparent font-medium " +
     "transition-[background-color,border-color,color,box-shadow,transform] duration-[var(--duration-fast)] " +
     "ease-[var(--ease-standard)] active:translate-y-px motion-reduce:transform-none " +
     "disabled:pointer-events-none disabled:opacity-45";
 
 const variants = {
     primary:
-        "border-accent/45 bg-accent/85 text-on-accent shadow-card font-semibold hover:border-accent/70 hover:bg-accent",
+        "border-action/60 bg-action text-on-action shadow-card font-semibold hover:border-action-hover hover:bg-action-hover",
     secondary:
-        "material-metal border-line-subtle text-primary shadow-card hover:border-line hover:bg-hover active:bg-active",
+        "material-metal border-line text-primary shadow-card hover:border-line-strong hover:bg-hover active:bg-active",
+    ai: "brand-ai-button",
     ghost: "text-secondary hover:bg-white/[0.045] hover:text-primary active:bg-active",
     destructive:
         "border-danger/30 bg-danger/[0.075] text-danger hover:border-danger/50 hover:bg-danger/15",

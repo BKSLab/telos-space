@@ -17,25 +17,28 @@ export function ChatWorkspace({ children }: { children: ReactNode }) {
     const projects = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()), enabled: userId > 0 }).data;
     const selectedId = useChatDockStore((state) => state.projects[userId]);
     const selectProject = useChatDockStore((state) => state.selectProject);
+    const selectPersonal = useChatDockStore(state => state.selectPersonal);
     const panel = useChatDockStore((state) => state.panel);
     const open = useChatDockStore((state) => state.open);
-    const project = projectKey
-        ? projects?.find((item) => item.key.toUpperCase() === projectKey.toUpperCase())
-        : projects?.find((item) => item.id === selectedId) ?? projects?.[0];
+    const routeProject = projects?.find(item => item.key.toUpperCase() === projectKey?.toUpperCase());
+    const selectedProject = projects?.find(item => item.id === selectedId);
     const section = match?.params["*"]?.replace(/\/$/, "");
-    const fullPage = section === "chat" ? "team" : null;
+    const fullPage = section === "chat" || location.pathname.replace(/\/$/, "") === "/chat";
     const view = new URLSearchParams(location.search).get("view");
-    const teamPageVisible = fullPage === "team" && view !== "personal" && view !== "knowledge";
-    const visiblePanel = panel === fullPage ? null : panel;
+    const teamPageVisible = Boolean(routeProject && fullPage && view !== "personal" && view !== "knowledge" && view !== "vera");
+    // Открытое окно закреплено за выбранной перепиской, а не за текущим маршрутом.
+    const project = fullPage ? routeProject : panel === "team" ? selectedProject : routeProject ?? selectedProject;
+    const visiblePanel = fullPage ? null : panel;
 
     useEffect(() => {
-        if (project && project.id !== selectedId) selectProject(userId, project.id);
-    }, [project, selectedId, userId, selectProject]);
-    useEffect(() => { if (fullPage === panel) open(null); }, [fullPage, panel, open]);
+        if (fullPage && teamPageVisible && routeProject && (routeProject.id !== selectedId || useChatDockStore.getState().modes[userId] !== "team")) selectProject(userId, routeProject.id);
+        if (fullPage && (view === "vera" || location.pathname.replace(/\/$/, "") === "/chat") && useChatDockStore.getState().modes[userId] !== "personal") selectPersonal(userId);
+    }, [fullPage, teamPageVisible, routeProject, selectedId, userId, selectProject, selectPersonal, view, location.pathname]);
+    useEffect(() => { if (fullPage) open(null); }, [fullPage, open]);
     useEffect(() => () => { useChatDockStore.getState().open(null); }, [userId]);
 
     return <ProjectChatProvider projectId={project?.id ?? 0} projectKey={project?.key ?? ""} chatVisible={teamPageVisible || visiblePanel === "team"}>
         {children}
-        {project && userId > 0 && <FloatingChatDock project={project} projects={projects ?? []} userId={userId} projectPinned={Boolean(projectKey)} fullPage={fullPage} panel={visiblePanel} />}
+        {userId > 0 && <FloatingChatDock project={project} routeProject={routeProject} projects={projects ?? []} userId={userId} fullPage={fullPage} panel={visiblePanel} />}
     </ProjectChatProvider>;
 }

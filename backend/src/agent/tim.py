@@ -1,16 +1,17 @@
-"""Вера — проектный менеджер и правила обращения в проектном чате."""
+"""Арис — проектный менеджер и правила обращения в проектном чате."""
 
+import re
 from enum import StrEnum
 
-TIM_NAME = "Вера"
-"""Имя агента для людей и для самой модели; обращение к нему — просто «Вера»."""
-_ADDRESS = "вера"
-# Разделители после обращения, которые не несут смысла вопроса: «Вера, …», «Вера: …».
+TIM_NAME = "Арис"
+"""Имя агента для людей и модели; допустимые обращения — «Арис» и «ARIS»."""
+_ADDRESS = re.compile(r"(?:арис|aris)(?!\w)", re.IGNORECASE)
+# Разделители после обращения, которые не несут смысла вопроса: «Арис, …», «ARIS: …».
 _ADDRESS_TAIL = " \t\r\n,.:;!?-—–"
 
 
 class TimMode(StrEnum):
-    """Где Вера отвечает: от этого зависят данные, инструменты и секция промпта."""
+    """Где Арис отвечает: от этого зависят данные, инструменты и секция промпта."""
 
     PROJECT_CHAT = "project_chat"
     """Общий чат проекта: ответ видит вся команда, только данные этого проекта."""
@@ -26,30 +27,27 @@ WIDGET_MODES = frozenset({TimMode.WIDGET_PROJECT, TimMode.WIDGET_PERSONAL})
 
 
 def is_addressed_to_tim(text: str | None) -> bool:
-    """Адресовано ли сообщение чата Вере.
+    """Адресовано ли сообщение чата Арису.
 
     Args:
         text: Текст сообщения как его отправил участник.
 
     Returns:
-        True для «Вера, что горит?», «ВЕРА перенеси срок», «вера»; False для
-        «Веранда», «Вероника», «коллеги, Вера сказала» и старого «Тим, …».
+        True для «Арис, что горит?», «ARIS перенеси срок», «арис»; False для
+        «Аристотель», «Арис2», «коллеги, Арис сказал» и прежних имён.
     """
-    normalized = (text or "").strip().lower()
-    if not normalized.startswith(_ADDRESS):
-        return False
-    rest = normalized[len(_ADDRESS) :]
-    return not rest or not rest[0].isalnum()
+    return _ADDRESS.match((text or "").strip()) is not None
 
 
 def strip_address(text: str) -> str:
-    """Убирает обращение «Вера» и разделители из начала вопроса.
+    """Убирает обращение «Арис» или «ARIS» и разделители из начала вопроса.
 
     Пустой остаток — исходный текст.
     """
     stripped = text.strip()
-    if not is_addressed_to_tim(stripped):
+    address = _ADDRESS.match(stripped)
+    if address is None:
         return stripped
-    rest = stripped[len(_ADDRESS) :]
+    rest = stripped[address.end() :]
     rest = rest.lstrip(_ADDRESS_TAIL).strip()
     return rest or stripped

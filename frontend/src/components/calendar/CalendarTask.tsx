@@ -5,6 +5,7 @@ import { calendarTaskDragId } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
 import type { CalendarGridTask as CalendarTaskModel } from "@/lib/types";
 import { IconButton } from "@/components/ui/Button";
+import { useMediaQuery } from "@/lib/useCalendarView";
 
 interface CalendarTaskProps {
     task: CalendarTaskModel;
@@ -24,6 +25,8 @@ export function CalendarTask({
     onOpen,
     onSchedule,
 }: CalendarTaskProps) {
+    const touchLayout = useMediaQuery("(max-width: 1023px), (pointer: coarse)");
+    const canPointerDrag = draggable && !touchLayout;
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: calendarTaskDragId(task.id),
         data: {
@@ -35,7 +38,7 @@ export function CalendarTask({
                       ? "interval"
                       : "unscheduled",
         },
-        disabled: !draggable,
+        disabled: !canPointerDrag,
     });
     const stateLabel = task.is_done
         ? "Завершена"
@@ -68,8 +71,8 @@ export function CalendarTask({
                     "group flex min-w-0 flex-1 items-center gap-1 rounded-md border px-1.5 text-left",
                     "transition-[background-color,border-color,color,box-shadow]",
                     "duration-[var(--duration-fast)] ease-[var(--ease-standard)]",
-                    compact ? "h-6" : "min-h-7 py-1",
-                    draggable && "cursor-grab touch-none active:cursor-grabbing",
+                    compact ? "h-6" : "min-h-11 py-1.5 lg:min-h-7 lg:py-1",
+                    canPointerDrag && "cursor-grab touch-none active:cursor-grabbing",
                     task.is_done && "border-line-subtle bg-surface-2/55 text-muted",
                     task.is_overdue && "border-danger/35 bg-danger/10 text-danger hover:bg-danger/15",
                     !task.is_done &&
@@ -82,16 +85,17 @@ export function CalendarTask({
                         "border-line bg-elevated text-secondary hover:border-line-strong hover:text-primary",
                 )}
                 style={{ transform: CSS.Translate.toString(transform) }}
-                {...(draggable ? attributes : {})}
-                {...(draggable ? listeners : {})}
+                {...(canPointerDrag ? attributes : {})}
+                {...(canPointerDrag ? listeners : {})}
             >
                 <span className="shrink-0">{icon}</span>
                 <span className="shrink-0 font-mono text-[10px] opacity-80">{task.key}</span>
-                {!compact && <span className="truncate text-[11px]">{task.title}</span>}
+                {!compact && <span className="line-clamp-2 text-[12px] break-words lg:line-clamp-none lg:truncate lg:text-[11px]">{task.title}</span>}
             </button>
             {!compact && onSchedule && (
                 <IconButton
                     size="sm"
+                    className="size-11 shrink-0 lg:size-7"
                     label={`Изменить срок ${task.key}`}
                     onClick={() => onSchedule(task)}
                 >

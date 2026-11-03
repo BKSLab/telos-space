@@ -167,7 +167,7 @@ class AgentActionsService:
         repeat_is_error: bool = False,
         allow_external: bool = False,
     ) -> AgentToolRunSchema:
-        """Решение инициатора по действию личного виджета Веры или MCP-вызова.
+        """Решение инициатора по действию личного виджета Ариса или MCP-вызова.
 
         Args:
             context: Пользователь из аутентифицированного транспорта; проект
@@ -239,7 +239,7 @@ class AgentActionsService:
     async def decide_in_chat(
         self, *, context: AgentToolContext, action_id: UUID, decision: str
     ) -> AgentToolRunSchema:
-        """Решение по действию, которое Вера предложила в общем чате проекта.
+        """Решение по действию, которое Арис предложил в общем чате проекта.
 
         Решить может автор просьбы или любой участник, у которого есть права на
         само действие (запись в проект; для owner_only — владелец). Действие
@@ -247,7 +247,7 @@ class AgentActionsService:
 
         Args:
             context: Проект маршрута и решающий участник.
-            action_id: ID действия из карточки сообщения Веры.
+            action_id: ID действия из карточки сообщения Ариса.
             decision: approve или reject.
         Returns:
             Сохранённый результат; карточка обновится у всей команды событием чата.
@@ -268,7 +268,7 @@ class AgentActionsService:
             if turn is None or row is None or turn.project_id != context.project_id:
                 raise AgentToolAccessError("Действие недоступно в этом чате.")
             if turn.status not in {"completed", "failed"}:
-                raise AgentToolConflictError("Дождитесь, пока Вера допишет ответ.")
+                raise AgentToolConflictError("Дождитесь, пока Арис допишет ответ.")
             if decision == "reject" and context.user_id == row.user_id:
                 # Автор просьбы может отказаться всегда, даже потеряв право записи.
                 actor = await self._active_user(db, context)
@@ -470,7 +470,7 @@ class AgentActionsService:
 
     @staticmethod
     async def _require_execution(db: AgentProjectToolScope, context: AgentToolContext) -> None:
-        """Запись из ответа Веры возможна только в ещё активной попытке этого ответа."""
+        """Запись из ответа Ариса возможна только в ещё активной попытке этого ответа."""
         if context.message_id is not None:
             message = await db.messages.get_for_update(context.message_id)
             if (

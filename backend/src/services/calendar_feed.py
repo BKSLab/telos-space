@@ -26,7 +26,7 @@ FEED_TOKEN_ENTROPY_BYTES = 32
 FEED_TOKEN_MAX_LENGTH = 128
 FEED_PAST_DAYS = 30
 FEED_FUTURE_DAYS = 180
-FEED_NAME = "Трекер — мои задачи"
+FEED_NAME = "TELOS SPACE — мои задачи"
 DONE_MARK = "✓ "
 MILESTONE_MARK = "◆ "
 
@@ -151,6 +151,8 @@ class CalendarFeedService:
         except CalendarServiceError as error:
             raise CalendarFeedServiceError(error.error_details) from error
         stamp = datetime.now(UTC)
+        # UID уже сохранённых событий сохраняются при смене бренда: подписчики
+        # должны обновлять прежние события, а не создавать их дубликаты.
         events = [
             IcsEvent(
                 uid=f"task-{task.id}@vera-task-tracker",

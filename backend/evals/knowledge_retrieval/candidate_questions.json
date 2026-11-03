@@ -15,7 +15,7 @@
     {"id": "candidate-011", "kind": "hybrid", "approval_status": "ТРЕБУЕТ УТВЕРЖДЕНИЯ", "question": "Почему задача по авторизации ещё не завершена?"},
     {"id": "candidate-012", "kind": "hybrid", "approval_status": "ТРЕБУЕТ УТВЕРЖДЕНИЯ", "question": "Кто отвечает за устранение риска и что уже решили?"},
     {"id": "candidate-013", "kind": "hybrid", "approval_status": "ТРЕБУЕТ УТВЕРЖДЕНИЯ", "question": "Какой срок у задачи из документа о миграции?"},
-    {"id": "candidate-014", "kind": "hybrid", "approval_status": "ТРЕБУЕТ УТВЕРЖДЕНИЯ", "question": "В каком состоянии задача VERA-142 и почему?"},
+    {"id": "candidate-014", "kind": "hybrid", "approval_status": "ТРЕБУЕТ УТВЕРЖДЕНИЯ", "question": "В каком состоянии задача TELOS-142 и почему?"},
     {"id": "candidate-015", "kind": "hybrid", "approval_status": "ТРЕБУЕТ УТВЕРЖДЕНИЯ", "question": "Какие незавершённые задачи связаны с безопасностью?"},
     {"id": "candidate-016", "kind": "hybrid", "approval_status": "ТРЕБУЕТ УТВЕРЖДЕНИЯ", "question": "Есть ли просроченные задачи по подготовке релиза?"},
     {"id": "candidate-017", "kind": "hybrid", "approval_status": "ТРЕБУЕТ УТВЕРЖДЕНИЯ", "question": "Кто сейчас выполняет задачи, связанные с аналитикой?"},

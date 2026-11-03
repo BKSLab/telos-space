@@ -1,4 +1,4 @@
-"""Цикл Веры на PydanticAI: инструменты из реестра, права, ModelRetry, бюджет, телеметрия.
+"""Цикл Ариса на PydanticAI: инструменты из реестра, права, ModelRetry, бюджет, телеметрия.
 
 Настоящая LLM не вызывается: FunctionModel/TestModel ведут цикл, а
 инструменты исполняет тот же ``AgentToolExecutor``, что и в сервисе.
@@ -32,11 +32,11 @@ from src.prompts.project_agent import (
 from src.schemas.knowledge import KnowledgeReadParameters
 from src.schemas.project_tool_inputs import TaskCreateInput, TaskInput
 from src.services.agent_actions import AgentActionsService
-from tests.unit.knowledge.agent_models import final
+from tests.unit.knowledge.agent_models import final, prompt_payload
 
 
 def registry_executor() -> AgentToolExecutor:
-    """Полный реестр Веры: чтение источников, действия проекта и личные действия."""
+    """Полный реестр Ариса: чтение источников, действия проекта и личные действия."""
     return build_project_tool_executor(
         MagicMock(), AgentActionsService(scope=MagicMock(), actions=TIM_ACTIONS)
     )
@@ -339,7 +339,51 @@ async def test_arguments_still_wrong_after_retries_do_not_fail_the_answer():
     assert [item.get("refused") for item in result.tool_calls] == ["arguments"] * 3
 
 
-async def test_openai_compatible_model_sends_native_tools_to_polza_endpoint():
+@pytest.mark.parametrize(
+    ("model_name", "options", "expected_fields"),
+    [
+        ("google/gemini-3.7-flash", {}, {}),
+        (
+            "qwen/qwen3.8-flash",
+            {"agent_reasoning_enabled": True, "agent_provider": "alibaba"},
+            {
+                "reasoning": {"enabled": True},
+                "provider": {"only": ["alibaba"], "allow_fallbacks": False},
+            },
+        ),
+        (
+            "qwen/qwen3.8-flash",
+            {"agent_reasoning_enabled": False, "agent_provider": "alibaba"},
+            {
+                "reasoning": {"enabled": False},
+                "provider": {"only": ["alibaba"], "allow_fallbacks": False},
+            },
+        ),
+        (
+            "qwen/qwen3.5-flash-02-23",
+            {"agent_reasoning_enabled": False, "agent_provider": "alibaba"},
+            {
+                "reasoning": {"enabled": False},
+                "provider": {"only": ["alibaba"], "allow_fallbacks": False},
+            },
+        ),
+        (
+            "openai/gpt-6-luna",
+            {
+                "agent_reasoning_enabled": False,
+                "agent_reasoning_effort": "none",
+                "agent_provider": "openai",
+            },
+            {
+                "reasoning": {"enabled": False, "effort": "none"},
+                "provider": {"only": ["openai"], "allow_fallbacks": False},
+            },
+        ),
+    ],
+)
+async def test_openai_compatible_model_sends_native_tools_to_polza_endpoint(
+    model_name, options, expected_fields
+):
     """Модель агента ходит в тот же адрес polza.ai с ключом и нативными tools."""
     import json as jsonlib
 
@@ -387,15 +431,23 @@ async def test_openai_compatible_model_sends_native_tools_to_polza_endpoint():
                 "object": "chat.completion",
                 "created": 0,
                 "model": payload["model"],
+                "provider": "test-provider",
                 "choices": [{"index": 0, "message": message, "finish_reason": "tool_calls"}],
-                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                    "cost_rub": 0 if len(requests) == 1 else 0.01234,
+                },
             },
         )
 
     settings = LlmSettings(
+        _env_file=None,
         llm_api_key="secret-key",
         llm_api_url="https://polza.ai/api/v1/chat/completions",
-        agent_model="google/gemini-3.7-flash",
+        agent_model=model_name,
+        **options,
     )
     async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as http_client:
         model = build_agent_model(settings, http_client)
@@ -408,7 +460,12 @@ async def test_openai_compatible_model_sends_native_tools_to_polza_endpoint():
     first, payload = requests[0]
     assert str(first.url) == "https://polza.ai/api/v1/chat/completions"
     assert first.headers["authorization"] == "Bearer secret-key"
-    assert payload["model"] == "google/gemini-3.7-flash"
+    assert payload["model"] == model_name
+    for _request, body in requests:
+        assert body["tool_choice"] == "auto"
+        assert {
+            key: body[key] for key in ("provider", "reasoning") if key in body
+        } == expected_fields
     assert len({body["prompt_cache_key"] for _, body in requests}) == len(requests)
     names = {tool["function"]["name"] for tool in payload["tools"]}
     assert names == {"get_task", "final_result"}
@@ -422,6 +479,161 @@ async def test_openai_compatible_model_sends_native_tools_to_polza_endpoint():
     assert [item["input_tokens"] for item in result.model_requests] == [10, 10]
     assert [item["tool_calls"] for item in result.model_requests] == [1, 1]
     assert all(item["ms"] >= 0 for item in result.model_requests)
+    assert [item["cost_rub"] for item in result.model_requests] == [0, 0.01234]
+    assert [item["provider_request_id"] for item in result.model_requests] == ["r1", "r2"]
+    assert all(
+        item["provider"] == "test-provider" and item["model"] == model_name
+        for item in result.model_requests
+    )
+
+
+@pytest.mark.parametrize(
+    ("agent_options", "read_timeout", "attempts"),
+    [
+        ({"agent_request_timeout_seconds": 30, "agent_request_attempts": 2}, 30, 2),
+        ({}, 300, 3),
+    ],
+    ids=["agent-limits", "legacy-defaults"],
+)
+async def test_native_model_limits_http_timeout_attempts_and_preserves_legacy_defaults(
+    monkeypatch, agent_options, read_timeout, attempts
+):
+    """SDK повторяет HTTP-таймаут только в пределах настроенного числа попыток."""
+    import httpx
+    from pydantic_ai.exceptions import ModelTimeoutError
+
+    from src.clients.agent_model import build_agent_model
+    from src.core.settings import LlmSettings
+
+    monkeypatch.delenv("AGENT_REQUEST_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("AGENT_REQUEST_ATTEMPTS", raising=False)
+    requests = []
+
+    def timeout_response(request):
+        requests.append(request)
+        raise httpx.ReadTimeout("synthetic model timeout", request=request)
+
+    settings = LlmSettings(
+        _env_file=None,
+        llm_api_key="test",
+        llm_api_url="https://polza.ai/api/v1/chat/completions",
+        agent_model="openai/gpt-6-luna",
+        agent_reasoning_enabled=False,
+        agent_reasoning_effort="none",
+        agent_provider="openai",
+        llm_timeout=300,
+        llm_retries=3,
+        **agent_options,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(timeout_response), timeout=300
+    ) as http:
+        executor, read, create = small_executor()
+        runtime = TimRuntime(model=build_agent_model(settings, http), executor=executor)
+        with pytest.raises(ModelTimeoutError):
+            await runtime.run(deps_for(executor), metadata={})
+
+    assert len(requests) == attempts
+    assert all(request.extensions["timeout"]["read"] == read_timeout for request in requests)
+    read.assert_not_awaited()
+    create.assert_not_awaited()
+
+
+@pytest.mark.parametrize("retry_succeeds", [True, False], ids=["final-recovered", "final-timeout"])
+async def test_native_final_response_timeout_does_not_repeat_a_completed_create_task(
+    retry_succeeds,
+):
+    """HTTP-повтор после квитанции create_task не запускает заново runtime или запись."""
+    import json as jsonlib
+
+    import httpx
+    from pydantic_ai.exceptions import ModelTimeoutError
+
+    from src.clients.agent_model import build_agent_model
+    from src.core.settings import LlmSettings
+
+    executor, read, create = small_executor()
+    requests = []
+
+    def reply(request):
+        body = jsonlib.loads(request.content)
+        requests.append((request, body))
+        if len(requests) == 1:
+            name, arguments = "create_task", {"title": "Проверка таймаута"}
+        else:
+            create.assert_awaited_once()
+            if len(requests) == 2 or not retry_succeeds:
+                raise httpx.ReadTimeout("synthetic final response timeout", request=request)
+            name, arguments = "final_result", {"answer": "Задача создана.", "source_ids": []}
+        return httpx.Response(
+            200,
+            json={
+                "id": f"r{len(requests)}",
+                "object": "chat.completion",
+                "created": 0,
+                "model": body["model"],
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "tool_calls",
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": f"c{len(requests)}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": name,
+                                        "arguments": jsonlib.dumps(arguments),
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            },
+        )
+
+    settings = LlmSettings(
+        _env_file=None,
+        llm_api_key="test",
+        llm_api_url="https://polza.ai/api/v1/chat/completions",
+        agent_model="openai/gpt-6-luna",
+        agent_reasoning_enabled=False,
+        agent_reasoning_effort="none",
+        agent_provider="openai",
+        llm_timeout=300,
+        llm_retries=3,
+        agent_request_timeout_seconds=30,
+        agent_request_attempts=2,
+    )
+    deps = deps_for(executor)
+    write_intent = AsyncMock(return_value=True)
+    deps.write_gate = WriteGate(write_intent())
+    deps.on_result = AsyncMock()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply), timeout=300) as http:
+        runtime = TimRuntime(model=build_agent_model(settings, http), executor=executor)
+        if retry_succeeds:
+            result = await runtime.run(deps, metadata={})
+            assert result.output.answer == "Задача создана."
+            assert result.requests == 2
+        else:
+            with pytest.raises(ModelTimeoutError):
+                await runtime.run(deps, metadata={})
+
+    assert len(requests) == 3  # create_task, затем две HTTP-попытки итогового ответа.
+    assert all(request.extensions["timeout"]["read"] == 30 for request, _ in requests)
+    assert requests[1][1] == requests[2][1]
+    receipt = next(item for item in requests[1][1]["messages"] if item["role"] == "tool")
+    assert jsonlib.loads(receipt["content"])["action"]["status"] == "completed"
+    assert jsonlib.loads(receipt["content"])["action"]["id"] == "a1"
+    create.assert_awaited_once()
+    read.assert_not_awaited()
+    write_intent.assert_awaited_once()
+    deps.on_result.assert_awaited_once()
+    assert [call["tool"] for call in deps.calls] == ["create_task"]
 
 
 async def test_steps_notice_appears_only_near_the_end():
@@ -517,16 +729,55 @@ async def test_small_talk_offers_only_native_loading_without_domain_context_or_w
         assert "checklist_revision" not in info.instructions
         assert "СХЕМЫ НА ДОСКАХ" not in info.instructions
         assert len(deps.system_prompt) < len(TIM_SYSTEM_PROMPTS[TimMode.WIDGET_PROJECT]) // 3
-        return final("Привет! Я Вера, проектный менеджер.")
+        return final("Привет! Я Арис, проектный менеджер.")
 
     runtime = TimRuntime(model=FunctionModel(respond), executor=executor)
     result = await runtime.run(deps, metadata={})
 
     assert result.requests == 1
-    assert result.output.answer == "Привет! Я Вера, проектный менеджер."
+    assert result.output.answer == "Привет! Я Арис, проектный менеджер."
     assert result.tool_calls == []
     deps.load_context.assert_not_awaited()
     deps.write_gate_factory.assert_not_called()
+
+
+async def test_old_assistant_names_remain_in_history_with_current_aris_instructions():
+    """Старая переписка сохраняется дословно; текущая личность задаётся системной инструкцией."""
+    history = [
+        {"role": "user", "content": "Тим, расскажи о проекте."},
+        {"role": "assistant", "content": "Я Вера, проектный менеджер. Готова помочь."},
+    ]
+    memory = "Вера договорилась проверить сроки задач."
+    for mode in TimMode:
+        for deferred, prompts in ((False, TIM_SYSTEM_PROMPTS), (True, TIM_BASE_PROMPTS)):
+            executor, read, create = small_executor()
+            deps = deps_for(executor, mode=mode, context_tokens=24000)
+            deps.defer_workflows = deferred
+            deps.system_prompt = prompts[mode]
+            deps.content.update(
+                question="Как тебя зовут сейчас?",
+                dialog_history=history,
+                dialog_memory=memory,
+            )
+            deps.budget = AgentContextBudget(
+                system_prompt=deps.system_prompt, max_tokens=24000, history_tokens=1000
+            )
+
+            async def respond(messages, info: AgentInfo) -> ModelResponse:
+                assert "Тебя зовут Арис (ARIS)" in info.instructions
+                assert "TELOS SPACE" in info.instructions and "мужском роде" in info.instructions
+                assert "Прежние имена в истории" in info.instructions
+                assert "Вера" not in info.instructions and "Тим" not in info.instructions
+                payload = prompt_payload(messages)
+                assert payload["dialog_history"] == history
+                assert payload["dialog_memory"] == memory
+                return final("Я Арис, проектный менеджер TELOS SPACE. Готов помочь.")
+
+            runtime = TimRuntime(model=FunctionModel(respond), executor=executor)
+            result = await runtime.run(deps, metadata={})
+            assert result.requests == 1 and result.tool_calls == []
+            read.assert_not_awaited()
+            create.assert_not_awaited()
 
 
 async def test_native_workflow_loads_context_rules_and_tools_then_resets_for_the_next_run():

@@ -67,7 +67,7 @@ class AgentToolRunsRepository:
     async def get_in_chat(
         self, run_id: UUID, project_id: int, *, lock: bool = True
     ) -> AgentToolRun | None:
-        """Действие, предложенное Верой в чате проекта, с блокировкой строки.
+        """Действие, предложенное Арисом в чате проекта, с блокировкой строки.
 
         Решение в общем чате принимает не только инициатор, поэтому владелец
         здесь не фильтруется: права решающего проверяет сервис.
@@ -82,7 +82,7 @@ class AgentToolRunsRepository:
         return (await self._execute(statement)).scalar_one_or_none()
 
     async def get_for_turns(self, turn_ids: list[int]) -> list[AgentToolRun]:
-        """Действия ходов Веры в чате проекта по порядку выполнения."""
+        """Действия ходов Ариса в чате проекта по порядку выполнения."""
         return list(
             (
                 await self._execute(

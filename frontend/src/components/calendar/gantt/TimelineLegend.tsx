@@ -18,7 +18,7 @@ export function TimelineLegend({
         <div
             aria-label="Легенда шкалы"
             role="note"
-            className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-1.5 text-[10px] leading-4 text-secondary"
+            className="scrollbar-thin flex min-w-0 shrink-0 flex-nowrap items-center gap-x-3 gap-y-1 overflow-x-auto px-1 pt-1.5 text-[10px] leading-4 text-secondary lg:flex-wrap [&>span]:shrink-0"
             data-gantt-legend=""
         >
             <span className="font-semibold text-muted" title="Меняется переключателем «Цвет по» в шапке календаря">

@@ -74,7 +74,7 @@ class AgentMessage(Base):
     )
     page_context: Mapped[dict | None] = mapped_column(
         JSONB,
-        doc="Страница, с которой пользователь написал Тиму: route, project_key, task_id, board_id.",
+        doc="Страница, с которой пользователь написал Арису: route, project_key, task_id, board_id.",
         comment="Контекст страницы виджета: route, project_key, task_id, board_id.",
     )
     verbatim: Mapped[str | None] = mapped_column(
@@ -97,8 +97,8 @@ class AgentMessage(Base):
     )
     progress: Mapped[str | None] = mapped_column(
         String(200),
-        doc="Что Тим делает сейчас, пока готовит ответ; None — статуса нет или ответ завершён.",
-        comment="Что Тим делает сейчас, пока готовит ответ; NULL — статуса нет или ответ завершён.",
+        doc="Что Арис делает сейчас, пока готовит ответ; None — статуса нет или ответ завершён.",
+        comment="Что Арис делает сейчас, пока готовит ответ; NULL — статуса нет или ответ завершён.",
     )
     error: Mapped[str | None] = mapped_column(
         Text, doc="Безопасное описание ошибки.", comment="Безопасное описание ошибки."

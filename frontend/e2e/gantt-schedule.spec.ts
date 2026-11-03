@@ -11,7 +11,19 @@ test.setTimeout(60_000);
  * «Зафиксировать план». SHOTS_DIR=<папка> — сохранить скриншоты.
  */
 const SHOTS_DIR = process.env.SHOTS_DIR;
-const TIMELINE = "/projects/DEMO/calendar?view=timeline&scale=month";
+const SCHEDULE_MONTH = "2026-06";
+const TIMELINE = `/projects/DEMO/calendar?view=timeline&scale=month&date=${SCHEDULE_MONTH}-15`;
+
+function mockScheduleState() {
+    const state = mockState();
+    // Все полосы и концы зависимостей внутри явного периода, независимо от даты запуска.
+    state.tasks = state.tasks.map((task, index) => ({
+        ...task,
+        start_date: `${SCHEDULE_MONTH}-${String(index + 1).padStart(2, "0")}`,
+        due_date: `${SCHEDULE_MONTH}-${String(index * 2 + 3).padStart(2, "0")}`,
+    }));
+    return state;
+}
 
 async function shot(page: Page, name: string) {
     if (!SHOTS_DIR) return;
@@ -25,7 +37,7 @@ const bar = (page: Page, taskId: number) => page.locator(`[data-gantt-task-id="$
 
 test.describe("шкала проекта: график", () => {
     test("полоса заливается на процент чек-листа, подсказка «Выполнено N%»", async ({ page }) => {
-        const state = mockState();
+        const state = mockScheduleState();
         state.schedule.progress = { 100: 40, 101: null };
         await installMockApi(page, state);
         await page.goto(TIMELINE);
@@ -42,7 +54,7 @@ test.describe("шкала проекта: график", () => {
     });
 
     test("«Критический путь» подсвечивает цепочку, приглушает остальное и запоминается", async ({ page }) => {
-        const state = mockState();
+        const state = mockScheduleState();
         state.schedule.critical = [100, 101];
         state.schedule.dependencies = [
             { id: 1, project_id: 1, predecessor_task_id: 100, successor_task_id: 101, dependency_type: "FINISH_TO_START", lag_days: 0, created_at: stamp, is_critical: true },
@@ -69,7 +81,7 @@ test.describe("шкала проекта: график", () => {
     });
 
     test("ручка на краю полосы: протянул к другой — создана FS-связь, цикл — тост", async ({ page }) => {
-        const state = mockState();
+        const state = mockScheduleState();
         await installMockApi(page, state);
         await page.goto(TIMELINE);
 
@@ -108,7 +120,7 @@ test.describe("шкала проекта: график", () => {
     });
 
     test("перенос с конфликтом у последователей: «Сдвинуть и N следующих?» — Да / Только эту", async ({ page }) => {
-        const state = mockState();
+        const state = mockScheduleState();
         // DEMO-2 → DEMO-5: DEMO-5 начинается до срока DEMO-2 + 2 дня.
         state.schedule.dependencies = [
             { id: 1, project_id: 1, predecessor_task_id: 101, successor_task_id: 104, dependency_type: "FINISH_TO_START", lag_days: 0, created_at: stamp },
@@ -142,7 +154,7 @@ test.describe("шкала проекта: график", () => {
     });
 
     test("«Зафиксировать план»: подтверждение с числом задач, затем один пакетный запрос", async ({ page }) => {
-        const state = mockState();
+        const state = mockScheduleState();
         await installMockApi(page, state);
         await page.goto(TIMELINE);
 

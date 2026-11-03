@@ -2,20 +2,26 @@ import { describe, expect, it } from "vitest";
 import { TIM_CHAT_HINT, TIM_NAME, TIM_PERSONA, describePageContext, isForTim, pageContext } from "@/lib/tim";
 
 describe("isForTim — имя в начале и граница слова, как на сервере", () => {
-    it.each(["Вера, что горит?", "ВЕРА перенеси срок", "  вера: сводка", "вера!", "Вера", "Вера_сводка", "Вера🙂", "Вера PM, что горит?"])("«%s» — Вере", (text) => {
+    it.each([
+        "Арис, что горит?", "АРИС перенеси срок", "  арис: сводка", "арис!", "Арис", "Арис🙂", "Арис PM, что горит?",
+        "ARIS, что горит?", "aris перенеси срок", "  ArIs: сводка", "ARIS!", "ARIS", "ARIS🙂", "ARIS PM, что горит?",
+    ])("«%s» — Арису", (text) => {
         expect(isForTim(text)).toBe(true);
     });
-    it.each(["Веранда", "Вероника", "Вера2", "ВераO", "Вера𐐀", "Вера²", "коллеги, Вера сказала", "@Вера привет", "Тим, сводка", "ТИМ", "Тим PM, сводка", "", "ве", null, undefined])("«%s» — не Вере", (text) => {
+    it.each([
+        "Аристотель", "Ариса", "Арис2", "АрисO", "Арис𐐀", "Арис²", "АрисА", "Арис_сводка", "ARISTOTLE", "ARIS2", "ARISЖ", "ARIS𐐀", "ARIS²", "ARIS_сводка",
+        "коллеги, Арис сказал", "коллеги, ARIS сказал", "@Арис привет", "@ARIS привет", "Вера, сводка", "ВЕРА", "вера!", "Веранда", "Тим, сводка", "ТИМ", "Тим PM, сводка", "", "ар", null, undefined,
+    ])("«%s» — не Арису", (text) => {
         expect(isForTim(text)).toBe(false);
     });
 });
 
 describe("имя агента", () => {
-    it("представляет Веру как проектного менеджера и показывает обращение по имени", () => {
-        expect(TIM_NAME).toBe("Вера");
-        expect(TIM_PERSONA).toBe("Вера — проектный менеджер");
-        expect(TIM_CHAT_HINT).toContain("Вера, …");
-        expect(isForTim("Вера, что горит?")).toBe(true);
+    it("представляет Ариса как проектного менеджера и показывает обращение по имени", () => {
+        expect(TIM_NAME).toBe("Арис");
+        expect(TIM_PERSONA).toBe("Арис — проектный менеджер");
+        expect(TIM_CHAT_HINT).toContain("Арис, …");
+        expect(isForTim("Арис, что горит?")).toBe(true);
         expect(isForTim(`${TIM_NAME}, что горит?`)).toBe(true);
     });
 });

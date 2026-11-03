@@ -114,9 +114,9 @@ export function ProjectSettingsPage() {
 
     return (
         <div className="scrollbar-thin h-full overflow-y-auto">
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-5">
+            <div className="mx-auto flex w-full min-w-0 max-w-none flex-col gap-6 px-3 py-4 pb-24 sm:px-5 sm:py-5">
                 <Section title="О проекте">
-                    <div className="flex flex-col gap-5 rounded-[var(--radius-card)] bg-surface/40 p-5">
+                    <div className="flex min-w-0 flex-col gap-5 rounded-[var(--radius-card)] bg-surface/40 p-3 sm:p-5">
                         <ProjectPeopleSummary project={project} />
                         {saveMutation.error && (
                             <ErrorMessage message={(saveMutation.error as Error).message} />

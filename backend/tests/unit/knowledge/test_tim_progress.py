@@ -1,4 +1,4 @@
-"""Живой статус ответа Веры: фразы по инструментам и запись, которая не мешает ответу.
+"""Живой статус ответа Ариса: фразы по инструментам и запись, которая не мешает ответу.
 
 Настоящая LLM не вызывается: FunctionModel ведёт цикл PydanticAI, инструменты
 исполняет реестр ``AgentToolExecutor``.
@@ -80,7 +80,7 @@ def test_every_registered_tool_has_a_phrase_and_long_queries_are_cut():
     assert len(describe_call("get_task", {"task_key": "K" * 500})) <= MAX_PROGRESS_CHARS
     for text in PHRASES.values():
         assert "_" not in text and text.endswith("…")
-    # Действие с подтверждением Вера только предлагает — фраза не обещает изменение.
+    # Действие с подтверждением Арис только предлагает — фраза не обещает изменение.
     for definition in TIM_ACTIONS:
         if definition.requires_confirmation:
             assert PHRASES[definition.name].startswith("Готовлю"), definition.name

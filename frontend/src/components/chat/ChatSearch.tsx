@@ -20,9 +20,9 @@ export function ChatSearch({ onJump, onClose, compact = false }: { onJump: (id: 
         enabled: query.length >= 2,
     });
     const results = search.data?.pages.flatMap((page) => [...page.messages].reverse()) ?? [];
-    return <aside aria-label="Поиск по сообщениям" className={cn("material-mineral absolute inset-y-0 right-0 z-20 flex max-w-full flex-col border-l border-line-subtle shadow-panel", compact ? "w-full" : "w-80 lg:relative lg:shrink-0 lg:shadow-none")}>
-        <div className="flex items-center gap-2 border-b border-line-subtle p-3"><Search size={14} className="shrink-0 text-muted" /><input autoFocus value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onClose(); } }} maxLength={200} aria-label="Поиск по сообщениям" placeholder="Найти в переписке…" className="min-w-0 flex-1 bg-transparent text-xs text-primary outline-none" /><IconButton label="Закрыть поиск" size="sm" onClick={onClose}><X size={13} /></IconButton></div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+    return <aside aria-label="Поиск по сообщениям" className={cn("chat-search material-mineral absolute inset-y-0 right-0 z-20 flex max-w-full flex-col border-l border-line-subtle shadow-panel", compact ? "w-full" : "w-80 lg:relative lg:shrink-0 lg:shadow-none")}>
+        <div className="flex items-center gap-2 border-b border-line-subtle p-3"><Search size={14} className="shrink-0 text-muted" /><input type="search" autoFocus value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); onClose(); } }} maxLength={200} aria-label="Поиск по сообщениям" placeholder="Найти в переписке…" className="min-h-11 min-w-0 flex-1 bg-transparent text-base text-primary outline-none sm:min-h-8 sm:text-sm" /><IconButton label="Закрыть поиск" size="sm" onClick={onClose}><X size={13} /></IconButton></div>
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-2">
             {query.length < 2 && <p className="px-2 py-3 text-xs text-muted">Введите хотя бы два символа.</p>}
             {query.length >= 2 && search.isFetching && !results.length && <p role="status" className="px-2 py-3 text-xs text-muted">Поиск…</p>}
             {query.length >= 2 && !search.isFetching && !results.length && !search.error && <p className="px-2 py-3 text-xs text-muted">Сообщения не найдены.</p>}

@@ -36,6 +36,8 @@ import { useCtrlWheelZoom } from "@/components/calendar/gantt/useCtrlWheelZoom";
 import { WorkloadStrip } from "@/components/calendar/TimelineWorkload";
 import { IconButton } from "@/components/ui/Button";
 import { taskColor, type ColorMode } from "@/lib/calendarGrid";
+import { useMediaQuery } from "@/lib/useCalendarView";
+import { shortDate } from "@/components/calendar/grid/gridHelpers";
 import {
     GANTT_COLUMNS,
     LABEL_WIDTH_DEFAULT,
@@ -161,8 +163,14 @@ export function TimelineGrid({
     groupBy = "stage",
     workload,
 }: TimelineGridProps) {
+    const compactScreen = useMediaQuery("(max-width: 1023px)");
+    const touchScreen = useMediaQuery("(pointer: coarse)");
+    const compact = compactScreen && !staticLayout;
+    const pointerEditing = !staticLayout && !compact && !touchScreen;
     const [dragLabelWidth, setDragLabelWidth] = useState<number | null>(null);
-    const titleWidth = dragLabelWidth ?? labelWidth;
+    const titleWidth = compact ? 168 : dragLabelWidth ?? labelWidth;
+    // Дополнительные колонки можно пролистать целиком: широкая закреплённая часть не закрывает шкалу телефона.
+    const labelPosition = compact && columns.length > 0 ? "relative" : "sticky left-0";
     const visibleColumns = GANTT_COLUMNS.filter((column) => columns.includes(column.id));
     const leftWidth = titleWidth + ganttColumnsWidth(columns);
     const [collapsedIds, setCollapsedIds] = useState<Set<TimelineGroupKey>>(new Set());
@@ -179,7 +187,7 @@ export function TimelineGrid({
     const dayWidth = dayWidthOverride ?? TIMELINE_DAY_WIDTH[scale];
     const showInitials = scale === "week" || scale === "month";
     const timelineWidth = days.length * dayWidth;
-    const rowHeight = scale === "week" ? 48 : 42;
+    const rowHeight = compact ? 64 : scale === "week" ? 48 : 42;
     const headerHeight = 42;
     const bodyHeight = Math.max(rows.length * rowHeight, 92);
     const scenarioByTaskId = useMemo(
@@ -270,13 +278,13 @@ export function TimelineGrid({
                 staticLayout ? "w-max" : "h-full min-h-0 overflow-hidden",
             )}
         >
-            <div ref={scrollRef} className={staticLayout ? undefined : "scrollbar-thin min-h-0 flex-1 overflow-auto"} data-timeline-scroll="">
+            <div ref={scrollRef} className={staticLayout ? undefined : "scrollbar-thin min-h-0 flex-1 overflow-auto overscroll-contain"} style={{ scrollPaddingTop: headerHeight }} data-timeline-scroll="" data-own-arrows="" tabIndex={staticLayout ? undefined : 0} role="region" aria-label="Шкала задач, прокручивается по горизонтали и вертикали">
                 <div className="relative min-w-max" style={{ width: leftWidth + timelineWidth }}>
                     <div
                         className="sticky top-0 z-30 grid border-b border-line bg-surface-2/95 backdrop-blur-sm"
                         style={{ gridTemplateColumns: `${leftWidth}px ${timelineWidth}px`, height: headerHeight }}
                     >
-                        <div className="sticky left-0 z-40 flex items-center border-r border-line bg-surface-2 text-[11px] font-semibold tracking-[0.06em] text-muted uppercase">
+                        <div className={cn(labelPosition, "z-40 flex items-center border-r border-line bg-surface-2 text-[11px] font-semibold tracking-[0.06em] text-muted uppercase")}>
                             <span className="flex min-w-0 flex-1 items-center gap-2 px-3">
                                 <CalendarDays size={13} className="shrink-0" /> Работа
                             </span>
@@ -285,7 +293,7 @@ export function TimelineGrid({
                                     {column.header}
                                 </span>
                             ))}
-                            {onLabelWidthChange && !staticLayout && (
+                            {onLabelWidthChange && pointerEditing && (
                                 <span
                                     role="separator"
                                     aria-orientation="vertical"
@@ -549,8 +557,8 @@ export function TimelineGrid({
                                                       ? "Показать задачи группы"
                                                       : "Свернуть задачи группы"
                                             }
-                                            className="sticky left-0 z-20 flex min-w-0 items-center gap-1.5 border-r border-line bg-surface-2 px-2 text-left"
-                                            style={{ paddingLeft: 8 + (row.depth ?? 0) * 14 }}
+                                            className={cn(labelPosition, "z-20 flex min-w-0 items-center gap-1.5 border-r border-line bg-surface-2 px-2 text-left")}
+                                            style={{ paddingLeft: compact ? 8 + Math.min(row.depth ?? 0, 2) * 8 : 8 + (row.depth ?? 0) * 14 }}
                                         >
                                             {row.collapsed ? (
                                                 <ChevronRight size={13} className="shrink-0" />
@@ -562,13 +570,13 @@ export function TimelineGrid({
                                                 className="size-2 shrink-0 rounded-full"
                                                 style={{ background: dataColor(row.color) ?? "var(--color-text-muted)" }}
                                             />
-                                            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-primary">
+                                            <span className={cn("min-w-0 flex-1 text-[11px] font-medium text-primary", compact ? "line-clamp-2" : "truncate")}>
                                                 {row.title}
                                             </span>
                                             <span className="shrink-0 font-mono text-[9px] text-muted">
                                                 {personSummary ? (
                                                     personSummary.short
-                                                ) : (
+                                                ) : compact ? row.aggregate.total : (
                                                     <>
                                                         {row.aggregate.total} · {row.aggregate.progress}% ·{" "}
                                                         {row.aggregate.risks} риск.
@@ -644,19 +652,22 @@ export function TimelineGrid({
                                     }}
                                 >
                                     <div
-                                        className="sticky left-0 z-20 flex min-w-0 items-center gap-1 border-r border-line bg-surface px-2"
-                                        style={{ paddingLeft: 22 + (row.depth ?? 0) * 14 }}
+                                        className={cn(labelPosition, "z-20 flex min-w-0 items-center gap-1 border-r border-line bg-surface px-2")}
+                                        style={{ paddingLeft: compact ? 8 + Math.min(row.depth ?? 0, 2) * 8 : 22 + (row.depth ?? 0) * 14 }}
                                     >
                                         <button
                                             type="button"
                                             onClick={() => onOpenTask(task.id)}
-                                            title={`${task.key} · ${task.title}`}
-                                            className="min-w-0 flex-1 truncate text-left text-[11px] text-secondary hover:text-primary"
+                                            title={`${task.key} · ${task.title}\n${task.start_date ?? "—"} — ${task.due_date ?? "без срока"}`}
+                                            className={cn("min-w-0 flex-1 text-left text-[11px] text-secondary hover:text-primary", compact ? "min-h-11" : "truncate")}
                                         >
+                                            <span className={compact ? "line-clamp-2" : undefined}>
                                             <span className="font-mono text-[10px] text-accent">
                                                 {task.key}
                                             </span>{" "}
                                             {task.title}
+                                            </span>
+                                            {compact && <span className="mt-0.5 block truncate text-[10px] text-muted">{task.start_date ? shortDate(task.start_date) : "—"} → {task.due_date ? shortDate(task.due_date) : "без срока"}</span>}
                                         </button>
                                         {task.drift_days !== null && task.drift_days !== 0 && (
                                             <span
@@ -675,6 +686,7 @@ export function TimelineGrid({
                                         {!staticLayout && (
                                             <IconButton
                                                 size="sm"
+                                                className={compact ? "size-11 shrink-0" : undefined}
                                                 label={`Изменить даты ${task.key}`}
                                                 onClick={() => onScheduleTask(task)}
                                             >
@@ -716,9 +728,9 @@ export function TimelineGrid({
                                                 onResize={onResizeTask}
                                                 color={colorMode ? taskColor(task, colorMode, stagesById) : undefined}
                                                 initials={showInitials ? assigneeInitials(task.assignee) : null}
-                                                readOnly={staticLayout}
+                                                readOnly={!pointerEditing}
                                                 critical={criticalState(task.is_critical, criticalMode)}
-                                                onLink={onLinkTasks}
+                                                onLink={pointerEditing ? onLinkTasks : undefined}
                                             />
                                         )}
                                         {scenarioGeometry && scenarioChange && (

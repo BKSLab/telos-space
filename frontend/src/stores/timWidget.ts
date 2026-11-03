@@ -16,7 +16,7 @@ interface TimWidgetState {
     clearDraft: (key: string, requestId: string) => void;
 }
 
-/** Виджет Веры: черновик и UUID отправки переживают перезагрузку — повтор не создаёт второй вопрос. */
+/** Виджет Ариса: черновик и UUID отправки переживают перезагрузку — повтор не создаёт второй вопрос. */
 export const useTimWidgetStore = create<TimWidgetState>()(persist((set) => ({
     open: false, conversations: {}, drafts: {},
     setOpen: (open) => set({ open }),

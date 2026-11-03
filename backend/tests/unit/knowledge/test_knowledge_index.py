@@ -19,7 +19,9 @@ from src.services.source_summaries import SourceSummariesService, SourceSummaryO
 
 def base_rows():
     return {
-        "projects": [{"id": 1, "key": "PROJ", "name": "Вера", "description_md": "Паспорт проекта"}],
+        "projects": [
+            {"id": 1, "key": "PROJ", "name": "TELOS SPACE", "description_md": "Паспорт проекта"}
+        ],
         "tasks": [
             {
                 "id": 7,

@@ -22,6 +22,7 @@ test("разовая задача: создание, название, стат�
     await expect(card.getByRole("heading", { name: "Личный план на неделю" })).toBeVisible();
     await card.getByLabel("Статус", { exact: true }).selectOption("IN_PROGRESS");
     await expect.poll(() => state.tasks.find((task) => task.id === 201)?.status).toBe("IN_PROGRESS");
+    await card.getByRole("tab", { name: "Отчёт", exact: true }).click();
     await card.getByRole("button", { name: "Добавить отчёт" }).click();
     await card.getByRole("textbox", { name: "Отчёт по задаче" }).fill("План составлен, сроки проверены.");
     await card.getByRole("button", { name: "Опубликовать отчёт", exact: true }).click();
@@ -47,6 +48,7 @@ test("перенос разовой задачи показывает предп
     await dialog.getByRole("button", { name: "Перенести", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Задача DEMO-20", exact: true })).toBeVisible();
     expect(state.writes.find((item) => item.path === "/tasks/200/move-to")?.body).toEqual({ project_id: 1, remove_outsiders: true });
+    await page.getByRole("dialog", { name: "Задача DEMO-20", exact: true }).getByRole("tab", { name: "Отчёт", exact: true }).click();
     await expect(page.getByText("Сохранённый итог", { exact: true })).toBeVisible();
     expect(state.errors).toEqual([]);
 });
@@ -56,6 +58,7 @@ test("проектная задача: предупреждение о снят�
     await installMockApi(page, state);
     await page.goto("/my-tasks?task=100");
     const card = page.getByRole("dialog", { name: "Задача DEMO-1", exact: true });
+    await card.getByRole("tab", { name: "Связи", exact: true }).click();
     await card.getByRole("button", { name: "Переместить…" }).click();
     let dialog = page.getByRole("dialog", { name: "Переместить задачу", exact: true });
     await expect(dialog.getByRole("note")).toContainText("1 размещение в ИСР");
@@ -66,6 +69,9 @@ test("проектная задача: предупреждение о снят�
     dialog = page.getByRole("dialog", { name: "Переместить задачу", exact: true });
     await dialog.getByRole("button", { name: "Перенести", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Задача T-20", exact: true })).toBeVisible();
+    const personalCard = page.getByRole("dialog", { name: "Задача T-20", exact: true });
+    await expect(personalCard.getByRole("tab", { name: "Связи", exact: true })).toHaveCount(0);
+    await expect(personalCard.getByRole("tab", { name: "Основное", exact: true })).toHaveAttribute("aria-selected", "true");
     expect(state.writes.find((item) => item.path === "/tasks/100/move-to")?.body).toEqual({ personal: true });
     expect(state.errors).toEqual([]);
 });

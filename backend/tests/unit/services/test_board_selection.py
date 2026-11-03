@@ -1,4 +1,4 @@
-"""Недоверенное выделение никогда не расширяет видимость и права Веры."""
+"""Недоверенное выделение никогда не расширяет видимость и права Ариса."""
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class TurnQueue(Protocol):
-    """Постоянная очередь ответов Веры: чат проекта или личный виджет."""
+    """Постоянная очередь ответов Ариса: чат проекта или личный виджет."""
 
     async def process_next(self) -> bool:
         """Выполняет одно задание; False — очередь пуста."""
@@ -17,7 +17,7 @@ class TurnQueue(Protocol):
 
 
 class AgentWorker:
-    """Ограниченное число исполнителей постоянных очередей ответов Веры."""
+    """Ограниченное число исполнителей постоянных очередей ответов Ариса."""
 
     def __init__(
         self, *, poll_seconds: float, concurrency: int, services: Sequence[TurnQueue] | None = None, service: TurnQueue | None = None
@@ -64,7 +64,7 @@ class AgentWorker:
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    logger.error("❌ Очередь ответов Веры временно недоступна.", exc_info=True)
+                    logger.error("❌ Очередь ответов Ариса временно недоступна.", exc_info=True)
             if worked:
                 continue
             waiters = [

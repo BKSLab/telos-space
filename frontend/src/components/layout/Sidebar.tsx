@@ -1,15 +1,8 @@
 import { NavLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-    FolderKanban,
-    LayoutTemplate,
-    ListTodo,
-    KeyRound,
-    CalendarDays,
-    LayoutDashboard,
     PanelLeftClose,
     PanelLeftOpen,
-    Plug,
     Plus,
 } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
@@ -21,26 +14,19 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { ProjectIcon } from "@/components/projects/ProjectIcon";
 import { UserMenu } from "@/components/users/UserMenu";
 import { useCurrentUser } from "@/lib/useAuth";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+import { GLOBAL_NAV_ITEMS } from "@/lib/navigation";
 
-const GLOBAL_ITEMS = [
-    { to: "/", label: "Портфель", icon: LayoutDashboard, end: true },
-    { to: "/projects", label: "Проекты", icon: FolderKanban, end: false },
-    { to: "/boards", label: "Доски", icon: LayoutTemplate, end: false },
-    { to: "/my-tasks", label: "Мои задачи", icon: ListTodo, end: false },
-    { to: "/calendar", label: "Календарь", icon: CalendarDays, end: false },
-    { to: "/my-api-keys", label: "API-ключи", icon: KeyRound, end: false },
-    { to: "/mcp", label: "MCP", icon: Plug, end: false },
-];
 
 function navLinkClass(isActive: boolean, collapsed: boolean): string {
     return cn(
-        "relative flex min-h-8 items-center gap-2.5 rounded-[var(--radius-control)] px-2 py-1.5 text-[13px]",
+        "brand-side-nav relative flex min-h-8 items-center gap-2.5 rounded-[var(--radius-control)] border border-transparent px-2 py-1.5 text-[13px]",
         "before:absolute before:top-1.5 before:bottom-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-transparent",
         "transition-[background-color,color] duration-[var(--duration-fast)] ease-[var(--ease-standard)]",
         collapsed && "justify-center px-0",
         isActive
-            ? "bg-accent/[0.085] text-primary before:bg-accent"
-            : "text-muted hover:bg-white/[0.04] hover:text-secondary",
+            ? "border-line bg-white/[0.055] text-primary shadow-card before:bg-accent"
+            : "text-muted hover:border-line-subtle hover:bg-white/[0.035] hover:text-secondary",
     );
 }
 
@@ -58,25 +44,20 @@ export function Sidebar() {
     return (
         <aside
             className={cn(
-                "hidden shrink-0 flex-col border-r border-line-subtle bg-sidebar md:flex",
+                "app-sidebar material-metal hidden shrink-0 flex-col rounded-[var(--radius-panel)] border border-line lg:flex",
                 "transition-[width] duration-[var(--duration-normal)] ease-[var(--ease-standard)]",
                 collapsed ? "w-14" : "w-[232px]",
             )}
         >
             <div
                 className={cn(
-                    "flex h-12 shrink-0 items-center border-b border-line-subtle px-2",
-                    collapsed ? "justify-center" : "justify-between",
+                    "flex shrink-0 items-center border-b border-line-subtle px-2",
+                    collapsed ? "h-20 flex-col justify-center gap-1" : "h-14 justify-between gap-1",
                 )}
             >
-                {!collapsed && (
-                    <span className="flex min-w-0 items-center gap-2 px-1">
-                        <span aria-hidden="true" className="size-1.5 shrink-0 rotate-45 rounded-[1px] bg-accent/80" />
-                        <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-primary">
-                            Task Tracker
-                        </span>
-                    </span>
-                )}
+                <NavLink to="/" className="min-w-0 rounded focus-visible:outline-2 focus-visible:outline-accent">
+                    <BrandLogo variant={collapsed ? "symbol" : "logo"} className={collapsed ? "size-7" : "w-[172px]"} />
+                </NavLink>
                 <Tooltip
                     content={collapsed ? "Развернуть панель" : "Свернуть панель"}
                     placement="right"
@@ -92,7 +73,7 @@ export function Sidebar() {
             </div>
 
             <nav aria-label="Основная навигация" className="flex flex-col gap-0.5 p-2 pt-2.5">
-                {GLOBAL_ITEMS.map(({ to, label, icon: Icon, end }) => (
+                {GLOBAL_NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
                     <NavLink
                         key={to}
                         to={to}

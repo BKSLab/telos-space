@@ -160,7 +160,7 @@ export function ProjectIconPicker({
                     <div
                         role="group"
                         aria-label="Иконки набора"
-                        className="grid grid-cols-8 gap-1"
+                        className="icon-picker-grid grid grid-cols-8 gap-1"
                     >
                         {PROJECT_ICONS.map(({ name, label, Icon }) => {
                             const isSelected = selected?.name === name;
@@ -176,7 +176,7 @@ export function ProjectIconPicker({
                                         close();
                                     }}
                                     className={cn(
-                                        "grid size-8 place-items-center rounded-[6px] transition-colors duration-[var(--duration-fast)]",
+                                        "touch-target grid size-8 place-items-center rounded-[6px] transition-colors duration-[var(--duration-fast)]",
                                         "hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1",
                                         isSelected && "ring-2 ring-offset-1 ring-offset-app",
                                     )}

@@ -35,7 +35,7 @@ class CredentialsMiddleware:
             await JSONResponse(
                 {"detail": "Требуется действующий API-ключ или токен трекера."},
                 status_code=401,
-                headers={"WWW-Authenticate": 'Bearer realm="task-tracker-mcp"'},
+                headers={"WWW-Authenticate": 'Bearer realm="telos-space-mcp"'},
             )(scope, receive, send)
             return
         await self.app(scope, receive, send)

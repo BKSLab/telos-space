@@ -1,4 +1,4 @@
-"""Совместимый проектный интерфейс над общей очередью диалогов Веры."""
+"""Совместимый проектный интерфейс над общей очередью диалогов Ариса."""
 
 from src.services.tim_widget import AgentConversationConfig, ConversationMemory, TimWidgetService
 

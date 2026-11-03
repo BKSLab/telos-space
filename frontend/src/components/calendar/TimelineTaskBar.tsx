@@ -140,14 +140,15 @@ export function TimelineTaskBar({
                 <button
                     type="button"
                     className={cn(
-                        "min-w-0 flex-1 cursor-grab touch-none text-left active:cursor-grabbing",
+                        "min-w-0 flex-1 text-left",
+                        !readOnly && "cursor-grab touch-none active:cursor-grabbing",
                         isCompactMarker ? "px-1" : "px-2",
                     )}
                     title={`${task.key} · ${task.title}\n${stage?.name ?? "Стадия не найдена"} · ${dates}${progress ? `\n${progress}` : ""}${critical === "critical" ? "\nНа критическом пути" : ""}${risk ? `\n${risk}` : ""}`}
-                    aria-label={`Переместить интервал ${task.key}: ${task.title}. ${dates}`}
+                    aria-label={`${readOnly ? "Открыть" : "Переместить интервал"} ${task.key}: ${task.title}. ${dates}`}
                     onClick={() => onOpen(task.id)}
-                    {...attributes}
-                    {...listeners}
+                    {...(!readOnly ? attributes : {})}
+                    {...(!readOnly ? listeners : {})}
                 >
                     <span className="flex min-w-0 items-center gap-1.5">
                         {task.risk_level && <AlertTriangle size={11} className="shrink-0" />}

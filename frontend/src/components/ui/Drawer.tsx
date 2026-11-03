@@ -30,16 +30,16 @@ export function Drawer({ label, header, children, footer, isOpen, onClose, close
                 }
             }}
             isDismissable
-            className="drawer-overlay fixed inset-0 z-50 flex justify-end bg-black/40"
+            className="drawer-overlay viewport-overlay fixed inset-0 z-50 flex justify-end bg-black/40"
         >
             <RACModal
                 className={cn(
-                    "drawer-surface material-glass flex h-full w-full flex-col overflow-hidden shadow-panel",
+                    "drawer-surface material-panel flex h-full w-full flex-col overflow-hidden shadow-panel",
                     "sm:w-[min(580px,100vw)] sm:rounded-l-[var(--radius-panel)]",
                 )}
             >
                 <Dialog aria-label={label} className="flex min-h-0 flex-1 flex-col outline-none">
-                    <header className="sticky top-0 z-10 flex shrink-0 items-start gap-3 border-b border-line-subtle bg-floating/80 px-5 py-4 backdrop-blur-xl">
+                    <header className="material-metal sticky top-0 z-10 flex shrink-0 items-start gap-3 border-b border-line px-5 py-4">
                         <div className="min-w-0 flex-1">{header}</div>
                         <IconButton label={closeLabel} onClick={onClose}>
                             <X size={16} aria-hidden="true" />
@@ -49,7 +49,7 @@ export function Drawer({ label, header, children, footer, isOpen, onClose, close
                     <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
 
                     {footer && (
-                        <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-line-subtle bg-floating/70 px-5 py-3">
+                        <footer className="material-metal flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3 sm:px-5">
                             {footer}
                         </footer>
                     )}
@@ -68,9 +68,9 @@ interface DrawerSectionProps {
 
 export function DrawerSection({ title, count, action, children }: DrawerSectionProps) {
     return (
-        <section className="px-5 py-4 first:pt-5 last:pb-6">
+        <section className="border-b border-line-subtle px-5 py-4 first:pt-5 last:border-b-0 last:pb-6">
             <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.11em] text-muted uppercase">
+                <h3 className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
                     {title}
                     {typeof count === "number" && (
                         <span className="font-mono text-[11px] text-disabled">{count}</span>

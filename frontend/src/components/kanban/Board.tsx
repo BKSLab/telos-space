@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import "@/components/kanban/kanban.css";
+import { useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
     DndContext,
     DragOverlay,
     KeyboardSensor,
-    PointerSensor,
+    MouseSensor,
+    TouchSensor,
     useSensor,
     useSensors,
     type DragEndEvent,
@@ -46,10 +49,22 @@ export function Board({
     const riskCounts = useRiskTaskCounts(projectId);
     const toast = useToast();
     const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+        useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 8 } }),
         useSensor(KeyboardSensor),
     );
     const [activeTask, setActiveTask] = useState<Task | null>(null);
+    const [visibleStageId, setVisibleStageId] = useState(stages[0]?.id ?? 0);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const visibleStageIndex = Math.max(0, stages.findIndex(stage => stage.id === visibleStageId));
+
+    function showStage(index: number) {
+        const stage = stages[index];
+        if (!stage) return;
+        setVisibleStageId(stage.id);
+        const column = scrollRef.current?.querySelector<HTMLElement>(`[data-stage-id="${stage.id}"]`);
+        if (column && scrollRef.current) scrollRef.current.scrollTo({ left: column.offsetLeft - 12, behavior: "auto" });
+    }
 
     const tasksByStage = useMemo(() => {
         const map = new Map<number, Task[]>();
@@ -109,6 +124,12 @@ export function Board({
         if (!task || targetStageId === task.stage_id) {
             return;
         }
+        moveToStage(task.id, targetStageId);
+    }
+
+    function moveToStage(taskId: number, targetStageId: number) {
+        const task = tasks.find(item => item.id === taskId);
+        if (!task || task.stage_id === targetStageId || !stages.some(stage => stage.id === targetStageId) || moveMutation.isPending) return;
         const destination = tasksByStage.get(targetStageId) ?? [];
         const maxPosition = destination.reduce((max, item) => Math.max(max, item.position), 0);
         moveMutation.mutate({
@@ -125,19 +146,37 @@ export function Board({
             onDragEnd={handleDragEnd}
             onDragCancel={() => setActiveTask(null)}
         >
-            <div className="scrollbar-thin h-full overflow-x-auto px-5 py-4">
-                <div className="flex h-full w-max min-w-full items-start gap-3">
+            <div className="kanban-workspace">
+                <nav className="kanban-stage-nav" aria-label="Навигация по стадиям">
+                    <button type="button" aria-label="Предыдущая стадия" disabled={visibleStageIndex === 0} onClick={() => showStage(visibleStageIndex - 1)}><ChevronLeft size={18} aria-hidden="true" /></button>
+                    <select aria-label="Показать стадию" value={stages[visibleStageIndex]?.id ?? ""} onChange={event => showStage(stages.findIndex(stage => stage.id === Number(event.target.value)))}>
+                        {stages.map(stage => <option key={stage.id} value={stage.id}>{stage.name} · {tasksByStage.get(stage.id)?.length ?? 0}</option>)}
+                    </select>
+                    <button type="button" aria-label="Следующая стадия" disabled={visibleStageIndex >= stages.length - 1} onClick={() => showStage(visibleStageIndex + 1)}><ChevronRight size={18} aria-hidden="true" /></button>
+                </nav>
+            <div ref={scrollRef} className="kanban-scroll scrollbar-thin" onScroll={event => {
+                const container = event.currentTarget;
+                const columns = [...container.querySelectorAll<HTMLElement>("[data-stage-id]")];
+                const nearest = columns.reduce<HTMLElement | null>((best, column) => !best || Math.abs(column.offsetLeft - container.scrollLeft - 12) < Math.abs(best.offsetLeft - container.scrollLeft - 12) ? column : best, null);
+                if (nearest) setVisibleStageId(Number(nearest.dataset.stageId));
+            }}>
+                <div className="kanban-columns">
                     {stages.map((stage) => (
                         <Column
                             key={stage.id}
                             stage={stage}
                             riskCounts={riskCounts.data ?? {}}
                             tasks={tasksByStage.get(stage.id) ?? []}
+                            activeStageId={activeTask?.stage_id ?? null}
                             selectedTaskId={selectedTaskId}
                             onTaskOpen={onTaskOpen}
+                            stages={stages}
+                            moving={moveMutation.isPending}
+                            onMoveTask={moveToStage}
                         />
                     ))}
                 </div>
+            </div>
             </div>
 
             <DragOverlay>

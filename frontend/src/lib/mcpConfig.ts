@@ -51,7 +51,7 @@ export function buildMcpConfig(options: {
     return JSON.stringify(
         {
             mcpServers: {
-                "task-tracker": {
+                "telos-space": {
                     type: "http",
                     url,
                     headers: { Authorization: `Bearer ${secret}` },

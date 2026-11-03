@@ -291,6 +291,10 @@ async def test_old_history_is_summarized_and_pagination_retains_the_full_transcr
     env = agent_env
     conversation = await start(env)
     for i in range(5):
+        # Сводка сохраняется фоново: проверяем короткую историю после её commit.
+        memory_task = env.service._memory_tasks.get(conversation.id)
+        if memory_task is not None:
+            await asyncio.wait_for(asyncio.shield(memory_task), timeout=5)
         await send(env, conversation.id, f"Вопрос об окне заказа номер {i}")
         await env.service.process_next()
     assert env.llm.get_structured_response.await_count == 2

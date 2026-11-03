@@ -1,7 +1,6 @@
 import { MyApiKeysPage } from "@/routes/MyApiKeysPage";
 import { MyTasksPage } from "@/routes/MyTasksPage";
 import { TaskAttentionProvider } from "@/components/tasks/TaskAttentionProvider";
-import { TimWidget } from "@/components/tim/TimWidget";
 import { AgentConfirmModal } from "@/components/agent/AgentConfirmModal";
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
@@ -29,6 +28,7 @@ import { LoginPage } from "@/routes/LoginPage";
 import { RegisterPage } from "@/routes/RegisterPage";
 import { NotFoundPage } from "@/routes/NotFoundPage";
 import { Skeleton } from "@/components/ui/States";
+const GlobalChatPage = lazy(() => import("@/routes/GlobalChatPage"));
 
 /**
  * Конструктор ИСР тянет React Flow и elkjs — самые тяжёлые зависимости
@@ -92,6 +92,7 @@ function ProtectedApp() {
                     <AppShell>
                         <Routes>
                             <Route path="/" element={<DashboardPage />} />
+                            <Route path="/chat" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><GlobalChatPage /></Suspense>} />
                             <Route path="/boards" element={<Suspense fallback={<ProjectBoardFallback />}><FreeBoardsPage /></Suspense>} />
                             <Route path="/my-tasks" element={<MyTasksPage />} />
                             <Route path="/calendar" element={<Suspense fallback={<CalendarFallback />}><MyCalendarPage /></Suspense>} />
@@ -141,7 +142,6 @@ function ProtectedApp() {
                             <Route path="*" element={<NotFoundPage />} />
                         </Routes>
                     </AppShell>
-                    <TimWidget />
                     <AgentConfirmModal />
                 </ChatWorkspace>
             </TaskAttentionProvider>

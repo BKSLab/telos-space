@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.agent.tools import AgentToolContext
+from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor, AgentToolRequest
 from src.clients.qdrant import KnowledgeSearchHit
 from src.db.models.documents import Document
 from src.db.models.project_stages import ProjectStage
@@ -32,11 +32,13 @@ from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.repositories.wbs_nodes import WbsNodesRepository
 from src.schemas.knowledge import KnowledgeChatMessageSchema
+from src.schemas.project_tool_inputs import TaskCreateInput, TaskInput
 from src.services.calendar import CalendarService
 from src.services.calendar_scenarios import CalendarScenarioService
 from src.services.db_scope import ProjectAgentScope
 from src.services.knowledge_events import KnowledgeEvents
 from src.services.project_agent import (
+    EMPTY_ANSWER,
     PROJECT_DESCRIPTION_LIMIT,
     ProjectAgentConfig,
     ProjectAgentService,
@@ -238,17 +240,17 @@ async def test_smalltalk_does_not_load_project_data_or_start_write_intent():
 
     async def respond(messages, info):
         seen.append({tool.name for tool in info.function_tools})
-        return ModelResponse(parts=[TextPart("Привет! Я Вера, готова помочь.")])
+        return ModelResponse(parts=[TextPart("Привет! Я Арис, готов помочь.")])
 
     service.agent_model = FunctionModel(respond)
     answer = await service.ask(
         project_id=project.id,
-        question="Вера, привет!",
+        question="Арис, привет!",
         history=[],
         execution=AgentToolContext(project_id=project.id, user_id=1, can_write=True),
     )
 
-    assert answer.answer == "Привет! Я Вера, готова помочь."
+    assert answer.answer == "Привет! Я Арис, готов помочь."
     assert seen == [{"load_capability"}]
     db.sources.get_project_rows.assert_not_awaited()
     db.sources.search.assert_not_awaited()
@@ -341,6 +343,169 @@ async def test_card_only_answer_uses_verified_fields_and_keeps_conversation_cont
     )
     assert "task:7" in history.content
     assert "Подготовить паспорт рисков" in history.content
+
+
+async def test_created_task_receives_a_handle_before_the_next_step_and_is_revalidated():
+    service, project, clients, db = build_service()
+    created = Task(
+        id=8,
+        project_id=project.id,
+        stage_id=3,
+        number=13,
+        title="Новая задача",
+        priority=TaskPriority.MEDIUM,
+        position=2000.0,
+        created_at=project.created_at,
+        updated_at=project.updated_at,
+    )
+
+    async def create(_context, _arguments):
+        db.tasks.search_ranked.return_value.append(created)
+        return {
+            "action": {
+                "id": "created-receipt",
+                "tool_name": "create_task",
+                "status": "completed",
+                "result": {"source_id": "task:8", "task": {"id": 8, "title": created.title}},
+            }
+        }
+
+    handler = AsyncMock(side_effect=create)
+    service.tools = AgentToolExecutor(
+        [AgentTool("create_task", "Создать задачу", TaskCreateInput, handler, mutating=True)]
+    )
+
+    async def respond(*, schema, content, **_kwargs):
+        if schema is WriteIntent:
+            return WriteIntent(write_intent=True)
+        payload = json.loads(content)
+        if not payload.get("read_results"):
+            return AgentOutput(
+                tool_calls=[
+                    AgentToolRequest(name="create_task", arguments={"title": created.title})
+                ]
+            )
+        result = payload["read_results"][0]["result"]["action"]["result"]
+        assert result["source_id"] == "task:8"
+        handle = result["source_handle"]
+        assert handle.startswith("SRC_")
+        # Финальная карточка должна учитывать изменение после выдачи handle модели.
+        created.title = "Актуальный заголовок"
+        return AgentOutput(answer="", source_ids=[handle, "task:8", "SRC_deadbeef_1"])
+
+    clients.llm_client.get_structured_response.side_effect = respond
+    answer = await service.ask(
+        project_id=project.id,
+        question="Создай новую задачу",
+        history=[],
+        execution=AgentToolContext(project_id=project.id, user_id=1, can_write=True),
+    )
+
+    handler.assert_awaited_once()
+    assert answer.answer == ""
+    assert [source.source_id for source in answer.sources] == ["task:8"]
+    assert "Актуальный заголовок" in answer.sources[0].title
+    assert answer.sources[0].card.key == "PROJ-13"
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "receipts", "write_intent", "expected_count"),
+    [
+        pytest.param(
+            "create_task", [{"id": "new", "status": "completed"}], True, 1, id="completed"
+        ),
+        pytest.param(
+            "create_task",
+            [{"id": "new", "status": "completed"}, {"id": "new", "status": "completed"}],
+            True,
+            1,
+            id="same-receipt",
+        ),
+        pytest.param(
+            "create_task",
+            [{"id": "one", "status": "completed"}, {"id": "two", "status": "completed"}],
+            True,
+            2,
+            id="two-receipts",
+        ),
+        pytest.param(
+            "create_task", [{"id": "pending", "status": "pending"}], True, 0, id="pending"
+        ),
+        pytest.param("create_task", [{"status": "completed"}], True, 0, id="missing-id"),
+        pytest.param(
+            "get_task", [{"id": "read", "status": "completed"}], True, 0, id="read-receipt"
+        ),
+        pytest.param("get_task", [None], True, 0, id="no-current-action"),
+        pytest.param(
+            "create_task", [{"id": "denied", "status": "completed"}], False, 0, id="write-denied"
+        ),
+    ],
+)
+async def test_empty_final_answer_uses_only_current_completed_write_receipts(
+    tool_name, receipts, write_intent, expected_count
+):
+    service, project, clients, _db = build_service()
+    mutating = tool_name == "create_task"
+    returned = 0
+
+    async def invoke(_context, _arguments):
+        nonlocal returned
+        receipt = receipts[returned]
+        returned += 1
+        if receipt is None:
+            return {"source_id": "task:7", "task": {"id": 7}}
+        return {"action": {"tool_name": tool_name, **receipt}}
+
+    handler = AsyncMock(side_effect=invoke)
+    service.tools = AgentToolExecutor(
+        [
+            AgentTool(
+                tool_name,
+                "Действие с задачей",
+                TaskCreateInput if mutating else TaskInput,
+                handler,
+                mutating=mutating,
+            )
+        ]
+    )
+
+    async def respond(*, schema, content, **_kwargs):
+        if schema is WriteIntent:
+            return WriteIntent(write_intent=write_intent)
+        payload = json.loads(content)
+        if len(payload.get("read_results", [])) < len(receipts):
+            return AgentOutput(
+                tool_calls=[
+                    AgentToolRequest(
+                        name=tool_name,
+                        arguments={"title": "Новая задача"} if mutating else {"task_id": 7},
+                    )
+                ]
+            )
+        return AgentOutput(answer="", source_ids=["task:7", "SRC_deadbeef_1"])
+
+    clients.llm_client.get_structured_response.side_effect = respond
+    answer = await service.ask(
+        project_id=project.id,
+        question="Выполни действие с задачей",
+        history=[],
+        action_history=[{"id": "previous", "tool_name": "create_task", "status": "completed"}],
+        execution=AgentToolContext(project_id=project.id, user_id=1, can_write=True),
+    )
+
+    assert answer.sources == []  # canonical source_id и поддельный handle не приняты.
+    if expected_count == 1:
+        assert answer.answer == "Действие выполнено. Результат — в карточке действия."
+    elif expected_count > 1:
+        assert answer.answer == (
+            f"Выполнено действий: {expected_count}. Результаты — в карточках действий."
+        )
+    else:
+        assert answer.answer == EMPTY_ANSWER
+    if not write_intent:
+        handler.assert_not_awaited()
+    else:
+        assert handler.await_count == len(receipts)
 
 
 @pytest.mark.asyncio

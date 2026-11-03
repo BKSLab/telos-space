@@ -80,7 +80,7 @@ class ProjectSchema(BaseModel):
         False, description="Срок окончания уже назначался; пересмотр требует причины."
     )
     key: str = Field(..., description="Короткий код проекта.", examples=["PROJ"])
-    name: str = Field(..., description="Название проекта.", examples=["Агент Вера"])
+    name: str = Field(..., description="Название проекта.", examples=["TELOS SPACE"])
     description_md: str | None = Field(
         None,
         description="Описание проекта в Markdown.",
@@ -120,7 +120,7 @@ class ProjectCreateSchema(BaseModel):
         json_schema_extra={
             "example": {
                 "key": "PROJ",
-                "name": "Агент Вера",
+                "name": "TELOS SPACE",
                 "description_md": "Персональный ассистент для подбора работы.",
                 "color": "#58a6ff",
                 "icon": "🚀",
@@ -178,7 +178,7 @@ class ProjectCreateSchema(BaseModel):
         min_length=1,
         max_length=255,
         description="Название проекта.",
-        examples=["Агент Вера"],
+        examples=["TELOS SPACE"],
     )
     description_md: str | None = Field(
         None,
@@ -250,7 +250,7 @@ class ProjectUpdateSchema(BaseModel):
         min_length=1,
         max_length=255,
         description="Новое название проекта.",
-        examples=["Агент Вера 2.0"],
+        examples=["TELOS SPACE 2.0"],
     )
     description_md: str | None = Field(
         None,

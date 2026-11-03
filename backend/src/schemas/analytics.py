@@ -242,7 +242,9 @@ class AnalyticsFindingSchema(BaseModel):
         examples=["Срок 20.08, последний комментарий 22.08: ждём доступы."],
     )
     project_key: str | None = Field(None, description="Код проекта.", examples=["PROJ"])
-    project_name: str | None = Field(None, description="Название проекта.", examples=["Вера"])
+    project_name: str | None = Field(
+        None, description="Название проекта.", examples=["TELOS SPACE"]
+    )
     tasks: list[AnalyticsTaskRefSchema] = Field(
         default_factory=list,
         description="Задачи-подтверждения.",
@@ -259,7 +261,9 @@ class AnalyticsProgressSchema(BaseModel):
         examples=["Пять задач блока закрыты за неделю."],
     )
     project_key: str | None = Field(None, description="Код проекта.", examples=["PROJ"])
-    project_name: str | None = Field(None, description="Название проекта.", examples=["Вера"])
+    project_name: str | None = Field(
+        None, description="Название проекта.", examples=["TELOS SPACE"]
+    )
     tasks: list[AnalyticsTaskRefSchema] = Field(
         default_factory=list,
         description="Задачи результата.",
@@ -281,7 +285,9 @@ class AnalyticsRecommendationSchema(BaseModel):
         examples=["Четыре задачи блока без исполнителя."],
     )
     project_key: str | None = Field(None, description="Код проекта.", examples=["PROJ"])
-    project_name: str | None = Field(None, description="Название проекта.", examples=["Вера"])
+    project_name: str | None = Field(
+        None, description="Название проекта.", examples=["TELOS SPACE"]
+    )
     tasks: list[AnalyticsTaskRefSchema] = Field(
         default_factory=list,
         description="Задачи действия.",
@@ -394,7 +400,9 @@ class AnalyticsReportSchema(BaseModel):
     scope: AnalyticsScope = Field(..., description="Область анализа.", examples=["PROJECT"])
     project_id: int | None = Field(None, description="Идентификатор проекта.", examples=[1])
     project_key: str | None = Field(None, description="Код проекта.", examples=["PROJ"])
-    project_name: str | None = Field(None, description="Название проекта.", examples=["Вера"])
+    project_name: str | None = Field(
+        None, description="Название проекта.", examples=["TELOS SPACE"]
+    )
     created_at: datetime = Field(
         ...,
         description="Момент формирования свода.",

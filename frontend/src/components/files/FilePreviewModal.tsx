@@ -36,7 +36,7 @@ export function FilePreviewModal({
                             href={file.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="material-metal inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-control)] border border-line-subtle px-3 text-[13px] font-medium text-primary hover:border-line hover:bg-hover"
+                            className="touch-target material-metal inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-control)] border border-line-subtle px-3 text-[13px] font-medium text-primary hover:border-line hover:bg-hover"
                         >
                             Открыть оригинал
                             <ExternalLink size={13} aria-hidden="true" />
@@ -44,7 +44,7 @@ export function FilePreviewModal({
                         <a
                             href={file.url}
                             download={file.name}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-control)] border border-accent/45 bg-accent/85 px-3 text-[13px] font-semibold text-on-accent hover:bg-accent"
+                            className="touch-target inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-control)] border border-accent/45 bg-accent/85 px-3 text-[13px] font-semibold text-on-accent hover:bg-accent"
                         >
                             Скачать
                             <Download size={13} aria-hidden="true" />

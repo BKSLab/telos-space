@@ -13,6 +13,7 @@ from qdrant_client import AsyncQdrantClient
 
 from src.clients.embedding import EmbeddingClient
 from src.clients.llm import LlmClient
+from src.clients.model_options import agent_request_fields
 from src.clients.qdrant import ProjectQdrantClient
 from src.clients.vision import DisabledVisionCapability, VisionCapability, VisionClient
 from src.core.settings import Settings
@@ -112,8 +113,9 @@ def build_knowledge_runtime(
             url=settings.llm.llm_api_url,
             headers=settings.llm.headers,
             model=settings.llm.agent_model,
-            timeout=settings.llm.llm_timeout,
-            retries=settings.llm.llm_retries,
+            timeout=settings.llm.agent_timeout_seconds,
+            retries=settings.llm.agent_attempts,
+            request_fields=agent_request_fields(settings.llm),
         ),
         qdrant_client=ProjectQdrantClient(
             client=qdrant_client,

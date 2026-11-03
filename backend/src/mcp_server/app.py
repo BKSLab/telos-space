@@ -65,7 +65,7 @@ def create_app(*, settings: Settings, session_factory, engine=None) -> Starlette
                 await engine.dispose()
 
     async def health(_request: Request) -> JSONResponse:
-        return JSONResponse({"status": "ok", "server": "task-tracker-mcp", "tools": len(TOOL_REGISTRY)})
+        return JSONResponse({"status": "ok", "server": "telos-space-mcp", "tools": len(TOOL_REGISTRY)})
 
     async def ready(_request: Request) -> JSONResponse:
         try:

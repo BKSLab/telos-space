@@ -124,22 +124,22 @@ class ChatReplyView(BaseModel):
 
 
 class ChatAgentView(BaseModel):
-    """Состояние ответа Веры: печатает, готов или ошибка, и его карточки."""
+    """Состояние ответа Ариса: печатает, готов или ошибка, и его карточки."""
 
-    name: str = Field(description="Имя агента для людей — «Вера».")
+    name: str = Field(description="Имя агента для людей — «Арис».")
     status: Literal["queued", "processing", "completed", "failed"] = Field(
-        description="queued/processing — Вера печатает; completed — ответ; failed — ошибка."
+        description="queued/processing — Арис печатает; completed — ответ; failed — ошибка."
     )
     error: str | None = Field(description="Причина ошибки; текст ошибки уже в content.")
     progress: str | None = Field(
         None,
         description=(
-            "Что Вера делает сейчас, пока готовит ответ («Ищу задачи…»); "
+            "Что Арис делает сейчас, пока готовит ответ («Ищу задачи…»); "
             "null — статуса нет или ответ завершён."
         ),
     )
-    requester: ChatUser | None = Field(description="Кто позвал Веру; его права действуют.")
-    request_message_id: int = Field(description="Сообщение участника, на которое отвечает Вера.")
+    requester: ChatUser | None = Field(description="Кто позвал Ариса; его права действуют.")
+    request_message_id: int = Field(description="Сообщение участника, на которое отвечает Арис.")
     sources: list[KnowledgeSourceSchema] = Field(
         description="Карточки сущностей проекта, подтверждающие ответ."
     )

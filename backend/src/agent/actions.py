@@ -28,6 +28,6 @@ class ProjectAction:
     requires_confirmation: bool = False
     owner_only: bool = False
     needs_project: bool = True
-    """False — личное действие Веры вне проекта (мои задачи, разовые)."""
+    """False — личное действие Ариса вне проекта (мои задачи, разовые)."""
     modes: frozenset[TimMode] = PROJECT_MODES
-    """Режимы Веры, в которых действие доступно модели; MCP режимы не проверяет."""
+    """Режимы Ариса, в которых действие доступно модели; MCP режимы не проверяет."""

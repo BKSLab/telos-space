@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useDraggable } from "@dnd-kit/core";
-import { Check, Diamond } from "lucide-react";
+import { CalendarDays, Check, Diamond } from "lucide-react";
+import { IconButton } from "@/components/ui/Button";
 import { addDateDays, type HolidayMap } from "@/lib/calendar";
 import { taskColor, type ColorMode, type GridScale } from "@/lib/calendarGrid";
 import { cn } from "@/lib/cn";
 import type { CalendarGridMilestone, CalendarGridTask, CalendarStage } from "@/lib/types";
-import { milestoneTooltip, rememberGridGrab, stateLabel, taskTooltip } from "./gridHelpers";
+import { milestoneTooltip, rememberGridGrab, shortDate, stateLabel, taskTooltip } from "./gridHelpers";
 
 /** Общее окружение сетки: как красить, что можно тянуть, куда вести клики. */
 export interface GridEnv {
@@ -18,6 +19,8 @@ export interface GridEnv {
     /** Показывать чип источника (ключ проекта) — в «Моём календаре». */
     showSource: boolean;
     onOpenTask: (taskId: number) => void;
+    /** Выбор дат без перетаскивания, в том числе на сенсорном экране. */
+    onScheduleTask?: (task: CalendarGridTask) => void;
     /** Создать задачу с этим сроком; нет — клик по пустому дню ничего не делает. */
     onCreate?: (date: string) => void;
     /** Перейти к масштабу на дату (номер дня → «День», номер недели → «Неделя», день года → «Месяц»). */
@@ -74,6 +77,7 @@ export function GridTaskCard({
     const stageName = task.stage_id === null ? undefined : env.stagesById?.get(task.stage_id)?.name;
     const draggable = env.canDrag(task);
     return (
+        <div className="flex min-w-0 items-stretch gap-1" data-grid-item="">
         <button
             ref={setNodeRef}
             type="button"
@@ -87,7 +91,7 @@ export function GridTaskCard({
             className={cn(
                 "flex w-full min-w-0 items-center gap-1 rounded-[5px] border text-left",
                 "transition-[background-color,border-color,opacity] duration-[var(--duration-fast)]",
-                variant === "compact" ? "h-[18px] pr-1 text-[11px]" : "min-h-8 py-1 pr-2 text-[12px]",
+                variant === "compact" ? "h-[18px] pr-1 text-[11px]" : "min-h-12 py-1.5 pr-2 text-[12px] lg:min-h-8 lg:py-1",
                 task.is_overdue && !task.is_done
                     ? "border-danger bg-danger/10 text-primary"
                     : "border-line bg-elevated text-secondary hover:border-line-strong hover:text-primary",
@@ -101,10 +105,18 @@ export function GridTaskCard({
         >
             {task.is_done && <Check size={11} aria-hidden="true" className="ml-1 shrink-0 text-success" />}
             <span className={cn("shrink-0 pl-1 font-mono text-[10px] text-muted", task.is_done && "line-through")}>{task.key}</span>
-            <span className={cn("min-w-0 flex-1 truncate", task.is_done && "line-through")}>{task.title}</span>
-            {variant === "full" && note && <span className="shrink-0 text-[10px] text-muted">{note}</span>}
+            <span className={cn("min-w-0 flex-1", task.is_done && "line-through")}>
+                <span className={variant === "full" ? "line-clamp-2 break-words lg:line-clamp-none lg:truncate" : "block truncate"}>{task.title}</span>
+                {variant === "full" && <span className="mt-0.5 block text-[11px] text-muted lg:hidden">{note ?? (task.due_date ? `до ${shortDate(task.due_date)}` : task.start_date ? `с ${shortDate(task.start_date)}` : "Без срока")}</span>}
+            </span>
+            {variant === "full" && note && <span className="hidden shrink-0 text-[10px] text-muted lg:inline">{note}</span>}
             {env.showSource && <SourceChip task={task} />}
         </button>
+        {variant === "full" && env.onScheduleTask && <IconButton className="min-h-11 w-11 shrink-0 self-center lg:min-h-7 lg:w-7" size="sm" label={`Изменить даты ${task.key}`} onClick={(event) => {
+            event.stopPropagation();
+            env.onScheduleTask?.(task);
+        }}><CalendarDays size={16} aria-hidden="true" /></IconButton>}
+        </div>
     );
 }
 

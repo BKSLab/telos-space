@@ -71,7 +71,6 @@ import type {
 } from "@/lib/types";
 import { PRIORITY_LABELS, PRIORITY_ORDER } from "@/lib/types";
 import {
-    PHONE_QUERY,
     useCalendarHotkeys,
     useCalendarViewState,
     useHolidays,
@@ -107,7 +106,7 @@ export function MyCalendarPage() {
     }
 
     return (
-        <div className="instrument-surface flex h-full min-h-0 flex-col">
+        <div className="instrument-surface flex h-full min-h-0 flex-col [@media(max-height:500px)]:overflow-y-auto [@media(max-height:500px)]:overscroll-contain">
             <div className="flex shrink-0 items-center gap-1 px-3 pt-2 sm:px-4" role="tablist" aria-label="Разделы календаря">
                 {(
                     [
@@ -123,7 +122,7 @@ export function MyCalendarPage() {
                         title={item.title}
                         onClick={() => switchTab(item.id)}
                         className={cn(
-                            "flex h-8 items-center gap-1.5 border-b-2 px-3 text-[13px]",
+                            "flex h-11 items-center gap-1.5 border-b-2 px-3 text-[13px] lg:h-8",
                             tab === item.id ? "border-accent font-semibold text-primary" : "border-transparent text-muted hover:text-primary",
                         )}
                     >
@@ -155,12 +154,12 @@ function MyTasksCalendar() {
     const setSelectedTaskId = useUiStore((state) => state.setSelectedTaskId);
     const [searchParams, setSearchParams] = useSearchParams();
     const today = localToday();
-    const isPhone = useMediaQuery(PHONE_QUERY);
+    const isPhone = useMediaQuery("(max-width: 1023px)");
+    const isTouch = useMediaQuery("(pointer: coarse)");
     const viewState = useCalendarViewState(
         isPhone ? "tt.calendar.my.view.phone" : "tt.calendar.my.view",
         { view: "grid", gridScale: isPhone ? "week" : "month", timelineScale: "month" },
         today,
-        isPhone ? "grid" : undefined,
     );
     // «Рядом» есть только у календаря проекта; ссылка с view=split открывает сетку.
     const view = viewState.view === "split" ? "grid" : viewState.view;
@@ -349,9 +348,10 @@ function MyTasksCalendar() {
         today,
         holidays,
         colorMode,
-        canDrag: () => true,
+        canDrag: () => !isPhone && !isTouch,
         showSource: true,
         onOpenTask: setSelectedTaskId,
+        onScheduleTask: setDeadlineTask,
         onCreate: setCreateDate,
         onOpenPeriod: (scale, value) => viewState.setGridScale(scale, value),
     };
@@ -366,7 +366,8 @@ function MyTasksCalendar() {
             <div className="flex shrink-0 flex-col gap-2 border-b border-line px-3 py-2 sm:px-4">
                 <CalendarToolbar
                     title={title}
-                    view={isPhone ? undefined : view}
+                    view={view}
+                    activeFilterCount={activeFilterCount}
                     onViewChange={viewState.setView}
                     scale={view === "grid" ? gridScale : timelineScale}
                     scales={view === "grid" ? GRID_SCALES : TIMELINE_SCALES}
@@ -390,7 +391,7 @@ function MyTasksCalendar() {
                         <div className="mb-3 flex items-center justify-between gap-3">
                             <p className="text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">Видимые задачи</p>
                             {hasFilters && (
-                                <button type="button" onClick={resetFilters} className="text-[11px] text-muted hover:text-accent">
+                                <button type="button" onClick={resetFilters} className="min-h-11 px-2 text-[12px] text-muted hover:text-accent lg:min-h-0 lg:px-0 lg:text-[11px]">
                                     Сбросить
                                 </button>
                             )}
@@ -443,7 +444,7 @@ function MyTasksCalendar() {
                 onDragEnd={handleDragEnd}
                 onDragCancel={() => setActiveTask(null)}
             >
-                <div className="relative flex min-h-0 flex-1">
+                <div className="relative flex min-h-0 flex-1 [@media(max-height:500px)]:min-h-[180px] [@media(max-height:500px)]:shrink-0">
                     <div className={view === "grid" ? "scrollbar-thin min-w-0 flex-1 overflow-auto" : "flex min-w-0 flex-1 flex-col p-2 sm:p-3"} data-calendar-body={view}>
                         {error && <ErrorMessage message={(error as Error).message} />}
                         {calendarQuery.isPending && !error && (
@@ -608,7 +609,7 @@ function PortfolioCalendarView() {
                 />
                 <CalendarPulseChips chips={chips} />
             </div>
-            <div className="flex min-h-0 flex-1 flex-col p-2 sm:p-3">
+            <div className="flex min-h-0 flex-1 flex-col p-2 sm:p-3 [@media(max-height:500px)]:min-h-[180px] [@media(max-height:500px)]:shrink-0">
                 {query.error && <ErrorMessage message={(query.error as Error).message} />}
                 {query.isPending && !query.error && <Skeleton className="h-full min-h-[320px] w-full" />}
                 {query.data && (

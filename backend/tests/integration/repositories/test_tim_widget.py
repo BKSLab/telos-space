@@ -1,4 +1,4 @@
-"""Диалог виджета Веры: переписка, очередь, приватность и проект страницы — на PostgreSQL."""
+"""Диалог виджета Ариса: переписка, очередь, приватность и проект страницы — на PostgreSQL."""
 
 import asyncio
 from dataclasses import replace
@@ -210,7 +210,7 @@ async def test_dialogues_are_private_and_recheck_active_user(agent_env):
 
 
 async def test_page_context_picks_project_only_within_user_access(agent_env):
-    """Проект страницы — подсказка: недоступный проект Вере не показывается."""
+    """Проект страницы — подсказка: недоступный проект Арису не показывается."""
     env = agent_env
     newest = None
     for user_id, page, expected_project in (

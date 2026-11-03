@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,7 +20,7 @@ class SettingsBase(BaseSettings):
 class AppSettings(SettingsBase):
     """Настройки HTTP-приложения и его инфраструктуры."""
 
-    app_name: str = "Project Task Tracker"
+    app_name: str = "TELOS SPACE"
     app_version: str = "1.0.0"
     api_v1_prefix: str = "/api/v1"
     mcp_path: str = "/mcp"
@@ -78,19 +79,40 @@ class LlmSettings(SettingsBase):
     плюс экспоненциальный backoff между попытками. При значениях по
     умолчанию это ``300 × 3 = 900`` секунд ожидания upstream. Расхождение
     этого бюджета с timeout-ом nginx на ``/api/`` зафиксировано в
-    ``docs/agent.md``. Очередь Веры имеет отдельный общий срок выполнения.
+    ``docs/agent.md``. Очередь Ариса имеет отдельный общий срок выполнения.
     """
 
     llm_api_key: SecretStr
     llm_api_url: str
     llm_model: str = "google/gemini-3.7-flash"
     agent_model: str = "google/gemini-3.7-flash"
+    agent_provider: str = ""
+    agent_reasoning_enabled: bool | None = None
+    agent_reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh"] | None = (
+        None
+    )
+    agent_request_timeout_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    agent_request_attempts: int | None = Field(default=None, ge=1)
     llm_api_base_url: str = ""
     llm_timeout: int = 300
     llm_retries: int = 3
-    vision_model: str = "google/gemini-3.7-flash"
+    vision_model: str = "qwen/qwen3-vl-30b-a3b-instruct"
     vision_max_tokens: int = 4000
     task_rephrase_file_max_chars: int = Field(default=5000, ge=500, le=50_000)
+
+    @property
+    def agent_timeout_seconds(self) -> float:
+        """Таймаут попытки модели Ариса, отдельно от vision."""
+        if self.agent_request_timeout_seconds is not None:
+            return self.agent_request_timeout_seconds
+        return float(self.llm_timeout)
+
+    @property
+    def agent_attempts(self) -> int:
+        """Число HTTP-попыток модели; незаданное сохраняет прежнюю политику."""
+        if self.agent_request_attempts is not None:
+            return self.agent_request_attempts
+        return self.llm_retries
 
     @property
     def base_url(self) -> str:

@@ -1,4 +1,4 @@
-"""HTTP-контур Веры: виджет без проекта и решение по действию из чата проекта."""
+"""HTTP-контур Ариса: виджет без проекта и решение по действию из чата проекта."""
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock

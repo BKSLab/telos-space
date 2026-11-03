@@ -50,7 +50,7 @@ export interface ActionDecisionRules {
     note?: string;
 }
 
-const DEFAULT_DISABLED_HINT = "Решить можно только по последнему ответу Веры. Попросите её предложить действие ещё раз";
+const DEFAULT_DISABLED_HINT = "Решить можно только по последнему ответу Ариса. Попросите его предложить действие ещё раз";
 
 export function AgentActionCard({ action, project, sources, pending, onDecision, rules, enabled: legacyEnabled }: {
     action: AgentToolRun;
@@ -79,7 +79,7 @@ export function AgentActionCard({ action, project, sources, pending, onDecision,
             <summary className="cursor-pointer text-secondary">Параметры действия</summary>
             <div className="mt-2 max-h-64 overflow-y-auto"><Parameters value={action.arguments} /></div>
         </details>
-        {action.status === "pending" && <p className="mt-2 text-[11px] text-muted">{decisionRules.note ?? "Вера предлагает изменение. Оно выполнится только после подтверждения; отменить потом можно только вручную."}</p>}
+        {action.status === "pending" && <p className="mt-2 text-[11px] text-muted">{decisionRules.note ?? "Арис предлагает изменение. Оно выполнится только после подтверждения; отменить потом можно только вручную."}</p>}
         {action.status === "pending" && (canApprove || canReject) && <div className="mt-3 flex gap-2">
             {canApprove && <Button size="sm" variant="primary" disabled={!enabled || pending} onClick={() => onDecision("approve")} title={enabled ? decisionRules.approveHint ?? "Выполнить изменение сейчас. Отменить можно только вручную" : disabledHint}>Подтвердить</Button>}
             {canReject && <Button size="sm" disabled={!enabled || pending} onClick={() => onDecision("reject")} title={enabled ? "Не выполнять — данные не изменятся" : disabledHint}>Отклонить</Button>}

@@ -2,13 +2,12 @@ import { useCallback, useEffect, useRef, type FormEvent, type KeyboardEvent } fr
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
-    Bot,
     Database,
+    ArrowDown,
     Paperclip,
     Plus,
     RefreshCw,
     Send,
-    Sparkles,
 } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import type {
@@ -23,11 +22,15 @@ import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 import { TimThinking } from "@/components/chat/TimChatReply";
 import { AgentEntityCard } from "@/components/agent/AgentEntityCard";
 import { actionSources } from "@/lib/agentCards";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { AgentActionCard } from "@/components/projects/AgentActionCard";
 import { ErrorMessage } from "@/components/ui/States";
 import { cn } from "@/lib/cn";
 import { TIM_PERSONA } from "@/lib/tim";
+import { AgentAvatar } from "@/components/brand/AgentAvatar";
+import { shouldSubmitChat, useChatInput } from "@/components/chat/useChatInput";
+import { useChatHistory } from "@/components/chat/useChatHistory";
+import "@/components/chat/chat.css";
 
 const STARTERS = [
     "Дай краткую сводку проекта и текущие риски",
@@ -58,7 +61,6 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
-    const endRef = useRef<HTMLDivElement>(null);
     const [searchParams] = useSearchParams();
     const updateSearchParams = useCallback((update: (previous: URLSearchParams) => URLSearchParams, options?: { replace?: boolean }) => {
         const next = update(new URLSearchParams(location.search));
@@ -84,6 +86,8 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
     const draftKey = `${sessionKey}:${conversationId ?? "new"}`;
     const draft = useAgentChatStore((state) => state.drafts[draftKey]);
     const question = draft?.content ?? "";
+    const input = useChatInput(question);
+    const { viewportRef, contentRef, atBottom, onScroll, scrollToLatest } = useChatHistory(draftKey, messages.map(message => `${message.id}:${message.status}:${message.content.length}`).join("|"));
     const selectedFiles = draft?.files ?? [];
     const sendingRef = useRef(false);
     const busy = messages.some((message) => message.status === "queued" || message.status === "processing");
@@ -154,14 +158,11 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
         },
     });
 
-    useEffect(() => {
-        endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, [conversationId, lastMessage?.id, lastMessage?.status]);
-
     async function submit(value = question) {
         const normalized = value.trim();
         if (normalized.length < 2 || sending || sendingRef.current || busy || loading || chat.messages.isError) return;
         sendingRef.current = true;
+        scrollToLatest();
         const requestId = draft?.content.trim() === normalized ? draft.requestId : crypto.randomUUID();
         updateDraft(draftKey, { content: normalized, files: selectedFiles, requestId });
         let id = conversationId;
@@ -228,7 +229,7 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
     }
 
     function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-        if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+        if (shouldSubmitChat(event)) {
             event.preventDefault();
             void submit();
         }
@@ -239,13 +240,11 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
 
     return (
         <div className="h-full min-h-0">
-            <div className={cn("mx-auto grid h-full w-full", !compact && "max-w-6xl gap-4 p-5", !compact && !knowledgeOnly && "lg:grid-cols-[minmax(0,1fr)_280px]")}>
-                <section aria-label="Личный диалог с Верой" className={cn("ai-surface flex min-h-0 min-w-0 flex-col overflow-hidden", !compact && "rounded-[var(--radius-panel)] border border-ai-border shadow-card", knowledgeOnly && "hidden")}>
-                    {!compact && <div className="flex items-center justify-between gap-3 border-b border-line-subtle px-4 py-3">
+            <div className={cn("mx-auto grid h-full w-full", !compact && "chat-project-agent max-w-6xl gap-4 p-5", !compact && !knowledgeOnly && "lg:grid-cols-[minmax(0,1fr)_280px]")}>
+                <section aria-label="Личный диалог с Арисом" className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden", compact ? "ai-surface" : "brand-ai-panel rounded-[var(--radius-panel)] border border-transparent shadow-card", knowledgeOnly && "hidden")}>
+                    {!compact && <div className="chat-agent-header brand-ai-header flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line-subtle px-3 py-2 sm:gap-3 sm:px-4 sm:py-3">
                         <div className="flex min-w-0 items-center gap-2.5">
-                            <span className="ai-mark flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-ai-blue">
-                                <Bot size={17} aria-hidden="true" />
-                            </span>
+                            <AgentAvatar />
                             <div className="min-w-0">
                                 <h2 className="text-[13px] font-semibold text-primary">{TIM_PERSONA}</h2>
                                 <p className="truncate text-[11px] text-muted">
@@ -265,11 +264,11 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
                         </span>
                     </div>}
 
-                    <div className="flex flex-wrap items-center gap-2 border-b border-line-subtle px-4 py-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line-subtle px-3 py-2 sm:px-4">
                         <select aria-label="Диалог" value={conversationId ?? ""}
                             disabled={sending || chat.conversations.isPending}
                             onChange={(event) => selectConversation(Number(event.target.value))}
-                            className="min-w-0 flex-1 rounded-[var(--radius-control)] border border-line bg-surface px-2 py-1.5 text-[12px] text-primary">
+                            className="min-h-9 min-w-0 flex-1 rounded-[var(--radius-control)] border border-line bg-surface px-2 py-1.5 text-[12px] text-primary">
                             {conversationId == null && <option value="">Начните первый разговор</option>}
                             {conversationId != null && !conversations.some((item) => item.id === conversationId) && <option value={conversationId}>Текущий диалог</option>}
                             {conversations.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
@@ -278,18 +277,18 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
                         {chat.conversations.hasNextPage && <Button size="sm" disabled={chat.conversations.isFetchingNextPage} onClick={() => void chat.conversations.fetchNextPage()}>Ещё диалоги</Button>}
                     </div>
 
-                    <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-5" aria-live="polite">
+                    <div className="relative min-h-0 flex-1">
+                    <div ref={viewportRef} onScroll={onScroll} aria-label="История личного диалога проекта" className="chat-history scrollbar-thin h-full overflow-y-auto px-3 py-4 sm:px-4 sm:py-5" aria-live="polite">
+                        <div ref={contentRef}>
                         {loading ? <p className="text-[13px] text-muted">Загружаю переписку…</p> : messages.length === 0 ? (
                             <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center gap-5 py-8 text-center">
-                                <span className="ai-mark flex size-11 items-center justify-center rounded-[var(--radius-card)] text-ai-blue">
-                                    <Sparkles size={22} aria-hidden="true" />
-                                </span>
+                                <AgentAvatar size={48} />
                                 <div className="flex flex-col gap-1.5">
                                     <h3 className="text-base font-semibold text-primary">
                                         Спросите что угодно о {project.name}
                                     </h3>
                                     <p className="text-[13px] text-muted">
-                                        Вера учитывает знания проекта и актуальное состояние задач.
+                                        Арис учитывает знания проекта и актуальное состояние задач.
                                     </p>
                                 </div>
                                 <div className={cn("grid w-full border-y border-line-subtle", !compact && "sm:grid-cols-2")}>
@@ -299,7 +298,7 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
                                             type="button"
                                             disabled={sending || busy || Boolean(chatError)}
                                             onClick={() => void submit(starter)}
-                                            className="px-3 py-2.5 text-left text-[12px] text-secondary transition-colors hover:bg-ai-soft hover:text-primary sm:odd:border-r sm:odd:border-line-subtle"
+                                            className="chat-starter px-3 py-2.5 text-left text-[12px] text-secondary transition-colors hover:bg-ai-soft hover:text-primary sm:odd:border-r sm:odd:border-line-subtle"
                                         >
                                             {starter}
                                         </button>
@@ -312,6 +311,7 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
                                 {messages.map((message) => (
                                     <div
                                         key={message.id}
+                                        data-chat-message={message.id}
                                         className={cn(
                                             "flex",
                                             message.role === "user" ? "justify-end" : "justify-start",
@@ -319,7 +319,7 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
                                     >
                                         <div
                                             className={cn(
-                                                "min-w-0 rounded-lg px-3.5 py-3", compact ? "max-w-full" : "max-w-[88%]",
+                                                "chat-content chat-personal-message min-w-0 rounded-lg px-3.5 py-3", compact ? "max-w-full" : "max-w-[88%]",
                                                 message.role === "user"
                                                     ? "bg-accent/85 text-on-accent"
                                                     : "bg-ai-soft text-secondary shadow-card",
@@ -330,16 +330,16 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
                                             ) : message.status === "failed" ? (
                                                 <div className="space-y-2 text-[12px]">
                                                     <p className="text-danger">{message.error}</p>
-                                                    {message.id === lastMessage?.id && <Button size="sm" disabled={sending} onClick={() => chat.retry.mutate({ id: conversationId!, messageId: message.id })}>Повторить ответ</Button>}
+                                                    {message.id === lastMessage?.id && <Button size="sm" variant="ai" disabled={sending} onClick={() => chat.retry.mutate({ id: conversationId!, messageId: message.id })}>Повторить ответ</Button>}
                                                 </div>
                                             ) : message.role === "assistant" ? (
                                                 message.content.trim() ? <MarkdownAnswer content={message.content} /> : null
                                             ) : (
-                                                <p className="whitespace-pre-wrap text-[13px] leading-relaxed">
+                                                <p className="whitespace-pre-wrap text-[14px] leading-relaxed">
                                                     {message.content}
                                                 </p>
                                             )}
-                                            {(message.files ?? []).map((file) => <p key={file.id} className="mt-2 flex items-center gap-1 text-[12px]"><Paperclip size={12} />{file.original_name}</p>)}
+                                            {(message.files ?? []).map((file) => <p key={file.id} className="mt-2 flex min-w-0 items-center gap-1 text-[12px]"><Paperclip size={12} className="shrink-0" /><span className="min-w-0 break-words">{file.original_name}</span></p>)}
                                             {(message.actions ?? []).map((action) => <AgentActionCard
                                                 key={action.id} action={action} project={project} sources={message.sources}
                                                 enabled={message.id === lastMessage?.id && !busy && !sending}
@@ -354,42 +354,45 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
                                         </div>
                                     </div>
                                 ))}
-                                <div ref={endRef} />
                             </div>
                         )}
+                        </div>
+                    </div>
+                    {!atBottom && <Button size="sm" className="material-glass absolute right-3 bottom-3 shadow-panel" icon={<ArrowDown size={14} />} onClick={scrollToLatest}>К последним сообщениям</Button>}
                     </div>
 
-                    <form onSubmit={onSubmit} className="border-t border-line-subtle bg-surface/55 px-4 py-3">
+                    <form onSubmit={onSubmit} className="chat-personal-composer shrink-0 border-t border-line-subtle bg-surface/55 px-4 py-3">
                         {chatError && <ErrorMessage title="Не удалось обновить диалог" message={(chatError as Error).message} />}
-                        {selectedFiles.length > 0 && <ul className="mx-auto mb-2 flex max-w-3xl flex-wrap gap-2 text-[12px]">{selectedFiles.map((file) => <li key={file.id} className="rounded border border-line p-1">
-                            {file.original_name} <button type="button" aria-label={`Убрать ${file.original_name}`} disabled={sending || busy} onClick={() => void removeFile(file.id)}>×</button>
+                        {selectedFiles.length > 0 && <ul aria-label="Файлы для отправки" className="chat-draft-items mx-auto mb-2 flex max-w-3xl flex-wrap gap-2 text-[12px]">{selectedFiles.map((file) => <li key={file.id} className="chat-draft-chip flex items-center rounded border border-line px-2 py-1">
+                            <span className="truncate">{file.original_name}</span><button type="button" aria-label={`Убрать ${file.original_name}`} disabled={sending || busy} onClick={() => void removeFile(file.id)}>×</button>
                         </li>)}</ul>}
                         <div className="material-metal mx-auto flex max-w-3xl items-end gap-2 rounded-[var(--radius-card)] border border-ai-border p-2 transition-[border-color,box-shadow] focus-within:border-ai-blue/55 focus-within:shadow-focus">
-                            <input type="file" multiple ref={fileInputRef} aria-label="Файлы для Веры" className="hidden" onChange={(event) => { void uploadFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
-                            <Button type="button" size="sm" disabled={sending || busy || loading || selectedFiles.length >= 5} title="Добавить файл до 10 МБ" onClick={() => fileInputRef.current?.click()} icon={<Paperclip size={14} />}>Файл</Button>
+                            <input type="file" multiple ref={fileInputRef} aria-label="Файлы для Ариса" className="hidden" onChange={(event) => { void uploadFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
+                            <IconButton label="Добавить файл до 10 МБ" disabled={sending || busy || loading || selectedFiles.length >= 5} onClick={() => fileInputRef.current?.click()}><Paperclip size={16} /></IconButton>
                             <textarea
+                                ref={input}
                                 value={question}
                                 onChange={(event) => updateDraft(draftKey, { content: event.target.value })}
                                 onKeyDown={onKeyDown}
-                                rows={2}
+                                rows={1}
                                 maxLength={2000}
-                                placeholder="Спросите о проекте…"
-                                aria-label="Вопрос Вере по проекту"
-                                disabled={sending || busy || loading}
-                                className="scrollbar-thin min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1 text-[13px] text-primary outline-none placeholder:text-disabled"
+                                placeholder={busy ? "Арис отвечает — можно подготовить следующий вопрос…" : "Спросите о проекте…"}
+                                aria-label="Вопрос Арису по проекту"
+                                disabled={sending || loading}
+                                className="chat-input scrollbar-thin min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1 text-[14px] leading-relaxed text-primary outline-none placeholder:text-disabled"
                             />
                             <Button
                                 type="submit"
-                                variant="primary"
+                                variant="ai"
                                 size="md"
                                 disabled={question.trim().length < 2 || sending || busy || loading || chat.messages.isError}
                                 icon={<Send size={14} aria-hidden="true" />}
                             >
-                                <span className={compact ? "sr-only" : undefined}>Спросить</span>
+                                <span className={compact ? "sr-only" : "sr-only sm:not-sr-only"}>Спросить</span>
                             </Button>
                         </div>
-                        <p className="mx-auto mt-1.5 max-w-3xl text-[10px] text-disabled">
-                            Переписка сохраняется. Enter — отправить, Shift+Enter — новая строка.
+                        <p className="chat-personal-help mx-auto mt-1.5 max-w-3xl text-[10px] text-disabled">
+                            Переписка сохраняется.<span className="chat-keyboard-hint hidden sm:inline"> Enter — отправить, Shift+Enter — новая строка.</span>
                         </p>
                     </form>
                 </section>
@@ -469,7 +472,7 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
                         </section>
                     )}
                     <section className="border-t border-line-subtle px-1 pt-4 text-[12px] leading-relaxed text-muted">
-                        <p className="mb-2 font-medium text-secondary">Что знает Вера</p>
+                        <p className="mb-2 font-medium text-secondary">Что знает Арис</p>
                         <ul className="flex list-disc flex-col gap-1 pl-4">
                             <li>паспорт, команда, стадии и структура проекта;</li>
                             <li>задачи, чек-листы, риски, вехи и стикеры;</li>

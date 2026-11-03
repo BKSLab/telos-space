@@ -12,5 +12,5 @@ def request_routing_fields(url: str) -> dict[str, str]:
     Остальным OpenAI-совместимым API поле не отправляется.
     """
     if urlsplit(url).hostname == "polza.ai":
-        return {"prompt_cache_key": f"vera-{uuid4().hex}"}
+        return {"prompt_cache_key": f"telos-{uuid4().hex}"}
     return {}

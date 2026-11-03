@@ -1,30 +1,48 @@
-"""Вера вызывается целым именем в начале сообщения, без старого обращения «Тим»."""
+"""Арис/ARIS вызывается целым именем в начале; прежние имена его не вызывают."""
 
 from src.agent.tim import TIM_NAME, TimMode, is_addressed_to_tim, strip_address
-from src.prompts.project_agent import TIM_SYSTEM_PROMPTS
+from src.prompts.project_agent import TIM_BASE_PROMPTS, TIM_SYSTEM_PROMPTS
 from src.prompts.tracker_agent import TRACKER_ROUTER_SYSTEM_PROMPT
 
 
-def test_message_is_for_vera_only_when_it_starts_with_the_whole_word():
+def test_message_is_for_aris_only_when_it_starts_with_the_whole_word():
     addressed = [
-        "Вера, что горит?",
-        "ВЕРА перенеси срок",
-        "вера",
-        "  Вера: сводка по проекту  ",
-        "вера!",
-        "Вера\nкакие задачи?",
-        "ВеРа — сводка",
-        "Вера, PM-план готов?",
+        "Арис, что горит?",
+        "АРИС перенеси срок",
+        "арис",
+        "  Арис: сводка по проекту  ",
+        "арис!",
+        "Арис\nкакие задачи?",
+        "АрИс — сводка",
+        "Арис, PM-план готов?",
+        "ARIS, что горит?",
+        "aris перенеси срок",
+        "ArIs",
+        "\tARIS; сводка",
+        "ARIS?",
+        "ARIS\nкакие задачи?",
+        "ARIS–сводка",
+        "Арис… сводка",
+        "ARIS(сводка)",
     ]
     not_addressed = [
-        "Веранда, привет",
-        "Вероника сказала",
-        "коллеги, Вера сказала",
-        "@Вера привет",
+        "Аристотель, привет",
+        "Ариса спросили",
+        "Арис2 это логин",
+        "ARIS2 это логин",
+        "Aristo отчёт",
+        "АрисO отчёт",
+        "ARISА отчёт",
+        "Арис_бот, привет",
+        "ARIS_bot, привет",
+        "коллеги, Арис сказал",
+        "@Арис привет",
+        "@ARIS привет",
         "",
         None,
-        "вера2 это логин",
-        "ВераO отчёт",
+        "Вера, сводка",
+        "ВЕРА перенеси срок",
+        "вера",
         "Тим, сводка",
         "ТИМ перенеси срок",
         "тим",
@@ -36,26 +54,38 @@ def test_message_is_for_vera_only_when_it_starts_with_the_whole_word():
 
 def test_strip_address_keeps_the_question_itself():
     cases = {
-        "Вера, какие задачи в проекте?": "какие задачи в проекте?",
-        "ВЕРА перенеси срок": "перенеси срок",
-        "вера: — сводка": "сводка",
-        "Вера": "Вера",
-        "Веранда, привет": "Веранда, привет",
-        "Вероника, привет": "Вероника, привет",
-        "Вера, PM-план готов?": "PM-план готов?",
-        "Вера PMO отчёт": "PMO отчёт",
-        "Вера PM: сводка": "PM: сводка",
+        "Арис, какие задачи в проекте?": "какие задачи в проекте?",
+        "АРИС перенеси срок": "перенеси срок",
+        "арис: — сводка": "сводка",
+        "Арис": "Арис",
+        "  ARIS, \t\n": "ARIS,",
+        "ARIS": "ARIS",
+        "aRiS, какие задачи?": "какие задачи?",
+        "\tARIS;!? —– сводка  ": "сводка",
+        "ARIS\nзадачи": "задачи",
+        "ARIS(сводка)": "(сводка)",
+        "Аристотель, привет": "Аристотель, привет",
+        "Арис2, привет": "Арис2, привет",
+        "ARIS2, привет": "ARIS2, привет",
+        "Арис, PM-план готов?": "PM-план готов?",
+        "Арис PMO отчёт": "PMO отчёт",
+        "ARIS PM: сводка": "PM: сводка",
+        "Вера, сводка": "Вера, сводка",
         "Тим, сводка": "Тим, сводка",
-        "коллеги, Вера, сводка": "коллеги, Вера, сводка",
+        "коллеги, Арис, сводка": "коллеги, Арис, сводка",
     }
     assert {text: strip_address(text) for text in cases} == cases
 
 
-def test_agent_identity_and_persona_are_vera_project_manager_in_every_mode():
-    assert TIM_NAME == "Вера"
-    for mode in TimMode:
-        prompt = TIM_SYSTEM_PROMPTS[mode]
-        assert "Тебя зовут Вера" in prompt and "проектный менеджер" in prompt
-        assert "женском роде" in prompt
-        assert "Тим" not in prompt
-    assert "Вера, проектный менеджер" in TRACKER_ROUTER_SYSTEM_PROMPT
+def test_agent_identity_is_aris_project_manager_of_telos_space_in_every_mode():
+    assert TIM_NAME == "Арис"
+    for prompts in (TIM_SYSTEM_PROMPTS, TIM_BASE_PROMPTS):
+        for mode in TimMode:
+            prompt = prompts[mode]
+            assert "Тебя зовут Арис (ARIS)" in prompt and "проектный менеджер TELOS SPACE" in prompt
+            assert "мужском роде" in prompt
+            assert "цель → контекст → действие → результат" in prompt
+            assert "Прежние имена в истории" in prompt
+            assert "Вера" not in prompt and "Тим" not in prompt
+    assert "Арис (ARIS), проектный менеджер TELOS SPACE" in TRACKER_ROUTER_SYSTEM_PROMPT
+    assert "мужском роде" in TRACKER_ROUTER_SYSTEM_PROMPT

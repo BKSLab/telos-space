@@ -33,7 +33,7 @@ function chatServer() {
         return message;
     };
     const add = (content: string, userId = 2, broadcast = true) => create(userId, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, broadcast);
-    const addTim = (content: string, status: ChatAgentState["status"] = "completed") => create(0, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, true, { author_type: "AGENT", author: null, agent: { name: "Вера", status, requester: members[0], request_message_id: 1, error: null, sources: [], actions: [] } });
+    const addTim = (content: string, status: ChatAgentState["status"] = "completed") => create(0, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, true, { author_type: "AGENT", author: null, agent: { name: "Арис", status, requester: members[0], request_message_id: 1, error: null, sources: [], actions: [] } });
 
     const attach = async (page: Page, userId = 1) => {
         const publicUser = members.find((user) => user.id === userId)!;
@@ -120,12 +120,13 @@ const LEGACY_CONFIRM = "0f1e2d3c-0000-4000-8000-000000000001";
 async function installPersonalHistory(page: Page) {
     const stamp = "2026-09-21T10:00:00Z";
     const state = { reindexCalls: 0 };
-    await page.route(/\/api\/v1\/(?:projects\/1\/(?:agent\/conversations|knowledge\/)|agent\/pending\/)/, async (route) => {
+    await page.route(/\/api\/v1\/(?:projects\/1\/(?:agent\/conversations|knowledge\/)|agent\/pending\/|tim\/conversations)/, async (route) => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
         const headers = { "access-control-allow-origin": "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, OPTIONS" };
         const reply = (json: unknown) => route.fulfill({ json, headers });
         if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+        if (path === "/api/v1/tim/conversations") return reply({ items: [], next_offset: null });
         if (path.endsWith("/agent/conversations")) return reply({ items: [{ id: 17, project_id: 1, title: "План проекта", created_at: stamp, updated_at: stamp }], next_offset: null });
         if (path.endsWith("/agent/conversations/17/messages")) return reply({ items: [{ id: 170, conversation_id: 17, request_id: "history", role: "assistant", content: "Сохранённый план проверки проекта", sources: [], files: [], actions: [], status: "completed", error: null, created_at: stamp }], next_before_id: null });
         if (path.endsWith("/knowledge/reindex")) { state.reindexCalls += 1; return reply({ queued: true }); }
@@ -143,30 +144,101 @@ async function openChat(page: Page) {
     await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
 }
 
-test("одна вкладка чата и обращение к Вере по начальному имени", async ({ page }) => {
+test("одна вкладка чата и обращение к Арису по начальному имени", async ({ page }) => {
     const server = chatServer(); await server.attach(page); await openChat(page);
     const sections = page.getByRole("navigation", { name: "Разделы проекта" });
     await expect(sections.getByRole("link", { name: "Чат", exact: true })).toHaveCount(1);
     await expect(sections.getByRole("link", { name: "Агент", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Открыть чат агента" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Открыть чат команды" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Спросить Веру", exact: true })).toHaveAttribute("title", /Вера — проектный менеджер/);
+    await expect(page.getByRole("button", { name: "Открыть чаты", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Спросить Ариса", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Чаты", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "Выбор чата", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Личные диалоги и знания", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Проектные диалоги и знания", exact: true })).toHaveCount(0);
     const input = page.getByRole("combobox", { name: "Сообщение проекту" });
-    await input.fill("Тим, что по задачам?");
-    await expect(page.getByText("Начните сообщение с «Вера, …», чтобы обратиться к проектному менеджеру", { exact: true })).toBeVisible();
-    await input.fill("Веранда готова");
-    await expect(page.getByText("Вера — проектный менеджер — ответит здесь, в чате проекта", { exact: true })).toHaveCount(0);
-    await input.fill("Вера, какие сроки ближайшие?");
-    await expect(page.getByText("Вера — проектный менеджер — ответит здесь, в чате проекта", { exact: true })).toBeVisible();
+    for (const text of ["Тим, что по задачам?", "Вера, какие сроки?", "Аристотель", "ARISTOTLE", "Арис2", "Арис_бот", "ARIS_bot", "коллеги, Арис сказал"]) {
+        await input.fill(text);
+        await expect(page.getByText("Начните сообщение с «Арис, …», чтобы обратиться к проектному менеджеру", { exact: true })).toBeVisible();
+        await expect(page.getByText("Арис — проектный менеджер — ответит здесь, в чате проекта", { exact: true })).toHaveCount(0);
+    }
+    await input.fill("  aRiS: какие сроки ближайшие?");
+    await expect(page.getByText("Арис — проектный менеджер — ответит здесь, в чате проекта", { exact: true })).toBeVisible();
+    await input.fill("Арис, какие сроки ближайшие?");
+    await expect(page.getByText("Арис — проектный менеджер — ответит здесь, в чате проекта", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
-    await expect(page.getByRole("article").filter({ hasText: "Вера, какие сроки ближайшие?" })).toBeVisible();
-    expect(server.control.commands.find((command) => command.type === "message.send")?.data.content).toBe("Вера, какие сроки ближайшие?");
+    await expect(page.getByRole("article").filter({ hasText: "Арис, какие сроки ближайшие?" })).toBeVisible();
+    expect(server.control.commands.find((command) => command.type === "message.send")?.data.content).toBe("Арис, какие сроки ближайшие?");
     await page.setViewportSize({ width: 390, height: 844 });
-    const send = await page.getByRole("button", { name: "Отправить", exact: true }).boundingBox();
-    const vera = await page.getByRole("button", { name: "Спросить Веру", exact: true }).boundingBox();
-    const editor = await input.boundingBox();
-    expect(vera!.y + vera!.height, "Личный виджет остаётся над полем общего чата").toBeLessThanOrEqual(editor!.y);
-    expect(vera!.x >= send!.x + send!.width || vera!.x + vera!.width <= send!.x || vera!.y >= send!.y + send!.height || vera!.y + vera!.height <= send!.y, "Личный виджет не перекрывает отправку в общий чат").toBe(true);
+    await expect(page.getByRole("button", { name: "Открыть чаты", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Спросить Ариса", exact: true })).toHaveCount(0);
+    await input.evaluate((element) => { element.style.height = "180px"; });
+    const resizedEditor = (await input.boundingBox())!;
+    expect(resizedEditor.height).toBeGreaterThanOrEqual(44);
+    expect(resizedEditor.height, "Редактор ограничивает высоту и оставляет место истории и отправке").toBeLessThanOrEqual(180);
+    await input.fill("Проверка после изменения высоты редактора");
+    await expect(page.getByRole("button", { name: "Отправить", exact: true })).toBeInViewport();
+    await page.getByRole("button", { name: "Отправить", exact: true }).click();
+    await expect(page.getByRole("article").filter({ hasText: "Проверка после изменения высоты редактора" })).toBeVisible();
+    expect(server.control.commands.filter((command) => command.type === "message.send").at(-1)?.data.content).toBe("Проверка после изменения высоты редактора");
+});
+
+test("проектный чат занимает рабочую ширину на 1920 px и не переполняет экран 320 px", async ({ page }, info) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const server = chatServer();
+    server.add("Сообщение на широком экране", 2, false);
+    await server.attach(page); await openChat(page);
+    const sections = page.getByRole("navigation", { name: "Разделы проекта" });
+    const input = page.getByRole("combobox", { name: "Сообщение проекту" });
+    const assertActiveTabFullyVisible = async () => {
+        await expect.poll(async () => {
+            const tab = (await sections.getByRole("link", { name: "Чат", exact: true }).boundingBox())!;
+            const nav = (await sections.boundingBox())!;
+            return Math.max(nav.x - tab.x, tab.x + tab.width - nav.x - nav.width, 0);
+        }, { message: "Активная вкладка целиком видна внутри полосы разделов" }).toBeLessThanOrEqual(1);
+    };
+    const assertProjectChatOnly = async () => {
+        await expect(page.getByRole("combobox", { name: "Выбор чата", exact: true })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Личные диалоги и знания", exact: true })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Проектные диалоги и знания", exact: true })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Открыть чаты", exact: true })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Спросить Ариса", exact: true })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Открыть чат команды", exact: true })).toHaveCount(0);
+        await expect(page.getByRole("dialog", { name: "Чаты", exact: true })).toHaveCount(0);
+    };
+    await assertProjectChatOnly();
+    await expect(page.locator("body")).toHaveCSS("font-size", "14px");
+    await expect(sections.getByRole("link", { name: "Чат", exact: true })).toHaveCSS("font-size", "15px");
+    await expect(page.getByText("Сообщение на широком экране", { exact: true })).toBeVisible();
+    const workspace = (await page.locator("#main-content").boundingBox())!;
+    const tabs = (await sections.boundingBox())!;
+    const firstTab = (await sections.getByRole("link").first().boundingBox())!;
+    const lastTab = (await sections.getByRole("link").last().boundingBox())!;
+    const messages = (await page.getByLabel("История сообщений проекта", { exact: true }).locator(":scope > div").first().boundingBox())!;
+    const editor = (await input.boundingBox())!;
+    expect(tabs.width, "Навигация проекта использует ширину рабочей области").toBeGreaterThan(workspace.width - 64);
+    expect(Math.abs(firstTab.x - tabs.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(lastTab.x + lastTab.width - tabs.x - tabs.width), "Вкладки распределены по всей ширине навигации").toBeLessThanOrEqual(2);
+    expect(messages.width, "История сообщений использует ширину рабочей области").toBeGreaterThan(workspace.width - 64);
+    expect(editor.width, "Редактор использует ширину рабочей области").toBeGreaterThan(workspace.width - 80);
+    await page.screenshot({ path: info.outputPath("project-chat-wide.png") });
+    await page.setViewportSize({ width: 320, height: 844 });
+    await assertActiveTabFullyVisible();
+    await page.reload();
+    await expect(page.getByText("Подключено", { exact: true })).toBeVisible();
+    await assertProjectChatOnly();
+    await expect(sections.getByRole("link", { name: "Чат", exact: true })).toBeInViewport();
+    await assertActiveTabFullyVisible();
+    await expect(input).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "Узкая страница не прокручивается по горизонтали").toBe(true);
+    await input.fill("Проверка чата на экране 320 px");
+    await expect(page.getByRole("button", { name: "Отправить", exact: true })).toBeInViewport();
+    await page.getByRole("button", { name: "Отправить", exact: true }).click();
+    await expect(page.getByRole("article").filter({ hasText: "Проверка чата на экране 320 px" })).toBeVisible();
+    expect(server.control.commands.filter((command) => command.type === "message.send").at(-1)?.data.content).toBe("Проверка чата на экране 320 px");
+    await assertActiveTabFullyVisible();
+    await page.screenshot({ path: info.outputPath("project-chat-320.png") });
 });
 
 test("старый адрес личного диалога сохраняет историю, подтверждение и контекст в едином чате", async ({ page }) => {
@@ -180,7 +252,8 @@ test("старый адрес личного диалога сохраняет �
     expect(redirected.searchParams.get("confirm")).toBe(LEGACY_CONFIRM);
     expect(redirected.hash).toBe("#context");
     await confirmation.getByRole("button", { name: "Закрыть", exact: true }).last().click();
-    await expect(page.getByText("Личные диалоги по проекту · видите только вы", { exact: true })).toBeVisible();
+    await expect(page.getByText("Личные диалоги проекта · видно только вам", { exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Выбор чата", exact: true })).toHaveCount(0);
     await expect(page.getByText("Сохранённый план проверки проекта", { exact: true })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Диалог", exact: true })).toHaveValue("17");
     const current = new URL(page.url());
@@ -201,17 +274,22 @@ test("знания и переиндексация доступны из еди�
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/projects/DEMO/knowledge?task=42#knowledge");
     await expect(page).toHaveURL(/\/projects\/DEMO\/chat\?task=42&view=knowledge#knowledge$/);
+    expect(new URL(page.url()).searchParams.get("task")).toBe("42");
+    expect(new URL(page.url()).hash).toBe("#knowledge");
     const knowledge = page.getByRole("complementary", { name: "Знания проекта", exact: true });
     await expect(knowledge.getByText("Фрагментов", { exact: true })).toBeVisible();
     await expect(knowledge.getByText("23", { exact: true })).toBeVisible();
     await expect(knowledge.getByText("План.pdf", { exact: true })).toBeVisible();
     await knowledge.getByRole("button", { name: "Переиндексировать", exact: true }).click();
     await expect.poll(() => state.reindexCalls).toBe(1);
-    await page.getByRole("button", { name: "Личные диалоги и знания", exact: true }).click();
-    await page.getByRole("button", { name: "Личные диалоги", exact: true }).click();
+    await page.goto("/chat");
+    await page.getByRole("button", { name: "Проектные диалоги и знания", exact: true }).click();
+    await expect(page.getByRole("link", { name: "DEMO · Знания", exact: true })).toHaveAttribute("href", "/projects/DEMO/chat?view=knowledge");
+    await page.getByRole("link", { name: "DEMO · Личные диалоги", exact: true }).click();
     await expect(page.getByText("Сохранённый план проверки проекта", { exact: true })).toBeVisible();
-    expect(new URL(page.url()).hash).toBe("#knowledge");
+    expect(new URL(page.url()).searchParams.get("view")).toBe("personal");
     expect(new URL(page.url()).searchParams.get("conversation")).toBe("17");
+    await expect(page.getByRole("combobox", { name: "Выбор чата", exact: true })).toHaveCount(0);
 });
 
 test("окно команды и вкладка разделяют сокет, историю, ответ и черновик редактирования", async ({ page }) => {
@@ -219,7 +297,7 @@ test("окно команды и вкладка разделяют сокет, �
     server.add("Проверим плавающее окно", 2, false);
     await server.attach(page);
     await page.goto("/projects/DEMO/team");
-    await page.getByRole("button", { name: "Открыть чат команды", exact: true }).click();
+    await page.getByRole("button", { name: "Открыть чаты", exact: true }).click();
     await expect(page.getByText("Подключено", { exact: true })).toBeVisible();
     const connections = server.control.connections;
     const original = page.getByRole("article").filter({ hasText: "Проверим плавающее окно" });
@@ -230,7 +308,9 @@ test("окно команды и вкладка разделяют сокет, �
     await expect(page).toHaveURL(/\/chat$/);
     await expect(page.getByRole("button", { name: "Открыть чат команды", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Открыть чат агента", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Спросить Веру", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Открыть чаты", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Спросить Ариса", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Чаты", exact: true })).toHaveCount(0);
     await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toHaveValue("Проверяю прямо из команды");
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
     expect(server.rows.at(-1)!.reply?.id).toBe(server.rows[0].id);
@@ -239,13 +319,13 @@ test("окно команды и вкладка разделяют сокет, �
     await page.getByRole("button", { name: "Изменить", exact: true }).click();
     await page.getByRole("combobox", { name: "Редактирование сообщения" }).fill("Проверено из двух представлений");
     await page.getByRole("link", { name: "Команда", exact: true }).click();
-    await page.getByRole("button", { name: "Открыть чат команды", exact: true }).click();
+    await page.getByRole("button", { name: "Открыть чаты", exact: true }).click();
     await expect(page.getByRole("combobox", { name: "Редактирование сообщения" })).toHaveValue("Проверено из двух представлений");
     await page.getByRole("button", { name: "Сохранить", exact: true }).click();
     await expect(page.getByText("Проверено из двух представлений", { exact: true })).toBeVisible();
     await page.getByRole("navigation", { name: "Основная навигация" }).getByRole("link", { name: "Проекты", exact: true }).click();
     await expect(page).toHaveURL(/\/projects$/);
-    await expect(page.getByRole("dialog", { name: "Окно чата команды" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Чаты", exact: true })).toBeVisible();
     await expect(page.getByText("Проверено из двух представлений", { exact: true })).toBeVisible();
     expect(server.control.connections).toBe(connections);
     await page.screenshot({ path: "test-results/floating-team-chat.png" });
@@ -256,10 +336,10 @@ test("поиск и прочтение в окне команды не меня�
     for (let i = 0; i < 65; i++) server.add(i === 0 ? "Давнее решение по приёмке" : `Сообщение ${i}`, 2, false);
     await server.attach(page);
     await page.goto("/projects/DEMO/team");
-    await page.getByRole("button", { name: "Открыть чат команды", exact: true }).click();
+    await page.getByRole("button", { name: "Открыть чаты", exact: true }).click();
     await expect(page.getByText("Подключено", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Поиск в чате" }).click();
-    await page.getByRole("textbox", { name: "Поиск по сообщениям" }).fill("Давнее решение");
+    await page.getByRole("searchbox", { name: "Поиск по сообщениям" }).fill("Давнее решение");
     await page.getByRole("complementary", { name: "Поиск по сообщениям" }).getByRole("button").filter({ hasText: "Давнее решение" }).click();
     await expect(page.getByRole("article").filter({ hasText: "Давнее решение по приёмке" })).toBeVisible();
     await expect(page).toHaveURL(/\/team$/);
@@ -268,12 +348,12 @@ test("поиск и прочтение в окне команды не меня�
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
     await page.screenshot({ path: "test-results/floating-team-mobile.png" });
-    const panel = await page.getByRole("dialog", { name: "Окно чата команды" }).boundingBox();
+    const panel = await page.getByRole("dialog", { name: "Чаты", exact: true }).boundingBox();
     expect(panel!.x).toBeGreaterThanOrEqual(0);
     expect(panel!.x + panel!.width).toBeLessThanOrEqual(390);
     await page.getByRole("combobox", { name: "Сообщение проекту" }).press("Escape");
-    await expect(page.getByRole("dialog", { name: "Окно чата команды" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Открыть чат команды", exact: true })).toBeFocused();
+    await expect(page.getByRole("dialog", { name: "Чаты", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Открыть чаты", exact: true })).toBeFocused();
 });
 
 test("два участника получают сообщения, ответы и реакции; история сохраняется после reload", async ({ page, context }) => {
@@ -330,7 +410,7 @@ test("редактирование, цитирование, удаление и 
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
     await expect(page.locator("blockquote")).toHaveText("Согласованное решение по интерфейсу");
     await page.getByRole("button", { name: "Поиск в чате" }).click();
-    await page.getByRole("textbox", { name: "Поиск по сообщениям" }).fill("Согласованное");
+    await page.getByRole("searchbox", { name: "Поиск по сообщениям" }).fill("Согласованное");
     await expect(page.getByRole("complementary", { name: "Поиск по сообщениям" }).getByRole("button").filter({ hasText: "Согласованное" })).toHaveCount(2);
     await own.first().getByRole("button", { name: "Действия с сообщением" }).click();
     await page.getByRole("button", { name: "Удалить", exact: true }).click();
@@ -352,7 +432,7 @@ test("счётчик и уведомление обновляются на др�
     const historyRequests = server.control.messageGets;
     await page.waitForTimeout(1600);
     expect(server.control.messageGets).toBe(historyRequests);
-    await page.getByRole("link", { name: /Чат/ }).click();
+    await page.getByRole("navigation", { name: "Разделы проекта" }).getByRole("link", { name: /^Чат/ }).click();
     await expect(page.getByText("Обсудим критерии приёмки", { exact: true }).first()).toBeVisible();
 });
 
@@ -370,7 +450,7 @@ test("переносы задач появляются в общем чате б
     await expect(notices.getByText(/DEMO-42/)).toHaveCount(0);
 });
 
-test("уведомление, ответ и поиск называют Веру при пустом author", async ({ page }) => {
+test("уведомление, ответ и поиск называют Ариса при пустом author", async ({ page }) => {
     const server = chatServer(); await server.attach(page); await openChat(page);
     await page.getByRole("link", { name: "Команда", exact: true }).click();
     await expect(page).toHaveURL(/\/team$/);
@@ -378,20 +458,23 @@ test("уведомление, ответ и поиск называют Веру
     await expect(page.getByRole("complementary", { name: "Новое сообщение проекта" })).toHaveCount(0);
     server.addTim("План проверки готов");
     const notification = page.getByRole("complementary", { name: "Новое сообщение проекта" });
-    await expect(notification.getByText("Вера: План проверки готов")).toBeVisible();
+    await expect(notification.getByText("Арис: План проверки готов")).toBeVisible();
     await notification.getByRole("button").first().click();
-    const answer = page.getByRole("article", { name: "Сообщение Вера", exact: true }).filter({ hasText: "План проверки готов" });
+    const answer = page.getByRole("article", { name: "Сообщение Ариса", exact: true }).filter({ hasText: "План проверки готов" });
+    const avatar = answer.locator('img');
+    await expect(avatar).toHaveAttribute("src", /\/brand\/aris-avatar-/);
+    await expect.poll(() => avatar.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0);
     await answer.getByRole("button", { name: "Действия с сообщением" }).click();
     await page.getByRole("button", { name: "Ответить", exact: true }).click();
-    await expect(page.getByText("Ответ Вера: План проверки готов", { exact: true })).toBeVisible();
+    await expect(page.getByText("Ответ Арису: План проверки готов", { exact: true })).toBeVisible();
     await page.getByRole("combobox", { name: "Сообщение проекту" }).fill("Спасибо за план");
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
     const reply = page.getByRole("article", { name: "Сообщение Анна Иванова", exact: true });
-    await expect(reply.getByRole("button", { name: "Перейти к исходному сообщению" }).getByText("Вера", { exact: true })).toBeVisible();
+    await expect(reply.getByRole("button", { name: "Перейти к исходному сообщению" }).getByText("Арис", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Поиск в чате" }).click();
     const search = page.getByRole("complementary", { name: "Поиск по сообщениям" });
-    await search.getByRole("textbox", { name: "Поиск по сообщениям" }).fill("План проверки готов");
-    await expect(search.getByRole("button").filter({ hasText: "План проверки готов" }).getByText("Вера", { exact: true })).toBeVisible();
+    await search.getByRole("searchbox", { name: "Поиск по сообщениям" }).fill("План проверки готов");
+    await expect(search.getByRole("button").filter({ hasText: "План проверки готов" }).getByText("Арис", { exact: true })).toBeVisible();
 });
 
 test("потерянный ack и reload сохраняют UUID и не дублируют сообщение", async ({ page }) => {
@@ -418,7 +501,7 @@ test("подгрузка ранней истории сохраняет прок
     await expect(page.getByRole("article")).toHaveCount(85);
     await expect(page.getByText("Обсуждение номер 36", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Поиск в чате" }).click();
-    await page.getByRole("textbox", { name: "Поиск по сообщениям" }).fill("номер 8");
+    await page.getByRole("searchbox", { name: "Поиск по сообщениям" }).fill("номер 8");
     await page.getByRole("complementary", { name: "Поиск по сообщениям" }).getByRole("button").filter({ hasText: "Обсуждение номер 8" }).last().click();
     await expect(page.getByText("Обсуждение номер 8", { exact: true }).first()).toBeVisible();
 });
@@ -465,7 +548,7 @@ test("на узком экране редактор, карточки и пои�
     await page.getByRole("button", { name: "Отправить", exact: true }).click();
     await expect(page.getByRole("button", { name: "Документ: План тестирования" })).toBeVisible();
     await page.getByRole("button", { name: "Поиск в чате" }).click();
-    await page.getByRole("textbox", { name: "Поиск по сообщениям" }).fill("мобильный");
+    await page.getByRole("searchbox", { name: "Поиск по сообщениям" }).fill("мобильный");
     await expect(page.getByRole("complementary", { name: "Поиск по сообщениям" })).toContainText("Проверим мобильный интерфейс");
     await page.getByRole("button", { name: "Закрыть поиск" }).click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();

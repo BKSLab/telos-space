@@ -10,7 +10,7 @@ export default defineConfig({
         baseURL: "http://127.0.0.1:4179",
         channel: process.env.PLAYWRIGHT_CHANNEL,
         viewport: { width: 1440, height: 1000 },
-        screenshot: "only-on-failure",
+        screenshot: process.env.PLAYWRIGHT_SCREENSHOT === "on" ? "on" : "only-on-failure",
         trace: "retain-on-failure",
     },
     webServer: {

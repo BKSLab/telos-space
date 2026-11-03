@@ -216,7 +216,7 @@ AgentConversationScopeFactory = Callable[[], AbstractAsyncContextManager[AgentCo
 
 @dataclass(frozen=True, slots=True)
 class TimChatScope:
-    """Короткая транзакция очереди ответов Веры в общем проектном чате."""
+    """Короткая транзакция очереди ответов Ариса в общем проектном чате."""
 
     chats: ProjectChatsRepository
     messages: ChatMessagesRepository

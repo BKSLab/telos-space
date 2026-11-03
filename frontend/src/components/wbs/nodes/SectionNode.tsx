@@ -138,7 +138,7 @@ export function SectionNode({ data, selected }: NodeProps) {
                             event.stopPropagation();
                             onToggleCollapse(section.node.id);
                         }}
-                        className="mt-0.5 shrink-0 rounded-sm p-0.5 text-muted hover:bg-hover hover:text-primary"
+                        className="wbs-section-collapse nodrag nopan mt-0.5 shrink-0 rounded-sm p-0.5 text-muted hover:bg-hover hover:text-primary"
                     >
                         {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
                     </button>
@@ -164,7 +164,7 @@ export function SectionNode({ data, selected }: NodeProps) {
                                     onCancelRename();
                                 }
                             }}
-                            className="w-full rounded-sm border border-accent/70 bg-elevated px-1 py-0.5 text-[13px] text-primary outline-none shadow-focus"
+                            className="nodrag nopan w-full rounded-sm border border-accent/70 bg-elevated px-1 py-0.5 text-[13px] text-primary outline-none shadow-focus"
                         />
                     ) : (
                         <h3
@@ -189,7 +189,7 @@ export function SectionNode({ data, selected }: NodeProps) {
                                 y: event.clientY,
                             });
                         }}
-                        className="shrink-0 rounded-sm p-0.5 text-muted hover:bg-hover hover:text-primary"
+                        className="wbs-section-menu nodrag nopan shrink-0 rounded-sm p-0.5 text-muted hover:bg-hover hover:text-primary"
                     >
                         <MoreHorizontal size={13} />
                     </button>

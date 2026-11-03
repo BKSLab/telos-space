@@ -45,7 +45,7 @@ export function ScenarioPanel({
 
             {preview && (
                 <>
-                    <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+                    <div className="flex flex-col gap-1 lg:max-h-64 lg:overflow-y-auto">
                         {preview.changes.map((change) => (
                             <div
                                 key={change.task_id}

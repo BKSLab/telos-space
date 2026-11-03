@@ -25,7 +25,7 @@ class DocumentSchema(BaseModel):
     search_title: str | None = Field(
         None,
         description="Заголовок с безопасными маркерами подсветки.",
-        examples=["__FTS_START__Проект__FTS_END__ Вера"],
+        examples=["__FTS_START__Проект__FTS_END__ TELOS SPACE"],
     )
     search_excerpt: str | None = Field(
         None,

@@ -13,15 +13,15 @@ export interface ChatAttachment {
     id: string; original_name: string; content_type: string; size_bytes: number;
     message_id: number | null; created_at: string;
 }
-/** USER — участник, AGENT — Вера (у него author = null), docs/tim-agent.md. */
+/** USER — участник, AGENT — Арис (у него author = null), docs/tim-agent.md. */
 export type ChatAuthorType = "USER" | "AGENT";
 export interface ChatReply { id: number; seq: number; author_type?: ChatAuthorType; author: ChatUser | null; content: string; deleted: boolean }
-/** Состояние ответа Веры: queued/processing — «Вера думает», completed — ответ, failed — ошибка (текст уже в content). */
+/** Состояние ответа Ариса: queued/processing — «Арис думает», completed — ответ, failed — ошибка (текст уже в content). */
 export interface ChatAgentState {
     name: string;
     status: "queued" | "processing" | "completed" | "failed";
     error: string | null;
-    /** Что Вера делает сейчас, пока готовит ответ («Ищу задачи…»); null — статуса нет или ответ готов. */
+    /** Что Арис делает сейчас, пока готовит ответ («Ищу задачи…»); null — статуса нет или ответ готов. */
     progress?: string | null;
     requester: ChatUser | null;
     request_message_id: number;
@@ -38,7 +38,7 @@ export interface ChatMessage {
     created_at: string; edited_at: string | null; deleted_at: string | null;
     reply: ChatReply | null; mentions: ChatUser[]; entities: ChatEntity[]; attachments: ChatAttachment[];
     reactions: { reaction: string; user_ids: number[] }[];
-    /** Только у сообщений Веры; у людей null. */
+    /** Только у сообщений Ариса; у людей null. */
     agent?: ChatAgentState | null;
     /** Только клиентские поля оптимистичной строки, не отдельное хранилище истории. */
     delivery?: "sending" | "failed";
@@ -122,9 +122,9 @@ export function applyChatMessage(history: ChatHistory | undefined, message: Chat
     return { messages, has_more: history?.has_more ?? false, event_cursor: Math.max(history?.event_cursor ?? 0, message.eventSeq ?? 0), initialized: history?.initialized ?? false };
 }
 
-/** Сообщение Веры в чате проекта. */
+/** Сообщение Ариса в чате проекта. */
 export const isAgentMessage = (message: Pick<ChatMessage, "author_type">): boolean => message.author_type === "AGENT";
-/** Вера ещё готовит ответ — показываем живой статус или «Вера думает…». */
+/** Арис ещё готовит ответ — показываем живой статус или «Арис думает…». */
 export const isAgentThinking = (message: ChatMessage): boolean =>
     isAgentMessage(message) && (message.agent?.status === "queued" || message.agent?.status === "processing") && !message.content;
 /** Имя автора для подписи, уведомления и цитаты. */

@@ -40,7 +40,7 @@ class DashboardProjectSchema(BaseModel):
 
     id: int = Field(..., description="Идентификатор проекта.", examples=[1])
     key: str = Field(..., description="Короткий код проекта.", examples=["PROJ"])
-    name: str = Field(..., description="Название проекта.", examples=["Агент Вера"])
+    name: str = Field(..., description="Название проекта.", examples=["TELOS SPACE"])
     description_md: str | None = Field(
         None,
         description="Описание проекта в Markdown.",
@@ -85,7 +85,7 @@ class DashboardTaskSchema(BaseModel):
     )
     project_id: int = Field(..., description="Идентификатор проекта.", examples=[1])
     project_key: str = Field(..., description="Код проекта.", examples=["PROJ"])
-    project_name: str = Field(..., description="Название проекта.", examples=["Агент Вера"])
+    project_name: str = Field(..., description="Название проекта.", examples=["TELOS SPACE"])
     project_color: str = Field(..., description="HEX-цвет проекта.", examples=["#58a6ff"])
     stage_id: int = Field(..., description="Идентификатор стадии.", examples=[2])
     stage_name: str = Field(..., description="Название стадии.", examples=["В работе"])

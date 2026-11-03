@@ -84,7 +84,7 @@ export function DocumentDetailPage() {
 
     if (listQuery.isPending || documentQuery.isPending) {
         return (
-            <div className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-5 py-5">
+            <div className="mx-auto flex w-full max-w-none flex-col gap-3 px-5 py-5">
                 <Skeleton className="h-8 w-64" />
                 <Skeleton className="h-64 w-full" />
             </div>
@@ -93,7 +93,7 @@ export function DocumentDetailPage() {
 
     if (documentId === undefined) {
         return (
-            <div className="mx-auto w-full max-w-4xl px-5 py-5">
+            <div className="mx-auto w-full max-w-none px-5 py-5">
                 <EmptyState
                     title="Документ не найден"
                     description={`В проекте нет документа со slug «${slug}».`}
@@ -114,7 +114,7 @@ export function DocumentDetailPage() {
 
     return (
         <div className="scrollbar-thin h-full overflow-y-auto">
-            <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-5 py-5">
+            <div className="mx-auto flex w-full min-w-0 max-w-none flex-col gap-4 px-3 py-4 pb-24 sm:px-5 sm:py-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <Link
                         to={`/projects/${project.key}/docs`}
@@ -175,7 +175,7 @@ export function DocumentDetailPage() {
                     document && (
                         <>
                             <header className="flex flex-col gap-1">
-                                <h1 className="text-xl font-semibold text-primary">
+                                <h1 className="text-xl font-semibold break-words text-primary">
                                     {document.title}
                                 </h1>
                                 <p className="text-[11px] text-disabled">
@@ -184,7 +184,7 @@ export function DocumentDetailPage() {
                                 </p>
                             </header>
 
-                            <div className="rounded-[var(--radius-card)] bg-surface/35 p-5">
+                            <div className="min-w-0 overflow-x-auto rounded-[var(--radius-card)] bg-surface/35 p-3 sm:p-5">
                                 <RenderedDocument markdown={document.content_md} />
                             </div>
                         </>

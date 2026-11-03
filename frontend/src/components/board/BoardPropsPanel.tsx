@@ -179,8 +179,8 @@ export function BoardPropsPanel({ selected, position, busy, onStyle, onLayer, on
                     </span>
                 </>
             )}
-            {single?.type === "shape" && (
-                <button type="button" className="board-props__btn" disabled={busy} aria-label="Редактировать подпись" title="Добавить или изменить подпись — Ctrl+Enter сохранит"
+            {single && (
+                <button type="button" className="board-props__btn" disabled={busy} aria-label={single.type === "sticker" ? "Редактировать стикер" : "Редактировать подпись"} title="Добавить или изменить текст"
                     onClick={() => { setConnectorMenu(false); onEditLabel(); }}><Pencil size={14} aria-hidden="true" /></button>
             )}
             {single?.type === "shape" && isConnectorKind(single.kind) && (

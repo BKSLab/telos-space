@@ -1,4 +1,4 @@
-"""Личный диалог с Верой в виджете: хранение, очередь ответов и контекст страницы."""
+"""Личный диалог с Арисом в виджете: хранение, очередь ответов и контекст страницы."""
 
 import asyncio
 import json
@@ -71,7 +71,7 @@ class TimWidgetService:
 
     Диалог не привязан к проекту. Проект ответа определяется страницей
     (page_context) при каждом ответе заново и только если он доступен
-    пользователю; иначе Вера отвечает в личном режиме без проекта.
+    пользователю; иначе Арис отвечает в личном режиме без проекта.
     """
 
     DEFAULT_TITLE = "Новый диалог"
@@ -100,7 +100,7 @@ class TimWidgetService:
     async def list_conversations(
         self, *, user_id: int, offset: int, limit: int, project_id: int | None = None
     ) -> AgentConversationListSchema:
-        """Возвращает страницу диалогов пользователя с Верой.
+        """Возвращает страницу диалогов пользователя с Арисом.
 
         Args:
             user_id: Текущий пользователь.
@@ -126,7 +126,7 @@ class TimWidgetService:
     async def create_conversation(
         self, *, user_id: int, project_id: int | None = None
     ) -> AgentConversationSchema:
-        """Начинает новый диалог с Верой; он становится текущим.
+        """Начинает новый диалог с Арисом; он становится текущим.
 
         Args:
             user_id: Автор из аутентифицированной сессии.
@@ -318,7 +318,7 @@ class TimWidgetService:
         if message is None:
             return False
         logger.info(
-            "🤖 Вера начала ответ в виджете id=%s, диалог=%s.", message.id, message.conversation_id
+            "🤖 Арис начал ответ в виджете id=%s, диалог=%s.", message.id, message.conversation_id
         )
         try:
             async with asyncio.timeout(self.config.turn_timeout_seconds):
@@ -391,7 +391,7 @@ class TimWidgetService:
                 project_id, can_write = None, True
             else:
                 # Проект страницы пересчитывается на каждый ответ и только в пределах
-                # прав пользователя: недоступный проект Вере не показывается вовсе.
+                # прав пользователя: недоступный проект Арису не показывается вовсе.
                 if conversation.project_id is not None:
                     grant = await db.access.ensure_project_access(
                         project_id=conversation.project_id, user_id=user.id

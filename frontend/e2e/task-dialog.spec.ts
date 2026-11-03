@@ -1,0 +1,98 @@
+import { expect, test } from "@playwright/test";
+import { installMockApi, mockState } from "./support/taskMockApi";
+import { stamp } from "./support/mockApi";
+
+test("задача открывается по центру, разделы доступны с клавиатуры, черновики сохраняются", async ({ page }, info) => {
+    const state = mockState();
+    await installMockApi(page, state);
+    await page.goto("/my-tasks");
+    const opener = page.getByRole("button", { name: state.tasks[0].title, exact: true });
+    await opener.click();
+    const card = page.getByRole("dialog", { name: "Задача DEMO-1", exact: true });
+    const overview = card.getByRole("tab", { name: "Основное", exact: true });
+    await expect(overview).toHaveAttribute("aria-selected", "true");
+    await expect(card.getByRole("tablist", { name: "Разделы задачи" })).toHaveAttribute("aria-orientation", "vertical");
+    await expect(card.getByRole("tabpanel")).toHaveCount(1);
+    const box = await card.boundingBox();
+    expect(box!.width).toBeGreaterThan(900);
+    expect(box!.y).toBeGreaterThan(0);
+    expect(Math.abs(box!.x + box!.width / 2 - 720)).toBeLessThan(2);
+    await page.screenshot({ path: info.outputPath("task-dialog-desktop.png") });
+
+    await card.getByRole("button", { name: "Редактировать описание" }).click();
+    await card.getByRole("textbox", { name: "Описание задачи в Markdown" }).fill("Черновик описания");
+    await card.getByRole("tab", { name: "Комментарии", exact: true }).click();
+    await card.getByRole("textbox", { name: "Текст комментария" }).fill("Черновик комментария");
+    await card.getByRole("tab", { name: "Отчёт", exact: true }).click();
+    await card.getByRole("button", { name: "Добавить отчёт", exact: true }).click();
+    await card.getByRole("textbox", { name: "Отчёт по задаче" }).fill("Черновик итога");
+    await overview.click();
+    await expect(card.getByRole("textbox", { name: "Описание задачи в Markdown" })).toHaveValue("Черновик описания");
+    await card.getByRole("tab", { name: "Комментарии", exact: true }).click();
+    await expect(card.getByRole("textbox", { name: "Текст комментария" })).toHaveValue("Черновик комментария");
+    await card.getByRole("tab", { name: "Отчёт", exact: true }).click();
+    await expect(card.getByRole("textbox", { name: "Отчёт по задаче" })).toHaveValue("Черновик итога");
+    expect(state.writes.filter(write => !write.path.endsWith("/view"))).toEqual([]);
+
+    await overview.focus();
+    await overview.press("ArrowDown");
+    await expect(card.getByRole("tab", { name: "Участники", exact: true })).toBeFocused();
+    await expect(card.getByRole("tabpanel", { name: "Участники", exact: true })).toBeVisible();
+    await card.getByRole("tab", { name: "Участники", exact: true }).press("Escape");
+    await expect(card).toHaveCount(0);
+    await expect(opener).toBeFocused();
+    expect(state.errors).toEqual([]);
+});
+
+test("комментарий открывает раздел отчёта, публикация требует отдельного действия", async ({ page }) => {
+    const state = mockState();
+    state.comments = [{ id: 1, task_id: 100, body_md: "Макеты согласованы, проверки пройдены.", author: state.me, author_name: "Тестов Тест", created_at: stamp }];
+    await installMockApi(page, state);
+    await page.goto("/my-tasks?task=100");
+    const card = page.getByRole("dialog", { name: "Задача DEMO-1", exact: true });
+    await card.getByRole("tab", { name: "Комментарии", exact: true }).click();
+    await card.getByRole("button", { name: "Считать отчётом", exact: true }).click();
+    await expect(card.getByRole("tab", { name: "Отчёт", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(card.getByRole("tab", { name: "Отчёт", exact: true })).toBeFocused();
+    expect(state.report.revision).toBe(0);
+    await card.getByRole("button", { name: "Опубликовать комментарий как отчёт", exact: true }).click();
+    await expect.poll(() => state.report.revision).toBe(1);
+    expect(state.writes.find(write => write.path.endsWith("/report/from-comment"))?.body).toEqual({ comment_id: 1, expected_revision: 0, expected_comment_body_md: state.comments[0].body_md });
+    await expect(card.getByRole("tabpanel", { name: "Отчёт", exact: true }).getByText("Макеты согласованы, проверки пройдены.", { exact: true })).toBeVisible();
+    expect(state.errors).toEqual([]);
+});
+
+test("на телефоне разделы прокручиваются, вложенный диалог возвращает фокус в задачу", async ({ page }, info) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const state = mockState();
+    await installMockApi(page, state);
+    await page.goto("/my-tasks?task=200");
+    const card = page.getByRole("dialog", { name: "Задача T-1", exact: true });
+    await expect(card).toBeVisible();
+    await expect(card.getByRole("tablist", { name: "Разделы задачи" })).toHaveAttribute("aria-orientation", "horizontal");
+    await expect(card.getByRole("tab", { name: "Связи", exact: true })).toHaveCount(0);
+    const box = await card.boundingBox();
+    expect(box!.x).toBeLessThanOrEqual(1);
+    expect(box!.y).toBeLessThanOrEqual(1);
+    expect(Math.abs(box!.width - 390)).toBeLessThanOrEqual(2);
+    expect(Math.abs(box!.height - 844)).toBeLessThanOrEqual(2);
+    await card.getByRole("tab", { name: "История", exact: true }).click();
+    await expect(card.getByRole("tabpanel", { name: "История", exact: true })).toBeVisible();
+    await card.getByRole("tab", { name: "Файлы", exact: true }).click();
+    const move = card.getByRole("button", { name: "Переместить…", exact: true });
+    await move.click();
+    const transfer = page.getByRole("dialog", { name: "Переместить задачу", exact: true });
+    await transfer.getByRole("button", { name: "Отмена", exact: true }).click();
+    await expect(transfer).toHaveCount(0);
+    await expect(move).toBeFocused();
+    await expect(card.getByRole("tab", { name: "Файлы", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(() => card.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await card.getByRole("tab", { name: "Основное", exact: true }).click();
+    await expect(card.getByRole("tab", { name: "Основное", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(card.getByRole("tab", { name: "Основное", exact: true })).toBeInViewport({ ratio: 1 });
+    await page.mouse.move(380, 820);
+    await page.screenshot({ path: info.outputPath("task-dialog-mobile.png") });
+    await card.getByRole("button", { name: "Закрыть задачу", exact: true }).click();
+    await expect(card).toHaveCount(0);
+    expect(state.errors).toEqual([]);
+});

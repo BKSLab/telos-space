@@ -1,4 +1,4 @@
-"""Постоянная очередь ответов Веры в чатах проектов."""
+"""Постоянная очередь ответов Ариса в чатах проектов."""
 
 from datetime import timedelta
 from typing import Any
@@ -27,7 +27,7 @@ class ChatAgentTurnsRepository(ChatRepository):
         return (await self._execute(statement)).scalar_one_or_none()
 
     async def get_by_replies(self, message_ids: list[int]) -> list[ChatAgentTurn]:
-        """Пакетно читает ходы по сообщениям Веры для витрины чата."""
+        """Пакетно читает ходы по сообщениям Ариса для витрины чата."""
         return list(
             (
                 await self._execute(

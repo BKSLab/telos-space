@@ -2,6 +2,7 @@ import { Inbox } from "lucide-react";
 import type { CalendarGridTask, CalendarStage } from "@/lib/types";
 import { CalendarTask } from "@/components/calendar/CalendarTask";
 import { Button } from "@/components/ui/Button";
+import { useMediaQuery } from "@/lib/useCalendarView";
 
 interface UnscheduledListProps {
     tasks: CalendarGridTask[];
@@ -25,6 +26,7 @@ export function UnscheduledList({
     onScheduleTask,
     onLoadMore,
 }: UnscheduledListProps) {
+    const touchLayout = useMediaQuery("(max-width: 1023px), (pointer: coarse)");
     if (tasks.length === 0) {
         return (
             <div className="flex flex-col items-center gap-2 py-8 text-center text-[12px] text-muted">
@@ -37,7 +39,9 @@ export function UnscheduledList({
         <div className="flex flex-col gap-2">
             <p className="text-[11px] text-muted">
                 {canDrag
-                    ? "Перетащите задачу на день сетки или шкалы — у неё появится срок. Кнопка с календарём — выбрать даты вручную."
+                    ? touchLayout
+                        ? "Нажмите кнопку календаря рядом с задачей, чтобы выбрать начало и срок."
+                        : "Перетащите задачу на день сетки или шкалы — у неё появится срок. Кнопка с календарём — выбрать даты вручную."
                     : "Задачи без плановых дат. Назначить срок может участник с правом редактирования."}
             </p>
             <div className="flex flex-col gap-1">

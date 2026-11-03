@@ -86,13 +86,13 @@ describe("события переноса в общем чате", () => {
         client.clear();
     });
 
-    it("подписывает уведомление Верой и не показывает пустое сообщение во время подготовки ответа", () => {
+    it("подписывает уведомление Арисом и не показывает пустое сообщение во время подготовки ответа", () => {
         const { client } = setup();
-        const thinking = message({ author_type: "AGENT", author: null, content: "", agent: { name: "Вера", status: "processing", error: null, requester: members[0], request_message_id: 1, sources: [], actions: [] } });
+        const thinking = message({ author_type: "AGENT", author: null, content: "", agent: { name: "Арис", status: "processing", error: null, requester: members[0], request_message_id: 1, sources: [], actions: [] } });
         act(() => connections.at(-1)!.onEvent({ type: "message.created", project_id: 1, seq: 1, data: { message: thinking } }, false));
         expect(screen.queryByRole("complementary")).toBeNull();
         act(() => connections.at(-1)!.onEvent({ type: "message.created", project_id: 1, seq: 2, data: { message: message({ id: 8, author_type: "AGENT", author: null, content: "План готов" }) } }, false));
-        expect(screen.getByText("Вера: План готов")).toBeTruthy();
+        expect(screen.getByText("Арис: План готов")).toBeTruthy();
         client.clear();
     });
 });

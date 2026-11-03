@@ -20,8 +20,8 @@ def build_service(*, file_context_limit: int = 5000):
     projects = AsyncMock(spec=ProjectsRepository)
     projects.get_by_id.return_value = SimpleNamespace(
         id=1,
-        key="VERA",
-        name="Вера",
+        key="TELOS",
+        name="TELOS SPACE",
         description_md="Контекст проекта",
     )
     tasks = AsyncMock(spec=TasksRepository)
@@ -79,8 +79,8 @@ async def test_rephrase_uses_project_tasks_documents_and_limited_file_text() -> 
 
     assert result.description_md == "Понятное описание задачи."
     prompt = json.loads(llm.get_structured_response.await_args.kwargs["content"])
-    assert prompt["project"]["name"] == "Вера"
-    assert prompt["related_task_wording"][0]["key"] == "VERA-7"
+    assert prompt["project"]["name"] == "TELOS SPACE"
+    assert prompt["related_task_wording"][0]["key"] == "TELOS-7"
     assert prompt["selected_documents"][0]["title"] == "Требования"
     assert prompt["new_files"][0]["content"] == "abcde"
     assert prompt["task"]["checklist"]["items"] == [

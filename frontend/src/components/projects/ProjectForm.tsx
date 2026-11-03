@@ -59,7 +59,7 @@ export function ProjectForm({ values, onChange, lockKey = false, requireDeadline
                         <Input
                             id={id}
                             value={values.name}
-                            placeholder="Агент Вера"
+                            placeholder="Агент Арис"
                             onChange={(event) => update({ name: event.target.value })}
                         />
                     )}

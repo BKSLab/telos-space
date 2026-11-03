@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Unlink } from "lucide-react";
+import { MoreHorizontal, Unlink } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { ProjectStage, TaskCompact } from "@/lib/types";
 import { DueDate } from "@/components/ui/DueDate";
@@ -52,7 +52,7 @@ export function TaskCard({
                       }
             }
             className={cn(
-                "flex h-full w-full cursor-grab flex-col justify-center gap-1 rounded-[var(--radius-control)] border px-2.5 py-2 text-left",
+                "wbs-task-card surface-card relative flex h-full w-full cursor-grab flex-col justify-center gap-1 rounded-[var(--radius-control)] border px-2.5 py-2 text-left",
                 "transition-[background-color,border-color,box-shadow] duration-[var(--duration-normal)]",
                 "ease-[var(--ease-standard)] shadow-card active:cursor-grabbing",
                 // Холст тёмный, поэтому карточка всегда светлее фона: иначе
@@ -70,7 +70,13 @@ export function TaskCard({
         >
             {children}
 
-            <div className="flex shrink-0 items-center justify-between gap-2">
+            {onContextMenu && <button type="button" className="wbs-node-menu nodrag nopan" aria-label={`Действия задачи ${task.key}`} onClick={event => {
+                event.stopPropagation();
+                const rect = event.currentTarget.getBoundingClientRect();
+                onContextMenu(task.id, { x: rect.right, y: rect.bottom });
+            }}><MoreHorizontal size={16} aria-hidden="true" /></button>}
+
+            <div className={cn("flex shrink-0 items-center justify-between gap-2", onContextMenu && "pr-7")}>
                 <span className="font-mono text-[10px] text-muted">{task.key}</span>
                 <div className="flex items-center gap-1">
                     {isFloating && (
@@ -86,7 +92,7 @@ export function TaskCard({
 
             <p
                 className={cn(
-                    "line-clamp-1 shrink-0 text-[12px] leading-snug",
+                    "line-clamp-1 shrink-0 pr-6 text-[12px] leading-snug",
                     task.is_done ? "text-muted line-through" : "text-secondary",
                 )}
             >

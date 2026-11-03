@@ -1,6 +1,6 @@
-"""Вера в общем чате проекта: адресация, очередь, ответ всем, ошибки и решения по действиям.
+"""Арис в общем чате проекта: адресация, очередь, ответ всем, ошибки и решения по действиям.
 
-Проверки идут на PostgreSQL с настоящими commit: ответ Веры — обычное
+Проверки идут на PostgreSQL с настоящими commit: ответ Ариса — обычное
 сообщение чата, поэтому важны порядок событий outbox и права решающего.
 """
 
@@ -20,7 +20,8 @@ from src.db.models import ChatAgentTurn, ChatEvent, ChatMessage, ProjectMember
 from src.dependencies.scopes import build_agent_project_tool_scope, build_tim_chat_scope
 from src.exceptions.agent_tools import AgentToolAccessError, AgentToolConflictError
 from src.exceptions.knowledge import KnowledgeProviderError
-from src.schemas.knowledge import KnowledgeAnswerSchema
+from src.repositories.chat_messages import ChatMessagesRepository
+from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeSourceSchema
 from src.schemas.project_chats import ChatMessageCreate
 from src.services.agent_actions import AgentActionsService
 from src.services.project_agent import ProjectAgentService
@@ -58,19 +59,26 @@ async def events(env, message_id):
 
 async def test_only_addressed_message_queues_tim_and_placeholder_is_visible_to_all(tim):
     env = tim
-    for text in ("Веранда, привет", "Вероника, привет", "коллеги, Вера сказала", "Тим, сводка"):
+    for text in (
+        "Аристотель, привет",
+        "Арис2, сводка",
+        "ARIS2, сводка",
+        "коллеги, Арис сказал",
+        "Вера, сводка",
+        "Тим, сводка",
+    ):
         ignored = await env.service.send(1, 2, message(text))
         assert ignored.agent is None
     assert not await env.tim.process_next()
-    asked = await env.service.send(1, 2, message("ВеРа, какие задачи в проекте?"))
+    asked = await env.service.send(1, 2, message("ArIs, какие задачи в проекте?"))
     page = await env.service.history(1, 1)
     placeholder = page.messages[-1]
     assert placeholder.author_type == "AGENT" and placeholder.author is None
     assert placeholder.reply.id == asked.id and placeholder.content == ""
-    assert placeholder.agent.status == "queued" and placeholder.agent.name == "Вера"
+    assert placeholder.agent.status == "queued" and placeholder.agent.name == "Арис"
     assert placeholder.agent.requester.id == 2
     assert await events(env, placeholder.id) == ["message.created"]
-    # Повтор той же отправки не зовёт Веры второй раз.
+    # Повтор той же отправки не зовёт Ариса второй раз.
     async with env.factory() as db:
         count = len((await db.execute(select(ChatAgentTurn))).scalars().all())
     assert count == 1
@@ -79,7 +87,7 @@ async def test_only_addressed_message_queues_tim_and_placeholder_is_visible_to_a
 async def test_answer_uses_requester_rights_chat_history_and_quote(tim):
     env = tim
     quoted = await env.service.send(1, 1, message("Задача по складу зависла"))
-    await env.service.send(1, 2, message("ВЕРА перенеси срок", reply_to_message_id=quoted.id))
+    await env.service.send(1, 2, message("АРИС перенеси срок", reply_to_message_id=quoted.id))
     assert await env.tim.process_next()
     kwargs = env.agent.ask.await_args.kwargs
     assert kwargs["project_id"] == 1 and kwargs["mode"] is TimMode.PROJECT_CHAT
@@ -96,9 +104,60 @@ async def test_answer_uses_requester_rights_chat_history_and_quote(tim):
     assert env.engine.sync_engine.pool.checkedout() == 0
 
 
+@pytest.mark.parametrize("outcome", ["completed", "failed", "card_only"])
+async def test_history_refreshes_terminal_reply_committed_after_reading_placeholder(
+    tim, monkeypatch, outcome
+):
+    env = tim
+    if outcome == "failed":
+        env.agent.ask.side_effect = KnowledgeProviderError("synthetic provider failure")
+    elif outcome == "card_only":
+        env.agent.ask.return_value = KnowledgeAnswerSchema(
+            answer="",
+            sources=[
+                KnowledgeSourceSchema(
+                    source_id="project:1", entity_type="project", entity_id=1, title="Чат 1"
+                )
+            ],
+        )
+    await env.service.send(1, 1, message("Арис, что с проектом?"))
+    original_get_page = ChatMessagesRepository.get_page
+    interleaved = False
+
+    async def finish_after_page(repository, chat_id, **kwargs):
+        nonlocal interleaved
+        rows = await original_get_page(repository, chat_id, **kwargs)
+        placeholder = next((row for row in rows if row.author_kind == "agent"), None)
+        if placeholder is not None and not interleaved:
+            interleaved = True
+            assert placeholder.content == "" and placeholder.revision == 1
+            # Второй scope завершает ход после чтения страницы, до загрузки turns.
+            assert await asyncio.wait_for(env.tim.process_next(), timeout=10)
+            async with env.factory() as db:
+                saved_reply = await db.get(ChatMessage, placeholder.id)
+                assert saved_reply.revision == 2
+            # Читающая сессия по-прежнему держит старый объект в identity map.
+            assert placeholder.content == "" and placeholder.revision == 1
+        return rows
+
+    monkeypatch.setattr(ChatMessagesRepository, "get_page", finish_after_page)
+    reply = (await asyncio.wait_for(env.service.history(1, 1), timeout=10)).messages[-1]
+
+    assert interleaved
+    assert reply.agent.status == ("failed" if outcome == "failed" else "completed")
+    assert reply.revision == 2
+    if outcome == "failed":
+        assert reply.content.startswith("Не получилось ответить") and reply.agent.sources == []
+    elif outcome == "card_only":
+        assert reply.content == ""
+        assert [source.source_id for source in reply.agent.sources] == ["project:1"]
+    else:
+        assert reply.content == "В проекте две задачи." and reply.agent.sources == []
+
+
 async def test_model_failure_becomes_visible_error_message_not_silence(tim):
     env = tim
-    await env.service.send(1, 1, message("Вера, что горит?"))
+    await env.service.send(1, 1, message("Арис, что горит?"))
     env.agent.ask.side_effect = KnowledgeProviderError("upstream 500 секрет")
     await env.tim.process_next()
     reply = (await env.service.history(1, 1)).messages[-1]
@@ -106,7 +165,7 @@ async def test_model_failure_becomes_visible_error_message_not_silence(tim):
     assert reply.content.startswith("Не получилось ответить") and "секрет" not in reply.content
     # Позвавший ушёл из проекта до ответа — ошибка тоже видна, модель не вызывается.
     env.agent.ask.reset_mock(side_effect=True)
-    await env.service.send(1, 2, message("Вера, что горит?"))
+    await env.service.send(1, 2, message("Арис, что горит?"))
     async with env.factory() as db:
         await db.execute(delete(ProjectMember).where(ProjectMember.user_id == 2))
         await db.commit()
@@ -124,7 +183,7 @@ async def test_model_failure_becomes_visible_error_message_not_silence(tim):
 
 async def test_live_progress_reaches_the_whole_chat_and_is_cleared_by_the_answer(tim):
     env = tim
-    await env.service.send(1, 2, message("Вера, что с задачей P1-1?"))
+    await env.service.send(1, 2, message("Арис, что с задачей P1-1?"))
     entered, release = asyncio.Event(), asyncio.Event()
     progress = {}
 
@@ -169,7 +228,7 @@ async def test_live_progress_reaches_the_whole_chat_and_is_cleared_by_the_answer
 
 async def test_timeout_and_stalled_attempt_fail_visibly(tim):
     env = tim
-    await env.service.send(1, 1, message("Вера, сводка"))
+    await env.service.send(1, 1, message("Арис, сводка"))
 
     async def stalled(**kwargs):
         await asyncio.Event().wait()
@@ -197,7 +256,7 @@ async def test_proposed_action_is_decided_by_requester_or_member_with_rights(tim
     task = created["action"]["result"]["task"]
 
     async def propose(**kwargs):
-        # Вера в чате не видит личных действий: режим чата их не пускает.
+        # Арис в чате не видит личных действий: режим чата их не пускает.
         assert kwargs["execution"].mode is not TimMode.WIDGET_PERSONAL
         await env.actions.execute(
             context=replace(kwargs["execution"], mode=TimMode.PROJECT_CHAT),
@@ -207,7 +266,7 @@ async def test_proposed_action_is_decided_by_requester_or_member_with_rights(tim
         return KnowledgeAnswerSchema(answer="Подтвердите удаление в карточке.", sources=[])
 
     env.agent.ask.side_effect = propose
-    await env.service.send(1, 2, message("Вера, удали задачу про окно заказа"))
+    await env.service.send(1, 2, message("Арис, удали задачу про окно заказа"))
     await env.tim.process_next()
     reply = (await env.service.history(1, 1)).messages[-1]
     action = reply.agent.actions[0]
@@ -247,7 +306,7 @@ async def test_owner_only_action_needs_owner_rights_and_requester_can_reject(tim
         return KnowledgeAnswerSchema(answer="Жду решения.", sources=[])
 
     env.agent.ask.side_effect = propose
-    await env.service.send(1, 1, message("Вера, убери второго участника"))
+    await env.service.send(1, 1, message("Арис, убери второго участника"))
     await env.tim.process_next()
     action = (await env.service.history(1, 1)).messages[-1].agent.actions[0]
     assert action.status == "pending"

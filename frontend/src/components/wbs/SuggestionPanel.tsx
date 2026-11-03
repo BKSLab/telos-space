@@ -50,7 +50,7 @@ export function SuggestionPanel({
     return (
         <aside
             aria-label="Предложенная структура ИСР"
-            className="flex w-full shrink-0 flex-col border-l border-line bg-sidebar lg:w-80"
+            className="wbs-suggestion-panel flex min-h-0 w-full shrink-0 flex-col border-l border-line bg-sidebar lg:w-80"
         >
             <div className="flex shrink-0 items-start gap-2 border-b border-line px-3 py-2.5">
                 <Sparkles size={14} className="mt-0.5 text-accent" aria-hidden="true" />

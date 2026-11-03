@@ -23,7 +23,7 @@ from .base import Base, TimestampMixin
 
 
 class ChatMessage(TimestampMixin, Base):
-    """Сообщение участника или Тима с серверным порядком и ключом повторной отправки."""
+    """Сообщение участника или Ариса с серверным порядком и ключом повторной отправки."""
 
     __tablename__ = "chat_messages"
     __table_args__ = (
@@ -59,8 +59,8 @@ class ChatMessage(TimestampMixin, Base):
     author_kind: Mapped[str] = mapped_column(
         String(16),
         server_default="user",
-        doc="Автор: user — участник, agent — Тим.",
-        comment="Автор: user — участник, agent — Тим.",
+        doc="Автор: user — участник, agent — Арис.",
+        comment="Автор: user — участник, agent — Арис.",
     )
     content: Mapped[str] = mapped_column(
         Text, doc="Безопасный текст сообщения.", comment="Безопасный текст сообщения."

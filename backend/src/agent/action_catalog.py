@@ -71,7 +71,7 @@ PROJECT_ACTIONS = (
         "Копирует в задачу файл, отправленный участником в личном чате. file_id берётся из uploaded_files; пути и ссылки не принимаются.",
         p.UploadedAttachmentInput,
         documents.attach_uploaded_file,
-        # Файлы приходят только в личном виджете; в общем чате загрузок Вере нет.
+        # Файлы приходят только в личном виджете; в общем чате загрузок Арису нет.
         modes=frozenset({TimMode.WIDGET_PROJECT}),
     ),
     ProjectAction(
@@ -557,7 +557,7 @@ PROJECT_ACTIONS = (
     ),
 )
 
-# Личные действия Веры в виджете: работают вне одного проекта, права — пользователя.
+# Личные действия Ариса в виджете: работают вне одного проекта, права — пользователя.
 PERSONAL_ACTIONS = (
     ProjectAction(
         "list_personal_boards",

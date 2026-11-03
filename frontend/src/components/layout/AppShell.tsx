@@ -4,8 +4,10 @@ import { FolderKanban, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ToastViewport } from "@/components/ui/Toast";
-import { TaskDrawer } from "@/components/tasks/TaskDrawer";
+import { TaskDialog } from "@/components/tasks/TaskDialog";
 import { RiskDrawer } from "@/components/risks/RiskDrawer";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+import { MobileMenu } from "@/components/layout/MobileMenu";
 
 const MOBILE_ITEMS = [
     { to: "/", label: "Портфель", icon: LayoutDashboard, end: true },
@@ -18,7 +20,7 @@ const MOBILE_ITEMS = [
  */
 export function AppShell({ children }: { children: ReactNode }) {
     return (
-        <div className="flex h-full min-w-0 overflow-hidden bg-app">
+        <div className="app-shell flex h-full min-w-0 overflow-hidden bg-app lg:gap-2 lg:p-2">
             <a
                 href="#main-content"
                 className={cn(
@@ -35,8 +37,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <nav
                     aria-label="Разделы"
-                    className="material-metal flex h-12 shrink-0 items-center gap-1 border-b border-line-subtle px-3 md:hidden"
+                    className="mobile-header material-metal flex min-h-14 shrink-0 items-center gap-0.5 border-b border-line-subtle px-2 lg:hidden"
                 >
+                    <NavLink to="/" className="mr-1 flex size-11 shrink-0 items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-accent">
+                        <BrandLogo variant="symbol" className="size-7" />
+                    </NavLink>
                     {MOBILE_ITEMS.map(({ to, label, icon: Icon, end }) => (
                         <NavLink
                             key={to}
@@ -44,7 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                             end={end}
                             className={({ isActive }) =>
                                 cn(
-                                    "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px]",
+                                    "brand-tab flex min-h-11 items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px]",
                                     isActive
                                         ? "bg-accent-soft text-accent"
                                         : "text-secondary hover:bg-hover hover:text-primary",
@@ -55,15 +60,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                             {label}
                         </NavLink>
                     ))}
+                    <MobileMenu />
                 </nav>
 
-                <main id="main-content" className="material-mineral min-w-0 flex-1 overflow-hidden">
+                <main id="main-content" className="app-workspace material-mineral min-h-0 min-w-0 flex-1 overflow-hidden lg:rounded-[var(--radius-panel)] lg:border lg:border-line">
                     {children}
                 </main>
             </div>
 
             <ToastViewport />
-            <TaskDrawer />
+            <TaskDialog />
             <RiskDrawer />
         </div>
     );
@@ -77,8 +83,8 @@ interface PageProps {
 /** Обычная прокручиваемая страница с внутренними отступами. */
 export function Page({ children, className }: PageProps) {
     return (
-        <div className="scrollbar-thin h-full overflow-y-auto">
-            <div className={cn("mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 py-6 sm:px-6", className)}>
+        <div className="scrollbar-thin h-full min-w-0 overflow-x-hidden overflow-y-auto overscroll-y-contain">
+            <div className={cn("mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-5 px-3 py-4 pb-24 sm:gap-6 sm:px-6 sm:py-6", className)}>
                 {children}
             </div>
         </div>

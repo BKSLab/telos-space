@@ -59,7 +59,9 @@ async function mockProject(page: Page, initial: TaskChecklist | null = checklist
 async function openTask(page: Page) {
     await page.goto("/projects/DEMO/tasks");
     await page.getByRole("button", { name: "DEMO-142", exact: true }).click();
-    return page.getByRole("dialog", { name: "Задача DEMO-142", exact: true });
+    const card = page.getByRole("dialog", { name: "Задача DEMO-142", exact: true });
+    await card.getByRole("tab", { name: "Чек-лист", exact: true }).click();
+    return card;
 }
 
 test("ручной чек-лист создаётся атомарно с задачей; пустой пункт нельзя сохранить", async ({ page }) => {
@@ -154,6 +156,9 @@ test("конфликт сохраняет локальный черновик и
     const section = drawer.getByRole("region", { name: "Чек-лист задачи" });
     await section.getByRole("button", { name: "Редактировать чек-лист", exact: true }).click();
     await section.getByLabel("Пункт 1", { exact: true }).fill("Локальная правка");
+    await drawer.getByRole("tab", { name: "Основное", exact: true }).click();
+    await drawer.getByRole("tab", { name: "Чек-лист", exact: true }).click();
+    await expect(section.getByLabel("Пункт 1", { exact: true })).toHaveValue("Локальная правка");
     state.task.checklist_revision = 2;
     state.task.checklist!.items[0].text = "Правка коллеги";
     await drawer.getByRole("button", { name: "Сохранить чек-лист", exact: true }).click();

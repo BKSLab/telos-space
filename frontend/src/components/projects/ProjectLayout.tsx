@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Settings } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
@@ -7,7 +8,6 @@ import { cn } from "@/lib/cn";
 import { useProjectFromRoute } from "@/lib/useProject";
 import { ProjectIcon } from "@/components/projects/ProjectIcon";
 import { ProjectStatusBadge } from "@/components/ui/Badge";
-import { IconButton } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/Progress";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 import { ChatUnreadBadge } from "@/components/chat/ChatUnreadBadge";
@@ -31,6 +31,24 @@ const TABS = [
  */
 export function ProjectLayout() {
     const { project, projectKey, isPending, error, isMissing } = useProjectFromRoute();
+    const location = useLocation();
+    const tabs = useRef<HTMLElement>(null);
+    useEffect(() => {
+        const navigation = tabs.current;
+        const active = navigation?.querySelector<HTMLElement>('[aria-current="page"]');
+        if (!navigation || !active) return;
+        const revealActive = () => {
+            const bounds = navigation.getBoundingClientRect();
+            const tab = active.getBoundingClientRect();
+            const offset = tab.left < bounds.left ? tab.left - bounds.left : Math.max(tab.right - bounds.right, 0);
+            if (Math.abs(offset) > 0.5) navigation.scrollLeft += offset;
+        };
+        const frame = requestAnimationFrame(revealActive);
+        const observer = new ResizeObserver(revealActive);
+        observer.observe(navigation);
+        navigation.querySelectorAll("a").forEach(tab => observer.observe(tab));
+        return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+    }, [project?.id, location.pathname]);
 
     const statsQuery = useQuery({
         queryKey: queryKeys.projectStats(project?.id ?? 0),
@@ -70,23 +88,23 @@ export function ProjectLayout() {
 
     return (
         <div className="flex h-full min-w-0 flex-col">
-            <header className="material-mineral shrink-0 border-b border-line-subtle px-5 pt-4">
-                <div className="mx-auto flex w-full max-w-6xl flex-col gap-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="flex min-w-0 items-start gap-2.5">
+            <header className="project-header material-metal shrink-0 border-b border-line bg-surface px-3 pt-2 sm:px-5 sm:pt-4">
+                <div className="flex w-full min-w-0 flex-col gap-3">
+                    <div className="project-header-details flex items-start justify-between gap-2 sm:flex-wrap sm:gap-3">
+                        <div className="flex min-w-0 flex-1 items-start gap-2.5">
                             <ProjectIcon project={project} size={22} />
                             <div className="flex min-w-0 flex-col gap-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <h1 className="truncate text-xl font-semibold tracking-[-0.025em] text-primary">
+                                    <h1 title={project.name} className="max-w-full truncate text-[18px] font-semibold tracking-[-0.025em] text-primary sm:text-[24px]">
                                         {project.name}
                                     </h1>
-                                    <span className="font-mono text-[11px] text-muted">
+                                    <span className="font-mono text-[12px] text-muted">
                                         {project.key}
                                     </span>
                                     <ProjectStatusBadge status={project.status} />
                                 </div>
                                 {statsQuery.data && (
-                                    <p className="text-[12px] text-muted">
+                                    <p className="text-[12px] text-muted sm:text-[13px]">
                                         {statsQuery.data.total_tasks} задач ·{" "}
                                         {statsQuery.data.in_progress_tasks} в работе ·{" "}
                                         {statsQuery.data.done_tasks} готово
@@ -107,24 +125,17 @@ export function ProjectLayout() {
                                     color={project.color}
                                     label={`Прогресс проекта ${project.name}`}
                                 />
-                                <span className="shrink-0 font-mono text-[11px] text-secondary">
+                                <span className="shrink-0 font-mono text-[12px] text-secondary">
                                     {percent}%
                                 </span>
                             </div>
-                            <NavLink to={`/projects/${project.key}/settings`}>
-                                {({ isActive }) => (
-                                    <IconButton
-                                        label="Настройки проекта"
-                                        className={cn(isActive && "bg-accent-soft text-accent")}
-                                    >
-                                        <Settings size={15} aria-hidden="true" />
-                                    </IconButton>
-                                )}
+                            <NavLink aria-label="Настройки проекта" title="Настройки проекта" to={`/projects/${project.key}/settings`} className={({ isActive }) => cn("touch-target flex size-8 shrink-0 items-center justify-center rounded-md text-secondary hover:bg-hover", isActive && "bg-accent-soft text-accent")}>
+                                <Settings size={17} aria-hidden="true" />
                             </NavLink>
                         </div>
                     </div>
 
-                    <nav aria-label="Разделы проекта" className="-mb-px flex gap-0.5 overflow-x-auto">
+                    <nav ref={tabs} aria-label="Разделы проекта" className="-mb-px flex w-full gap-0.5 overflow-x-auto overscroll-x-contain">
                         {TABS.map((tab) => (
                             <NavLink
                                 key={tab.path}
@@ -132,11 +143,11 @@ export function ProjectLayout() {
                                 end={tab.end}
                                 className={({ isActive }) =>
                                     cn(
-                                        "border-b px-3 py-2 text-[13px] whitespace-nowrap",
+                                        "brand-tab flex min-h-11 min-w-max shrink-0 items-center justify-center border-b px-4 py-2.5 text-[15px] whitespace-nowrap lg:flex-1",
                                         "transition-colors duration-[var(--duration-fast)]",
                                         isActive
-                                            ? "border-accent bg-accent/[0.035] text-primary"
-                                            : "border-transparent text-muted hover:bg-white/[0.02] hover:text-secondary",
+                                            ? "border-accent bg-accent/[0.075] text-primary"
+                                            : "border-transparent text-muted hover:bg-white/[0.035] hover:text-secondary",
                                     )
                                 }
                             >

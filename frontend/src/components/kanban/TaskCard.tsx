@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import { AlertTriangle, MessageSquare } from "lucide-react";
-import type { Task } from "@/lib/types";
+import type { ProjectStage, Task } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { PriorityBadge } from "@/components/ui/Badge";
 import { DueDate } from "@/components/ui/DueDate";
@@ -28,6 +28,9 @@ interface TaskCardProps {
     className?: string;
     style?: React.CSSProperties;
     dragHandleProps?: Record<string, unknown>;
+    stages?: ProjectStage[];
+    moving?: boolean;
+    onMove?: (stageId: number) => void;
 }
 
 /**
@@ -46,6 +49,9 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
         className,
         style,
         dragHandleProps,
+        stages,
+        moving,
+        onMove,
     },
     ref,
 ) {
@@ -57,15 +63,15 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
             style={style}
             {...dragHandleProps}
             className={cn(
-                "group rounded-[var(--radius-card)] border bg-surface-2 shadow-card",
+                "surface-card group rounded-[var(--radius-card)] border shadow-card",
                 "transition-[background-color,border-color,box-shadow,transform]",
                 "duration-[var(--duration-normal)] ease-[var(--ease-standard)]",
                 "focus-within:border-accent/55 focus-within:shadow-selected",
                 isSelected
                     ? "border-accent/55 bg-elevated shadow-selected"
-                    : "border-line",
+                    : !isDragging && "border-line",
                 !isDragging && "hover:-translate-y-px hover:border-line-strong hover:shadow-elevated",
-                isDragging && "border-line-strong shadow-dragging",
+                isDragging && "brand-kanban-dragging shadow-dragging",
                 className,
             )}
         >
@@ -133,6 +139,15 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                     </div>
                 )}
             </button>
+            {stages && onMove && (
+                <label className="kanban-card-stage" onPointerDown={event => event.stopPropagation()} onTouchStart={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+                    <span>Стадия</span>
+                    <select aria-label={`Стадия задачи ${task.key}`} value={task.stage_id ?? ""} disabled={moving} onChange={event => onMove(Number(event.target.value))}>
+                        {task.stage_id === null && <option value="" disabled>Без стадии</option>}
+                        {stages.map(stage => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
+                    </select>
+                </label>
+            )}
         </div>
     );
 });

@@ -8,10 +8,10 @@ import { useId } from "react";
 import { cn } from "@/lib/cn";
 
 const control =
-    "w-full rounded-[var(--radius-control)] border border-line-subtle bg-control px-3 text-[13px] text-primary " +
-    "placeholder:text-disabled transition-[border-color,background-color,box-shadow] " +
+    "control-surface w-full rounded-[var(--radius-control)] border border-line px-3 text-[13px] text-primary " +
+    "placeholder:text-muted transition-[border-color,background-color,box-shadow] " +
     "duration-[var(--duration-fast)] ease-[var(--ease-standard)] " +
-    "hover:border-line focus-visible:border-accent/70 focus-visible:bg-surface-2 " +
+    "hover:border-line-strong focus-visible:border-accent/70 focus-visible:bg-surface-2 " +
     "focus-visible:shadow-focus focus-visible:outline-none aria-[invalid=true]:border-danger/60 " +
     "disabled:cursor-not-allowed disabled:bg-white/[0.015] disabled:text-disabled disabled:opacity-60";
 
