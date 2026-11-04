@@ -1,7 +1,7 @@
 # TELOS SPACE — Пространство смыслов
 
 <p align="center">
-  <img src="frontend/public/brand/share-cover.png" width="960" alt="TELOS SPACE — Пространство смыслов. Проектный помощник ARIS.">
+  <img src="docs/logo/Логотип%20TELOS%20SPACE%20на%20тёмном%20фоне.png" width="960" alt="TELOS SPACE — Пространство смыслов">
 </p>
 
 <p align="center">
@@ -58,8 +58,8 @@
 
 ## Арис
 
-<p>
-  <img src="frontend/public/brand/aris-avatar-128.webp" width="88" height="88" alt="ARIS — проектный менеджер TELOS SPACE">
+<p align="center">
+  <img src="docs/logo/Футуристичный%20портрет%20мыслителя%20в%20стекле.png" width="560" alt="ARIS — проектный менеджер TELOS SPACE">
 </p>
 
 **Арис — проектный менеджер внутри TELOS SPACE.** Он помогает разобраться в
