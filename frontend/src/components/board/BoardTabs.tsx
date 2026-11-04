@@ -85,7 +85,7 @@ export function BoardTabs({ boards, activeId, readOnly, creating, onSelect, onCr
                         );
                     }
                     return (
-                        <span key={board.id} className={cn("board-tab", active && "board-tab--active")}>
+                        <span key={board.id} data-selected={active || undefined} className={cn("brand-tab board-tab", active && "board-tab--active")}>
                             <button
                                 type="button"
                                 role="tab"

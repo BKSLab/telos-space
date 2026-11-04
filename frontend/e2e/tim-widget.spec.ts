@@ -91,7 +91,7 @@ test("без проекта на странице Арис в личном ре�
     state.tim.pending = false;
     await expect(panel.getByText("По задачам всё в порядке: просрочек нет.")).toBeVisible();
     await expect(panel.getByText("Ищу среди ваших задач: «горит»…")).toHaveCount(0);
-    expect(state.tim.submissions[0].page_context).toEqual({ route: "/projects", project_key: null, task_id: null });
+    expect(state.tim.submissions[0].page_context).toEqual({ route: "/", project_key: null, task_id: null });
 });
 
 test("новый диалог и возврат к прежнему; ошибка ответа — повтор без дубля вопроса", async ({ page }) => {

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ApiKey } from "@/lib/apiKeys";
-import { MyApiKeysPage } from "./MyApiKeysPage";
+import { ApiKeysPanel } from "@/components/profile/ApiKeysPanel";
 
 const SCOPES = [
     { code: "projects:read", description: "Читать проекты" },
@@ -67,7 +67,7 @@ function renderPage() {
     return render(
         <QueryClientProvider client={client}>
             <MemoryRouter>
-                <MyApiKeysPage />
+                <ApiKeysPanel />
             </MemoryRouter>
         </QueryClientProvider>,
     );

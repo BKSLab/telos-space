@@ -8,8 +8,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ChatWorkspace } from "@/components/chat/ChatWorkspace";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { ProjectLayout } from "@/components/projects/ProjectLayout";
-import { DashboardPage } from "@/routes/DashboardPage";
-import { ProjectsPage } from "@/routes/ProjectsPage";
+import { PortfolioPage } from "@/routes/PortfolioPage";
 import { NewProjectPage } from "@/routes/NewProjectPage";
 import { ProjectTeamPage } from "@/routes/ProjectTeamPage";
 import { BoardPage } from "@/routes/BoardPage";
@@ -29,6 +28,7 @@ import { RegisterPage } from "@/routes/RegisterPage";
 import { NotFoundPage } from "@/routes/NotFoundPage";
 import { Skeleton } from "@/components/ui/States";
 const GlobalChatPage = lazy(() => import("@/routes/GlobalChatPage"));
+const HelpPage = lazy(() => import("@/routes/HelpPage").then(module => ({ default: module.HelpPage })));
 
 /**
  * Конструктор ИСР тянет React Flow и elkjs — самые тяжёлые зависимости
@@ -91,15 +91,16 @@ function ProtectedApp() {
                 <ChatWorkspace>
                     <AppShell>
                         <Routes>
-                            <Route path="/" element={<DashboardPage />} />
+                            <Route path="/" element={<PortfolioPage />} />
                             <Route path="/chat" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><GlobalChatPage /></Suspense>} />
                             <Route path="/boards" element={<Suspense fallback={<ProjectBoardFallback />}><FreeBoardsPage /></Suspense>} />
                             <Route path="/my-tasks" element={<MyTasksPage />} />
                             <Route path="/calendar" element={<Suspense fallback={<CalendarFallback />}><MyCalendarPage /></Suspense>} />
                             <Route path="/my/tasks" element={<Navigate to="/my-tasks" replace />} />
-                            <Route path="/projects" element={<ProjectsPage />} />
+                            <Route path="/projects" element={<Navigate to="/?view=projects" replace />} />
                             <Route path="/projects/new" element={<NewProjectPage />} />
                             <Route path="/profile" element={<ProfilePage />} />
+                            <Route path="/help/:sectionId?" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><HelpPage /></Suspense>} />
                             <Route path="/my-api-keys" element={<MyApiKeysPage />} />
                             <Route path="/mcp" element={<McpPage />} />
                             <Route path="/projects/:projectKey" element={<ProjectLayout />}>

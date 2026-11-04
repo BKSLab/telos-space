@@ -202,7 +202,7 @@ class AccessService:
     async def ensure_comment_authorship(self, *, comment_id: int, user_id: int) -> AccessGrant:
         grant = await self.ensure_comment_access(comment_id=comment_id, user_id=user_id)
         comment = await self._load(self.comments_repository.get_by_id, comment_id=comment_id)
-        if comment.author_id is not None and comment.author_id != user_id:
+        if not grant.is_owner and comment.author_id != user_id:
             from src.exceptions.access import ResourceWriteRequiredError
 
             raise ResourceWriteRequiredError()

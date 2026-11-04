@@ -7,7 +7,7 @@ import { Section } from "@/components/ui/Card";
 export function InstallAppCard() {
     const { available, installed, pending, error, install } = useInstallApp();
     return (
-        <Section title="На главный экран" className="border-t border-line-subtle pt-5">
+        <Section title="На главный экран">
             <div id="install" className="scroll-mt-4 flex min-w-0 flex-col gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
                 <div className="flex items-center gap-3">
                     <BrandLogo variant="symbol" className="size-12 shrink-0" />

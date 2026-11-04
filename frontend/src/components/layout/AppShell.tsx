@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { FolderKanban, LayoutDashboard } from "lucide-react";
+import { LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ToastViewport } from "@/components/ui/Toast";
@@ -11,7 +11,6 @@ import { MobileMenu } from "@/components/layout/MobileMenu";
 
 const MOBILE_ITEMS = [
     { to: "/", label: "Портфель", icon: LayoutDashboard, end: true },
-    { to: "/projects", label: "Проекты", icon: FolderKanban, end: false },
 ];
 
 /**

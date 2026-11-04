@@ -8,7 +8,7 @@
 Сервер живёт отдельным процессом (``python -m src.mcp_server.worker``,
 контейнер ``mcp``); сборка ASGI-приложения — в ``src/mcp_server/app.py``.
 Здесь — сервер и инструменты чтения; запись — ``write_tools``, задачи и
-учёт времени — ``task_tools``, риски — ``risk_tools``, каталог действий
+календарь — ``task_tools``, риски — ``risk_tools``, каталог действий
 проектного агента — ``project_tools``.
 """
 
@@ -143,7 +143,7 @@ async def get_project(context: Context, project_key: ProjectKey) -> dict:
     name="tt_list_project_members",
     title="Команда проекта",
     description=(
-        "Возвращает участников проекта: логин, ФИО и роль (OWNER, MEMBER, VIEWER). "
+        "Возвращает участников проекта: логин, ФИО и роль (OWNER, MEMBER). "
         "Логин отсюда годится для assignee, observers и owner в пишущих инструментах."
     ),
     scope=SCOPE_PROJECTS_READ,

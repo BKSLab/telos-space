@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Upload } from "lucide-react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { ChevronDown, KeyRound, ShieldCheck, Trash2, Upload, UserRound } from "lucide-react";
 import { api, authEndpoints, queryKeys } from "@/lib/api";
 import { formatFullDate } from "@/lib/dates";
-import type { PasswordChangePayload, User, UserUpdatePayload } from "@/lib/types";
+import { fullName, type PasswordChangePayload, type User, type UserUpdatePayload } from "@/lib/types";
+import { cn } from "@/lib/cn";
 import { MIN_PASSWORD_LENGTH } from "@/lib/authForm";
 import { useCurrentUser } from "@/lib/useAuth";
 import { useToast } from "@/lib/toast";
@@ -14,6 +16,8 @@ import { Section } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { UserAvatar } from "@/components/users/UserAvatar";
+import { ApiKeysPanel } from "@/components/profile/ApiKeysPanel";
+import { LegacyTokensPanel } from "@/components/profile/LegacyTokensPanel";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -50,7 +54,9 @@ function toPayload(values: ProfileFormValues): UserUpdatePayload {
 }
 
 export function ProfilePage() {
-    const { data: user, isPending } = useCurrentUser();
+    const { data: user, isPending, error, refetch } = useCurrentUser();
+
+    if (error && !user) return <Page><h1 className="text-[24px] font-semibold text-primary">Профиль</h1><ErrorMessage message={(error as Error).message} action={<Button onClick={() => void refetch()}>Повторить загрузку</Button>} /></Page>;
 
     if (isPending || !user) {
         return (
@@ -64,6 +70,16 @@ export function ProfilePage() {
 }
 
 function ProfileForm({ user }: { user: User }) {
+    const location = useLocation();
+    const [params] = useSearchParams();
+    const requestedTab = params.get("tab");
+    const tab = requestedTab === "security" || requestedTab === "keys" ? requestedTab : "details";
+    const [legacyOpen, setLegacyOpen] = useState(false);
+    useEffect(() => {
+        if (location.hash !== "#install" || tab !== "details") return;
+        const frame = requestAnimationFrame(() => document.getElementById("install")?.scrollIntoView({ block: "start" }));
+        return () => cancelAnimationFrame(frame);
+    }, [location.hash, tab]);
     const queryClient = useQueryClient();
     const toast = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -140,22 +156,29 @@ function ProfileForm({ user }: { user: User }) {
         !passwordMutation.isPending;
 
     return (
-        <Page className="max-w-3xl">
-            <header className="flex flex-col gap-0.5">
-                <h1 className="text-[22px] font-semibold tracking-[-0.03em] text-primary">
-                    Профиль
-                </h1>
-                <p className="text-[13px] text-muted">
-                    Учётная запись <span className="font-mono">{user.username}</span> создана{" "}
-                    {formatFullDate(user.created_at)}
-                </p>
+        <Page className="max-w-[1400px]">
+            <header className="flex flex-col gap-5">
+                <div className="space-y-1"><h1 className="text-[24px] font-semibold tracking-[-0.03em] text-primary">Профиль</h1><p className="text-[13px] text-muted">Личные данные, безопасность и доступ ваших интеграций</p></div>
+                <div className="surface-card flex min-w-0 items-center gap-4 rounded-[var(--radius-card)] border border-line p-4 sm:p-5">
+                    <UserAvatar user={user} size="lg" version={avatarVersion} className="size-14 text-[18px] sm:size-16" />
+                    <div className="min-w-0 space-y-1"><p className="break-words text-[18px] font-semibold text-primary">{fullName(user)}</p><p className="font-mono text-[12px] text-muted">{user.username}</p><p className="text-[12px] text-muted">В TELOS SPACE с {formatFullDate(user.created_at)}</p></div>
+                </div>
             </header>
+            <nav aria-label="Разделы профиля" className="-mt-1 flex border-b border-line">
+                {([
+                    { id: "details", label: "Личные данные", short: "Данные", icon: UserRound },
+                    { id: "security", label: "Безопасность", short: "Безопасность", icon: ShieldCheck },
+                    { id: "keys", label: "Ключи доступа", short: "Ключи", icon: KeyRound },
+                ] as const).map(({ id, label, short, icon: Icon }) => <Link key={id} to={`/profile?tab=${id}`} aria-label={label} aria-current={tab === id ? "page" : undefined}
+                    className={cn("brand-tab -mb-px flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 border-b px-2 py-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-accent sm:flex-none sm:px-4", tab === id ? "border-accent bg-accent/[0.075] text-primary" : "border-transparent text-muted hover:bg-hover hover:text-primary")}>
+                    <Icon size={16} className="hidden shrink-0 sm:block" aria-hidden="true" /><span className="hidden sm:inline">{label}</span><span className="sm:hidden">{short}</span>
+                </Link>)}
+            </nav>
 
-            <InstallAppCard />
-
+            {tab === "details" && <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="surface-card flex min-w-0 flex-col gap-5 rounded-[var(--radius-card)] border border-line p-4 sm:p-5">
             <Section title="Фотография">
                 <div className="flex flex-wrap items-center gap-5 rounded-[var(--radius-card)] bg-surface/40 px-4 py-4">
-                    <UserAvatar user={user} size="lg" version={avatarVersion} />
                     <div className="flex min-w-0 flex-1 flex-col gap-2">
                         {avatarError && <ErrorMessage message={avatarError} />}
                         <p className="text-[12px] text-muted">JPEG, PNG или WebP, до 5 МБ.</p>
@@ -287,8 +310,12 @@ function ProfileForm({ user }: { user: User }) {
                     </div>
                 </div>
             </Section>
+            </div>
+            <aside className="min-w-0"><InstallAppCard /></aside>
+            </div>}
 
-            <Section title="Смена пароля" className="border-t border-line-subtle pt-5">
+            {tab === "security" && <div className="surface-card max-w-4xl rounded-[var(--radius-card)] border border-line p-4 sm:p-5">
+            <Section title="Смена пароля">
                 <div className="flex flex-col gap-5 px-1">
                     {passwordMutation.error && (
                         <ErrorMessage message={(passwordMutation.error as Error).message} />
@@ -355,6 +382,15 @@ function ProfileForm({ user }: { user: User }) {
                     </div>
                 </div>
             </Section>
+            </div>}
+            {tab === "keys" && <div className="flex min-w-0 flex-col gap-6">
+                <div className="surface-card min-w-0 rounded-[var(--radius-card)] border border-line p-4 sm:p-5"><ApiKeysPanel /></div>
+                <details className="group rounded-[var(--radius-card)] border border-line-subtle bg-surface/35" open={legacyOpen} onToggle={event => setLegacyOpen(event.currentTarget.open)}>
+                    <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-4 py-3 text-[13px] font-medium text-secondary focus-visible:outline-2 focus-visible:outline-accent">Прежние токены<ChevronDown size={16} aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-180" /></summary>
+                    {legacyOpen && <div className="border-t border-line-subtle p-4 sm:p-5"><LegacyTokensPanel /></div>}
+                </details>
+                <p className="text-[12px] leading-6 text-muted">Подключение клиентов: <Link to="/help/api" className="text-accent hover:text-accent-hover">справка по API</Link> · <Link to="/help/mcp" className="text-accent hover:text-accent-hover">справка по MCP</Link></p>
+            </div>}
         </Page>
     );
 }

@@ -87,8 +87,6 @@ API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
     ("DELETE", f"{_P}/comments/{{comment_id}}"): SCOPE_COMMENTS_WRITE,
     # ── База знаний ─────────────────────────────────────────────────────────
     ("GET", f"{_P}/projects/{{project_id}}/knowledge/status"): SCOPE_KNOWLEDGE_READ,
-    ("POST", f"{_P}/projects/{{project_id}}/knowledge/search"): SCOPE_KNOWLEDGE_READ,
-    ("POST", f"{_P}/projects/{{project_id}}/knowledge/read"): SCOPE_KNOWLEDGE_READ,
     # ── Внешний вызов помощника владельца ключа ──────────────────────────
     ("POST", f"{_P}/agent/ask"): SCOPE_AGENT_ASK,
     ("GET", f"{_P}/agent/requests/{{request_id}}"): SCOPE_AGENT_ASK,
@@ -113,6 +111,7 @@ API_KEY_ROUTE_SCOPES.update(
         ("POST", f"{_P}/projects/{{project_id}}/calendar/scenarios/preview"): SCOPE_TASKS_READ,
         ("POST", f"{_P}/projects/{{project_id}}/calendar/scenarios/apply"): SCOPE_TASKS_WRITE,
         ("GET", f"{_P}/projects/{{project_id}}/wbs"): SCOPE_STRUCTURE_READ,
+        ("POST", f"{_P}/projects/{{project_id}}/wbs/suggestion"): SCOPE_STRUCTURE_READ,
     }
 )
 
@@ -124,7 +123,6 @@ for method, suffix in (
     ("POST", "/tasks/{task_id}/assign"),
     ("POST", "/tasks/{task_id}/placement"),
     ("DELETE", "/tasks/{task_id}/assignment"),
-    ("POST", "/suggestion"),
     ("POST", "/suggestion/apply"),
 ):
     API_KEY_ROUTE_SCOPES[(method, f"{_P}/projects/{{project_id}}/wbs{suffix}")] = (

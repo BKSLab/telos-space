@@ -34,6 +34,7 @@ async def get_project_metadata(
     principal: PrincipalDep,
     service: BoardEditorServiceDep,
 ) -> BoardEditorState:
+    """Возвращает группы, блокировки и ревизию редактора проектной доски."""
     try:
         return await service.get_metadata(
             project_id=project_id,
@@ -57,6 +58,7 @@ async def put_project_metadata(
     principal: PrincipalDep,
     service: BoardEditorServiceDep,
 ) -> BoardEditorState:
+    """Обновляет группы и блокировки проектной доски с проверкой ревизии."""
     try:
         return await service.put_metadata(
             project_id=project_id,
@@ -78,6 +80,7 @@ async def get_free_metadata(
     principal: PrincipalDep,
     service: BoardEditorServiceDep,
 ) -> BoardEditorState:
+    """Возвращает группы, блокировки и ревизию редактора личной доски."""
     try:
         return await service.get_metadata(
             project_id=None,
@@ -100,6 +103,7 @@ async def put_free_metadata(
     principal: PrincipalDep,
     service: BoardEditorServiceDep,
 ) -> BoardEditorState:
+    """Обновляет группы и блокировки личной доски с проверкой ревизии."""
     try:
         return await service.put_metadata(
             project_id=None,
@@ -124,6 +128,7 @@ async def create_project_from_board(
     principal: PrincipalDep,
     service: BoardEditorServiceDep,
 ) -> BoardPromotionResult:
+    """Создаёт проект из личной доски и сохраняет её содержимое в проектном контексте."""
     try:
         return await service.promote(
             board_id=board_id,

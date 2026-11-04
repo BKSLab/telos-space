@@ -1,22 +1,18 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, FolderKanban, ListTodo, Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FolderKanban, ListTodo } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import { formatFullDate } from "@/lib/dates";
 import { latestUpdate } from "@/lib/pulse";
+import { cn } from "@/lib/cn";
 import { fullName, type MyTask, type Dashboard } from "@/lib/types";
-import { Page } from "@/components/layout/AppShell";
-import { Button, LinkButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { DueDate } from "@/components/ui/DueDate";
-import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
+import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { PulseBoard } from "@/components/pulse/PulseBoard";
-import { ProjectCard } from "@/components/dashboard/ProjectCard";
 import { PortfolioAttention } from "@/components/dashboard/PortfolioAttention";
 import { OverviewTaskRow, TaskRow } from "@/components/dashboard/TaskRow";
-import { MetricCard, MetricGrid, OverviewPanel, OverviewSection, TaskCompletion } from "@/components/dashboard/OverviewCards";
+import { MetricCard, MetricGrid, OverviewPanel, TaskCompletion } from "@/components/dashboard/OverviewCards";
 import { useUiStore } from "@/stores/ui";
-
-const PROJECTS_ON_PORTFOLIO = 6;
 
 function DashboardSkeleton() {
     return <div role="status" aria-label="Загрузка сводки" className="flex flex-col gap-4">
@@ -26,24 +22,15 @@ function DashboardSkeleton() {
     </div>;
 }
 
-export function DashboardPage() {
+export function PortfolioSummary() {
     const setSelectedTaskId = useUiStore(state => state.setSelectedTaskId);
     const dashboardQuery = useQuery({ queryKey: queryKeys.dashboard, queryFn: () => api.get<Dashboard>(endpoints.dashboard()) });
     const personalTasks = useQuery({ queryKey: queryKeys.myTaskList("all", false), queryFn: () => api.get<MyTask[]>(endpoints.myTasks("all", false)) });
     const personalRows = (personalTasks.data ?? []).filter(task => task.project_id === null);
+    const showPersonal = personalTasks.isPending || !!personalTasks.error || personalRows.length > 0;
     const data = dashboardQuery.data;
     const activeProjects = (data?.projects ?? []).filter(project => project.status === "ACTIVE");
-    const shownProjects = activeProjects.slice(0, PROJECTS_ON_PORTFOLIO);
-
-    return <Page>
-        <header className="flex flex-wrap items-end justify-between gap-3">
-            <div className="flex flex-col gap-1.5">
-                <h1 className="text-[24px] font-semibold tracking-[-0.03em] text-primary">Портфель</h1>
-                <p className="text-[14px] text-muted">Состояние проектов и ближайшие действия · {formatFullDate(new Date().toISOString())}</p>
-            </div>
-            <LinkButton to="/projects/new" variant="primary" size="lg" icon={<Plus size={16} aria-hidden="true" />}>Новый проект</LinkButton>
-        </header>
-
+    return <section aria-label="Сводка портфеля" className="flex min-w-0 flex-col gap-5 sm:gap-6">
         {dashboardQuery.isPending && <DashboardSkeleton />}
         {dashboardQuery.error && <ErrorMessage message={(dashboardQuery.error as Error).message}
             action={<Button size="sm" onClick={() => void dashboardQuery.refetch()}>Повторить загрузку</Button>} />}
@@ -74,19 +61,10 @@ export function DashboardPage() {
                 dataUpdatedAt={latestUpdate([...data.projects, ...data.attention_tasks, ...data.recent_tasks, ...personalRows])}
                 blockedReason={activeProjects.length > 0 || data.has_outside_tasks ? undefined : "Нет проектов в работе и открытых разовых задач"} />
 
-            <OverviewSection title="Проекты в работе" description="Прогресс и ближайший срок каждого активного проекта"
-                action={<Link to="/projects" className="inline-flex items-center gap-1 text-[14px] text-accent hover:text-accent-hover">Все проекты · {data.totals.total_projects}<ArrowUpRight size={15} aria-hidden="true" /></Link>}>
-                {activeProjects.length === 0 ? <EmptyState title={data.projects.length === 0 ? "Проектов пока нет" : "Нет проектов в работе"}
-                    description={data.projects.length === 0 ? "Создайте первый проект, чтобы начать вести задачи и структуру работ." : "Переведите нужный проект в статус «В работе», чтобы видеть его здесь."}
-                    icon={<FolderKanban size={24} />} action={<LinkButton to={data.projects.length === 0 ? "/projects/new" : "/projects"} variant="primary" size="lg">{data.projects.length === 0 ? "Создать проект" : "Открыть проекты"}</LinkButton>} /> : <>
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{shownProjects.map(project => <ProjectCard key={project.id} project={project} />)}</div>
-                    {activeProjects.length > shownProjects.length && <Link to="/projects" className="text-[14px] text-accent hover:text-accent-hover">Ещё {activeProjects.length - shownProjects.length} в работе — на странице проектов</Link>}
-                </>}
-            </OverviewSection>
         </>}
 
-        <div className="grid items-start gap-4 xl:grid-cols-2">
-            {(personalTasks.isPending || personalTasks.error || personalRows.length > 0) && <OverviewPanel title="Разовые задачи" description="Открытые задачи вне проектов · в KPI портфеля не входят"
+        <div className={cn("grid items-start gap-4", showPersonal && data && "xl:grid-cols-2")}>
+            {showPersonal && <OverviewPanel title="Разовые задачи" description="Открытые задачи вне проектов · в KPI портфеля не входят"
                 action={<Link to="/my-tasks" className="text-[14px] text-accent hover:text-accent-hover">Мои задачи{personalRows.length > 0 ? ` · ${personalRows.length}` : ""}</Link>}>
                 {personalTasks.isPending && <Skeleton className="h-28" />}
                 {personalTasks.error && <ErrorMessage message={(personalTasks.error as Error).message} action={<Button size="sm" onClick={() => void personalTasks.refetch()}>Повторить</Button>} />}
@@ -100,5 +78,5 @@ export function DashboardPage() {
                 {data.recent_tasks.length === 0 ? <p className="py-5 text-[14px] text-muted">Изменений пока не было.</p> : <div className="divide-y divide-line-subtle">{data.recent_tasks.map(task => <TaskRow key={task.id} task={task} showUpdated onOpen={setSelectedTaskId} />)}</div>}
             </OverviewPanel>}
         </div>
-    </Page>;
+    </section>;
 }

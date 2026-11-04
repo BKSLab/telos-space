@@ -77,6 +77,18 @@
   --brand-edge-soft: linear-gradient(110deg, rgb(0 200 244 / 0.34), rgb(108 131 255 / 0.26), rgb(188 103 239 / 0.36));
   --brand-edge-hover: linear-gradient(110deg, rgb(0 200 244 / 0.68), rgb(108 131 255 / 0.52), rgb(188 103 239 / 0.7));
 
+  /* Soft white and brand light over the original neutral gray surfaces. */
+  --workspace-ambience:
+    radial-gradient(ellipse at 12% 0%, rgb(255 255 255 / 0.04), transparent 50%),
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--brand-violet) 2.5%, transparent), transparent 48%),
+    radial-gradient(ellipse at 0% 100%, color-mix(in srgb, var(--brand-cyan) 2%, transparent), transparent 50%);
+  --sidebar-ambience:
+    linear-gradient(165deg, rgb(255 255 255 / 0.045), transparent 48%),
+    radial-gradient(ellipse at 0% 100%, rgb(255 255 255 / 0.02), transparent 62%);
+  --navigation-accent:
+    linear-gradient(110deg, color-mix(in srgb, var(--brand-cyan) 7%, transparent),
+      color-mix(in srgb, var(--brand-violet) 7%, transparent));
+
   /* приоритеты задач — раздел 9 */
   --color-priority-low: #a3adba;
   --color-priority-medium: #86baff;
@@ -260,8 +272,47 @@ select:-webkit-autofill {
   }
 
   .app-sidebar {
-    --material-metal-base: var(--surface-chassis);
+    --material-metal-base: var(--surface-workspace);
+    background-image: var(--sidebar-ambience);
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.025);
+  }
+
+  .mobile-header {
+    --material-metal-base: var(--surface-workspace);
+    background-image: var(--sidebar-ambience);
+  }
+
+  .sidebar-brand {
+    position: relative;
+    background-image: var(--navigation-accent);
+  }
+
+  .sidebar-brand::after {
+    content: "";
+    position: absolute;
+    inset-inline: 10px;
+    bottom: -1px;
+    height: 1px;
+    background-image: var(--brand-edge-soft);
+    pointer-events: none;
+  }
+
+  .app-sidebar .brand-side-nav[aria-current="page"] {
+    background-image: var(--navigation-accent);
+  }
+
+  .app-sidebar .brand-side-nav[aria-current="page"] > svg {
+    color: var(--color-accent);
+  }
+
+  .brand-projects-heading {
+    background-image: linear-gradient(90deg, color-mix(in srgb, var(--brand-blue) 5%, transparent), transparent 75%);
+  }
+
+  .app-workspace,
+  .wbs-canvas {
+    background-color: var(--surface-workspace);
+    background-image: var(--workspace-ambience);
   }
 
   .app-workspace {
@@ -312,6 +363,11 @@ select:-webkit-autofill {
     box-shadow: var(--shadow-surface);
   }
 
+  .brand-projects-mark {
+    background-image: var(--brand-spectrum-vertical);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--brand-blue) 24%, transparent);
+  }
+
   .brand-side-nav[aria-current="page"]::before {
     background-image: var(--brand-spectrum-vertical);
   }
@@ -320,7 +376,7 @@ select:-webkit-autofill {
     position: relative;
   }
 
-  .brand-tab[aria-current="page"]::after {
+  .brand-tab:is([aria-current="page"], [aria-selected="true"], [data-selected])::after {
     content: "";
     position: absolute;
     inset-inline: 0;
@@ -329,6 +385,16 @@ select:-webkit-autofill {
     border-radius: 2px;
     background-image: var(--brand-spectrum);
     pointer-events: none;
+  }
+
+  [role="tablist"][aria-orientation="vertical"] .brand-tab[data-selected]::after {
+    inset-inline: auto;
+    inset-inline-start: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    height: auto;
+    background-image: var(--brand-spectrum-vertical);
   }
 
   .brand-ai-button {
@@ -440,20 +506,17 @@ select:-webkit-autofill {
   .brand-entry {
     position: relative;
     isolation: isolate;
+    background-image: var(--workspace-ambience);
   }
 
   .brand-entry::before {
     content: "";
     position: absolute;
     z-index: -1;
-    top: clamp(36px, 12vh, 140px);
-    left: 50%;
-    width: min(680px, 94vw);
-    height: 360px;
-    transform: translateX(-50%);
+    inset: 0;
     background:
-      radial-gradient(ellipse at 28% 45%, rgb(0 200 244 / 0.055), transparent 63%),
-      radial-gradient(ellipse at 72% 48%, rgb(188 103 239 / 0.05), transparent 62%);
+      radial-gradient(ellipse 380px 240px at calc(50% - 140px) 34%, rgb(255 255 255 / 0.035), transparent 74%),
+      radial-gradient(ellipse 380px 240px at calc(50% + 140px) 35%, color-mix(in srgb, var(--brand-violet) 3.5%, transparent), transparent 74%);
     pointer-events: none;
   }
 
@@ -497,11 +560,30 @@ select:-webkit-autofill {
 }
 
 @media (forced-colors: active) {
+  .app-shell,
+  .app-sidebar,
+  .mobile-header,
+  .app-workspace,
+  .wbs-canvas,
+  .brand-entry,
+  .sidebar-brand,
+  .app-sidebar .brand-side-nav[aria-current="page"],
+  .brand-projects-heading {
+    background-image: none;
+    background-color: Canvas;
+  }
+
+  .brand-entry::before {
+    display: none;
+  }
+
   .brand-ai-button, .brand-ai-panel, .brand-avatar, .brand-kanban-dragging, .brand-kanban-target {
     border-color: ButtonText;
   }
 
-  .brand-tab[aria-current="page"]::after,
+  .brand-projects-mark,
+  .sidebar-brand::after,
+  .brand-tab:is([aria-current="page"], [aria-selected="true"], [data-selected])::after,
   .brand-side-nav[aria-current="page"]::before,
   .brand-summary-title::before,
   .brand-kanban-insertion::before {
@@ -609,6 +691,45 @@ select:-webkit-autofill {
     width: 18px;
     height: 18px;
     flex-shrink: 0;
+  }
+}
+
+@media (max-width: 1279px) {
+  .api-keys-table,
+  .api-keys-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .api-keys-table thead {
+    display: none;
+  }
+
+  .api-keys-table tbody tr {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .api-keys-table tbody td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .api-keys-table tbody td[data-label]::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--color-muted);
+    content: attr(data-label);
+    font-size: 11px;
+  }
+
+  .api-keys-table tbody td:first-child::before {
+    display: none;
   }
 }
 

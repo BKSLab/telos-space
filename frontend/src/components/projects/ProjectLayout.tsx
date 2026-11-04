@@ -92,7 +92,7 @@ export function ProjectLayout() {
                 <div className="flex w-full min-w-0 flex-col gap-3">
                     <div className="project-header-details flex items-start justify-between gap-2 sm:flex-wrap sm:gap-3">
                         <div className="flex min-w-0 flex-1 items-start gap-2.5">
-                            <ProjectIcon project={project} size={22} />
+                            <ProjectIcon project={project} size={32} />
                             <div className="flex min-w-0 flex-col gap-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h1 title={project.name} className="max-w-full truncate text-[18px] font-semibold tracking-[-0.025em] text-primary sm:text-[24px]">

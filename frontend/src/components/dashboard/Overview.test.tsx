@@ -10,7 +10,7 @@ import { formatDateOnly } from "@/lib/dates";
 import type { AnalyticsReport, Dashboard, DashboardProject, MyTask, Project, ProjectStats, Task } from "@/lib/types";
 import type { RiskSummary } from "@/lib/risks";
 import { useUiStore } from "@/stores/ui";
-import { DashboardPage } from "@/routes/DashboardPage";
+import { PortfolioSummary } from "@/components/dashboard/PortfolioSummary";
 import { ProjectPulsePage } from "@/routes/ProjectPulsePage";
 import { ProjectCard } from "@/components/dashboard/ProjectCard";
 import { TaskCompletion } from "@/components/dashboard/OverviewCards";
@@ -90,7 +90,7 @@ describe("обзоры", () => {
         queryClient.setQueryData(queryKeys.dashboard, dashboard);
         queryClient.setQueryData(queryKeys.myTaskList("all", false), [personal]);
         queryClient.setQueryData(queryKeys.dashboardAnalytics(null), { ...historicalReport, scope: "PORTFOLIO", project_id: null });
-        renderPage(<DashboardPage />, queryClient);
+        renderPage(<PortfolioSummary />, queryClient);
 
         const metrics = within(screen.getByRole("region", { name: "Показатели портфеля" }));
         expect(metrics.getByText("25%")).toBeTruthy();

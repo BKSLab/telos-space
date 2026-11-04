@@ -122,8 +122,8 @@ export function MyCalendarPage() {
                         title={item.title}
                         onClick={() => switchTab(item.id)}
                         className={cn(
-                            "flex h-11 items-center gap-1.5 border-b-2 px-3 text-[13px] lg:h-8",
-                            tab === item.id ? "border-accent font-semibold text-primary" : "border-transparent text-muted hover:text-primary",
+                            "brand-tab flex h-11 items-center gap-1.5 border-b px-3 text-[13px] lg:h-8",
+                            tab === item.id ? "border-accent bg-accent/[0.075] font-semibold text-primary" : "border-transparent text-muted hover:bg-hover hover:text-primary",
                         )}
                     >
                         {item.icon}

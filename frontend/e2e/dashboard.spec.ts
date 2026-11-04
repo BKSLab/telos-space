@@ -53,12 +53,12 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     test(`обзоры портфеля и проекта: факты, исторический разбор, мобильная ширина ${viewport.width}`, async ({ page }, info) => {
         await page.setViewportSize(viewport);
         const state = await installOverviewApi(page);
-        await page.goto("/");
+        await page.goto("/?view=summary");
         const metrics = page.getByRole("region", { name: "Показатели портфеля" });
         await expect(metrics.getByText("50%", { exact: true })).toHaveCSS("font-size", "32px");
         await expect(metrics.getByText("900", { exact: true })).toHaveCount(0);
         await expect(page.getByRole("img", { name: "Выполнено 1 из 2 задач: 50%" })).toBeVisible();
-        await expect(page.getByText("Описание Важный этап", { exact: true })).toBeVisible();
+        await expect(page.getByRole("region", { name: "Каталог проектов" })).toHaveCount(0);
         await expect(page.locator("details").filter({ has: page.getByText(/Полный разбор ·/) })).not.toHaveAttribute("open");
         await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 

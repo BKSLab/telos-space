@@ -26,7 +26,7 @@ from src.mcp_server.context import (
     resolve_task,
     tool_context,
 )
-from src.mcp_server.registry import current_tool_call, tt_tool
+from src.mcp_server.registry import tt_tool
 from src.mcp_server.server import TaskKey, domain_message, links_of, parse_date, with_task_url
 from src.schemas.enums import TaskPriority
 from src.schemas.task_moves import TaskMoveTargetSchema
@@ -374,8 +374,8 @@ async def delete_task(
     name="tt_add_comment",
     title="Добавить комментарий к задаче",
     description=(
-        "Добавляет комментарий к задаче от имени вызывающего (или сотрудника из actor) "
-        "и фиксирует событие в её истории."
+        "Добавляет комментарий к задаче от имени проверенного пользователя запроса "
+        "и фиксирует событие в её истории. Автор определяется сервером."
     ),
     scope=SCOPE_COMMENTS_WRITE,
 )
@@ -384,24 +384,19 @@ async def add_comment(
     task_key: TaskKey,
     body: Annotated[str, Field(description="Текст комментария в Markdown.", min_length=1)],
     actor: Actor = None,
-    author: Annotated[str | None, Field(description="Подпись автора для прежних MCP-клиентов.")] = None,
+    author: Annotated[
+        str | None,
+        Field(description="Прежнее поле подписи: принимается для совместимости, автор определяется сервером."),
+    ] = None,
 ) -> dict:
     """Добавляет комментарий к задаче."""
     async with tool_context(context, require_write=True) as tools:
         resolved = await resolve_task(tools, task_key)
 
         try:
-            call = current_tool_call()
-            if call is not None and call.legacy:
-                comment = await tools.services.comments.add_comment(
-                    task_id=resolved.task_id,
-                    author_name=(author or "").strip() or tools.principal.short_name,
-                    body_md=body,
-                )
-            else:
-                comment = await tools.services.comments.add_comment(
-                    task_id=resolved.task_id, author_id=tools.principal.user_id, body_md=body,
-                )
+            comment = await tools.services.comments.add_comment(
+                task_id=resolved.task_id, author_id=tools.principal.user_id, body_md=body,
+            )
         except ApplicationError as error:
             raise ToolError(domain_message(error, "Не удалось добавить комментарий.")) from error
         return with_task_url(

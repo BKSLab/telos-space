@@ -10,8 +10,8 @@
 Все имена начинаются с ``tt_``: агент внешнего клиента сливает инструменты
 нескольких MCP-серверов, и у bitrix24-mcp есть свои ``create_task``.
 
-По этому же реестру собирается ``docs/mcp-tools.json`` для справки
-(``python -m src.mcp_server.export_tools``).
+По этому же реестру собирается единый каталог справки
+(``python -m src.integration_docs``).
 """
 
 import functools
@@ -208,10 +208,10 @@ async def _record_usage(call: ToolCall, status: int) -> None:
 
 
 def tool_catalog() -> list[dict]:
-    """Машиночитаемый список инструментов для справки (``docs/mcp-tools.json``).
+    """Сокращённый программный перечень основных tt_* инструментов.
 
-    Параметры берутся из входной схемы, которую видит агент, поэтому
-    справка не может разойтись с сервером.
+    Параметры берутся из входной схемы, которую видит агент.
+    Полный каталог справки с aliases и HTTP экспортируется ``integration_docs``.
     """
     from src.mcp_server.server import mcp_server
 

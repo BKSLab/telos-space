@@ -187,6 +187,7 @@ def build_tasks_service(session: AsyncSession, settings: Settings) -> TasksServi
 def build_comments_service(session: AsyncSession, settings: Settings) -> TaskCommentsService:
     """Создаёт сервис комментариев задач."""
     return TaskCommentsService(
+        users_repository=UsersRepository(session),
         comments_repository=TaskCommentsRepository(session),
         tasks_repository=TasksRepository(session),
         activity_repository=TaskActivityRepository(session),

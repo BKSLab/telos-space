@@ -913,6 +913,7 @@ DocumentLinksServiceDep = Annotated[
 
 
 def get_task_comments_service(
+    users_repository: UsersRepositoryDep,
     comments_repository: TaskCommentsRepositoryDep,
     tasks_repository: TasksRepositoryDep,
     activity_repository: TaskActivityRepositoryDep,
@@ -921,6 +922,7 @@ def get_task_comments_service(
 ) -> TaskCommentsService:
     """Создаёт сервис комментариев задач."""
     return TaskCommentsService(
+        users_repository=users_repository,
         comments_repository=comments_repository,
         tasks_repository=tasks_repository,
         activity_repository=activity_repository,

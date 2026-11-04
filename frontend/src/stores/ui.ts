@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type { BoardObjectSelectionRef } from "@/lib/types";
 
 export interface BoardSelectionContext {
@@ -20,6 +21,11 @@ interface UiState {
     sidebarCollapsed: boolean;
     toggleSidebar: () => void;
 
+    projectListCollapsed: boolean;
+    toggleProjectList: () => void;
+    portfolioView: "projects" | "summary";
+    setPortfolioView: (view: "projects" | "summary") => void;
+
     /** Свёрнутые ветки ИСР — локальное состояние вида, на backend не уходит. */
     collapsedWbsNodes: Set<number>;
     toggleWbsNode: (nodeId: number) => void;
@@ -29,7 +35,7 @@ interface UiState {
     setWbsLayoutMode: (mode: WbsLayoutMode) => void;
 }
 
-export const useUiStore = create<UiState>((set) => ({
+export const useUiStore = create<UiState>()(persist((set) => ({
     boardSelection: null,
     setBoardSelection: (selection) => set((state) => {
         const previous = state.boardSelection;
@@ -45,6 +51,11 @@ export const useUiStore = create<UiState>((set) => ({
 
     sidebarCollapsed: false,
     toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+    projectListCollapsed: false,
+    toggleProjectList: () => set((state) => ({ projectListCollapsed: !state.projectListCollapsed })),
+    portfolioView: "projects",
+    setPortfolioView: (portfolioView) => set({ portfolioView }),
 
     collapsedWbsNodes: new Set<number>(),
     toggleWbsNode: (nodeId) =>
@@ -69,4 +80,8 @@ export const useUiStore = create<UiState>((set) => ({
     // ИСР почти всегда рисуют сверху вниз, поэтому это и режим по умолчанию.
     wbsLayoutMode: "vertical",
     setWbsLayoutMode: (mode) => set({ wbsLayoutMode: mode }),
+}), {
+    name: "telos-workspace-preferences",
+    // Only display preferences are saved; task and board state stays in memory.
+    partialize: ({ projectListCollapsed, portfolioView }) => ({ projectListCollapsed, portfolioView }),
 }));

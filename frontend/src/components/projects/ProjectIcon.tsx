@@ -85,5 +85,7 @@ export function ProjectIcon({
         );
     }
 
-    return <StatusDot color={project.color} className={dotClassName} />;
+    return <span aria-hidden="true" className={cn("inline-flex shrink-0 items-center justify-center", className)} style={{ width: size, height: size }}>
+        <StatusDot color={project.color} className={cn(size >= 24 && "size-2.5", dotClassName)} />
+    </span>;
 }

@@ -35,13 +35,13 @@
 }
 .board-tabs__list { display: flex; min-width: 0; gap: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .board-tab { display: inline-flex; flex: none; align-items: center; gap: 2px; border-bottom: 2px solid transparent; }
-.board-tab--active { border-bottom-color: var(--color-accent); }
+.board-tab--active { background: color-mix(in srgb, var(--color-accent) 7.5%, transparent); }
 .board-tab__title {
   max-width: 220px; overflow: hidden; padding: 9px 8px; color: var(--color-text-secondary);
   font-size: 13px; text-overflow: ellipsis; white-space: nowrap;
 }
 .board-tab__title:hover { color: var(--color-text-primary); }
-.board-tab--active .board-tab__title { color: var(--color-accent); font-weight: 600; }
+.board-tab--active .board-tab__title { color: var(--color-text-primary); font-weight: 600; }
 .board-tab__menu.board-button { min-height: 24px; height: 24px; padding: 0 4px; border-color: transparent; background: transparent; }
 .board-tab__input.board-input { width: 190px; height: 30px; margin: 4px 0; }
 .board-tabs__add {
@@ -59,6 +59,15 @@
   background-color: var(--color-bg-surface-2);
   background-image: radial-gradient(var(--color-border) 1px, transparent 1.2px);
   background-size: 32px 32px;
+}
+/* Ambient light stays still while the grid follows canvas pan and zoom. */
+.board-viewport::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: var(--workspace-ambience);
+}
+@media (forced-colors: active) {
+  .board-panel, .board-viewport { background: Canvas; }
+  .board-viewport::before { display: none; }
 }
 .board-viewport[data-tool="hand"], .board-viewport[data-readonly] { cursor: grab; }
 .board-viewport.is-panning { cursor: grabbing; }

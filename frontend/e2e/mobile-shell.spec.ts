@@ -13,7 +13,7 @@ test("мобильное меню открывает все разделы и в
     const trigger = page.getByRole("button", { name: "Открыть меню", exact: true });
     await trigger.tap();
     const menu = page.getByRole("dialog", { name: "Меню навигации" });
-    for (const label of ["Портфель", "Проекты", "Доски", "Мои задачи", "Календарь", "Чаты", "API-ключи", "MCP"]) {
+    for (const label of ["Портфель", "Доски", "Мои задачи", "Календарь"]) {
         const link = menu.getByRole("navigation", { name: "Основная навигация" }).getByRole("link", { name: label, exact: true });
         await expect(link).toBeVisible();
         expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -88,7 +88,7 @@ test("основные экраны доступны в узком и гориз
     await page.route("**/api/v1/auth/me", route => route.fulfill({ json: { ...state.me, created_at: "2026-09-20T10:00:00Z" } }));
     for (const viewport of [{ width: 320, height: 740 }, { width: 740, height: 360 }]) {
         await page.setViewportSize(viewport);
-        for (const [path, heading] of [["/", "Портфель"], ["/projects/new", "Новый проект"], ["/profile", "Профиль"], ["/my-api-keys", "Мои API-ключи"], ["/mcp", "MCP"], ["/projects/DEMO/team", "Команда"], ["/projects/DEMO/settings", "О проекте"], ["/projects/DEMO/docs", "Документы"]]) {
+        for (const [path, heading] of [["/", "Портфель"], ["/projects/new", "Новый проект"], ["/profile", "Профиль"], ["/my-api-keys", "Профиль"], ["/help/mcp", "MCP"], ["/projects/DEMO/team", "Команда"], ["/projects/DEMO/settings", "О проекте"], ["/projects/DEMO/docs", "Документы"]]) {
             await page.goto(path);
             const content = path.endsWith("/docs") ? page.getByRole("textbox", { name: "Поиск документов проекта" }) : page.getByRole("heading", { name: heading, exact: true }).first();
             await expect(content).toBeVisible();

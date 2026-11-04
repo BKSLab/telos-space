@@ -159,7 +159,7 @@ test("открытый чат закреплён за выбранным про�
     await panel.getByRole("combobox", { name: "Сообщение проекту" }).fill("Черновик первого проекта");
     await page.screenshot({ path: info.outputPath("unified-project.png") });
     const connections = server.control.connections;
-    await page.getByRole("navigation", { name: "Основная навигация" }).getByRole("link", { name: "Проекты", exact: true }).click();
+    await page.getByRole("navigation", { name: "Основная навигация" }).getByRole("link", { name: "Портфель", exact: true }).click();
     await page.locator('a[href="/projects/SAMPLE"]').first().click();
     await expect(page).toHaveURL(/\/projects\/SAMPLE$/);
     await expect(panel.getByRole("combobox", { name: "Выбор чата", exact: true })).toHaveValue("project:1");

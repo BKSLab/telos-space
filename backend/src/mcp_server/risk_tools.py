@@ -54,7 +54,7 @@ async def _links(
     if owner is not None:
         result["owner_user_id"] = (
             await tools.services.members.resolve_member_user_id(
-                project_id=project_id, login=owner.strip().lower()
+                project_id=project_id, username=owner.strip().lower()
             )
             if owner.strip()
             else None

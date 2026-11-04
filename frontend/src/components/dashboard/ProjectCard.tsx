@@ -38,7 +38,7 @@ export function ProjectCard({ project }: { project: DashboardProject }) {
             >
                 <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-2.5">
-                        <ProjectIcon project={project} size={22} />
+                        <ProjectIcon project={project} size={36} />
                         <div className="flex min-w-0 flex-col gap-0.5">
                             <h3 className="line-clamp-2 text-[16px] leading-snug font-semibold tracking-[-0.015em] break-words text-primary">
                                 {project.name}

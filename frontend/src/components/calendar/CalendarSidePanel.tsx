@@ -59,8 +59,8 @@ export function CalendarSidePanel<T extends string>({
                         document.getElementById(`${id}-${tabs[next].id}`)?.focus();
                     }}
                     className={cn(
-                        "flex h-11 shrink-0 items-center gap-1 rounded-[6px] px-2 text-[12px] transition-colors lg:h-7",
-                        tab.id === current.id ? "bg-active font-semibold text-primary" : "text-muted hover:bg-hover hover:text-primary",
+                        "brand-tab flex h-11 shrink-0 items-center gap-1 border-b border-transparent px-2 text-[12px] transition-colors lg:h-7",
+                        tab.id === current.id ? "bg-accent/[0.075] font-semibold text-primary" : "text-muted hover:bg-hover hover:text-primary",
                     )}
                 >
                     {tab.label}

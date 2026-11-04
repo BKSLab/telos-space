@@ -1,21 +1,17 @@
 import { NavLink } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import {
     PanelLeftClose,
     PanelLeftOpen,
-    Plus,
 } from "lucide-react";
-import { api, endpoints, queryKeys } from "@/lib/api";
-import type { Project } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { useUiStore } from "@/stores/ui";
 import { IconButton } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { ProjectIcon } from "@/components/projects/ProjectIcon";
+import { ProjectNavigation } from "@/components/layout/ProjectNavigation";
 import { UserMenu } from "@/components/users/UserMenu";
 import { useCurrentUser } from "@/lib/useAuth";
 import { BrandLogo } from "@/components/brand/BrandLogo";
-import { GLOBAL_NAV_ITEMS } from "@/lib/navigation";
+import { GLOBAL_NAV_ITEMS, HELP_NAV_ITEM } from "@/lib/navigation";
 
 
 function navLinkClass(isActive: boolean, collapsed: boolean): string {
@@ -36,11 +32,6 @@ export function Sidebar() {
 
     const { data: user } = useCurrentUser();
 
-    const projectsQuery = useQuery({
-        queryKey: queryKeys.projects,
-        queryFn: () => api.get<Project[]>(endpoints.projects()),
-    });
-
     return (
         <aside
             className={cn(
@@ -51,7 +42,7 @@ export function Sidebar() {
         >
             <div
                 className={cn(
-                    "flex shrink-0 items-center border-b border-line-subtle px-2",
+                    "sidebar-brand flex shrink-0 items-center border-b border-line-subtle px-2",
                     collapsed ? "h-20 flex-col justify-center gap-1" : "h-14 justify-between gap-1",
                 )}
             >
@@ -88,32 +79,16 @@ export function Sidebar() {
             </nav>
 
             <div className="scrollbar-thin mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
-                {!collapsed && (
-                    <p className="px-2 pt-2 pb-2 text-[10px] font-semibold tracking-[0.1em] text-disabled uppercase">
-                        Проекты
-                    </p>
-                )}
-                {projectsQuery.data?.map((project) => (
-                    <NavLink
-                        key={project.id}
-                        to={`/projects/${project.key}`}
-                        title={collapsed ? project.name : undefined}
-                        className={({ isActive }) => navLinkClass(isActive, collapsed)}
-                    >
-                        <ProjectIcon project={project} size={16} />
-                        {!collapsed && <span className="truncate">{project.name}</span>}
-                    </NavLink>
-                ))}
-                <NavLink
-                    to="/projects/new"
-                    title={collapsed ? "Новый проект" : undefined}
-                    className={({ isActive }) => navLinkClass(isActive, collapsed)}
-                >
-                    <Plus size={16} aria-hidden="true" className="shrink-0" />
-                    {!collapsed && <span className="truncate">Новый проект</span>}
-                </NavLink>
+                <ProjectNavigation compact={collapsed} />
             </div>
 
+            <nav aria-label="Справка" className="shrink-0 border-t border-line-subtle px-2 py-2">
+                <NavLink to={HELP_NAV_ITEM.to} title={collapsed ? HELP_NAV_ITEM.label : undefined}
+                    className={({ isActive }) => navLinkClass(isActive, collapsed)}>
+                    <HELP_NAV_ITEM.icon size={16} aria-hidden="true" className="shrink-0" />
+                    {!collapsed && <span>{HELP_NAV_ITEM.label}</span>}
+                </NavLink>
+            </nav>
             {user && <UserMenu user={user} collapsed={collapsed} />}
         </aside>
     );
