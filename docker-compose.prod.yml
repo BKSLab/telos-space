@@ -1,0 +1,30 @@
+# HTTP-развёртывание: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Нужен Docker Compose >= 2.24.4 для !override. Секреты остаются в backend/.env.
+name: telos-space
+
+services:
+  redis:
+    ports: !reset []
+
+  db:
+    container_name: !reset null
+    ports: !reset []
+
+  qdrant:
+    container_name: !reset null
+    ports: !reset []
+
+  backend:
+    container_name: !reset null
+
+  # Публичный MCP доступен через /mcp основного backend, без отдельного порта.
+  mcp:
+    ports: !reset []
+
+  frontend:
+    container_name: !reset null
+
+  nginx:
+    container_name: !reset null
+    ports: !override
+      - "${TELOS_HTTP_PORT:-8081}:80"

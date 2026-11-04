@@ -1,3 +1,5 @@
+import { newUuid } from "@/lib/uuid";
+
 export interface ChecklistItem {
     id: string;
     text: string;
@@ -15,7 +17,7 @@ export interface ChecklistSuggestion {
 }
 
 export function newChecklistItem(): ChecklistItem {
-    return { id: crypto.randomUUID(), text: "", is_completed: false };
+    return { id: newUuid(), text: "", is_completed: false };
 }
 
 export function isChecklistValid(value: TaskChecklist | null): boolean {

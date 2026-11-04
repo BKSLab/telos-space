@@ -1,5 +1,6 @@
 import { ApiError } from "@/lib/api";
 import type { ChatAck, ChatConnectionState, ChatEvent, ChatEventPage } from "@/lib/projectChat";
+import { newUuid } from "@/lib/uuid";
 
 interface TransportOptions {
     url: string;
@@ -41,7 +42,7 @@ export class ProjectChatTransport {
 
     command(type: string, data: object = {}, messageId?: number): Promise<ChatAck> {
         if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error("Нет связи с чатом. Черновик сохранён."));
-        const requestId = crypto.randomUUID();
+        const requestId = newUuid();
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pending.delete(requestId);
@@ -54,7 +55,7 @@ export class ProjectChatTransport {
 
     ephemeral(type: "typing.started" | "typing.stopped") {
         if (this.ready && this.socket?.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify({ type, request_id: crypto.randomUUID(), data: {} }));
+            this.socket.send(JSON.stringify({ type, request_id: newUuid(), data: {} }));
         }
     }
 
@@ -74,7 +75,7 @@ export class ProjectChatTransport {
                 const heartbeat = (event.data.heartbeat_seconds ?? 20) * 1000;
                 this.heartbeatTimer = setInterval(() => {
                     if (Date.now() - this.lastReceivedAt >= heartbeat * 3) { socket.close(); return; }
-                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping", request_id: crypto.randomUUID(), data: {} }));
+                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping", request_id: newUuid(), data: {} }));
                 }, heartbeat);
                 this.options.onState("syncing");
                 void this.sync().then(() => {

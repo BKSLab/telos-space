@@ -19,4 +19,19 @@ describe("newUuid", () => {
             vi.stubGlobal("crypto", original);
         }
     });
+
+    it("использует getRandomValues, когда randomUUID недоступен по HTTP", () => {
+        const original = globalThis.crypto;
+        const getRandomValues = vi.fn((bytes: Uint8Array) => {
+            bytes.fill(0x12);
+            return bytes;
+        });
+        vi.stubGlobal("crypto", { getRandomValues });
+        try {
+            expect(newUuid()).toBe("12121212-1212-4212-9212-121212121212");
+            expect(getRandomValues).toHaveBeenCalledOnce();
+        } finally {
+            vi.stubGlobal("crypto", original);
+        }
+    });
 });

@@ -3,6 +3,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { PROJECT_COLORS } from "@/lib/types";
 import { validStageDrafts, type StageDraft } from "@/lib/projectStages";
+import { newUuid } from "@/lib/uuid";
 
 export function ProjectStagesDraft({ stages, onChange }: {
     stages: StageDraft[]; onChange: (stages: StageDraft[]) => void;
@@ -41,7 +42,7 @@ export function ProjectStagesDraft({ stages, onChange }: {
             ))}
             {!validStageDrafts(stages) && stages.length > 0 && <p role="alert" className="text-[12px] text-danger">Укажите разные непустые названия стадий.</p>}
             <Button className="self-start" disabled={stages.length >= 30} onClick={() => onChange([...stages, {
-                draftId: crypto.randomUUID(), name: "", color: PROJECT_COLORS[stages.length % PROJECT_COLORS.length], is_done_stage: false,
+                draftId: newUuid(), name: "", color: PROJECT_COLORS[stages.length % PROJECT_COLORS.length], is_done_stage: false,
             }])}><Plus size={14} />Добавить стадию</Button>
         </section>
     );

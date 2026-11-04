@@ -8,6 +8,7 @@ import { isForTim, TIM_CHAT_HINT } from "@/lib/tim";
 import { emptyChatDraft, useChatUiStore, type ChatDraft } from "@/stores/chat";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { newUuid } from "@/lib/uuid";
 import { isTouchChatInput, shouldSubmitChat, useChatInput } from "./useChatInput";
 import "./chat.css";
 
@@ -48,7 +49,7 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
     const disabled = !chat.canWrite || sending;
 
     const update = (patch: Partial<ChatDraft>) => {
-        const next = { ...patch, clientMessageId: crypto.randomUUID() };
+        const next = { ...patch, clientMessageId: newUuid() };
         updateStored(draftKey, { ...draft, ...next });
     };
     const uploadMutation = useMutation({ mutationFn: (file: File) => { const data = new FormData(); data.append("file", file); return api.postForm<ChatAttachment>(`${chatPath(chat.projectId)}/attachments`, data); } });
@@ -63,7 +64,7 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
             for (const file of selected) {
                 const result = await uploadMutation.mutateAsync(file);
                 const current = useChatUiStore.getState().drafts[draftKey] ?? draft;
-                updateStored(draftKey, { ...current, attachments: [...current.attachments, result], clientMessageId: crypto.randomUUID() });
+                updateStored(draftKey, { ...current, attachments: [...current.attachments, result], clientMessageId: newUuid() });
             }
         } catch (failure) { setError((failure as Error).message); } finally { setUploading(false); }
     };

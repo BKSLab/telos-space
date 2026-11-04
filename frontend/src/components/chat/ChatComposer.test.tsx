@@ -29,6 +29,18 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.unstubAllGlobals(); });
 
+it("сохраняет и отправляет сообщение по HTTP без crypto.randomUUID", async () => {
+    const cryptoApi = globalThis.crypto;
+    vi.stubGlobal("crypto", { getRandomValues: cryptoApi.getRandomValues.bind(cryptoApi) });
+    setup();
+    fireEvent.change(screen.getByRole("combobox", { name: "Сообщение проекту" }), { target: { value: "Сообщение по HTTP" } });
+    const id = useChatUiStore.getState().drafts["9:1"].clientMessageId;
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    fireEvent.click(screen.getByRole("button", { name: /^Отправить$/ }));
+    await waitFor(() => expect(chat.send).toHaveBeenCalledOnce());
+    expect(chat.send.mock.calls[0][0]).toMatchObject({ content: "Сообщение по HTTP", client_message_id: id });
+});
+
 it("оставляет мобильный Enter для новой строки, а кнопку — для отправки полного сообщения", async () => {
     touchDevice();
     setup();

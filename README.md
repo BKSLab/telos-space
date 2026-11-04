@@ -146,6 +146,56 @@ Healthcheck Compose использует внутренний порт 8000. Э�
 на хост не опубликован. Состояние и логи: `docker compose ps` и
 `docker compose logs --tail=80 backend`.
 
+### Сервер: HTTP по IP и порту
+
+Для сервера используется дополнительный
+[docker-compose.prod.yml](docker-compose.prod.yml), Docker Compose **2.24.4+**.
+Он создаёт отдельный проект `telos-space`, свою сеть и тома, убирает
+фиксированные имена контейнеров и публикацию портов PostgreSQL, Redis, Qdrant
+и отдельного MCP. Единственная внешняя точка входа — nginx на порту **8081**;
+через него работают интерфейс, `/api`, WebSocket и `/mcp`.
+
+Для адреса `http://91.218.114.82:8081` в серверном `backend/.env` дополнительно
+задайте следующие параметры, сохранив свои секреты и настройки AI:
+
+```dotenv
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+QDRANT_URL=http://qdrant:6333
+CHAT_REDIS_URL=redis://redis:6379/0
+UPLOADS_PATH=uploads
+AVATARS_PATH=uploads/avatars
+APP_PUBLIC_URL=http://91.218.114.82:8081
+CORS_ORIGINS=["http://91.218.114.82:8081"]
+MCP_ALLOWED_HOSTS=["91.218.114.82","91.218.114.82:8081","localhost","127.0.0.1"]
+MCP_ALLOWED_ORIGINS=["http://91.218.114.82:8081"]
+SESSION_COOKIE_NAME=telos_session
+SESSION_COOKIE_SECURE=false
+```
+
+В `frontend/.env.production.local` задайте
+`VITE_PUBLIC_URL=http://91.218.114.82:8081` перед сборкой. Эти `.env` не хранятся
+в Git; на Linux ограничьте доступ к ним командой
+`chmod 600 backend/.env frontend/.env.production.local`.
+
+Из корня клона на сервере:
+
+```bash
+git pull --ff-only origin main
+docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait --wait-timeout 180
+docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml ps
+```
+
+Для другого свободного порта задайте `TELOS_HTTP_PORT` в окружении команды
+Compose и согласованно измените публичные URL, CORS и MCP allowlist в `.env`;
+после изменения `VITE_PUBLIC_URL` пересоберите frontend. При обновлении и
+остановке всегда указывайте оба Compose-файла и проект `telos-space`,
+чтобы не запустить локальную конфигурацию с открытыми портами БД.
+Код и конфигурация Docker обновляются через Git; отдельно передаются только
+`.env`. Новая установка создаёт пустую БД, локальные пользователи и файлы
+автоматически не переносятся. Перед обновлением существующей БД нужна
+резервная копия, как описано выше; тома не удаляйте.
+
 ## Разработка без контейнеров приложения
 
 Используйте Python 3.12 и Node.js 22. Базы можно оставить в Docker:

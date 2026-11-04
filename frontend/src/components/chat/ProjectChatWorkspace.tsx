@@ -13,6 +13,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 import { Popover } from "@/components/ui/Popover";
 import { cn } from "@/lib/cn";
+import { newUuid } from "@/lib/uuid";
 
 const STATUS = { connecting: "Подключение…", syncing: "Восстановление сообщений…", connected: "Подключено", reconnecting: "Восстанавливаем соединение…", unavailable: "Нет соединения", forbidden: "Доступ к чату закрыт" };
 
@@ -53,13 +54,13 @@ function ProjectChatContent({ compact }: { compact: boolean }) {
     };
     const reply = (message: ChatMessage) => {
         setEditing(null);
-        updateDraft(draftKey, { reply: { id: message.id, seq: message.seq, author_type: message.author_type, author: message.author, content: message.content.slice(0, 240), deleted: Boolean(message.deleted_at) }, clientMessageId: crypto.randomUUID() });
+        updateDraft(draftKey, { reply: { id: message.id, seq: message.seq, author_type: message.author_type, author: message.author, content: message.content.slice(0, 240), deleted: Boolean(message.deleted_at) }, clientMessageId: newUuid() });
         requestAnimationFrame(() => document.getElementById("project-chat-composer")?.focus());
     };
     const quote = (text: string) => {
         setEditing(null);
         const previous = useChatUiStore.getState().drafts[draftKey]?.content ?? "";
-        updateDraft(draftKey, { content: `${previous}${previous ? "\n" : ""}${text.split("\n").map((line) => `> ${line}`).join("\n")}\n\n`.slice(0, 8000), clientMessageId: crypto.randomUUID() });
+        updateDraft(draftKey, { content: `${previous}${previous ? "\n" : ""}${text.split("\n").map((line) => `> ${line}`).join("\n")}\n\n`.slice(0, 8000), clientMessageId: newUuid() });
         requestAnimationFrame(() => document.getElementById("project-chat-composer")?.focus());
     };
     const onlineCount = chat.info?.members.filter((member) => chat.online.includes(member.id)).length ?? 0;

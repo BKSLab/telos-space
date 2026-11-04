@@ -86,9 +86,29 @@ class FakeSocket {
 }
 const microtasks = async () => { for (let index = 0; index < 10; index += 1) await Promise.resolve(); };
 const event = (seq: number): ChatEvent => ({ type: "message.updated", project_id: 1, seq, data: { message_id: seq } });
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("WebSocket reconnect/resync", () => {
+    it("передаёт команды, typing и heartbeat без randomUUID по HTTP", async () => {
+        vi.useFakeTimers();
+        const cryptoApi = globalThis.crypto;
+        vi.stubGlobal("crypto", { getRandomValues: cryptoApi.getRandomValues.bind(cryptoApi) });
+        const socket = new FakeSocket();
+        const transport = new ProjectChatTransport({ url: "ws://localhost", cursor: 0, createSocket: () => socket as unknown as WebSocket, fetchEvents: async () => ({ events: [], cursor: 0, has_more: false }), onEvent: vi.fn(), onState: vi.fn(), onReady: vi.fn() });
+        try {
+            transport.start(); socket.receive({ type: "ready", data: { can_write: true, heartbeat_seconds: 2 } }); await microtasks();
+            const accepted = transport.command("message.send", { content: "По HTTP" });
+            socket.receive({ type: "ack", request_id: socket.sent.at(-1)!.request_id, data: { message: row() } });
+            expect((await accepted).message?.id).toBe(1);
+            transport.ephemeral("typing.started");
+            await vi.advanceTimersByTimeAsync(2000);
+            expect(socket.sent.map(value => value.type)).toEqual(["message.send", "typing.started", "ping"]);
+            const ids = socket.sent.map(value => value.request_id);
+            expect(new Set(ids).size).toBe(3);
+            for (const id of ids) expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+        } finally { transport.stop(); }
+    });
+
     it("закрывает зависшее соединение, если сервер перестал отвечать на heartbeat", async () => {
         vi.useFakeTimers();
         const socket = new FakeSocket(); socket.respondToPings = false;

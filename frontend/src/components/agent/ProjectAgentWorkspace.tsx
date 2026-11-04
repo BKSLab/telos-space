@@ -27,6 +27,7 @@ import { AgentActionCard } from "@/components/projects/AgentActionCard";
 import { ErrorMessage } from "@/components/ui/States";
 import { cn } from "@/lib/cn";
 import { TIM_PERSONA } from "@/lib/tim";
+import { newUuid } from "@/lib/uuid";
 import { AgentAvatar } from "@/components/brand/AgentAvatar";
 import { shouldSubmitChat, useChatInput } from "@/components/chat/useChatInput";
 import { useChatHistory } from "@/components/chat/useChatHistory";
@@ -163,7 +164,7 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
         if (normalized.length < 2 || sending || sendingRef.current || busy || loading || chat.messages.isError) return;
         sendingRef.current = true;
         scrollToLatest();
-        const requestId = draft?.content.trim() === normalized ? draft.requestId : crypto.randomUUID();
+        const requestId = draft?.content.trim() === normalized ? draft.requestId : newUuid();
         updateDraft(draftKey, { content: normalized, files: selectedFiles, requestId });
         let id = conversationId;
         try {

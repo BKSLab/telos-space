@@ -2,12 +2,13 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ChatAttachment, ChatEntity, ChatReply } from "@/lib/projectChat";
 import type { ChatMessage } from "@/lib/projectChat";
+import { newUuid } from "@/lib/uuid";
 
 export interface ChatDraft {
     content: string; mentions: number[]; entities: ChatEntity[]; attachments: ChatAttachment[];
     reply: ChatReply | null; clientMessageId: string;
 }
-export const emptyChatDraft = (): ChatDraft => ({ content: "", mentions: [], entities: [], attachments: [], reply: null, clientMessageId: crypto.randomUUID() });
+export const emptyChatDraft = (): ChatDraft => ({ content: "", mentions: [], entities: [], attachments: [], reply: null, clientMessageId: newUuid() });
 interface ChatUiState {
     drafts: Record<string, ChatDraft>;
     editing: Record<string, ChatMessage | null>;
