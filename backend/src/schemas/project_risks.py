@@ -217,7 +217,7 @@ class RiskMatrixCellSchema(BaseModel):
 
 
 class RiskSignalSchema(BaseModel):
-    """Объяснимый сигнал внимания для Project Pulse."""
+    """Объяснимый сигнал внимания для обзора проекта."""
 
     code: RiskReasonCode = Field(
         ..., description="Стабильный код причины.", examples=["HIGH_OPEN_RISK"]

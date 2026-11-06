@@ -1,5 +1,30 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { AgentToolRun, AgentFile, KnowledgeSource, TimPageContext } from "../src/lib/types";
+
+async function expectAgentCardAccent(page: Page, card: Locator) {
+    const stripe = await card.evaluate(element => {
+        const style = getComputedStyle(element, "::before");
+        return { image: style.backgroundImage, width: Number.parseFloat(style.width), height: Number.parseFloat(style.height), opacity: Number(style.opacity) };
+    });
+    expect(stripe.image).toContain("linear-gradient");
+    expect(stripe.image).toMatch(/rgb\(0, 200, 244\)/);
+    expect(stripe.image).toMatch(/rgb\(188, 103, 239\)/);
+    expect(stripe.width).toBeGreaterThan(0);
+    expect(stripe.height).toBeGreaterThan(0);
+    expect(stripe.opacity).toBeGreaterThan(0);
+    await card.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(card).toBeFocused();
+    const paint = await card.evaluate(element => {
+        const style = getComputedStyle(element);
+        return { image: style.backgroundImage, outline: Number.parseFloat(style.outlineWidth), focusVisible: element.matches(":focus-visible") };
+    });
+    expect(paint.image.match(/linear-gradient/g)!.length).toBeGreaterThanOrEqual(3);
+    expect(paint.outline).toBeGreaterThanOrEqual(2);
+    expect(paint.focusVisible).toBe(true);
+    return { image: paint.image, stripe: stripe.image };
+}
 
 async function openPersonalWindow(page: Page) {
     await page.getByRole("button", { name: "Открыть чаты", exact: true }).click();
@@ -51,7 +76,9 @@ test("единое окно личного Ариса сохраняет чер�
     await expect(page).toHaveURL(/\/team$/);
 });
 
-test("карточка задачи показывает поля без повторяющего их текста и JSON результата", async ({ page }) => {
+test("карточка задачи показывает поля и фирменный акцент в личном окне и вкладке", async ({ page }, info) => {
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
     const control = await installProjectApi(page);
     control.answer = "";
     control.sources = [{ source_id: "task:42", entity_type: "task", entity_id: 42, title: "DEMO-42 · Проверить оплату", task_id: 42, document_slug: null, score: null, excerpt: null,
@@ -68,13 +95,22 @@ test("карточка задачи показывает поля без пов�
     await expect(card).toContainText("01.10.2026");
     await expect(page.getByText("DEMO-42", { exact: true })).toHaveCount(1);
     await expect(page.locator(".markdown-body")).toHaveCount(0);
-    await page.screenshot({ path: "test-results/floating-agent-card.png" });
+    const floatingPaint = await expectAgentCardAccent(page, card);
+    await page.screenshot({ path: info.outputPath("floating-agent-card.png"), animations: "disabled" });
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(card).toBeVisible();
     const panel = await page.getByRole("dialog", { name: "Чаты", exact: true }).boundingBox();
     expect(panel!.x).toBeGreaterThanOrEqual(0);
     expect(panel!.x + panel!.width).toBeLessThanOrEqual(390);
-    await page.screenshot({ path: "test-results/floating-agent-mobile.png" });
+    await expectAgentCardAccent(page, card);
+    await page.screenshot({ path: info.outputPath("floating-agent-mobile.png"), animations: "disabled" });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.getByRole("button", { name: "Открыть чат во вкладке" }).click();
+    await expect(page).toHaveURL(/\/chat$/);
+    await expect(card).toBeVisible();
+    expect(await expectAgentCardAccent(page, card), "Один акцент сохраняется при переходе личного чата во вкладку").toEqual(floatingPaint);
+    await page.screenshot({ path: info.outputPath("personal-agent-card.png"), animations: "disabled" });
+    expect(errors).toEqual([]);
 });
 
 test("проектный личный диалог выбирается явно на общем экране, черновики проектов не смешиваются", async ({ page }) => {
@@ -104,7 +140,7 @@ async function installProjectApi(page: Page) {
     const control = { projects: [project], answer: "Руководитель проекта — Анна Иванова.", sources: null as KnowledgeSource[] | null, pending: false, fail: false, submissions: [] as Record<string, unknown>[], action: null as AgentToolRun | null, decisions: [] as Record<string, unknown>[] };
     const uploaded: AgentFile = { id: "f918d205-2ced-48eb-85f4-19b8e55ef361", original_name: "acceptance.md", content_type: "text/markdown", size: 12, created_at: stamp };
     let messageId = 0;
-    await page.route(/https:\/\/fonts\.(?:googleapis|gstatic)\.com\//, route => route.abort());
+    await page.route("https://fonts.googleapis.com/**", route => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
     await page.route("**/api/v1/**", async (route) => {
         const path = new URL(route.request().url()).pathname;
         const method = route.request().method();
@@ -176,7 +212,7 @@ async function installProjectApi(page: Page) {
     return control;
 }
 
-test("чат восстанавливает ожидающий ответ после перезагрузки и открывает источники", async ({ page }) => {
+test("чат восстанавливает ожидающий ответ после перезагрузки и открывает источники", async ({ page }, info) => {
     const control = await installProjectApi(page);
     control.pending = true;
     const errors: string[] = [];
@@ -197,8 +233,10 @@ test("чат восстанавливает ожидающий ответ пос
     await expect(page.getByText("Руководитель проекта — Анна Иванова.", { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByText("Руководитель проекта — Анна Иванова.", { exact: true })).toBeVisible();
-    await page.screenshot({ path: "test-results/agent-dialog.png" });
-    await page.getByRole("button", { name: "Участник: Анна Иванова", exact: true }).click();
+    const sourceCard = page.getByRole("button", { name: "Участник: Анна Иванова", exact: true });
+    await expectAgentCardAccent(page, sourceCard);
+    await page.screenshot({ path: info.outputPath("legacy-agent-source.png"), animations: "disabled" });
+    await sourceCard.press("Enter");
     await expect(page).toHaveURL(/\/projects\/DEMO\/team$/);
     expect(control.submissions).toHaveLength(1);
     expect(Object.keys(control.submissions[0]).sort()).toEqual(["content", "file_ids", "request_id"]);

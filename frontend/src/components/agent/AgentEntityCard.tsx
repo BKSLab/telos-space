@@ -7,6 +7,7 @@ import { useUiStore } from "@/stores/ui";
 import { apiUrl } from "@/lib/api";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { PriorityBadge } from "@/components/ui/Badge";
+import { chatContextKey, sourceContextTarget, useChatContext } from "@/lib/chatContext";
 
 const TYPES = {
     project: ["Проект", Layers], task: ["Задача", ListTodo], document: ["Документ", FileText], risk: ["Риск", ShieldAlert],
@@ -21,12 +22,15 @@ const STATUS: Record<string, string> = { ...PROJECT_STATUS_LABELS, ...RISK_STATU
 
 export function AgentEntityCard({ source, project }: { source: KnowledgeSource; project: Pick<Project, "id" | "key"> | null }) {
     const navigate = useNavigate();
+    const context = useChatContext();
+    const target = context && project?.id === context.projectId ? sourceContextTarget(source) : null;
     const [label, Icon] = TYPES[source.entity_type] ?? ["Объект проекта", Database];
     const canOpen = source.task_id != null || project != null;
     const card = source.card;
     const key = card?.key ?? ((source.entity_type === "task" || source.entity_type === "risk") && source.title.includes(" · ") ? source.title.split(" · ")[0] : null);
     const title = key && source.title.startsWith(`${key} · `) ? source.title.slice(key.length + 3) : source.title;
     const open = () => {
+        if (context && target) { context.select(target); return; }
         if (source.entity_type === "risk" && project) { useUiStore.getState().setSelectedRisk({ projectId: project.id, riskId: source.entity_id }); return; }
         if (source.entity_type === "project_file" && project) { navigate(`/projects/${project.key}/docs?file=${source.entity_id}`); return; }
         if (source.entity_type === "task_report" && source.task_id != null) { navigate(`/my-tasks?task=${source.task_id}&task_tab=report`); return; }
@@ -40,8 +44,8 @@ export function AgentEntityCard({ source, project }: { source: KnowledgeSource; 
     const priority = card?.priority && ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(card.priority) ? card.priority as TaskPriority : null;
     const date = card?.due_date ? new Date(`${card.due_date.slice(0, 10)}T12:00:00`) : null;
     const Tag = canOpen ? "button" : "div";
-    return <Tag type={canOpen ? "button" : undefined} onClick={canOpen ? open : undefined} aria-label={`${label}: ${source.title}`} className="group flex w-full min-w-0 flex-col gap-2.5 rounded-xl border border-line bg-surface/90 p-3 text-left shadow-card transition-colors hover:border-accent/45 hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent">
-        <span className="flex items-center gap-2 text-[10px] text-muted"><Icon size={14} className="shrink-0 text-accent" /><span>{label}</span>{key && <span className="truncate font-mono text-secondary">{key}</span>}{canOpen && <ArrowUpRight size={13} className="ml-auto shrink-0 text-muted group-hover:text-accent" />}</span>
+    return <Tag type={canOpen ? "button" : undefined} onClick={canOpen ? open : undefined} aria-label={`${label}: ${source.title}`} aria-pressed={target ? Boolean(context?.target && chatContextKey(context.target) === chatContextKey(target)) : undefined} className="brand-entity-card group flex w-full min-w-0 flex-col gap-2.5 rounded-xl border border-transparent p-3 text-left shadow-card transition-colors focus-visible:outline-2 focus-visible:outline-accent">
+        <span className="flex items-center gap-2 text-[10px] text-muted"><Icon size={14} className="shrink-0 text-ai-cyan" /><span className="text-ai-violet">{label}</span>{key && <span className="truncate font-mono text-secondary">{key}</span>}{canOpen && <ArrowUpRight size={13} className="ml-auto shrink-0 text-muted group-hover:text-accent" />}</span>
         <span className="flex min-w-0 items-center gap-2.5">
             {source.entity_type === "member" && <UserAvatar size="sm" avatarUrl={card?.avatar_url ? apiUrl(card.avatar_url) : undefined} hasAvatar={Boolean(card?.avatar_url)} fallbackInitials={title.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase()} />}
             <span className="min-w-0">

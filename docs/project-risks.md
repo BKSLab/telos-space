@@ -55,9 +55,9 @@ HTTP/MCP → ProjectRiskService → ProjectRiskRepository → PostgreSQL. Зав
 по актуальной паре probability/impact. Назначение владельца сериализовано с удалением
 участника через блокировку строки участия.
 
-## «Пульс», знания и AI
+## Обзор, знания и AI
 
-Счётчики и причины внимания доступны проектному и портфельному «Пульсу»:
+Счётчики и причины внимания доступны обзору проекта и сводке портфеля:
 HIGH_OPEN_RISK, RISK_REVIEW_OVERDUE, RISK_WITHOUT_OWNER,
 RISK_WITHOUT_MITIGATION, RISK_OCCURRED. HIGH_OPEN_RISK относится к OPEN/MITIGATING;
 реализовавшиеся события имеют отдельный сигнал. Анализ поддерживает проекты,

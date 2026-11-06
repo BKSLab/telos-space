@@ -1,0 +1,45 @@
+import { describe, expect, it } from "vitest";
+import type { ChatEntity, ChatMessage } from "./projectChat";
+import type { KnowledgeSource } from "./types";
+import { entityContextTarget, recentChatContext, sourceContextTarget, suggestedChatContext } from "./chatContext";
+
+const source = (id: number, type: KnowledgeSource["entity_type"] = "task"): KnowledgeSource => ({
+    source_id: `${type}:${id}`, entity_type: type, entity_id: id, task_id: type === "task" ? id : null,
+    title: `Объект ${id}`, excerpt: "Фрагмент", score: null, document_slug: type === "document" ? "plan" : null,
+});
+const entity: ChatEntity = { entity_type: "TASK", entity_id: 42, available: true, title: "Задача 42", href: null, status: null, subtitle: null };
+function answer(id: number, sources: KnowledgeSource[]): ChatMessage {
+    return { id, seq: id, revision: 1, deleted_at: null, entities: [], agent: { status: "completed", sources } } as unknown as ChatMessage;
+}
+
+describe("контекст из карточек переписки", () => {
+    it("сохраняет id, фрагмент и slug поддерживаемых источников", () => {
+        expect(sourceContextTarget(source(7, "document"))).toEqual({ type: "document", id: 7, title: "Объект 7", excerpt: "Фрагмент", documentSlug: "plan" });
+        expect(sourceContextTarget(source(9, "project_file"))?.type).toBe("project_file");
+        expect(sourceContextTarget({ ...source(99), task_id: 42 })?.id).toBe(42);
+    });
+    it("отбрасывает недоступные карточки, неподдерживаемые типы и неверные id", () => {
+        expect(entityContextTarget({ ...entity, available: false })).toBeNull();
+        expect(entityContextTarget({ ...entity, entity_id: -1 })).toBeNull();
+        expect(sourceContextTarget(source(1.5))).toBeNull();
+        expect(sourceContextTarget(source(5, "task_report"))).toBeNull();
+        expect(sourceContextTarget(source(5, "risk"))).toBeNull();
+    });
+    it("объединяет повторы из источников и ссылок, исключая удалённые и локальные сообщения", () => {
+        const history = [answer(1, [source(42)]), { ...answer(2, []), entities: [entity] },
+            { ...answer(3, [source(9, "project_file")]), deleted_at: "2026-11-06" },
+            { ...answer(4, [source(3)]), delivery: "sending" as const }];
+        expect(recentChatContext(history)).toEqual([{ type: "task", id: 42, title: "Задача 42" }]);
+        expect(recentChatContext([answer(5, [source(1), source(2), source(3)])], 2)).toHaveLength(2);
+    });
+    it("автоматически выбирает только однозначный завершённый ответ", () => {
+        const first = answer(1, [source(42)]);
+        const newer = answer(2, [source(7, "document")]);
+        expect(suggestedChatContext([first, newer])?.target.id).toBe(7);
+        expect(suggestedChatContext([{ ...newer, agent: { ...newer.agent!, status: "processing" } }])).toBeNull();
+        expect(suggestedChatContext([answer(3, [source(1), source(2)])])).toBeNull();
+        expect(suggestedChatContext([answer(4, [source(42), source(42)])])?.target.id).toBe(42);
+        // Unrelated replies do not clear a useful existing context.
+        expect(suggestedChatContext([first, answer(5, [])])?.key).toBe("1:1");
+    });
+});

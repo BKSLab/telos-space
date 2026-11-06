@@ -39,7 +39,7 @@ export function ProjectPulse({ summary }: { summary: CalendarSummary }) {
         <aside className="rounded-[var(--radius-card)] bg-surface/55 p-3">
             <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
-                    Пульс проекта
+                    Обзор проекта
                 </h3>
                 <span className="size-1.5 rounded-full bg-accent/80" />
             </div>

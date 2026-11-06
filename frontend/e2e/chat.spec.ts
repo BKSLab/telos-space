@@ -1,8 +1,60 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type Locator, type Page, type WebSocketRoute } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 import type { ChatAgentState, ChatAttachment, ChatEntity, ChatEvent, ChatMessage, ChatMessageCreate } from "../src/lib/projectChat";
+import type { DocumentDetail, KnowledgeSource, ProjectFileDetail, Task } from "../src/lib/types";
 
 test.setTimeout(60_000);
+
+const browserErrors = new WeakMap<Page, { kind: string; text: string; expected: boolean }[]>();
+
+function watchBrowserErrors(page: Page, allowAccessErrors = false) {
+    const errors: { kind: string; text: string; expected: boolean }[] = [];
+    browserErrors.set(page, errors);
+    page.on("pageerror", error => errors.push({ kind: "pageerror", text: error.message, expected: false }));
+    page.on("console", entry => {
+        if (entry.type() !== "error") return;
+        const text = entry.text();
+        errors.push({ kind: "console", text, expected: allowAccessErrors && /Failed to load resource: the server responded with a status of (403|404)/.test(text) });
+    });
+}
+
+async function expectBrandPaint(target: Locator, pseudo: "::before" | "::after" | null = null) {
+    const paint = await target.evaluate((element, pseudoElement) => {
+        const style = getComputedStyle(element, pseudoElement);
+        return { image: style.backgroundImage, opacity: Number(style.opacity), display: style.display, width: style.width, height: style.height };
+    }, pseudo);
+    expect(paint.image, "Видимый градиент содержит цвета бренда").toContain("linear-gradient");
+    expect(paint.image).toMatch(/rgba?\(0, 200, 244(?:,|\))/);
+    expect(paint.image).toMatch(/rgba?\(188, 103, 239(?:,|\))/);
+    expect(paint.opacity).toBeGreaterThan(0);
+    expect(paint.display).not.toBe("none");
+    if (pseudo) {
+        expect(Number.parseFloat(paint.width)).toBeGreaterThan(0);
+        expect(Number.parseFloat(paint.height)).toBeGreaterThan(0);
+    }
+}
+
+async function focusCardWithKeyboard(page: Page, card: Locator) {
+    await card.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(card).toBeFocused();
+    const focus = await card.evaluate(element => ({ visible: element.matches(":focus-visible"), width: Number.parseFloat(getComputedStyle(element).outlineWidth), style: getComputedStyle(element).outlineStyle }));
+    expect(focus.visible).toBe(true);
+    expect(focus.width).toBeGreaterThanOrEqual(2);
+    expect(focus.style).not.toBe("none");
+}
+
+test.afterEach(async ({ page }, info) => {
+    const errors = browserErrors.get(page);
+    if (!errors) return;
+    const path = info.outputPath("browser-errors.json");
+    await mkdir(info.outputDir, { recursive: true });
+    await writeFile(path, JSON.stringify(errors, null, 2), "utf-8");
+    await info.attach("browser-errors", { path, contentType: "application/json" });
+    expect(errors.filter(error => !error.expected), "Нет непредвиденных console.error и pageerror").toEqual([]);
+});
 
 /** Общий серверный state для двух браузерных участников и нескольких вкладок. */
 function chatServer() {
@@ -15,9 +67,25 @@ function chatServer() {
     const reads = new Map<number, number>();
     const files = new Map<string, ChatAttachment>();
     const entity: ChatEntity = { entity_type: "DOCUMENT", entity_id: 1, title: "План тестирования", available: true, status: null, subtitle: null, href: "/projects/DEMO/docs/testing" };
+    const tasks = new Map<number, Task>([42, 43].map((id): [number, Task] => [id, {
+        id, project_id: 1, stage_id: 1, number: id, key: `DEMO-${id}`,
+        title: id === 42 ? "Проверить форму заказа" : "Согласовать мобильную версию",
+        description_md: id === 42 ? "Проверить обязательные поля и сохранение заказа." : "Согласовать расположение кнопок на телефоне.",
+        priority: "MEDIUM", role: null, assignee: "Анна Иванова", participants: [],
+        start_date: null, due_date: "2026-11-20", baseline_start_date: null, baseline_due_date: null,
+        completed_at: null, position: id, created_at: stamp, updated_at: stamp, comments_count: 0,
+        last_comment: null, search_match_source: null, search_title: null, search_excerpt: null, wbs_node_id: null,
+    }]));
+    const document: DocumentDetail = { id: 1, project_id: 1, slug: "testing", title: entity.title, content_md: "Критерии готовности интерфейса.", created_at: stamp, updated_at: stamp, search_match_source: null, search_title: null, search_excerpt: null };
+    const projectFileText = "Согласованный бюджет проекта — 742000 рублей.";
+    const projectFile: ProjectFileDetail = { id: 9, project_id: 1, uploaded_by_user_id: 1, original_name: "Бюджет.txt", content_type: "text/plain", size: new TextEncoder().encode(projectFileText).length, created_at: stamp, content_url: "/api/v1/projects/1/files/9/content", extraction_status: "ready", extraction_detail: null, index_status: "ready", index_detail: null, indexed_at: stamp, summary: "Согласованный бюджет", text: projectFileText, text_total_chars: projectFileText.length, text_offset: 0, next_offset: null };
+    const taskEntity = (id: number): ChatEntity => ({ entity_type: "TASK", entity_id: id, title: tasks.get(id)!.title, available: true, status: "В работе", subtitle: `DEMO-${id}`, href: null });
+    const taskSource = (id: number): KnowledgeSource => ({ source_id: `task:${id}`, entity_type: "task", entity_id: id, title: `DEMO-${id} · ${tasks.get(id)!.title}`, excerpt: null, score: null, task_id: id, document_slug: null });
+    const documentSource: KnowledgeSource = { source_id: "document:1", entity_type: "document", entity_id: 1, title: document.title, excerpt: null, score: null, task_id: null, document_slug: document.slug };
+    const fileSource: KnowledgeSource = { source_id: "project_file:9", entity_type: "project_file", entity_id: 9, title: projectFile.original_name, excerpt: null, score: null, task_id: null, document_slug: null };
     let seq = 0;
     let messageId = 0;
-    const control = { dropNextAck: false, connections: 0, messageGets: 0, blocked: false, commands: [] as { type: string; data: Record<string, unknown> }[] };
+    const control = { dropNextAck: false, connections: 0, messageGets: 0, blocked: false, sourceStatus: new Map<string, number>(), commands: [] as { type: string; data: Record<string, unknown> }[] };
     const emit = (type: string, data: ChatEvent["data"], broadcast = true) => {
         const event = { type, project_id: 1, seq: ++seq, data: structuredClone(data) };
         events.push(event);
@@ -32,12 +100,14 @@ function chatServer() {
         rows.push(message); emit("message.created", { message_id: message.id, message }, broadcast);
         return message;
     };
-    const add = (content: string, userId = 2, broadcast = true) => create(userId, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, broadcast);
-    const addTim = (content: string, status: ChatAgentState["status"] = "completed") => create(0, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, true, { author_type: "AGENT", author: null, agent: { name: "Арис", status, requester: members[0], request_message_id: 1, error: null, sources: [], actions: [] } });
+    const add = (content: string, userId = 2, broadcast = true, patch: Partial<ChatMessage> = {}) => create(userId, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, broadcast, patch);
+    const addTim = (content: string, status: ChatAgentState["status"] = "completed", sources: KnowledgeSource[] = [], broadcast = true) => create(0, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, broadcast, { author_type: "AGENT", author: null, agent: { name: "Арис", status, requester: members[0], request_message_id: 1, error: null, sources, actions: [] } });
 
     const attach = async (page: Page, userId = 1) => {
         const publicUser = members.find((user) => user.id === userId)!;
         const user = { ...publicUser, first_name: userId === 1 ? "Анна" : "Олег", last_name: userId === 1 ? "Иванова" : "Петров", middle_name: null, is_active: true, has_avatar: false };
+        // Сценарий не зависит от доступности внешнего CDN шрифтов.
+        await page.route("https://fonts.googleapis.com/**", route => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
         await page.route("**/api/v1/**", async (route) => {
             const url = new URL(route.request().url());
             const path = url.pathname;
@@ -51,6 +121,21 @@ function chatServer() {
             if (path === "/api/v1/projects/1") return reply(project);
             if (path.endsWith("/members")) return reply(members.map((member) => ({ id: member.id, project_id: 1, role: member.id === 1 ? "OWNER" : "MEMBER", user: { ...user, ...member }, created_at: stamp })));
             if (path.endsWith("/stats")) return reply({ total_tasks: 6, in_progress_tasks: 2, done_tasks: 2, overdue_tasks: 0, completion_rate: 0.33 });
+            if (path === "/api/v1/projects/1/risks") return reply({ items: [], total: 0, page: 1, page_size: 5 });
+            if (path === "/api/v1/my/task-attention") return reply({ new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] });
+            if (path === "/api/v1/projects/1/stages") return reply([{ id: 1, project_id: 1, name: "В работе", color: "#7299cc", order_index: 0, is_done_stage: false }]);
+            const taskMatch = path.match(/^\/api\/v1\/tasks\/(\d+)$/);
+            if (taskMatch) {
+                const id = Number(taskMatch[1]);
+                const status = control.sourceStatus.get(`task:${id}`) ?? (tasks.has(id) ? 200 : 404);
+                return status === 200 ? reply(tasks.get(id)) : reply({ detail: "Объект недоступен" }, status);
+            }
+            if (/^\/api\/v1\/tasks\/\d+\/attention$/.test(path)) return reply({ revision: 1, deadline_revision: 1, overdue: false });
+            if (path === "/api/v1/projects/1/wbs") return reply({ nodes: [], tasks: [], task_edges: [], revision: 0 });
+            if (path === "/api/v1/projects/1/files/9") {
+                const status = control.sourceStatus.get("project_file:9") ?? 200;
+                return status === 200 ? reply(projectFile) : reply({ detail: "Объект недоступен" }, status);
+            }
             if (path.endsWith("/chat")) return control.blocked ? reply({ detail: "Чат недоступен" }, 404) : reply({ id: 1, project_id: 1, event_cursor: seq, last_read_seq: reads.get(userId) ?? 0, unread_count: rows.filter((row) => row.author?.id !== userId && row.seq > (reads.get(userId) ?? 0) && !row.deleted_at).length, members });
             if (path.endsWith("/chat/events")) {
                 const after = Number(url.searchParams.get("after") ?? 0);
@@ -67,14 +152,24 @@ function chatServer() {
                 return reply({ messages: selected, has_more: all.length > selected.length && (around ? index > 5 : true), event_cursor: seq });
             }
             if (path.endsWith("/chat/search")) return reply({ messages: rows.filter((row) => !row.deleted_at && row.content.toLowerCase().includes((url.searchParams.get("q") ?? "").toLowerCase())).slice(-30), has_more: false, event_cursor: seq });
-            if (path.endsWith("/chat/entities") || path.endsWith("/chat/entities/resolve")) return reply([entity]);
+            if (path.endsWith("/chat/entities")) return reply([entity]);
+            if (path.endsWith("/chat/entities/resolve")) {
+                const refs = route.request().postDataJSON() as { entity_type: string; entity_id: number }[];
+                return reply(refs.flatMap(ref => ref.entity_type === "TASK" && tasks.has(ref.entity_id) ? [taskEntity(ref.entity_id)] : ref.entity_type === "DOCUMENT" && ref.entity_id === entity.entity_id ? [entity] : []));
+            }
             if (path.endsWith("/chat/attachments") && method === "POST") {
                 const file: ChatAttachment = { id: randomUUID(), original_name: "acceptance.txt", size_bytes: 12, content_type: "text/plain", message_id: null, created_at: stamp };
                 files.set(file.id, file); return reply(file, 201);
             }
             if (path.includes("/chat/attachments/") && method === "DELETE") return route.fulfill({ status: 204, headers });
-            if (path.includes("/documents/") || path.includes("/docs/")) return reply({ id: 1, project_id: 1, slug: "testing", title: entity.title, content_md: "Критерии готовности интерфейса.", created_at: stamp, updated_at: stamp });
+            if (path.includes("/documents/") || path.includes("/docs/")) {
+                const status = control.sourceStatus.get("document:testing") ?? 200;
+                return status === 200 ? reply(document) : reply({ detail: "Объект недоступен" }, status);
+            }
             return reply([]);
+        });
+        await page.routeWebSocket("**/my/task-attention/ws", socket => {
+            socket.send(JSON.stringify({ type: "task-attention", data: { new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] } }));
         });
         await page.routeWebSocket("**/projects/1/chat/ws", (socket) => {
             control.connections += 1; sockets.set(socket, userId);
@@ -112,7 +207,7 @@ function chatServer() {
             });
         });
     };
-    return { attach, add, addTim, emit, rows, entity, sockets, control };
+    return { attach, add, addTim, emit, rows, entity, sockets, control, tasks, taskEntity, taskSource, documentSource, fileSource, document, projectFile };
 }
 
 const LEGACY_CONFIRM = "0f1e2d3c-0000-4000-8000-000000000001";
@@ -147,6 +242,9 @@ async function openChat(page: Page) {
 test("одна вкладка чата и обращение к Арису по начальному имени", async ({ page }) => {
     const server = chatServer(); await server.attach(page); await openChat(page);
     const sections = page.getByRole("navigation", { name: "Разделы проекта" });
+    await expect(sections.getByRole("link").nth(0)).toHaveAccessibleName("Обзор");
+    await expect(sections.getByRole("link").nth(1)).toHaveAccessibleName("Чат");
+    await expect(sections.getByRole("link", { name: "Пульс", exact: true })).toHaveCount(0);
     await expect(sections.getByRole("link", { name: "Чат", exact: true })).toHaveCount(1);
     await expect(sections.getByRole("link", { name: "Агент", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Открыть чат агента" })).toHaveCount(0);
@@ -184,10 +282,11 @@ test("одна вкладка чата и обращение к Арису по 
     expect(server.control.commands.filter((command) => command.type === "message.send").at(-1)?.data.content).toBe("Проверка после изменения высоты редактора");
 });
 
-test("проектный чат занимает рабочую ширину на 1920 px и не переполняет экран 320 px", async ({ page }, info) => {
+test("чат и контекст делят рабочую область на 1920 px, на 320 px контекст открывается отдельно", async ({ page }, info) => {
+    watchBrowserErrors(page);
     await page.setViewportSize({ width: 1920, height: 1080 });
     const server = chatServer();
-    server.add("Сообщение на широком экране", 2, false);
+    server.add("Сообщение на широком экране", 2, false, { entities: [server.entity] });
     await server.attach(page); await openChat(page);
     const sections = page.getByRole("navigation", { name: "Разделы проекта" });
     const input = page.getByRole("combobox", { name: "Сообщение проекту" });
@@ -216,21 +315,57 @@ test("проектный чат занимает рабочую ширину н�
     const firstTab = (await sections.getByRole("link").first().boundingBox())!;
     const lastTab = (await sections.getByRole("link").last().boundingBox())!;
     const messages = (await page.getByLabel("История сообщений проекта", { exact: true }).locator(":scope > div").first().boundingBox())!;
+    const history = (await page.getByLabel("История сообщений проекта", { exact: true }).boundingBox())!;
     const editor = (await input.boundingBox())!;
+    const context = page.getByRole("complementary", { name: "Контекст чата", exact: true });
+    await expect(context.getByText("Объекты из переписки", { exact: true })).toBeVisible();
+    const sidebar = (await context.boundingBox())!;
+    const panelGaps = await context.evaluate(element => {
+        const panel = element.getBoundingClientRect();
+        const parent = element.parentElement!.getBoundingClientRect();
+        return { top: panel.top - parent.top, right: parent.right - panel.right, bottom: parent.bottom - panel.bottom };
+    });
+    const composer = (await page.locator(".project-chat-workspace .chat-composer").boundingBox())!;
     expect(tabs.width, "Навигация проекта использует ширину рабочей области").toBeGreaterThan(workspace.width - 64);
     expect(Math.abs(firstTab.x - tabs.x)).toBeLessThanOrEqual(2);
     expect(Math.abs(lastTab.x + lastTab.width - tabs.x - tabs.width), "Вкладки распределены по всей ширине навигации").toBeLessThanOrEqual(2);
-    expect(messages.width, "История сообщений использует ширину рабочей области").toBeGreaterThan(workspace.width - 64);
-    expect(editor.width, "Редактор использует ширину рабочей области").toBeGreaterThan(workspace.width - 80);
-    await page.screenshot({ path: info.outputPath("project-chat-wide.png") });
+    expect(sidebar.width, "Панель контекста сохраняет рабочую ширину").toBeGreaterThanOrEqual(360);
+    expect(sidebar.width).toBeLessThanOrEqual(460);
+    for (const gap of Object.values(panelGaps)) {
+        expect(gap, "Контекст отступает от границ рабочей области").toBeGreaterThanOrEqual(12);
+        expect(gap).toBeLessThanOrEqual(24);
+    }
+    expect(history.x + history.width, "Контекст не перекрывает историю").toBeLessThanOrEqual(sidebar.x + 1);
+    const leftOffset = messages.x - history.x;
+    expect(leftOffset).toBeGreaterThanOrEqual(0);
+    expect(leftOffset, "Переписка сдвинута влево от прежнего центрирования").toBeLessThan((history.width - messages.width) / 2 - 4);
+    expect(Math.abs(composer.x - messages.x), "История и редактор выровнены").toBeLessThanOrEqual(2);
+    expect(messages.width, "Строки переписки ограничены 900 px").toBeLessThanOrEqual(900);
+    expect(messages.width).toBeGreaterThan(800);
+    expect(editor.width, "Редактор следует ширине переписки").toBeLessThanOrEqual(900);
+    expect(editor.width).toBeGreaterThan(700);
+    await expect(page.getByLabel("История сообщений проекта", { exact: true }).locator(":scope > div").first(), "Ограничение ширины задано CSS").toHaveCSS("max-width", "900px");
+    await expectBrandPaint(context);
+    await expectBrandPaint(context.locator(":scope > header"), "::after");
+    await page.screenshot({ path: info.outputPath("project-chat-wide.png"), animations: "disabled" });
     await page.setViewportSize({ width: 320, height: 844 });
     await assertActiveTabFullyVisible();
     await page.reload();
     await expect(page.getByText("Подключено", { exact: true })).toBeVisible();
     await assertProjectChatOnly();
+    await expect(context).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Контекст чата", exact: true })).toHaveCount(0);
     await expect(sections.getByRole("link", { name: "Чат", exact: true })).toBeInViewport();
     await assertActiveTabFullyVisible();
     await expect(input).toBeInViewport();
+    await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
+    const drawer = page.getByRole("dialog", { name: "Контекст чата", exact: true });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText("Объекты из переписки", { exact: true })).toBeVisible();
+    await expectBrandPaint(drawer.locator(".brand-ai-header"), "::after");
+    expect((await drawer.boundingBox())!.width).toBeLessThanOrEqual(320);
+    await page.screenshot({ path: info.outputPath("project-chat-context-320.png"), animations: "disabled" });
+    await drawer.getByRole("button", { name: "Закрыть контекст", exact: true }).click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "Узкая страница не прокручивается по горизонтали").toBe(true);
     await input.fill("Проверка чата на экране 320 px");
     await expect(page.getByRole("button", { name: "Отправить", exact: true })).toBeInViewport();
@@ -238,7 +373,162 @@ test("проектный чат занимает рабочую ширину н�
     await expect(page.getByRole("article").filter({ hasText: "Проверка чата на экране 320 px" })).toBeVisible();
     expect(server.control.commands.filter((command) => command.type === "message.send").at(-1)?.data.content).toBe("Проверка чата на экране 320 px");
     await assertActiveTabFullyVisible();
-    await page.screenshot({ path: info.outputPath("project-chat-320.png") });
+    await page.screenshot({ path: info.outputPath("project-chat-320.png"), animations: "disabled" });
+});
+
+test("контекст задачи позволяет писать, переключать карточки и сохраняет закреплённый выбор", async ({ page }, info) => {
+    watchBrowserErrors(page);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const server = chatServer();
+    server.add("Разбираем задачи заказа", 2, false, { entities: [server.taskEntity(42), server.taskEntity(43), server.entity] });
+    await server.attach(page); await openChat(page);
+    const panel = page.getByRole("complementary", { name: "Контекст чата", exact: true });
+    const history = page.getByLabel("История сообщений проекта", { exact: true });
+    const input = page.getByRole("combobox", { name: "Сообщение проекту" });
+    const firstCard = history.getByRole("button", { name: `Задача: ${server.tasks.get(42)!.title}`, exact: true });
+    const secondCard = history.getByRole("button", { name: `Задача: ${server.tasks.get(43)!.title}`, exact: true });
+    await expect(panel.getByText("Объекты из переписки", { exact: true })).toBeVisible();
+    await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toHaveCount(0);
+    await input.fill("Черновик обсуждения заказа");
+    await firstCard.click();
+    await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    await expect(page).toHaveURL(/\/projects\/DEMO\/chat$/);
+    await input.fill("Черновик обсуждения заказа — продолжаю писать");
+    await expect(input).toBeEditable();
+    await secondCard.click();
+    await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
+    await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toHaveCount(0);
+    await panel.getByRole("button", { name: "Закрепить контекст", exact: true }).click();
+    server.addTim("Проверим первую задачу перед выпуском", "completed", [server.taskSource(42)]);
+    await expect(history.getByText("Проверим первую задачу перед выпуском", { exact: true })).toBeVisible();
+    await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Открепить контекст", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await firstCard.click();
+    await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Открепить контекст", exact: true })).toBeVisible();
+    server.tasks.get(42)!.description_md = "Проверить обязательные поля, сохранение и подтверждение заказа.";
+    server.emit("entity.updated", { entity_type: "TASK", entity_id: 42 });
+    await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+    await panel.getByRole("button", { name: "Закрыть контекст", exact: true }).click();
+    await expect(panel).toHaveCount(0);
+    await expect(input).toHaveValue("Черновик обсуждения заказа — продолжаю писать");
+    await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
+    await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+    await expect(input).toHaveValue("Черновик обсуждения заказа — продолжаю писать");
+    await page.screenshot({ path: info.outputPath("project-chat-task-context.png"), animations: "disabled" });
+    await panel.getByRole("button", { name: "Открыть карточку задачи", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Задача DEMO-42", exact: true })).toBeVisible();
+});
+
+test("источники Ариса открываются рядом, авто-выбор ждёт готовый однозначный ответ", async ({ page }) => {
+    watchBrowserErrors(page);
+    const server = chatServer();
+    server.addTim("Материалы для проверки", "completed", [server.taskSource(42), server.documentSource, server.fileSource], false);
+    await server.attach(page); await openChat(page);
+    const panel = page.getByRole("complementary", { name: "Контекст чата", exact: true });
+    const history = page.getByLabel("История сообщений проекта", { exact: true });
+    await expect(panel.getByText("Задача или источник рядом с чатом", { exact: true })).toBeVisible();
+    for (const [label, body] of [
+        [`Задача: ${server.taskSource(42).title}`, server.tasks.get(42)!.description_md!],
+        [`Документ: ${server.documentSource.title}`, server.document.content_md],
+        [`Файл проекта: ${server.fileSource.title}`, server.projectFile.text],
+    ]) {
+        const sourceCard = history.getByRole("button", { name: label, exact: true });
+        const restingPaint = await sourceCard.evaluate(element => getComputedStyle(element).backgroundImage);
+        await expectBrandPaint(sourceCard);
+        await expectBrandPaint(sourceCard, "::before");
+        await focusCardWithKeyboard(page, sourceCard);
+        await sourceCard.press("Enter");
+        await expect(sourceCard).toHaveAttribute("aria-pressed", "true");
+        await expect.poll(() => sourceCard.evaluate(element => getComputedStyle(element).backgroundImage), { message: "Выбор и клавиатурный фокус усиливают границу карточки" }).not.toBe(restingPaint);
+        await expectBrandPaint(sourceCard);
+        await expect(panel.getByText(body, { exact: true })).toBeVisible();
+        if (label === `Документ: ${server.documentSource.title}`) {
+            server.document.content_md = "Обновлённые критерии готовности интерфейса согласованы.";
+            server.emit("entity.updated", { entity_type: "DOCUMENT", entity_id: 1 });
+            await expect(panel.getByText(server.document.content_md, { exact: true })).toBeVisible();
+            server.document.content_md = "Повторно выбранный документ содержит свежие критерии.";
+            await history.getByRole("button", { name: label, exact: true }).click();
+            await expect(panel.getByText(server.document.content_md, { exact: true })).toBeVisible();
+            server.document.content_md = "Новый ответ Ариса использует последнюю версию документа.";
+            server.addTim("Свежая версия документа", "completed", [server.documentSource]);
+            await expect(panel.getByText(server.document.content_md, { exact: true })).toBeVisible();
+        }
+        await expect(page).toHaveURL(/\/projects\/DEMO\/chat$/);
+        await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    }
+    const pending = server.addTim("", "processing", [server.taskSource(43)]);
+    await expect(history.getByText("Арис думает…", { exact: true })).toBeVisible();
+    await expect(panel.getByText(server.projectFile.text, { exact: true })).toBeVisible();
+    Object.assign(pending, { revision: 2, content: "Мобильная задача готова к обсуждению", agent: { ...pending.agent!, status: "completed" } });
+    server.emit("message.updated", { message_id: pending.id, message: pending });
+    await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
+    server.addTim("Оба материала пригодятся", "completed", [server.documentSource, server.fileSource]);
+    await expect(history.getByText("Оба материала пригодятся", { exact: true })).toBeVisible();
+    await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
+});
+
+test("на телефоне карточка открывает контекст в Drawer, Escape возвращает фокус и черновик", async ({ page }, info) => {
+    watchBrowserErrors(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const server = chatServer();
+    server.add("Обсуждаем задачу на телефоне", 2, false, { entities: [server.taskEntity(42), server.entity] });
+    await server.attach(page); await openChat(page);
+    const history = page.getByLabel("История сообщений проекта", { exact: true });
+    const card = history.getByRole("button", { name: `Задача: ${server.tasks.get(42)!.title}`, exact: true });
+    const input = page.getByRole("combobox", { name: "Сообщение проекту" });
+    const drawer = page.getByRole("dialog", { name: "Контекст чата", exact: true });
+    await expect(drawer).toHaveCount(0);
+    await expect(page.getByRole("complementary", { name: "Контекст чата", exact: true })).toHaveCount(0);
+    await input.fill("Мобильный черновик сохранён");
+    await card.click();
+    await expect(drawer).toBeVisible();
+    await expectBrandPaint(drawer.locator(".brand-ai-header"), "::after");
+    await expect(drawer.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    expect((await drawer.boundingBox())!.width).toBeLessThanOrEqual(390);
+    await page.screenshot({ path: info.outputPath("project-chat-mobile-context.png"), animations: "disabled" });
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    await expect(card).toBeFocused();
+    await expect(input).toHaveValue("Мобильный черновик сохранён");
+    await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
+    await expect(drawer.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+    await drawer.getByRole("button", { name: "Закрыть контекст", exact: true }).click();
+    server.addTim("Проверим мобильную задачу", "completed", [server.taskSource(43)]);
+    await expect(history.getByText("Проверим мобильную задачу", { exact: true })).toBeVisible();
+    await expect(drawer).toHaveCount(0);
+    await expect(input).toHaveValue("Мобильный черновик сохранён");
+    await expect(input).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("недоступный источник 403 или 404 очищает прежний preview и оставляет редактор", async ({ page }) => {
+    watchBrowserErrors(page, true);
+    const server = chatServer();
+    server.addTim("Проверка доступа к источникам", "completed", [server.taskSource(42), server.documentSource, server.fileSource], false);
+    await server.attach(page); await openChat(page);
+    const panel = page.getByRole("complementary", { name: "Контекст чата", exact: true });
+    const history = page.getByLabel("История сообщений проекта", { exact: true });
+    await history.getByRole("button", { name: `Задача: ${server.taskSource(42).title}`, exact: true }).click();
+    await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+    const input = page.getByRole("combobox", { name: "Сообщение проекту" });
+    await input.fill("Обсуждение продолжается без источника");
+    for (const [key, status, label] of [
+        ["document:testing", 403, `Документ: ${server.documentSource.title}`],
+        ["project_file:9", 404, `Файл проекта: ${server.fileSource.title}`],
+    ] as const) {
+        server.control.sourceStatus.set(key, status);
+        await history.getByRole("button", { name: label, exact: true }).click();
+        await expect(panel.getByText(/недоступен|не найден|нет доступа/i).first()).toBeVisible();
+        await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toHaveCount(0);
+        await expect(panel.getByText(server.document.content_md, { exact: true })).toHaveCount(0);
+        await expect(panel.getByText(server.projectFile.text, { exact: true })).toHaveCount(0);
+        await expect(input).toHaveValue("Обсуждение продолжается без источника");
+        await expect(input).toBeEditable();
+        await expect(page).toHaveURL(/\/projects\/DEMO\/chat$/);
+    }
 });
 
 test("старый адрес личного диалога сохраняет историю, подтверждение и контекст в едином чате", async ({ page }) => {
@@ -292,7 +582,7 @@ test("знания и переиндексация доступны из еди�
     await expect(page.getByRole("combobox", { name: "Выбор чата", exact: true })).toHaveCount(0);
 });
 
-test("окно команды и вкладка разделяют сокет, историю, ответ и черновик редактирования", async ({ page }) => {
+test("окно команды и вкладка разделяют сокет, историю, ответ и черновик редактирования", async ({ page }, info) => {
     const server = chatServer();
     server.add("Проверим плавающее окно", 2, false);
     await server.attach(page);
@@ -323,15 +613,15 @@ test("окно команды и вкладка разделяют сокет, �
     await expect(page.getByRole("combobox", { name: "Редактирование сообщения" })).toHaveValue("Проверено из двух представлений");
     await page.getByRole("button", { name: "Сохранить", exact: true }).click();
     await expect(page.getByText("Проверено из двух представлений", { exact: true })).toBeVisible();
-    await page.getByRole("navigation", { name: "Основная навигация" }).getByRole("link", { name: "Проекты", exact: true }).click();
-    await expect(page).toHaveURL(/\/projects$/);
+    await page.getByRole("navigation", { name: "Основная навигация" }).getByRole("link", { name: "Портфель", exact: true }).click();
+    await expect(page).toHaveURL("/");
     await expect(page.getByRole("dialog", { name: "Чаты", exact: true })).toBeVisible();
     await expect(page.getByText("Проверено из двух представлений", { exact: true })).toBeVisible();
     expect(server.control.connections).toBe(connections);
-    await page.screenshot({ path: "test-results/floating-team-chat.png" });
+    await page.screenshot({ path: info.outputPath("floating-team-chat.png"), animations: "disabled" });
 });
 
-test("поиск и прочтение в окне команды не меняют основной экран, окно помещается на телефоне", async ({ page }) => {
+test("поиск и прочтение в окне команды не меняют основной экран, окно помещается на телефоне", async ({ page }, info) => {
     const server = chatServer();
     for (let i = 0; i < 65; i++) server.add(i === 0 ? "Давнее решение по приёмке" : `Сообщение ${i}`, 2, false);
     await server.attach(page);
@@ -347,7 +637,7 @@ test("поиск и прочтение в окне команды не меня�
     await expect.poll(() => server.control.commands.some((command) => command.type === "read.set")).toBe(true);
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
-    await page.screenshot({ path: "test-results/floating-team-mobile.png" });
+    await page.screenshot({ path: info.outputPath("floating-team-mobile.png"), animations: "disabled" });
     const panel = await page.getByRole("dialog", { name: "Чаты", exact: true }).boundingBox();
     expect(panel!.x).toBeGreaterThanOrEqual(0);
     expect(panel!.x + panel!.width).toBeLessThanOrEqual(390);

@@ -49432,7 +49432,7 @@
       "type": "string"
     },
     "RiskSignalSchema": {
-      "description": "Объяснимый сигнал внимания для Project Pulse.",
+      "description": "Объяснимый сигнал внимания для обзора проекта.",
       "properties": {
         "code": {
           "$ref": "#/components/schemas/RiskReasonCode",

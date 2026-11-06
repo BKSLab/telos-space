@@ -1,6 +1,14 @@
 .chat-input { max-height: min(14rem, calc(var(--app-height, 100dvh) * .28)); overflow-y: auto; }
 .chat-history { overflow-anchor: none; overscroll-behavior: contain; }
 .chat-content { min-width: 0; overflow-wrap: anywhere; }
+.chat-context-panel { width: clamp(360px, 33.333%, 460px); margin: 12px clamp(16px, 1.25vw, 24px) 12px 12px; }
+@media (min-width: 1280px) {
+  .project-chat-workspace .chat-thread .chat-history > div,
+  .project-chat-workspace .chat-thread > .chat-composer {
+    margin-inline-start: max(0px, calc(33.333% - 300px));
+    margin-inline-end: auto;
+  }
+}
 .chat-content .markdown-body { min-width: 0; max-width: 100%; }
 .chat-content .markdown-body pre { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
 .chat-content .markdown-body table { display: block; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }

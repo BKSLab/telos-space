@@ -118,7 +118,7 @@ export function ChatMessageList({ messages, hasMore, loadOlder, initialReadSeq, 
     const day = (value: string) => new Date(value).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
     return <div className="relative min-h-0 flex-1">
         <span className="sr-only" aria-live="polite" aria-atomic="true">{latestIncoming && `${chatAuthorName(latestIncoming)}: ${latestIncoming.content.slice(0, 160) || "Вложение"}`}</span>
-        <div ref={viewport} onScroll={scroll} aria-label="История сообщений проекта" className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]">
+        <div ref={viewport} onScroll={scroll} aria-label="История сообщений проекта" className="chat-history h-full overflow-y-auto overscroll-contain [overflow-anchor:none]">
             <div ref={content} className="mx-auto w-full max-w-[var(--chat-content-width,56rem)] px-2 pt-2 pb-6 sm:px-4">
                 <div ref={top} className="flex min-h-5 justify-center">{hasMore && <Button variant="ghost" size="sm" disabled={loadingOlder} onClick={() => void older()} icon={loadingOlder ? <Loader2 size={12} className="animate-spin motion-reduce:animate-none" /> : undefined}>{loadingOlder ? "Загрузка…" : "Ранние сообщения"}</Button>}</div>
                 {olderError && <p role="alert" className="py-2 text-center text-xs text-danger">{olderError}</p>}

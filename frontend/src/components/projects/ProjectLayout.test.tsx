@@ -30,6 +30,11 @@ it("оставляет одну активную вкладку чата и со
     expect(chat.getAttribute("href")).toBe("/projects/DEMO/chat");
     expect(chat.getAttribute("aria-current")).toBe("page");
     expect(navigation.getAllByRole("link", { name: /Чат/ })).toHaveLength(1);
+    const tabs = navigation.getAllByRole("link");
+    expect(tabs[0]).toBe(navigation.getByRole("link", { name: "Обзор" }));
+    expect(tabs[1]).toBe(chat);
+    expect(navigation.getByRole("link", { name: "Обзор" }).getAttribute("href")).toBe("/projects/DEMO");
+    expect(navigation.queryByRole("link", { name: "Пульс" })).toBeNull();
     expect(navigation.queryByRole("link", { name: "Агент" })).toBeNull();
     expect(navigation.getByRole("link", { name: "Структура" }).getAttribute("href")).toBe("/projects/DEMO/structure");
     expect(screen.getByText("Общая переписка")).toBeTruthy();

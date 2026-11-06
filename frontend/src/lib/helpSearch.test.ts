@@ -15,7 +15,10 @@ describe("поиск по справке", () => {
         expect(searchHelp("MCP несуществующееслово")).toEqual([]);
     });
     it("выше ставит совпадение в заголовке", () => {
-        expect(searchHelp("пульс")[0].article.id).toBe("project-pulse");
+        expect(searchHelp("Обзор проекта")[0].article.id).toBe("project-pulse");
+    });
+    it("находит обзор по прежнему названию вкладки", () => {
+        expect(searchHelp("пульс").some(result => result.article.id === "project-pulse")).toBe(true);
     });
     it("обрабатывает пустые запросы и знаки без регулярных выражений от пользователя", () => {
         for (const query of ["", "  ", "[.*+?()]"]) expect(searchHelp(query)).toEqual([]);

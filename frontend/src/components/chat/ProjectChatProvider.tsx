@@ -91,6 +91,8 @@ export function ProjectChatProvider({ projectId, projectKey, children, chatVisib
             }
             if (event.type === "entity.updated" && event.data.entity_type && event.data.entity_id) {
                 const ref = { entity_type: event.data.entity_type, entity_id: event.data.entity_id };
+                if (ref.entity_type === "TASK") void client.invalidateQueries({ queryKey: queryKeys.task(ref.entity_id) });
+                if (ref.entity_type === "DOCUMENT") void client.invalidateQueries({ queryKey: queryKeys.document(ref.entity_id) });
                 changedEntities.set(`${ref.entity_type}:${ref.entity_id}`, ref);
                 refreshEntities();
             }

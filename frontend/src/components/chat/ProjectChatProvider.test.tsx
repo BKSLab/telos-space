@@ -48,6 +48,22 @@ afterEach(() => {
 });
 
 describe("события переноса в общем чате", () => {
+    it("обновляет открытые детали по событиям задач и документов только текущего проекта", () => {
+        const { client } = setup();
+        const taskKey = [...queryKeys.task(42), "chat-preview", 1];
+        client.setQueryData(taskKey, { title: "Прежнее описание" });
+        client.setQueryData(queryKeys.document(7), { title: "Прежний документ" });
+        const event: ChatEvent = { type: "entity.updated", project_id: 99, data: { entity_type: "TASK", entity_id: 42 } };
+        act(() => connections.at(-1)!.onEvent(event, false));
+        expect(client.getQueryState(taskKey)?.isInvalidated).toBe(false);
+        act(() => connections.at(-1)!.onEvent({ ...event, project_id: 1 }, false));
+        expect(client.getQueryState(taskKey)?.isInvalidated).toBe(true);
+        expect(client.getQueryState(queryKeys.document(7))?.isInvalidated).toBe(false);
+        act(() => connections.at(-1)!.onEvent({ ...event, project_id: 1, data: { entity_type: "DOCUMENT", entity_id: 7 } }, false));
+        expect(client.getQueryState(queryKeys.document(7))?.isInvalidated).toBe(true);
+        client.clear();
+    });
+
     it("обновляет проект, WBS, зависимости и личный список; закрывает старую карточку задачи", async () => {
         const resolve = vi.spyOn(api, "post").mockResolvedValue([]);
         const { client } = setup();

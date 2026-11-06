@@ -87,7 +87,7 @@ export function normalizeTimelineScale(value: string | null | undefined): Timeli
 
 /**
  * Вид из URL (?view=&scale=&date=), иначе — последний выбор пользователя, иначе умолчание.
- * Старый адрес ?anchor= (ссылки из вех и пульса) читается как date, без view — как шкала.
+ * Старый адрес ?anchor= (ссылки из вех и обзора) читается как date, без view — как шкала.
  */
 export function readCalendarViewState(
     params: URLSearchParams,

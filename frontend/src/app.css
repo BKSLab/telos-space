@@ -435,6 +435,32 @@ select:-webkit-autofill {
     background-image: linear-gradient(110deg, rgb(0 200 244 / 0.035), transparent 55%, rgb(188 103 239 / 0.025));
   }
 
+  .brand-entity-card {
+    position: relative;
+    background:
+      linear-gradient(115deg, color-mix(in srgb, var(--brand-cyan) 5%, transparent), transparent 55%, color-mix(in srgb, var(--brand-violet) 4%, transparent)) padding-box,
+      linear-gradient(var(--surface-interactive), var(--surface-interactive)) padding-box,
+      var(--brand-edge-soft) border-box;
+  }
+
+  .brand-entity-card::before {
+    content: "";
+    position: absolute;
+    inset-block: 10px;
+    inset-inline-start: 0;
+    width: 2px;
+    border-radius: 2px;
+    background-image: var(--brand-spectrum-vertical);
+    pointer-events: none;
+  }
+
+  .brand-entity-card:is(button:hover, :focus-visible, [aria-pressed="true"]) {
+    background:
+      linear-gradient(115deg, color-mix(in srgb, var(--brand-cyan) 8%, transparent), transparent 55%, color-mix(in srgb, var(--brand-violet) 7%, transparent)) padding-box,
+      linear-gradient(var(--surface-interactive), var(--surface-interactive)) padding-box,
+      var(--brand-edge-hover) border-box;
+  }
+
   .brand-ai-header::after {
     content: "";
     position: absolute;
@@ -568,7 +594,8 @@ select:-webkit-autofill {
   .brand-entry,
   .sidebar-brand,
   .app-sidebar .brand-side-nav[aria-current="page"],
-  .brand-projects-heading {
+  .brand-projects-heading,
+  .brand-entity-card {
     background-image: none;
     background-color: Canvas;
   }
@@ -577,7 +604,7 @@ select:-webkit-autofill {
     display: none;
   }
 
-  .brand-ai-button, .brand-ai-panel, .brand-avatar, .brand-kanban-dragging, .brand-kanban-target {
+  .brand-ai-button, .brand-ai-panel, .brand-entity-card, .brand-avatar, .brand-kanban-dragging, .brand-kanban-target {
     border-color: ButtonText;
   }
 
@@ -586,6 +613,7 @@ select:-webkit-autofill {
   .brand-tab:is([aria-current="page"], [aria-selected="true"], [data-selected])::after,
   .brand-side-nav[aria-current="page"]::before,
   .brand-summary-title::before,
+  .brand-entity-card::before,
   .brand-kanban-insertion::before {
     background: Highlight;
   }

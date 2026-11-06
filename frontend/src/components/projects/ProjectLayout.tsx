@@ -13,7 +13,8 @@ import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 import { ChatUnreadBadge } from "@/components/chat/ChatUnreadBadge";
 
 const TABS = [
-    { path: "", label: "Пульс", end: true },
+    { path: "", label: "Обзор", end: true },
+    { path: "chat", label: "Чат", end: false },
     { path: "team", label: "Команда", end: false },
     { path: "board", label: "Канбан", end: false },
     { path: "tasks", label: "Задачи", end: false },
@@ -22,7 +23,6 @@ const TABS = [
     { path: "risks", label: "Риски", end: false },
     { path: "whiteboard", label: "Доска", end: false },
     { path: "docs", label: "Документы", end: false },
-    { path: "chat", label: "Чат", end: false },
 ];
 
 /**
