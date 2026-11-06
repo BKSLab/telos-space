@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ToastViewport } from "@/components/ui/Toast";
 import { TaskDialog } from "@/components/tasks/TaskDialog";
-import { RiskDrawer } from "@/components/risks/RiskDrawer";
+import { RiskDialog } from "@/components/risks/RiskDialog";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 
@@ -69,7 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
             <ToastViewport />
             <TaskDialog />
-            <RiskDrawer />
+            <RiskDialog />
         </div>
     );
 }
