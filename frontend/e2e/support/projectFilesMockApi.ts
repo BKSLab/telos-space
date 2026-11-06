@@ -57,7 +57,10 @@ export async function installProjectFilesApi(page: Page, initialFiles: ProjectFi
             Object.assign(file, { extraction_status: "pending", extraction_detail: null, index_status: "pending", index_detail: null });
             return reply(file, 202);
         }
-        if (match[2] === "content") return route.fulfill({ status: 200, headers: { ...headers, "content-type": "application/pdf", "content-disposition": `attachment; filename="original.pdf"` }, body: "%PDF-1.4 mock original" });
+        if (match[2] === "content") {
+            const filename = encodeURIComponent(file.original_name).replace(/['()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+            return route.fulfill({ status: 200, headers: { ...headers, "content-type": file.content_type, "content-disposition": `attachment; filename*=UTF-8''${filename}` }, body: "%PDF-1.4 mock original" });
+        }
         if (method === "DELETE") {
             if (state.deleteError) return reply({ detail: "Не удалось удалить оригинал" }, 503);
             state.files = state.files.filter((item) => item.id !== id);

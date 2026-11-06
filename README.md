@@ -186,8 +186,8 @@ SESSION_COOKIE_SECURE=false
 ```bash
 git pull --ff-only origin main
 docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml up -d --build --wait --wait-timeout 180
-docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml exec -T nginx nginx -t
-docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml exec -T nginx nginx -s reload
+docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml exec -T --interactive=false nginx nginx -t
+docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml exec -T --interactive=false nginx nginx -s reload
 docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml ps
 ```
 

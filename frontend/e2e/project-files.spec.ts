@@ -78,7 +78,7 @@ test("прямая ссылка, страницы извлечённого те�
     expect(state.requests.some((request) => request.url.searchParams.get("offset") === "8000" && request.url.searchParams.get("max_chars") === "8000")).toBe(true);
     const download = page.waitForEvent("download");
     await dialog.getByRole("link", { name: "Скачать оригинал" }).click();
-    expect((await download).suggestedFilename()).toBe("original.pdf");
+    expect((await download).suggestedFilename()).toBe(state.files[0].original_name);
     await dialog.getByRole("button", { name: "Закрыть", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     expect(new URL(page.url()).searchParams.has("file")).toBe(false);
