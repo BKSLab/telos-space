@@ -71,7 +71,7 @@ export interface ChatContextValue {
     selectionKey: string;
     recent: ChatContextTarget[];
     pinned: boolean;
-    select: (target: ChatContextTarget) => void;
+    select: (target: ChatContextTarget, options?: { open?: boolean }) => void;
     show: () => void;
     close: () => void;
     togglePin: () => void;

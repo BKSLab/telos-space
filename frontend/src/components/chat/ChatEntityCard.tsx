@@ -16,7 +16,11 @@ export function ChatEntityCard({ entity, projectId }: { entity: ChatEntity; proj
     const Icon = ICONS[entity.entity_type];
     const open = () => {
         if (!entity.available) return;
-        if (context && target) { context.select(target); return; }
+        if (context && target) {
+            context.select(target, { open: target.type !== "task" || context.desktop });
+            if (target.type === "task") openTask(target.id);
+            return;
+        }
         if (entity.entity_type === "TASK") openTask(entity.entity_id);
         else if (entity.entity_type === "RISK") openRisk({ projectId, riskId: entity.entity_id });
         else if (entity.href) navigate(entity.href);

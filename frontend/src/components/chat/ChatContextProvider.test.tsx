@@ -7,10 +7,12 @@ import type { ChatMessage } from "@/lib/projectChat";
 import type { KnowledgeSource } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
 import { AgentEntityCard } from "@/components/agent/AgentEntityCard";
+import { ChatEntityCard } from "./ChatEntityCard";
 import { ChatContextProvider } from "./ChatContextProvider";
 
-vi.mock("@/lib/useCalendarView", () => ({ useMediaQuery: () => true }));
-afterEach(() => { cleanup(); useUiStore.getState().setSelectedTaskId(null); });
+const { viewport } = vi.hoisted(() => ({ viewport: { desktop: true } }));
+vi.mock("@/lib/useCalendarView", () => ({ useMediaQuery: () => viewport.desktop }));
+afterEach(() => { cleanup(); useUiStore.getState().setSelectedTaskId(null); viewport.desktop = true; });
 const source = (id: number): KnowledgeSource => ({ source_id: `task:${id}`, entity_type: "task", entity_id: id, task_id: id, title: `Задача ${id}`, excerpt: null, score: null, document_slug: null });
 const answer = (id: number, taskId: number) => ({ id, revision: 1, entities: [], deleted_at: null, agent: { status: "completed", sources: [source(taskId)] } } as unknown as ChatMessage);
 function Controls() {
@@ -20,7 +22,10 @@ function Controls() {
         <button onClick={() => context?.togglePin()}>Закрепить</button>
         <button onClick={() => context?.close()}>Скрыть</button>
         <button onClick={() => context?.show()}>Показать</button>
-        <AgentEntityCard source={source(77)} project={{ id: 1, key: "DEMO" }} /></>;
+        <AgentEntityCard source={source(77)} project={{ id: 1, key: "DEMO" }} />
+        <AgentEntityCard source={{ ...source(55), task_id: null }} project={{ id: 1, key: "DEMO" }} />
+        <AgentEntityCard source={{ ...source(9), source_id: "document:9", entity_type: "document", task_id: null, title: "План", document_slug: "plan" }} project={{ id: 1, key: "DEMO" }} />
+        <ChatEntityCard entity={{ entity_type: "TASK", entity_id: 88, available: true, title: "Ссылка на задачу", status: null, subtitle: null, href: null }} projectId={1} /></>;
 }
 function Workspace({ messages, enabled = true }: { messages: ChatMessage[]; enabled?: boolean }) {
     return <MemoryRouter><ChatContextProvider projectId={1} projectKey="DEMO" messages={messages} enabled={enabled}><Controls /></ChatContextProvider></MemoryRouter>;
@@ -31,13 +36,47 @@ it("показывает новую единственную задачу и у�
     const first = answer(1, 42);
     const view = render(<Workspace messages={[first]} />);
     expect(selected()).toBe("42");
+    expect(useUiStore.getState().selectedTaskId).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Задача: Задача 77" }));
     expect(selected()).toBe("77");
-    expect(useUiStore.getState().selectedTaskId).toBeNull();
+    expect(useUiStore.getState().selectedTaskId).toBe(77);
     view.rerender(<Workspace messages={[first]} />);
     expect(selected()).toBe("77");
     view.rerender(<Workspace messages={[first, answer(2, 43)]} />);
     expect(selected()).toBe("43");
+    expect(useUiStore.getState().selectedTaskId).toBe(77);
+});
+
+it("ссылка на задачу в сообщении открывает общую карточку и сохраняет контекст", () => {
+    render(<Workspace messages={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Задача: Ссылка на задачу" }));
+    expect(useUiStore.getState().selectedTaskId).toBe(88);
+    expect(selected()).toBe("88");
+});
+
+it("источник задачи использует entity_id, если отдельный task_id не задан", () => {
+    render(<Workspace messages={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Задача: Задача 55" }));
+    expect(useUiStore.getState().selectedTaskId).toBe(55);
+    expect(selected()).toBe("55");
+});
+
+it("на телефоне задача открывает карточку, сохраняя контекст без второго листа", () => {
+    viewport.desktop = false;
+    render(<Workspace messages={[answer(1, 42)]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Задача: Ссылка на задачу" }));
+    expect(useUiStore.getState().selectedTaskId).toBe(88);
+    expect(selected()).toBe("88");
+    expect(screen.getByLabelText("Панель видна").textContent).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Показать" }));
+    expect(screen.getByLabelText("Панель видна").textContent).toBe("true");
+});
+
+it("документ продолжает открывать контекст без модальной карточки задачи", () => {
+    render(<Workspace messages={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Документ: План" }));
+    expect(selected()).toBe("9");
+    expect(useUiStore.getState().selectedTaskId).toBeNull();
 });
 
 it("закрепление защищает выбор от новых ответов, сохраняя ручное переключение", () => {

@@ -17,7 +17,7 @@ import {
 } from "@/lib/apiKeys";
 import { formatDateTime, formatFullDate } from "@/lib/dates";
 import { Button, LinkButton } from "@/components/ui/Button";
-import { Field, Input, Select } from "@/components/ui/Field";
+import { Field, Input } from "@/components/ui/Field";
 import { HelpHint } from "@/components/ui/HelpHint";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
@@ -42,7 +42,9 @@ function ScopeChips({ scopes, descriptions }: { scopes: string[]; descriptions: 
     );
 }
 
-function ScopeCheckboxes({ scopes, value, onChange }: { scopes: ApiScope[]; value: string[]; onChange: (next: string[]) => void }) {
+function ScopeCheckboxes({ scopes, value, onChange, disabled }: { scopes: ApiScope[]; value: string[]; onChange: (next: string[]) => void; disabled: boolean }) {
+    const allSelected = scopes.length > 0 && scopes.every((scope) => value.includes(scope.code));
+    const partiallySelected = !allSelected && scopes.some((scope) => value.includes(scope.code));
     return (
         <fieldset className="flex flex-col gap-2">
             <legend className="text-[11px] font-medium text-secondary mb-1.5 flex items-center gap-1">
@@ -51,11 +53,18 @@ function ScopeCheckboxes({ scopes, value, onChange }: { scopes: ApiScope[]; valu
                     Каждое право открывает группу методов REST API и инструментов MCP в пределах вашего доступа к проектам, задачам и личным доскам. Право agent:ask разрешает обращаться к помощнику от вашего имени.
                 </HelpHint>
             </legend>
+            <label className="mb-1 flex items-center gap-2 border-b border-line-subtle pb-2 text-[12px] font-medium text-primary">
+                <input type="checkbox" checked={allSelected} disabled={disabled || scopes.length === 0}
+                    ref={(element) => { if (element) element.indeterminate = partiallySelected; }}
+                    onChange={(event) => onChange(event.target.checked ? scopes.map((scope) => scope.code) : [])} />
+                <span>Выбрать все</span>
+            </label>
             {scopes.length === 0 && <p className="text-xs text-muted">Список прав не загрузился — обновите страницу.</p>}
             {scopes.map((scope) => (
                 <label key={scope.code} className="flex items-start gap-2 text-[12px] text-primary">
                     <input
                         type="checkbox"
+                        disabled={disabled}
                         className="mt-0.5"
                         checked={value.includes(scope.code)}
                         onChange={(event) => onChange(event.target.checked ? [...value, scope.code] : value.filter((item) => item !== scope.code))}
@@ -71,13 +80,12 @@ function ScopeCheckboxes({ scopes, value, onChange }: { scopes: ApiScope[]; valu
 }
 
 interface KeyFormState {
-    kind: "personal" | "service";
     label: string;
     scopes: string[];
     expires: string;
 }
 
-/** Диалог выпуска и правки личного ключа: владелец — сам пользователь, не выбирается. */
+/** Владелец API-ключа — текущий пользователь; возможности определяются правами. */
 function KeyFormDialog({
     mode,
     initial,
@@ -111,20 +119,13 @@ function KeyFormDialog({
     return (
         <Modal
             title={mode === "create" ? "Выпустить API-ключ" : "Изменить API-ключ"}
-            description={mode === "create" ? "Ключ для ваших скриптов и клиентов: работает от вашего имени в пределах отмеченных прав." : undefined}
+            description={mode === "create" ? "Один ключ для REST API и MCP. Работает от вашего имени в пределах выбранных прав." : undefined}
             isOpen
             onOpenChange={(open) => !open && !isPending && onClose()}
             isDismissable={!isPending}
             size="md"
         >
             <form id="personal-key-form" className="flex flex-col gap-4" onSubmit={submit}>
-                {mode === "create" && <Field label="Тип ключа" hint="Оба типа работают с вашим доступом.">
-                    {(id) => <Select id={id} value={form.kind} disabled={isPending}
-                        onChange={(event) => setForm({...form, kind: event.target.value as "personal" | "service"})}>
-                        <option value="personal">Личный</option>
-                        <option value="service">Сервисный</option>
-                    </Select>}
-                </Field>}
                 <Field label="Название" hint="Где будет использоваться ключ: «Скрипт сверки», «Claude на ноутбуке».">
                     {(id) => (
                         <Input
@@ -137,7 +138,7 @@ function KeyFormDialog({
                         />
                     )}
                 </Field>
-                <ScopeCheckboxes scopes={scopes} value={form.scopes} onChange={(next) => setForm({ ...form, scopes: next })} />
+                <ScopeCheckboxes scopes={scopes} value={form.scopes} disabled={isPending} onChange={(next) => { setForm({ ...form, scopes: next }); setLocalError(""); }} />
                 <Field label="Действует до" hint="Пусто — ключ бессрочный. Для разовой работы поставьте дату: просроченный ключ закроется сам.">
                     {(id) => (
                         <Input
@@ -298,7 +299,7 @@ export function ApiKeysPanel() {
                 </div>
             </header>
             <p className="text-[13px] text-secondary">
-                Ключи работают от вашего имени и получают только отмеченные права. Личный ключ подходит для вашего клиента, сервисный — для вашей интеграции или фонового скрипта.
+                Один API-ключ подходит для REST API и MCP: ваших клиентов, скриптов и интеграций. Он работает от вашего имени в пределах выбранных прав и вашего доступа.
             </p>
             {actionError && (
                 <p className="rounded-[var(--radius-card)] border border-danger/30 bg-danger/10 text-danger px-3 py-2 text-[12px]" role="alert">
@@ -337,7 +338,6 @@ export function ApiKeysPanel() {
                                     <tr key={key.id} data-testid={`api-key-${key.id}`}>
                                         <td data-label="Ключ">
                                             <div className="text-[13px] font-medium text-primary">{key.label}</div>
-                                            <span className="mr-2 text-[11px] text-muted">{key.kind === "service" ? "Сервисный" : "Личный"}</span>
                                             <code className="font-mono text-[11px] text-secondary">{key.key_prefix}…</code>
                                         </td>
                                         <td data-label="Права" className="min-w-0 break-words">
@@ -391,14 +391,13 @@ export function ApiKeysPanel() {
             {formMode?.mode === "create" && (
                 <KeyFormDialog
                     mode="create"
-                    initial={{ kind: "personal", label: "", scopes: DEFAULT_SCOPES.filter((code) => scopes.length === 0 || descriptions.has(code)), expires: "" }}
+                    initial={{ label: "", scopes: DEFAULT_SCOPES.filter((code) => scopes.length === 0 || descriptions.has(code)), expires: "" }}
                     scopes={scopes}
                     isPending={createMutation.isPending}
                     error={formError}
                     onClose={() => setFormMode(null)}
                     onSubmit={(form) =>
                         createMutation.mutate({
-                            kind: form.kind,
                             label: form.label.trim(),
                             scopes: form.scopes,
                             expires_at: endOfDayIso(form.expires),
@@ -409,7 +408,7 @@ export function ApiKeysPanel() {
             {formMode?.mode === "edit" && (
                 <KeyFormDialog
                     mode="edit"
-                    initial={{ kind: formMode.key.kind, label: formMode.key.label, scopes: formMode.key.scopes, expires: isoToDateInput(formMode.key.expires_at) }}
+                    initial={{ label: formMode.key.label, scopes: formMode.key.scopes, expires: isoToDateInput(formMode.key.expires_at) }}
                     scopes={scopes}
                     isPending={updateMutation.isPending}
                     error={formError}

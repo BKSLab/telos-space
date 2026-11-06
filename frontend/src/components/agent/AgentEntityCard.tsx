@@ -30,7 +30,11 @@ export function AgentEntityCard({ source, project }: { source: KnowledgeSource; 
     const key = card?.key ?? ((source.entity_type === "task" || source.entity_type === "risk") && source.title.includes(" · ") ? source.title.split(" · ")[0] : null);
     const title = key && source.title.startsWith(`${key} · `) ? source.title.slice(key.length + 3) : source.title;
     const open = () => {
-        if (context && target) { context.select(target); return; }
+        if (context && target) {
+            context.select(target, { open: target.type !== "task" || context.desktop });
+            if (target.type === "task") useUiStore.getState().setSelectedTaskId(target.id);
+            return;
+        }
         if (source.entity_type === "risk" && project) { useUiStore.getState().setSelectedRisk({ projectId: project.id, riskId: source.entity_id }); return; }
         if (source.entity_type === "project_file" && project) { navigate(`/projects/${project.key}/docs?file=${source.entity_id}`); return; }
         if (source.entity_type === "task_report" && source.task_id != null) { navigate(`/my-tasks?task=${source.task_id}&task_tab=report`); return; }

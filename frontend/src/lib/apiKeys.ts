@@ -7,8 +7,8 @@ export interface ApiKey {
     key_prefix: string;
     owner_user_id: number | null;
     owner_name: string | null;
-    /** Тип ключа: service — интеграции и агенты, personal — личный ключ пользователя. */
-    kind: "service" | "personal";
+    /** Историческая метка старого API; интерфейс не разделяет ключи по типу. */
+    kind?: "service" | "personal";
     scopes: string[];
     expires_at: string | null;
     is_active: boolean;
@@ -69,7 +69,6 @@ export function isoToDateInput(value: string | null): string {
 }
 
 export interface PersonalApiKeyCreatePayload {
-    kind?: "personal" | "service";
     label: string;
     scopes: string[];
     expires_at?: string | null;

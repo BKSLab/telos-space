@@ -46,6 +46,20 @@ async function focusCardWithKeyboard(page: Page, card: Locator) {
     expect(focus.style).not.toBe("none");
 }
 
+async function expectTaskDialogThenClose(page: Page, task: Task, screenshotPath?: string) {
+    const dialog = page.getByRole("dialog", { name: /^Задача/ });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAccessibleName(`Задача ${task.key}`);
+    await expect(dialog.getByText(task.key, { exact: true })).toBeVisible();
+    await expect(dialog.getByText(task.title, { exact: true })).toBeVisible();
+    await expect(dialog.getByText(task.description_md!, { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("tablist", { name: "Разделы задачи", exact: true })).toBeVisible();
+    await expect(page.locator(".modal-workspace").filter({ has: dialog })).toBeVisible();
+    if (screenshotPath) await page.screenshot({ path: screenshotPath, animations: "disabled" });
+    await dialog.getByRole("button", { name: "Закрыть задачу", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+}
+
 test.afterEach(async ({ page }, info) => {
     const errors = browserErrors.get(page);
     if (!errors) return;
@@ -391,12 +405,15 @@ test("контекст задачи позволяет писать, перек�
     await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toHaveCount(0);
     await input.fill("Черновик обсуждения заказа");
     await firstCard.click();
+    await expectTaskDialogThenClose(page, server.tasks.get(42)!, info.outputPath("project-chat-human-task-modal.png"));
     await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
-    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    await expect(firstCard).toHaveAttribute("aria-pressed", "true");
+    await expect(input).toHaveValue("Черновик обсуждения заказа");
     await expect(page).toHaveURL(/\/projects\/DEMO\/chat$/);
     await input.fill("Черновик обсуждения заказа — продолжаю писать");
     await expect(input).toBeEditable();
     await secondCard.click();
+    await expectTaskDialogThenClose(page, server.tasks.get(43)!);
     await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
     await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toHaveCount(0);
     await panel.getByRole("button", { name: "Закрепить контекст", exact: true }).click();
@@ -404,7 +421,16 @@ test("контекст задачи позволяет писать, перек�
     await expect(history.getByText("Проверим первую задачу перед выпуском", { exact: true })).toBeVisible();
     await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
     await expect(panel.getByRole("button", { name: "Открепить контекст", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    const recent = panel.getByRole("region", { name: "Объекты из переписки", exact: true });
+    await recent.getByRole("button", { name: `Задача ${server.taskSource(42).title}`, exact: true }).click();
+    await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    await recent.getByRole("button", { name: `Задача ${server.tasks.get(43)!.title}`, exact: true }).click();
+    await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
     await firstCard.click();
+    await expectTaskDialogThenClose(page, server.tasks.get(42)!);
     await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
     await expect(panel.getByRole("button", { name: "Открепить контекст", exact: true })).toBeVisible();
     server.tasks.get(42)!.description_md = "Проверить обязательные поля, сохранение и подтверждение заказа.";
@@ -418,17 +444,21 @@ test("контекст задачи позволяет писать, перек�
     await expect(input).toHaveValue("Черновик обсуждения заказа — продолжаю писать");
     await page.screenshot({ path: info.outputPath("project-chat-task-context.png"), animations: "disabled" });
     await panel.getByRole("button", { name: "Открыть карточку задачи", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Задача DEMO-42", exact: true })).toBeVisible();
+    await expectTaskDialogThenClose(page, server.tasks.get(42)!);
+    await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+    await expect(input).toHaveValue("Черновик обсуждения заказа — продолжаю писать");
 });
 
-test("источники Ариса открываются рядом, авто-выбор ждёт готовый однозначный ответ", async ({ page }) => {
+test("источники Ариса открываются рядом, авто-выбор ждёт готовый однозначный ответ", async ({ page }, info) => {
     watchBrowserErrors(page);
     const server = chatServer();
-    server.addTim("Материалы для проверки", "completed", [server.taskSource(42), server.documentSource, server.fileSource], false);
+    server.addTim("Материалы для проверки", "completed", [{ ...server.taskSource(42), task_id: null }, server.documentSource, server.fileSource], false);
     await server.attach(page); await openChat(page);
     const panel = page.getByRole("complementary", { name: "Контекст чата", exact: true });
     const history = page.getByLabel("История сообщений проекта", { exact: true });
+    const input = page.getByRole("combobox", { name: "Сообщение проекту" });
     await expect(panel.getByText("Задача или источник рядом с чатом", { exact: true })).toBeVisible();
+    await input.fill("Продолжаю обсуждать источники");
     for (const [label, body] of [
         [`Задача: ${server.taskSource(42).title}`, server.tasks.get(42)!.description_md!],
         [`Документ: ${server.documentSource.title}`, server.document.content_md],
@@ -440,6 +470,11 @@ test("источники Ариса открываются рядом, авто-
         await expectBrandPaint(sourceCard, "::before");
         await focusCardWithKeyboard(page, sourceCard);
         await sourceCard.press("Enter");
+        if (label === `Задача: ${server.taskSource(42).title}`) {
+            await expectTaskDialogThenClose(page, server.tasks.get(42)!, info.outputPath("project-chat-agent-task-modal.png"));
+        } else {
+            await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+        }
         await expect(sourceCard).toHaveAttribute("aria-pressed", "true");
         await expect.poll(() => sourceCard.evaluate(element => getComputedStyle(element).backgroundImage), { message: "Выбор и клавиатурный фокус усиливают границу карточки" }).not.toBe(restingPaint);
         await expectBrandPaint(sourceCard);
@@ -457,19 +492,25 @@ test("источники Ариса открываются рядом, авто-
         }
         await expect(page).toHaveURL(/\/projects\/DEMO\/chat$/);
         await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+        await expect(input).toHaveValue("Продолжаю обсуждать источники");
+        await expect(input).toBeEditable();
     }
     const pending = server.addTim("", "processing", [server.taskSource(43)]);
     await expect(history.getByText("Арис думает…", { exact: true })).toBeVisible();
     await expect(panel.getByText(server.projectFile.text, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
     Object.assign(pending, { revision: 2, content: "Мобильная задача готова к обсуждению", agent: { ...pending.agent!, status: "completed" } });
     server.emit("message.updated", { message_id: pending.id, message: pending });
     await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
     server.addTim("Оба материала пригодятся", "completed", [server.documentSource, server.fileSource]);
     await expect(history.getByText("Оба материала пригодятся", { exact: true })).toBeVisible();
     await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    await expect(input).toHaveValue("Продолжаю обсуждать источники");
 });
 
-test("на телефоне карточка открывает контекст в Drawer, Escape возвращает фокус и черновик", async ({ page }, info) => {
+test("на телефоне карточка открывает задачу, контекст сохраняется без лишнего Drawer", async ({ page }, info) => {
     watchBrowserErrors(page);
     await page.setViewportSize({ width: 390, height: 844 });
     const server = chatServer();
@@ -483,6 +524,14 @@ test("на телефоне карточка открывает контекст
     await expect(page.getByRole("complementary", { name: "Контекст чата", exact: true })).toHaveCount(0);
     await input.fill("Мобильный черновик сохранён");
     await card.click();
+    await expect(drawer).toHaveCount(0);
+    await expectTaskDialogThenClose(page, server.tasks.get(42)!, info.outputPath("project-chat-mobile-task-modal.png"));
+    await expect(drawer).toHaveCount(0);
+    await expect(card).toBeFocused();
+    await expect(input).toHaveValue("Мобильный черновик сохранён");
+    await expect(input).toBeEditable();
+    const contextToggle = page.getByRole("button", { name: "Показать контекст", exact: true });
+    await contextToggle.click();
     await expect(drawer).toBeVisible();
     await expectBrandPaint(drawer.locator(".brand-ai-header"), "::after");
     await expect(drawer.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
@@ -491,7 +540,7 @@ test("на телефоне карточка открывает контекст
     await page.screenshot({ path: info.outputPath("project-chat-mobile-context.png"), animations: "disabled" });
     await page.keyboard.press("Escape");
     await expect(drawer).toHaveCount(0);
-    await expect(card).toBeFocused();
+    await expect(contextToggle).toBeFocused();
     await expect(input).toHaveValue("Мобильный черновик сохранён");
     await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
     await expect(drawer.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
@@ -499,6 +548,15 @@ test("на телефоне карточка открывает контекст
     server.addTim("Проверим мобильную задачу", "completed", [server.taskSource(43)]);
     await expect(history.getByText("Проверим мобильную задачу", { exact: true })).toBeVisible();
     await expect(drawer).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
+    await expect(drawer.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    await drawer.getByRole("button", { name: "Закрыть контекст", exact: true }).click();
+    await history.getByRole("button", { name: `Документ: ${server.document.title}`, exact: true }).click();
+    await expect(drawer.getByText(server.document.content_md, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+    await drawer.getByRole("button", { name: "Закрыть контекст", exact: true }).click();
     await expect(input).toHaveValue("Мобильный черновик сохранён");
     await expect(input).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -512,6 +570,7 @@ test("недоступный источник 403 или 404 очищает пр
     const panel = page.getByRole("complementary", { name: "Контекст чата", exact: true });
     const history = page.getByLabel("История сообщений проекта", { exact: true });
     await history.getByRole("button", { name: `Задача: ${server.taskSource(42).title}`, exact: true }).click();
+    await expectTaskDialogThenClose(page, server.tasks.get(42)!);
     await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
     const input = page.getByRole("combobox", { name: "Сообщение проекту" });
     await input.fill("Обсуждение продолжается без источника");
@@ -528,6 +587,7 @@ test("недоступный источник 403 или 404 очищает пр
         await expect(input).toHaveValue("Обсуждение продолжается без источника");
         await expect(input).toBeEditable();
         await expect(page).toHaveURL(/\/projects\/DEMO\/chat$/);
+        await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
     }
 });
 

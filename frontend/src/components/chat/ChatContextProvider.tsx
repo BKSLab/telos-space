@@ -25,9 +25,9 @@ export function ChatContextProvider({ projectId, projectKey, messages, enabled, 
     return <ChatContext.Provider value={enabled ? {
         projectId, projectKey, desktop, isOpen: desktop ? desktopOpen : mobileOpen, target, selectionKey,
         recent: recentChatContext(messages), pinned, show, close,
-        select: (next) => {
+        select: (next, { open = true } = {}) => {
             setSelection((previous) => ({ target: next, suggestionKey: suggestion?.key, picks: (previous?.picks ?? 0) + 1, refreshKey: `pick:${(previous?.picks ?? 0) + 1}` }));
-            show();
+            if (open) show();
         },
         togglePin: () => {
             if (!target) return;
