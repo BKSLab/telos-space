@@ -16,6 +16,7 @@ import {
     type ApiScope,
 } from "@/lib/apiKeys";
 import { formatDateTime, formatFullDate } from "@/lib/dates";
+import { copyText } from "@/lib/clipboard";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { HelpHint } from "@/components/ui/HelpHint";
@@ -170,8 +171,10 @@ function CopySecretButton({ value }: { value: string }) {
     const [copied, setCopied] = useState(false);
     const [failed, setFailed] = useState(false);
     async function copy() {
+        setCopied(false);
+        setFailed(false);
         try {
-            await navigator.clipboard.writeText(value);
+            await copyText(value);
             setCopied(true);
             setFailed(false);
             window.setTimeout(() => setCopied(false), 2000);

@@ -4,6 +4,7 @@ import { BookOpen, ChartNoAxesCombined, Check, ChevronRight, CodeXml, Copy, Fold
 import { HELP_SECTIONS, type HelpArticle } from "@/content/help";
 import { helpHighlights, searchHelp } from "@/lib/helpSearch";
 import { cn } from "@/lib/cn";
+import { copyText } from "@/lib/clipboard";
 import { buildMcpConfig, mcpServerUrl } from "@/lib/mcpConfig";
 import { Button, IconButton, LinkButton } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Field";
@@ -25,7 +26,9 @@ function ConnectionExample({ type }: { type: "api" | "mcp" }) {
     const code = type === "mcp" ? buildMcpConfig({ origin, secret: "YOUR_API_KEY" })
         : `curl -H "Authorization: Bearer YOUR_API_KEY" "${origin}/api/v1/projects"`;
     const copy = async () => {
-        try { await navigator.clipboard.writeText(code); setCopied(true); setError(false); }
+        setCopied(false);
+        setError(false);
+        try { await copyText(code); setCopied(true); }
         catch { setError(true); }
     };
     return <div className="min-w-0 space-y-2">

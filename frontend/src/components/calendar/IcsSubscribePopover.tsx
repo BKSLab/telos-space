@@ -7,6 +7,7 @@ import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { Popover } from "@/components/ui/Popover";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import { formatDateTime } from "@/lib/dates";
+import { copyText } from "@/lib/clipboard";
 import { useToast } from "@/lib/toast";
 import type { IcsTokenCreated, IcsTokenStatus } from "@/lib/types";
 
@@ -44,7 +45,7 @@ export function IcsSubscribePopover() {
 
     async function copy(url: string) {
         try {
-            await navigator.clipboard.writeText(url);
+            await copyText(url);
             toast.success("Ссылка скопирована.");
         } catch {
             toast.error("Не удалось скопировать — выделите ссылку и скопируйте вручную.");

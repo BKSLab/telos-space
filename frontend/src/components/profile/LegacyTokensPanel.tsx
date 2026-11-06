@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, KeyRound } from "lucide-react";
 import { api, authEndpoints, queryKeys } from "@/lib/api";
 import { formatFullDate } from "@/lib/dates";
+import { copyText } from "@/lib/clipboard";
 import { scopeLabel, tokenState } from "@/lib/mcpConfig";
 import type { ApiToken, ApiTokenCreated, ApiTokenCreatePayload, ApiTokenScope } from "@/lib/types";
 import { useToast } from "@/lib/toast";
@@ -32,7 +33,7 @@ export function LegacyTokensPanel() {
     });
     const copy = async () => {
         if (!issued) return;
-        try { await navigator.clipboard.writeText(issued.secret); toast.success("Токен скопирован"); }
+        try { await copyText(issued.secret); toast.success("Токен скопирован"); }
         catch { toast.error("Буфер обмена недоступен — выделите и скопируйте токен вручную"); }
     };
 
