@@ -209,6 +209,16 @@ Compose и согласованно измените публичные URL, COR
 Сохраняйте прежние образы и резервные копии вне checkout; исходники и собранную
 статику напрямую на сервер не копируйте.
 
+При изменениях только frontend после `git pull --ff-only origin main` используйте:
+
+```bash
+docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml build frontend
+docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps --no-build --wait --wait-timeout 180 frontend
+```
+
+Затем выполните проверку и reload nginx, как показано выше. Прежний образ
+frontend сохраните для отката. Этот путь сохраняет работающие backend и БД.
+
 ## Разработка без контейнеров приложения
 
 Используйте Python 3.12 и Node.js 22. Базы можно оставить в Docker:
