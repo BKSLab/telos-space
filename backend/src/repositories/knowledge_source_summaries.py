@@ -1,11 +1,12 @@
 """Сохранение производных описаний отдельно от первичного текста."""
 
-from sqlalchemy import func
+from sqlalchemy import func, literal, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.knowledge_source_summaries import KnowledgeSourceSummary
+from src.db.models.project_files import ProjectFile
 from src.exceptions.knowledge import KnowledgeIndexJobsRepositoryError
 
 
@@ -22,6 +23,18 @@ class KnowledgeSourceSummariesRepository:
             KnowledgeIndexJobsRepositoryError: Сохранение не удалось.
         """
         statement = insert(KnowledgeSourceSummary).values(**data)
+        if data.get("project_file_id") is not None:
+            statement = insert(KnowledgeSourceSummary).from_select(
+                list(data),
+                select(*(literal(data[key]) for key in data))
+                .select_from(ProjectFile)
+                .where(
+                    ProjectFile.id == data["project_file_id"],
+                    ProjectFile.project_id == data["project_id"],
+                    ProjectFile.deleted_at.is_(None),
+                ),
+                include_defaults=False,
+            )
         try:
             await self.db_session.execute(
                 statement.on_conflict_do_update(

@@ -59,6 +59,7 @@ READ_ONLY_POST_ROUTES = {
 # короткой области базы внутри сервиса, поэтому guard в графе маршрута
 # отсутствует намеренно, а request-scoped сессии там быть не должно.
 STREAMING_ROUTES = {
+    ("GET", "/api/v1/projects/{project_id}/files/{file_id}/content"),
     ("GET", "/api/v1/projects/{project_id}/chat/attachments/{file_id}/content"),
     ("GET", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/content"),
 }
@@ -71,8 +72,8 @@ DETACHED_AUTH_ROUTES = STREAMING_ROUTES | {
     ("POST", "/api/v1/projects/{project_id}/risks/suggestions"),
 }
 
-EXPECTED_NON_GET_TOTAL = 127
-EXPECTED_MUTATION_TOTAL = 106
+EXPECTED_NON_GET_TOTAL = 130
+EXPECTED_MUTATION_TOTAL = 109
 
 
 def route_dependencies(route: APIRoute) -> set[str]:

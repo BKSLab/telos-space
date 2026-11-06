@@ -9,6 +9,7 @@ from src.db.models import (
     Document,
     DocumentLink,
     ProjectDeadlineChange,
+    ProjectFile,
     ProjectMember,
     ProjectMilestone,
     ProjectRisk,
@@ -95,6 +96,16 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
         owner_user_id=user.id,
     )
     db_session.add_all([attachment, sticker, document, risk])
+    project_file = ProjectFile(
+        project_id=project.id,
+        uploaded_by_user_id=user.id,
+        original_name="Материалы.txt",
+        storage_key="projects/source.txt",
+        content_type="text/plain",
+        size=30,
+        content_hash="b" * 64,
+    )
+    db_session.add(project_file)
     await db_session.flush()
     db_session.add_all(
         [
@@ -162,6 +173,16 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
     )
     await db_session.flush()
     repository = KnowledgeSourcesRepository(db_session)
+    await repository.save_project_file_extraction(
+        {
+            "project_file_id": project_file.id,
+            "text": "Файл проекта: лазуритопоставка",
+            "status": "ready",
+            "detail": None,
+            "original_chars": 30,
+            "content_hash": "b" * 64,
+        }
+    )
     await repository.save_extraction(
         {
             "attachment_id": attachment.id,
@@ -189,6 +210,7 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
         ("сапфирооборудование", "deadline_change"),
         ("агатопроверка", "analytics_report"),
         ("обсидианокомпонент", "attachment"),
+        ("лазуритопоставка", "project_file"),
         ("Владельцев", "member"),
     ]:
         hits = await repository.search(project.id, query)

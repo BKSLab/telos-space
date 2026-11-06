@@ -36,6 +36,9 @@ class AppSettings(SettingsBase):
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     logging_config_path: Path = BASE_DIR / "logging.ini"
     uploads_path: Path = BASE_DIR / "uploads"
+    project_file_max_size: int = Field(
+        default=10 * 1024 * 1024, ge=1, description="Максимальный размер файла проекта в байтах."
+    )
     app_public_url: str = ""
 
 

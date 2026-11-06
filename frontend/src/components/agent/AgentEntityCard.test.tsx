@@ -26,3 +26,9 @@ it("открывает опубликованный отчёт на вкладк
     fireEvent.click(screen.getByRole("button", { name: "Отчёт по задаче: TASK-5 · Отчёт, версия 2" }));
     expect(screen.getByLabelText("Адрес").textContent).toBe("/my-tasks?task=5&task_tab=report");
 });
+
+it("открывает самостоятельный файл проекта по его ID", () => {
+    render(<MemoryRouter><AgentEntityCard source={{ ...source, source_id: "project_file:42", entity_type: "project_file", entity_id: 42, title: "План.pdf" }} project={{ id: 1, key: "TASK" }} /><Location /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Файл проекта: План.pdf" }));
+    expect(screen.getByLabelText("Адрес").textContent).toBe("/projects/TASK/docs?file=42");
+});

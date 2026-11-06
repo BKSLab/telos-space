@@ -147,6 +147,7 @@ class KnowledgeWorker:
 
     async def _prepare_and_execute_job(self, job: KnowledgeIndexJob) -> JobExecutionResult:
         """DB-снимок → извлечение без сессии → сохранение FTS → embeddings."""
+        action = None
         try:
             async with self.index_service() as service:
                 action = await service.prepare(job)
@@ -157,10 +158,23 @@ class KnowledgeWorker:
                 async with self.index_service() as persistence:
                     await persistence.persist_summary(summary)
             chunks_count = await service.execute_prepared(action)
+            if action.catalog.rows.get("project_files"):
+                async with self.index_service() as persistence:
+                    await persistence.persist_project_file_states(action)
             return JobExecutionResult(job=job, chunks_count=chunks_count)
         except asyncio.CancelledError:
             raise
         except Exception as error:
+            if action is not None and action.catalog.rows.get("project_files"):
+                try:
+                    async with self.index_service() as persistence:
+                        await persistence.persist_project_file_states(action)
+                except Exception:
+                    logger.warning(
+                        "⚠️ Не удалось сохранить состояние файлов проекта %s.",
+                        job.project_id,
+                        exc_info=True,
+                    )
             return JobExecutionResult(job=job, error=error)
 
     async def _persist_results(self, results: list[JobExecutionResult]) -> None:

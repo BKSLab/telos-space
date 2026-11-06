@@ -62,6 +62,7 @@ class SourceSummariesService:
             "source_id": source.source_id,
             "document_id": source.entity_id if source.kind is SourceType.DOCUMENT else None,
             "attachment_id": source.entity_id if source.kind is SourceType.ATTACHMENT else None,
+            "project_file_id": source.entity_id if source.kind is SourceType.PROJECT_FILE else None,
             "content_hash": source.summary_hash,
             "summary": summary,
         }

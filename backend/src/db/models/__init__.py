@@ -30,10 +30,12 @@ from .knowledge_index_jobs import (
     KnowledgeIndexOperation,
     KnowledgeIndexStatus,
 )
+from .knowledge_project_file_texts import KnowledgeProjectFileText
 from .knowledge_source_summaries import KnowledgeSourceSummary
 from .project_boards import ProjectBoard
 from .project_chats import ProjectChat
 from .project_deadline_changes import ProjectDeadlineChange
+from .project_files import ProjectFile
 from .project_members import ProjectMember, ProjectRole
 from .project_milestones import ProjectMilestone, ProjectMilestoneStatus
 from .project_risks import ProjectRisk
@@ -52,6 +54,8 @@ from .users import User
 from .wbs_nodes import WbsNode
 
 __all__ = [
+    "ProjectFile",
+    "KnowledgeProjectFileText",
     "ApiKey",
     "ApiKeyUsage",
     "ProjectBoard",

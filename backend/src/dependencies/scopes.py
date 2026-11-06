@@ -52,6 +52,7 @@ from src.repositories.milestones import MilestonesRepository
 from src.repositories.project_boards import ProjectBoardsRepository
 from src.repositories.project_chats import ProjectChatsRepository
 from src.repositories.project_deadline_changes import ProjectDeadlineChangesRepository
+from src.repositories.project_files import ProjectFilesRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_risks import ProjectRiskRepository
 from src.repositories.project_stages import ProjectStagesRepository
@@ -97,6 +98,11 @@ from src.services.documents import DocumentsService
 from src.services.knowledge_events import KnowledgeEvents
 from src.services.milestones import MilestonesService
 from src.services.project_boards import ProjectBoardsService
+from src.services.project_files import (
+    ProjectFilesScope,
+    ProjectFilesScopeFactory,
+    ProjectFilesService,
+)
 from src.services.project_members import ProjectMembersService
 from src.services.project_risks import ProjectRiskService
 from src.services.project_stages import ProjectStagesService
@@ -647,6 +653,52 @@ AttachmentDownloadServiceDep = Annotated[
     AttachmentDownloadService,
     Depends(get_attachment_download_service),
 ]
+
+
+def build_project_files_scope(
+    *, session_factory: SessionFactory, settings: Settings
+) -> ProjectFilesScopeFactory:
+    """Собирает короткую область файлов, включая актуальные auth/access."""
+
+    @asynccontextmanager
+    async def scope() -> AsyncIterator[ProjectFilesScope]:
+        async with session_factory() as session:
+            yield ProjectFilesScope(
+                files=ProjectFilesRepository(session),
+                sources=KnowledgeSourcesRepository(session),
+                access=AccessService(
+                    members_repository=ProjectMembersRepository(session),
+                    tasks_repository=TasksRepository(session),
+                    stages_repository=ProjectStagesRepository(session),
+                    documents_repository=DocumentsRepository(session),
+                    comments_repository=TaskCommentsRepository(session),
+                    links_repository=DocumentLinksRepository(session),
+                ),
+                auth=AuthService(
+                    users_repository=UsersRepository(session),
+                    tokens_repository=ApiTokensRepository(session),
+                    api_keys_repository=ApiKeysRepository(session),
+                    invite_code=settings.auth.registration_invite_code.get_secret_value(),
+                ),
+                unit_of_work=UnitOfWork(session),
+            )
+
+    return scope
+
+
+def get_project_files_service(
+    settings: SettingsDep, storage: TaskAttachmentStorageDep
+) -> ProjectFilesService:
+    """Создаёт сервис без request-scoped соединения PostgreSQL."""
+    return ProjectFilesService(
+        scope=build_project_files_scope(session_factory=async_session_factory, settings=settings),
+        storage=storage,
+        max_file_size=settings.app.project_file_max_size,
+        knowledge_enabled=settings.knowledge.knowledge_enabled,
+    )
+
+
+ProjectFilesServiceDep = Annotated[ProjectFilesService, Depends(get_project_files_service)]
 
 
 def build_wbs_suggestion_scope(

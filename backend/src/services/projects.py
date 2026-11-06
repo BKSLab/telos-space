@@ -208,7 +208,9 @@ class ProjectsService:
                 await self._record_deadline(project.id, None, payload["due_date"], owner_id, None)
             await self.knowledge_events.reindex_project(project.id)
             if self.boards_repository is not None:
-                await ensure_default_board(self.boards_repository, project.id, created_by_user_id=owner_id)
+                await ensure_default_board(
+                    self.boards_repository, project.id, created_by_user_id=owner_id
+                )
             await self.unit_of_work.commit()
             logger.info("✅ Проект %s создан с командой и стадиями.", project.key)
             return ProjectSchema.model_validate(project)
@@ -411,6 +413,12 @@ class ProjectsService:
             await self.knowledge_events.delete_collection(project_id)
             await self.unit_of_work.commit()
             await self._cleanup_task_files(task_ids=task_ids)
+            try:
+                await self.attachment_storage.delete_project_file_directory(project_id)
+            except TaskAttachmentStorageError:
+                logger.warning(
+                    "⚠️ Не удалось очистить файлы удалённого проекта %s.", project_id, exc_info=True
+                )
             logger.info("✅ Проект id=%s удалён вместе с %s задачами.", project_id, len(task_ids))
         except RepositoryErrors as error:
             logger.error("❌ Ошибка удаления проекта id=%s.", project_id, exc_info=True)

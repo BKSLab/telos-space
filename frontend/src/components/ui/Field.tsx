@@ -4,7 +4,7 @@ import type {
     SelectHTMLAttributes,
     TextareaHTMLAttributes,
 } from "react";
-import { useId } from "react";
+import { useCallback, useId, useLayoutEffect, useRef } from "react";
 import { cn } from "@/lib/cn";
 
 const control =
@@ -45,8 +45,68 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
     return <input className={cn(control, "h-8", className)} {...props} />;
 }
 
-export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-    return <textarea className={cn(control, "py-2 leading-relaxed", className)} {...props} />;
+interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+    /** Для редакторов с заданной геометрией автоматический рост можно отключить. */
+    autoGrow?: boolean;
+}
+
+/** Подстраивает высоту под текст и rows, сохраняя прокрутку у границы экрана. */
+export function Textarea({ className, autoGrow = true, onInput, ...props }: TextareaProps) {
+    const input = useRef<HTMLTextAreaElement>(null);
+    const resize = useCallback(() => {
+        const element = input.current;
+        if (!autoGrow || !element || element.clientWidth === 0) return;
+        const scrollTop = element.scrollTop;
+        const overflow = element.style.overflowY;
+        element.style.height = "auto";
+        // Во время измерения полоса прокрутки не должна сужать строки.
+        element.style.overflowY = "hidden";
+        const computed = window.getComputedStyle(element);
+        const border = parseFloat(computed.borderTopWidth) + parseFloat(computed.borderBottomWidth);
+        const padding = parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
+        const height = Math.max(element.offsetHeight, element.scrollHeight + border);
+        element.style.height = `${Math.ceil(computed.boxSizing === "border-box" ? height : height - border - padding)}px`;
+        element.style.overflowY = overflow;
+        element.scrollTop = scrollTop;
+    }, [autoGrow]);
+
+    useLayoutEffect(() => {
+        if (!autoGrow && input.current) {
+            const height = props.style?.height;
+            input.current.style.height = typeof height === "number" ? `${height}px` : height ?? "";
+        }
+        resize();
+    }, [autoGrow, resize, props.value, props.defaultValue, props.rows, props.style, className]);
+
+    useLayoutEffect(() => {
+        const element = input.current;
+        if (!autoGrow || !element) return;
+        let width = element.clientWidth;
+        let frame: number | undefined;
+        const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+            if (width === element.clientWidth) return;
+            width = element.clientWidth;
+            // Высоту меняем после доставки уведомлений, чтобы не замкнуть observer.
+            if (frame !== undefined) cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => { frame = undefined; resize(); });
+        });
+        observer?.observe(element);
+        window.addEventListener("resize", resize);
+        window.visualViewport?.addEventListener("resize", resize);
+        return () => {
+            if (frame !== undefined) cancelAnimationFrame(frame);
+            observer?.disconnect();
+            window.removeEventListener("resize", resize);
+            window.visualViewport?.removeEventListener("resize", resize);
+        };
+    }, [autoGrow, resize]);
+
+    return <textarea
+        {...props}
+        ref={input}
+        className={cn(control, "py-2 leading-relaxed", autoGrow && "max-h-[min(32rem,calc(var(--app-height,100dvh)*0.6))] resize-none overflow-y-auto", className)}
+        onInput={(event) => { onInput?.(event); resize(); }}
+    />;
 }
 
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {

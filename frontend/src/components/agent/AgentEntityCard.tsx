@@ -12,6 +12,7 @@ const TYPES = {
     project: ["Проект", Layers], task: ["Задача", ListTodo], document: ["Документ", FileText], risk: ["Риск", ShieldAlert],
     milestone: ["Веха", Diamond], wbs_node: ["Раздел ИСР", FolderTree], stage: ["Стадия", Layers], sticker: ["Стикер", StickyNote],
     task_report: ["Отчёт по задаче", FileText],
+    project_file: ["Файл проекта", Paperclip],
     member: ["Участник", Users], comment: ["Комментарий", MessageSquare], attachment: ["Файл", Paperclip],
     activity: ["История задачи", ListTodo], deadline_change: ["Изменение срока", CalendarDays], analytics_report: ["Отчёт", Database],
 } as const;
@@ -27,6 +28,7 @@ export function AgentEntityCard({ source, project }: { source: KnowledgeSource; 
     const title = key && source.title.startsWith(`${key} · `) ? source.title.slice(key.length + 3) : source.title;
     const open = () => {
         if (source.entity_type === "risk" && project) { useUiStore.getState().setSelectedRisk({ projectId: project.id, riskId: source.entity_id }); return; }
+        if (source.entity_type === "project_file" && project) { navigate(`/projects/${project.key}/docs?file=${source.entity_id}`); return; }
         if (source.entity_type === "task_report" && source.task_id != null) { navigate(`/my-tasks?task=${source.task_id}&task_tab=report`); return; }
         if (source.task_id != null) { useUiStore.getState().setSelectedTaskId(source.task_id); return; }
         if (!project) return;

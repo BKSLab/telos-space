@@ -22,6 +22,7 @@ from src.knowledge.worker import IndexServiceFactory, KnowledgeWorker, WorkerCon
 from src.repositories.knowledge_index_jobs import KnowledgeIndexJobsRepository
 from src.repositories.knowledge_source_summaries import KnowledgeSourceSummariesRepository
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
+from src.repositories.project_files import ProjectFilesRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.services.db_scope import KnowledgeQueueScope, KnowledgeQueueScopeFactory
 from src.services.knowledge_index import KnowledgeIndexService
@@ -59,6 +60,7 @@ def build_index_service_factory(
         async with session_factory() as session:
             yield KnowledgeIndexService(
                 sources_repository=KnowledgeSourcesRepository(session),
+                files_repository=ProjectFilesRepository(session),
                 summaries_repository=KnowledgeSourceSummariesRepository(session),
                 summarizer=SourceSummariesService(
                     llm_client=runtime.llm_client,

@@ -13,6 +13,12 @@ from fastapi.routing import APIRoute
 from main import app
 
 FROZEN_ROUTES: set[tuple[str, str]] = {
+    ("GET", "/api/v1/projects/{project_id}/files"),
+    ("POST", "/api/v1/projects/{project_id}/files"),
+    ("GET", "/api/v1/projects/{project_id}/files/{file_id}"),
+    ("GET", "/api/v1/projects/{project_id}/files/{file_id}/content"),
+    ("POST", "/api/v1/projects/{project_id}/files/{file_id}/retry"),
+    ("DELETE", "/api/v1/projects/{project_id}/files/{file_id}"),
     ("DELETE", "/api/v1/boards/{board_id}"),
     ("DELETE", "/api/v1/boards/{board_id}/shapes/{shape_id}"),
     ("DELETE", "/api/v1/boards/{board_id}/stickers/{sticker_id}"),
@@ -304,8 +310,8 @@ def test_non_get_routes_are_fully_classified() -> None:
     )
 
     mutations = non_get - explicit
-    assert len(non_get) == 127, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
-    assert len(mutations) == 106, f"Изменилось число доменных мутаций: {len(mutations)}"
+    assert len(non_get) == 130, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
+    assert len(mutations) == 109, f"Изменилось число доменных мутаций: {len(mutations)}"
 
 
 def test_every_route_has_unique_method_and_path() -> None:

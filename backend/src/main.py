@@ -36,6 +36,7 @@ from src.api.v1.endpoints.project_boards import router as project_boards_router
 from src.api.v1.endpoints.project_chat_ws import router as project_chat_ws_router
 from src.api.v1.endpoints.project_chats import download_router as chat_download_router
 from src.api.v1.endpoints.project_chats import router as project_chats_router
+from src.api.v1.endpoints.project_files import router as project_files_router
 from src.api.v1.endpoints.project_icons import router as project_icons_router
 from src.api.v1.endpoints.project_members import router as project_members_router
 from src.api.v1.endpoints.project_risks import router as project_risks_router
@@ -139,7 +140,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[dict[str, object]]:
     )
     agent_task = asyncio.create_task(agent_worker.run(worker_stop), name="project-agent-worker")
     chat_runtime = build_chat_runtime(settings=settings, session_factory=async_session_factory)
-    attention_runtime = build_task_attention_runtime(settings=settings, session_factory=async_session_factory)
+    attention_runtime = build_task_attention_runtime(
+        settings=settings, session_factory=async_session_factory
+    )
     try:
         await chat_runtime.start()
         await attention_runtime.start()
@@ -178,7 +181,9 @@ app = FastAPI(
 )
 
 app.add_middleware(RequestActorMiddleware)
-app.add_middleware(ApiKeyUsageMiddleware, recorder=build_api_key_usage_recorder(async_session_factory))
+app.add_middleware(
+    ApiKeyUsageMiddleware, recorder=build_api_key_usage_recorder(async_session_factory)
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -232,7 +237,6 @@ for api_router in (
     agent_pending_router,
     tim_router,
     tim_chat_router,
-
     project_risks_router,
     risk_suggestions_router,
     risk_formulation_router,
@@ -255,6 +259,7 @@ for api_router in (
     tasks_router,
     wbs_nodes_router,
     documents_router,
+    project_files_router,
     document_links_router,
     task_comments_router,
     task_dependencies_router,
@@ -284,6 +289,7 @@ async def health_live() -> dict[str, str]:
 @app.get("/health/ready", include_in_schema=False)
 async def health_ready() -> JSONResponse:
     from sqlalchemy import text
+
     try:
         async with async_session_factory() as session:
             await session.execute(text("SELECT 1"))

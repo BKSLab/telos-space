@@ -63,7 +63,9 @@ async def extract_indexable_text(
         text = await asyncio.to_thread(_extract_binary_text, suffix, content)
     if text is None:
         return None
-    return _limit(text.strip(), max_chars=max_chars, filename=filename)
+    # PostgreSQL text/JSONB не допускают U+0000. Пробел сохраняет границы слов,
+    # а исходные байты оригинала продолжают храниться без преобразования.
+    return _limit(text.replace("\x00", " ").strip(), max_chars=max_chars, filename=filename)
 
 
 def _extract_binary_text(suffix: str, content: bytes) -> str:

@@ -1,11 +1,15 @@
 import { useDeferredValue, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Plus, Search } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import type { DocumentDetail, DocumentListItem } from "@/lib/types";
 import { formatRelative } from "@/lib/dates";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
+import { useProjectFiles } from "@/lib/useProjectFiles";
+import { MAX_PROJECT_FILE_BATCH, MAX_PROJECT_FILE_SIZE, PROJECT_FILE_ACCEPT, projectFileId } from "@/lib/projectFiles";
+import { FileUploadControl } from "@/components/files/FileUploadControl";
+import { ProjectFilesSection } from "@/components/files/ProjectFilesSection";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
@@ -19,7 +23,20 @@ export function ProjectDocumentsPage() {
     const [search, setSearch] = useState("");
     const [isCreateOpen, setCreateOpen] = useState(false);
     const [newTitle, setNewTitle] = useState("");
+    const [uploadError, setUploadError] = useState<string | null>(null);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const selectedFileId = projectFileId(searchParams.get("file"));
     const deferredSearch = useDeferredValue(search.trim());
+    const projectFiles = useProjectFiles(project.id, deferredSearch);
+
+    function selectFile(id: number | null) {
+        setSearchParams((previous) => {
+            const next = new URLSearchParams(previous);
+            if (id === null) next.delete("file");
+            else next.set("file", String(id));
+            return next;
+        }, { replace: id === null });
+    }
 
     const documentsQuery = useQuery({
         queryKey: queryKeys.documents(project.id, deferredSearch),
@@ -48,7 +65,7 @@ export function ProjectDocumentsPage() {
         <div className="scrollbar-thin h-full overflow-y-auto">
             <div className="mx-auto flex w-full min-w-0 max-w-none flex-col gap-4 px-3 py-4 pb-24 sm:px-5 sm:py-5">
                 <div className="material-metal -mx-2 flex flex-wrap items-center gap-2 rounded-[var(--radius-card)] border border-line-subtle px-2 py-2 shadow-card">
-                    <div className="relative min-w-0 flex-1 sm:max-w-xs">
+                    <div className="relative min-w-0 basis-full sm:max-w-xs sm:flex-1 sm:basis-auto">
                         <Search
                             size={14}
                             aria-hidden="true"
@@ -56,8 +73,8 @@ export function ProjectDocumentsPage() {
                         />
                         <Input
                             value={search}
-                            aria-label="Поиск документов проекта"
-                            placeholder="Заголовок или содержимое"
+                            aria-label="Поиск документов и файлов проекта"
+                            placeholder="Название или содержимое"
                             className="pl-8"
                             onChange={(event) => setSearch(event.target.value)}
                         />
@@ -69,7 +86,30 @@ export function ProjectDocumentsPage() {
                     >
                         Документ
                     </Button>
+                    <FileUploadControl
+                        label="Загрузить файл"
+                        accept={PROJECT_FILE_ACCEPT}
+                        maxFiles={MAX_PROJECT_FILE_BATCH}
+                        maxFileSize={MAX_PROJECT_FILE_SIZE}
+                        currentCount={0}
+                        uploading={projectFiles.upload.isPending}
+                        onError={setUploadError}
+                        onFiles={(files) => projectFiles.upload.mutate(files)}
+                    />
                 </div>
+
+                {uploadError && <ErrorMessage title="Не удалось выбрать файлы" message={uploadError} />}
+
+                <ProjectFilesSection
+                    projectId={project.id}
+                    model={projectFiles}
+                    search={deferredSearch}
+                    selectedFileId={selectedFileId}
+                    onOpenFile={(id) => selectFile(id)}
+                    onCloseFile={() => selectFile(null)}
+                />
+
+                <h2 className="text-sm font-semibold text-primary">Документы</h2>
 
                 {documentsQuery.error && (
                     <ErrorMessage message={(documentsQuery.error as Error).message} />

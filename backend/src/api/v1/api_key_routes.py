@@ -33,6 +33,12 @@ _P = "/api/v1"
 
 #: (HTTP-метод, шаблон маршрута) → требуемое право.
 API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
+    ("GET", f"{_P}/projects/{{project_id}}/files"): SCOPE_PROJECTS_READ,
+    ("GET", f"{_P}/projects/{{project_id}}/files/{{file_id}}"): SCOPE_PROJECTS_READ,
+    ("GET", f"{_P}/projects/{{project_id}}/files/{{file_id}}/content"): SCOPE_PROJECTS_READ,
+    ("POST", f"{_P}/projects/{{project_id}}/files"): SCOPE_PROJECTS_WRITE,
+    ("POST", f"{_P}/projects/{{project_id}}/files/{{file_id}}/retry"): SCOPE_PROJECTS_WRITE,
+    ("DELETE", f"{_P}/projects/{{project_id}}/files/{{file_id}}"): SCOPE_PROJECTS_WRITE,
     # ── Проекты: карточка, стадии, команда, вехи, календарь, риски ──────────
     ("GET", f"{_P}/projects"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}"): SCOPE_PROJECTS_READ,

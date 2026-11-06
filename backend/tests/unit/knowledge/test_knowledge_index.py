@@ -13,6 +13,7 @@ from src.exceptions.knowledge import KnowledgeProviderError
 from src.knowledge.context import coverage, file_issues
 from src.repositories.knowledge_source_summaries import KnowledgeSourceSummariesRepository
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
+from src.repositories.project_files import ProjectFilesRepository
 from src.services.knowledge_index import KnowledgeIndexService
 from src.services.source_summaries import SourceSummariesService, SourceSummaryOutput
 
@@ -78,6 +79,7 @@ def build_service(tmp_path, *, rows=None, qdrant=None):
     storage.resolve.side_effect = lambda key: tmp_path / key
     service = KnowledgeIndexService(
         sources_repository=repository,
+        files_repository=AsyncMock(spec=ProjectFilesRepository),
         summaries_repository=AsyncMock(spec=KnowledgeSourceSummariesRepository),
         summarizer=SourceSummariesService(
             llm_client=AsyncMock(

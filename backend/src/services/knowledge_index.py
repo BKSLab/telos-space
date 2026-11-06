@@ -12,11 +12,13 @@ from src.clients.vision import VisionCapability
 from src.db.models.knowledge_index_jobs import KnowledgeIndexJob
 from src.exceptions.clients import ClientError
 from src.exceptions.knowledge import KnowledgeProviderError
+from src.exceptions.storage import TaskAttachmentStorageError
 from src.knowledge.catalog import ProjectCatalog, SourceType, build_catalog, digest
 from src.knowledge.documents import KnowledgeDocument
 from src.knowledge.extract import IMAGE_EXTENSIONS, INDEXABLE_EXTENSIONS, extract_indexable_text
 from src.repositories.knowledge_source_summaries import KnowledgeSourceSummariesRepository
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
+from src.repositories.project_files import ProjectFilesRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.services.source_summaries import SourceSummariesService
 from src.storage.task_attachments import TaskAttachmentStorage
@@ -31,6 +33,9 @@ class PreparedIndexAction:
     extractions: list[dict] = field(default_factory=list)
     extraction_errors: list[str] = field(default_factory=list)
     summaries: list[dict] = field(default_factory=list)
+    project_file_extractions: list[dict] = field(default_factory=list)
+    cleaned_project_file_ids: list[int] = field(default_factory=list)
+    index_completed: bool = False
 
 
 class KnowledgeIndexService:
@@ -38,6 +43,7 @@ class KnowledgeIndexService:
         self,
         *,
         sources_repository: KnowledgeSourcesRepository,
+        files_repository: ProjectFilesRepository,
         summaries_repository: KnowledgeSourceSummariesRepository,
         summarizer: SourceSummariesService,
         unit_of_work: UnitOfWork,
@@ -50,6 +56,7 @@ class KnowledgeIndexService:
         vision: VisionCapability,
     ):
         self.sources_repository = sources_repository
+        self.files_repository = files_repository
         self.summaries_repository = summaries_repository
         self.summarizer = summarizer
         self.unit_of_work = unit_of_work
@@ -64,6 +71,11 @@ class KnowledgeIndexService:
     async def prepare(self, job: KnowledgeIndexJob) -> PreparedIndexAction:
         """Обычная мутация и полная пересборка читают один и тот же каталог."""
         rows = await self.sources_repository.get_project_rows(job.project_id)
+        if any(not row.get("deleted_at") for row in rows.get("project_files", [])):
+            await self.sources_repository.start_project_files(
+                project_id=job.project_id, embedding_signature=self._embedding_signature()
+            )
+            await self.unit_of_work.commit()
         return PreparedIndexAction(job.project_id, build_catalog(job.project_id, rows))
 
     async def extract(self, action: PreparedIndexAction) -> None:
@@ -80,6 +92,44 @@ class KnowledgeIndexService:
             if result["status"] == "failed":
                 action.extraction_errors.append(f"Файл {attachment['id']}: {result['detail']}")
         rows["knowledge_attachment_texts"] = list(cached.values())
+        file_texts = {
+            row["project_file_id"]: row for row in rows.get("knowledge_project_file_texts", [])
+        }
+        for original in rows.get("project_files", []):
+            if original.get("deleted_at"):
+                try:
+                    await self.attachment_storage.delete_if_exists(original["storage_key"])
+                    action.cleaned_project_file_ids.append(original["id"])
+                except TaskAttachmentStorageError:
+                    action.extraction_errors.append(
+                        f"Очистка файла {original['id']} временно недоступна."
+                    )
+                continue
+            previous = file_texts.get(original["id"])
+            if (
+                previous
+                and previous["content_hash"] == original["content_hash"]
+                and previous["status"] in {"ready", "empty", "unsupported"}
+            ):
+                continue
+            result = await self._extract_attachment(original)
+            result["project_file_id"] = result.pop("attachment_id")
+            if result["status"] == "ready" and result["content_hash"] != original["content_hash"]:
+                result.update(
+                    status="failed",
+                    text="",
+                    detail="Оригинал изменился; загрузите файл повторно.",
+                    original_chars=0,
+                )
+            result["content_hash"] = original["content_hash"]
+            result["index_status"] = "processing"
+            action.project_file_extractions.append(result)
+            file_texts[original["id"]] = result
+            if result["status"] == "failed":
+                action.extraction_errors.append(
+                    f"Файл проекта {original['id']}: {result['detail']}"
+                )
+        rows["knowledge_project_file_texts"] = list(file_texts.values())
         action.catalog = build_catalog(action.project_id, rows)
 
     async def summarize(self, action: PreparedIndexAction) -> AsyncIterator[dict]:
@@ -93,10 +143,14 @@ class KnowledgeIndexService:
         rows = action.catalog.rows
         summaries = {item["source_id"]: item for item in rows.get("knowledge_source_summaries", [])}
         for source in action.catalog.sources.values():
-            if source.kind not in {SourceType.DOCUMENT, SourceType.ATTACHMENT} or source.summary:
+            if (
+                source.kind
+                not in {SourceType.DOCUMENT, SourceType.ATTACHMENT, SourceType.PROJECT_FILE}
+                or source.summary
+            ):
                 continue
             if (
-                source.kind is SourceType.ATTACHMENT
+                source.kind in {SourceType.ATTACHMENT, SourceType.PROJECT_FILE}
                 and source.properties.get("extraction", {}).get("status") != "ready"
             ):
                 continue
@@ -115,11 +169,19 @@ class KnowledgeIndexService:
 
     async def persist_extractions(self, action: PreparedIndexAction) -> None:
         """Сохраняет извлечение для FTS до обращения к embeddings/Qdrant."""
-        if not action.extractions:
+        if not (
+            action.extractions or action.project_file_extractions or action.cleaned_project_file_ids
+        ):
             return
         try:
             for result in action.extractions:
                 await self.sources_repository.save_extraction(result)
+            for result in action.project_file_extractions:
+                await self.sources_repository.save_project_file_extraction(result)
+            if action.cleaned_project_file_ids:
+                await self.files_repository.purge_deleted(
+                    project_id=action.project_id, file_ids=action.cleaned_project_file_ids
+                )
             await self.unit_of_work.commit()
         except Exception:
             await self.unit_of_work.rollback()
@@ -149,7 +211,7 @@ class KnowledgeIndexService:
             for chunk in source.chunks(self.chunk_target_chars, self.chunk_overlap_chars)
         ]
         existing = await self.qdrant_client.manifest(action.project_id)
-        signature = digest([self.embedding_client.model, self.qdrant_client.vector_dim])
+        signature = self._embedding_signature()
         for document in documents:
             document.payload["embedding_signature"] = signature
         changed = [
@@ -177,9 +239,40 @@ class KnowledgeIndexService:
         await self.qdrant_client.update_payloads(action.project_id, unchanged_text)
         expected = {doc.point_id for doc in documents}
         await self.qdrant_client.delete_points(action.project_id, sorted(set(existing) - expected))
+        action.index_completed = True
         if action.extraction_errors:
             raise KnowledgeProviderError("; ".join(action.extraction_errors))
         return len(documents)
+
+    async def persist_project_file_states(self, action: PreparedIndexAction) -> None:
+        """Сохраняет прогресс файлов отдельно от результата задания проекта.
+
+        Args:
+            action: Снимок с версиями оригиналов и результатом синхронизации Qdrant.
+        Raises:
+            KnowledgeIndexJobsRepositoryError: Прогресс не удалось записать.
+            UnitOfWorkRepositoryError: Транзакцию не удалось зафиксировать.
+        """
+        try:
+            for original in action.catalog.rows.get("project_files", []):
+                if original.get("deleted_at"):
+                    continue
+                await self.sources_repository.finish_project_file(
+                    file_id=original["id"],
+                    content_hash=original["content_hash"],
+                    embedding_signature=self._embedding_signature(),
+                    indexed=action.index_completed,
+                    detail=None
+                    if action.index_completed
+                    else "Индексация временно недоступна. Повторите обработку файла.",
+                )
+            await self.unit_of_work.commit()
+        except Exception:
+            await self.unit_of_work.rollback()
+            raise
+
+    def _embedding_signature(self) -> str:
+        return digest([self.embedding_client.model, self.qdrant_client.vector_dim])
 
     async def _extract_attachment(self, attachment: dict) -> dict:
         result = {
@@ -199,7 +292,7 @@ class KnowledgeIndexService:
             }
         try:
             content = await asyncio.to_thread(
-                self.attachment_storage.resolve(attachment["storage_key"]).read_bytes
+                lambda: self.attachment_storage.resolve(attachment["storage_key"]).read_bytes()
             )
             result["content_hash"] = hashlib.sha256(content).hexdigest()
             extracted = await extract_indexable_text(

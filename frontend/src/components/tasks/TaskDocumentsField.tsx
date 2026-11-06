@@ -1,33 +1,12 @@
 import { FileText, Library, Paperclip, X } from "lucide-react";
 import { formatFileSize } from "@/lib/files";
+import { MAX_PROJECT_FILE_BATCH, MAX_PROJECT_FILE_SIZE, PROJECT_FILE_ACCEPT } from "@/lib/projectFiles";
 import type { DocumentListItem } from "@/lib/types";
 import { IconButton } from "@/components/ui/Button";
 import { Popover } from "@/components/ui/Popover";
 import {
     FileUploadControl,
 } from "@/components/files/FileUploadControl";
-
-const TASK_DOCUMENT_ACCEPT = [
-    ".avif",
-    ".bmp",
-    ".csv",
-    ".docx",
-    ".gif",
-    ".jpeg",
-    ".jpg",
-    ".log",
-    ".md",
-    ".pdf",
-    ".png",
-    ".txt",
-    ".webp",
-    ".xls",
-    ".xlsm",
-    ".xlsx",
-].join(",");
-
-const MAX_NEW_TASK_DOCUMENTS = 10;
-const MAX_TASK_FILE_SIZE = 10 * 1024 * 1024;
 
 interface TaskDocumentsFieldProps {
     documents: DocumentListItem[];
@@ -124,9 +103,9 @@ export function TaskDocumentsField({
                 <span className="text-[11px] font-medium text-secondary">Новые файлы</span>
                 <div className="flex min-h-8 items-center">
                     <FileUploadControl
-                        accept={TASK_DOCUMENT_ACCEPT}
-                        maxFiles={MAX_NEW_TASK_DOCUMENTS}
-                        maxFileSize={MAX_TASK_FILE_SIZE}
+                        accept={PROJECT_FILE_ACCEPT}
+                        maxFiles={MAX_PROJECT_FILE_BATCH}
+                        maxFileSize={MAX_PROJECT_FILE_SIZE}
                         label={files.length > 0 ? `Выбрано файлов: ${files.length}` : "Загрузить документы"}
                         currentCount={files.length}
                         disabled={disabled}

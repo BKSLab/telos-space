@@ -18478,6 +18478,843 @@
     },
     {
       "access": "authenticated",
+      "description": "Возвращает страницу файлов с состояниями обработки и поиском по имени и тексту.",
+      "group": "project-files",
+      "id": "api-9f1be5aeee74c295",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/files",
+      "operationId": "getProjectFiles",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Поиск по имени и извлечённому тексту.",
+          "in": "query",
+          "name": "search",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Поиск по имени и извлечённому тексту.",
+            "examples": [
+              "требования"
+            ],
+            "title": "Search"
+          }
+        },
+        {
+          "description": "Размер страницы.",
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "default": 100,
+            "description": "Размер страницы.",
+            "examples": [
+              100
+            ],
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Смещение страницы.",
+          "in": "query",
+          "name": "offset",
+          "required": false,
+          "schema": {
+            "default": 0,
+            "description": "Смещение страницы.",
+            "examples": [
+              0
+            ],
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/files",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/ProjectFileSchema"
+                },
+                "title": "Response Getprojectfiles",
+                "type": "array"
+              }
+            }
+          },
+          "description": "Метаданные файлов и их состояний."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:read"
+      ],
+      "summary": "Получить файлы проекта"
+    },
+    {
+      "access": "authenticated",
+      "description": "Сохраняет оригинал и атомарно ставит обработку в очередь. Распознавание выполняется в фоне.",
+      "group": "project-files",
+      "id": "api-3892068a0f521c9a",
+      "kind": "http",
+      "legacy": [
+        "WRITE"
+      ],
+      "method": "POST",
+      "name": "POST /api/v1/projects/{project_id}/files",
+      "operationId": "uploadProjectFile",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/files",
+      "requestBody": {
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_uploadProjectFile"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "201": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectFileSchema"
+              }
+            }
+          },
+          "description": "Сохранённый оригинал с состоянием ожидания."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "413": {
+          "description": "Превышен размер файла."
+        },
+        "415": {
+          "description": "Неподдерживаемый формат."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:write"
+      ],
+      "summary": "Загрузить файл проекта"
+    },
+    {
+      "access": "authenticated",
+      "description": "Сразу скрывает источник и ставит очистку оригинала и производных данных в очередь.",
+      "group": "project-files",
+      "id": "api-a99c48b15f49d10d",
+      "kind": "http",
+      "legacy": [
+        "WRITE"
+      ],
+      "method": "DELETE",
+      "name": "DELETE /api/v1/projects/{project_id}/files/{file_id}",
+      "operationId": "deleteProjectFile",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Идентификатор файла проекта.",
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор файла проекта.",
+            "examples": [
+              5
+            ],
+            "exclusiveMinimum": 0,
+            "title": "File Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/files/{file_id}",
+      "requestBody": null,
+      "responses": {
+        "204": {
+          "description": "Файл скрыт; очистка поставлена в очередь."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:write"
+      ],
+      "summary": "Удалить файл проекта"
+    },
+    {
+      "access": "authenticated",
+      "description": "Возвращает метаданные и страницу сохранённого текста без вызова внешних моделей.",
+      "group": "project-files",
+      "id": "api-141e0bb1e6f731db",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/files/{file_id}",
+      "operationId": "getProjectFile",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Идентификатор файла проекта.",
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор файла проекта.",
+            "examples": [
+              5
+            ],
+            "exclusiveMinimum": 0,
+            "title": "File Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Позиция в извлечённом тексте.",
+          "in": "query",
+          "name": "offset",
+          "required": false,
+          "schema": {
+            "default": 0,
+            "description": "Позиция в извлечённом тексте.",
+            "examples": [
+              0
+            ],
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Максимум символов фрагмента.",
+          "in": "query",
+          "name": "max_chars",
+          "required": false,
+          "schema": {
+            "default": 8000,
+            "description": "Максимум символов фрагмента.",
+            "examples": [
+              8000
+            ],
+            "maximum": 32000,
+            "minimum": 1,
+            "title": "Max Chars",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/files/{file_id}",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectFileDetailSchema"
+              }
+            }
+          },
+          "description": "Метаданные и фрагмент извлечённого текста."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:read"
+      ],
+      "summary": "Прочитать файл проекта"
+    },
+    {
+      "access": "authenticated",
+      "description": "Проверяет доступ в короткой области БД и отдаёт оригинал как вложение.",
+      "group": "project-files",
+      "id": "api-491ee82e2945f4e4",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/files/{file_id}/content",
+      "operationId": "downloadProjectFile",
+      "parameters": [
+        {
+          "description": "Проект-владелец файла.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Проект-владелец файла.",
+            "examples": [
+              2
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Идентификатор файла проекта.",
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор файла проекта.",
+            "examples": [
+              5
+            ],
+            "exclusiveMinimum": 0,
+            "title": "File Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/files/{file_id}/content",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Бинарный оригинал файла."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:read"
+      ],
+      "summary": "Скачать оригинал файла проекта"
+    },
+    {
+      "access": "authenticated",
+      "description": "Ставит незавершённые этапы в устойчивую очередь, сохраняя уже извлечённый текст.",
+      "group": "project-files",
+      "id": "api-0c72d2d3473a8528",
+      "kind": "http",
+      "legacy": [
+        "WRITE"
+      ],
+      "method": "POST",
+      "name": "POST /api/v1/projects/{project_id}/files/{file_id}/retry",
+      "operationId": "retryProjectFile",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Идентификатор файла проекта.",
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор файла проекта.",
+            "examples": [
+              5
+            ],
+            "exclusiveMinimum": 0,
+            "title": "File Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/files/{file_id}/retry",
+      "requestBody": null,
+      "responses": {
+        "202": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectFileSchema"
+              }
+            }
+          },
+          "description": "Файл, поставленный в очередь."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:write"
+      ],
+      "summary": "Повторить обработку файла проекта"
+    },
+    {
+      "access": "authenticated",
       "description": "Проект снова показывает иконку из набора, эмодзи или цветную точку.",
       "group": "projects",
       "id": "api-4e22c38a88370c28",
@@ -31795,6 +32632,7 @@
               "document",
               "comment",
               "attachment",
+              "project_file",
               "milestone",
               "risk",
               "wbs_node",
@@ -31854,6 +32692,7 @@
               "document",
               "comment",
               "attachment",
+              "project_file",
               "milestone",
               "risk",
               "wbs_node",
@@ -34785,6 +35624,7 @@
               "document",
               "comment",
               "attachment",
+              "project_file",
               "milestone",
               "risk",
               "wbs_node",
@@ -34844,6 +35684,7 @@
               "document",
               "comment",
               "attachment",
+              "project_file",
               "milestone",
               "risk",
               "wbs_node",
@@ -40893,6 +41734,21 @@
       "title": "Body_uploadProjectChatAttachment",
       "type": "object"
     },
+    "Body_uploadProjectFile": {
+      "properties": {
+        "file": {
+          "description": "Поддерживаемый документ или изображение.",
+          "format": "binary",
+          "title": "File",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "title": "Body_uploadProjectFile",
+      "type": "object"
+    },
     "Body_uploadProjectIconImage": {
       "properties": {
         "file": {
@@ -46246,6 +47102,425 @@
       "title": "ProjectDescriptionSchema",
       "type": "object"
     },
+    "ProjectFileDetailSchema": {
+      "description": "Одна страница извлечённого текста вместе с метаданными.",
+      "properties": {
+        "content_type": {
+          "description": "Определённый сервером MIME-тип.",
+          "examples": [
+            "text/plain"
+          ],
+          "title": "Content Type",
+          "type": "string"
+        },
+        "content_url": {
+          "description": "Защищённый URL оригинала.",
+          "examples": [
+            "/api/v1/projects/2/files/5/content"
+          ],
+          "title": "Content Url",
+          "type": "string"
+        },
+        "created_at": {
+          "description": "Время загрузки.",
+          "examples": [
+            "2026-11-06T10:00:00Z"
+          ],
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "extraction_detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пояснение результата извлечения.",
+          "examples": [
+            null
+          ],
+          "title": "Extraction Detail"
+        },
+        "extraction_status": {
+          "description": "Состояние извлечения текста.",
+          "enum": [
+            "pending",
+            "processing",
+            "ready",
+            "empty",
+            "unsupported",
+            "failed"
+          ],
+          "examples": [
+            "pending"
+          ],
+          "title": "Extraction Status",
+          "type": "string"
+        },
+        "id": {
+          "description": "Идентификатор файла.",
+          "examples": [
+            5
+          ],
+          "title": "Id",
+          "type": "integer"
+        },
+        "index_detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пояснение состояния индексации.",
+          "examples": [
+            null
+          ],
+          "title": "Index Detail"
+        },
+        "index_status": {
+          "description": "Состояние векторного индекса файла.",
+          "enum": [
+            "pending",
+            "processing",
+            "ready",
+            "failed",
+            "disabled"
+          ],
+          "examples": [
+            "pending"
+          ],
+          "title": "Index Status",
+          "type": "string"
+        },
+        "indexed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Время успешной индексации версии.",
+          "examples": [
+            null
+          ],
+          "title": "Indexed At"
+        },
+        "next_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Позиция следующего фрагмента или null.",
+          "examples": [
+            8000
+          ],
+          "title": "Next Offset"
+        },
+        "original_name": {
+          "description": "Исходное имя файла.",
+          "examples": [
+            "План.docx"
+          ],
+          "title": "Original Name",
+          "type": "string"
+        },
+        "project_id": {
+          "description": "Проект-владелец файла.",
+          "examples": [
+            2
+          ],
+          "title": "Project Id",
+          "type": "integer"
+        },
+        "size": {
+          "description": "Размер оригинала в байтах.",
+          "examples": [
+            1024
+          ],
+          "exclusiveMinimum": 0.0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Краткое описание текущего текста.",
+          "examples": [
+            null
+          ],
+          "title": "Summary"
+        },
+        "text": {
+          "description": "Фрагмент извлечённого текста.",
+          "examples": [
+            "Цель проекта…"
+          ],
+          "title": "Text",
+          "type": "string"
+        },
+        "text_offset": {
+          "description": "Начальная позиция фрагмента.",
+          "examples": [
+            0
+          ],
+          "title": "Text Offset",
+          "type": "integer"
+        },
+        "text_total_chars": {
+          "description": "Полная длина извлечённого текста.",
+          "examples": [
+            12000
+          ],
+          "title": "Text Total Chars",
+          "type": "integer"
+        },
+        "uploaded_by_user_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Автор загрузки.",
+          "examples": [
+            1
+          ],
+          "title": "Uploaded By User Id"
+        }
+      },
+      "required": [
+        "id",
+        "project_id",
+        "uploaded_by_user_id",
+        "original_name",
+        "content_type",
+        "size",
+        "created_at",
+        "content_url",
+        "extraction_status",
+        "extraction_detail",
+        "index_status",
+        "index_detail",
+        "indexed_at",
+        "summary",
+        "text",
+        "text_total_chars",
+        "text_offset",
+        "next_offset"
+      ],
+      "title": "ProjectFileDetailSchema",
+      "type": "object"
+    },
+    "ProjectFileSchema": {
+      "description": "Оригинал и независимые состояния извлечения и индексации.",
+      "properties": {
+        "content_type": {
+          "description": "Определённый сервером MIME-тип.",
+          "examples": [
+            "text/plain"
+          ],
+          "title": "Content Type",
+          "type": "string"
+        },
+        "content_url": {
+          "description": "Защищённый URL оригинала.",
+          "examples": [
+            "/api/v1/projects/2/files/5/content"
+          ],
+          "title": "Content Url",
+          "type": "string"
+        },
+        "created_at": {
+          "description": "Время загрузки.",
+          "examples": [
+            "2026-11-06T10:00:00Z"
+          ],
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "extraction_detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пояснение результата извлечения.",
+          "examples": [
+            null
+          ],
+          "title": "Extraction Detail"
+        },
+        "extraction_status": {
+          "description": "Состояние извлечения текста.",
+          "enum": [
+            "pending",
+            "processing",
+            "ready",
+            "empty",
+            "unsupported",
+            "failed"
+          ],
+          "examples": [
+            "pending"
+          ],
+          "title": "Extraction Status",
+          "type": "string"
+        },
+        "id": {
+          "description": "Идентификатор файла.",
+          "examples": [
+            5
+          ],
+          "title": "Id",
+          "type": "integer"
+        },
+        "index_detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пояснение состояния индексации.",
+          "examples": [
+            null
+          ],
+          "title": "Index Detail"
+        },
+        "index_status": {
+          "description": "Состояние векторного индекса файла.",
+          "enum": [
+            "pending",
+            "processing",
+            "ready",
+            "failed",
+            "disabled"
+          ],
+          "examples": [
+            "pending"
+          ],
+          "title": "Index Status",
+          "type": "string"
+        },
+        "indexed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Время успешной индексации версии.",
+          "examples": [
+            null
+          ],
+          "title": "Indexed At"
+        },
+        "original_name": {
+          "description": "Исходное имя файла.",
+          "examples": [
+            "План.docx"
+          ],
+          "title": "Original Name",
+          "type": "string"
+        },
+        "project_id": {
+          "description": "Проект-владелец файла.",
+          "examples": [
+            2
+          ],
+          "title": "Project Id",
+          "type": "integer"
+        },
+        "size": {
+          "description": "Размер оригинала в байтах.",
+          "examples": [
+            1024
+          ],
+          "exclusiveMinimum": 0.0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Краткое описание текущего текста.",
+          "examples": [
+            null
+          ],
+          "title": "Summary"
+        },
+        "uploaded_by_user_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Автор загрузки.",
+          "examples": [
+            1
+          ],
+          "title": "Uploaded By User Id"
+        }
+      },
+      "required": [
+        "id",
+        "project_id",
+        "uploaded_by_user_id",
+        "original_name",
+        "content_type",
+        "size",
+        "created_at",
+        "content_url",
+        "extraction_status",
+        "extraction_detail",
+        "index_status",
+        "index_detail",
+        "indexed_at",
+        "summary"
+      ],
+      "title": "ProjectFileSchema",
+      "type": "object"
+    },
     "ProjectMemberCreateSchema": {
       "description": "Добавление пользователя в команду по известному точному логину.",
       "properties": {
@@ -48645,6 +49920,7 @@
         "document",
         "comment",
         "attachment",
+        "project_file",
         "milestone",
         "risk",
         "wbs_node",

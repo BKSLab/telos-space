@@ -12,7 +12,7 @@ class KnowledgeSourceSummary(Base):
     __tablename__ = "knowledge_source_summaries"
     __table_args__ = (
         CheckConstraint(
-            "(document_id IS NOT NULL) <> (attachment_id IS NOT NULL)",
+            "num_nonnulls(document_id, attachment_id, project_file_id) = 1",
             name="ck_knowledge_summary_owner",
         ),
     )
@@ -26,6 +26,12 @@ class KnowledgeSourceSummary(Base):
     )
     attachment_id: Mapped[int | None] = mapped_column(
         ForeignKey("task_attachments.id", ondelete="CASCADE"), nullable=True
+    )
+    project_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("project_files.id", ondelete="CASCADE"),
+        nullable=True,
+        doc="Файл проекта.",
+        comment="Исходный самостоятельный файл проекта.",
     )
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)

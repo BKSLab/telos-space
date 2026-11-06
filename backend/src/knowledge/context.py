@@ -67,7 +67,11 @@ def source_brief(source: ProjectSource, *, offset: int = 0) -> dict:
         for key, value in payload["properties"].items()
         if key in fields and value is not None
     }
-    is_document = source.kind in {SourceType.DOCUMENT, SourceType.ATTACHMENT}
+    is_document = source.kind in {
+        SourceType.DOCUMENT,
+        SourceType.ATTACHMENT,
+        SourceType.PROJECT_FILE,
+    }
     result = {
         "source_id": source.source_id,
         "entity_type": source.kind.value,
@@ -83,7 +87,7 @@ def source_brief(source: ProjectSource, *, offset: int = 0) -> dict:
     }
     if is_document:
         result["summary_status"] = "ready" if source.summary else "pending"
-    if source.kind is SourceType.ATTACHMENT:
+    if source.kind in {SourceType.ATTACHMENT, SourceType.PROJECT_FILE}:
         extraction = source.properties.get("extraction", {})
         result["extraction_status"] = extraction.get("status", "pending")
         if extraction.get("detail"):
@@ -262,7 +266,7 @@ def file_issues(catalog: ProjectCatalog) -> list[dict]:
             "detail": source.properties["extraction"].get("detail"),
         }
         for source in catalog.sources.values()
-        if source.kind is SourceType.ATTACHMENT
+        if source.kind in {SourceType.ATTACHMENT, SourceType.PROJECT_FILE}
         and source.properties["extraction"]["status"] not in {"ready", "document"}
     ]
 

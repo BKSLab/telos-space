@@ -143,9 +143,10 @@ export function FileUploadControl({
             <input
                 ref={inputRef}
                 type="file"
+                aria-label={label}
                 multiple
                 accept={accept}
-                className="sr-only"
+                className="hidden"
                 disabled={blocked}
                 onChange={(event) => {
                     processFiles(Array.from(event.currentTarget.files ?? []));
@@ -157,7 +158,7 @@ export function FileUploadControl({
                 onClick={() => inputRef.current?.click()}
                 disabled={blocked}
                 className={cn(
-                    "inline-flex items-center gap-1.5 rounded-[var(--radius-control)] border border-dashed border-line-strong bg-white/[0.025] px-3 py-1.5 text-xs font-semibold text-primary transition-colors",
+                    "touch-target inline-flex items-center gap-1.5 rounded-[var(--radius-control)] border border-dashed border-line-strong bg-white/[0.025] px-3 py-1.5 text-xs font-semibold text-primary transition-colors",
                     "hover:border-accent/50 hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                     isDragging && "border-accent bg-accent/10 text-accent-hover",
                     blocked && "cursor-not-allowed opacity-50",

@@ -72,6 +72,31 @@ class TaskAttachmentStorage:
         except (OSError, ValueError) as error:
             raise TaskAttachmentStorageError(str(error)) from error
 
+    async def delete_if_exists(self, storage_key: str) -> None:
+        """Идемпотентно удаляет один оригинал при повторе устойчивой очистки."""
+        try:
+            relative = PurePosixPath(storage_key)
+            if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+                raise ValueError("Некорректный storage key.")
+            root = self.root.resolve()
+            target = (root / Path(*relative.parts)).resolve()
+            if root not in target.parents:
+                raise ValueError("Файл находится вне корня uploads.")
+            await asyncio.to_thread(target.unlink, missing_ok=True)
+        except (OSError, ValueError) as error:
+            raise TaskAttachmentStorageError(str(error)) from error
+
+    async def delete_project_file_directory(self, project_id: int) -> None:
+        """Очищает только каталог самостоятельных файлов удалённого проекта."""
+        try:
+            root = self.root.resolve()
+            target = (root / "projects" / str(project_id) / "files").resolve()
+            if root not in target.parents:
+                raise ValueError("Каталог файлов проекта находится вне uploads.")
+            await asyncio.to_thread(shutil.rmtree, target, True)
+        except (OSError, ValueError) as error:
+            raise TaskAttachmentStorageError(str(error)) from error
+
     def resolve(self, storage_key: str) -> Path:
         """Возвращает проверенный абсолютный путь по storage key.
 
@@ -121,6 +146,7 @@ class TaskAttachmentStorage:
         target = (root / Path(*relative.parts)).resolve()
         if root not in target.parents:
             raise TaskAttachmentStorageError("Storage directory is outside uploads.")
+
         def save():
             target.mkdir(parents=True, exist_ok=True)
             name = f"{uuid.uuid4().hex}{extension}"
@@ -131,6 +157,7 @@ class TaskAttachmentStorage:
             finally:
                 temporary.unlink(missing_ok=True)
             return (relative / name).as_posix()
+
         try:
             return await asyncio.to_thread(save)
         except OSError as error:

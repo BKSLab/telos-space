@@ -1,6 +1,6 @@
 import type { AgentToolRun, KnowledgeEntityType, KnowledgeSource } from "@/lib/types";
 
-const KINDS: Record<string, KnowledgeEntityType> = { task: "task", document: "document", risk: "risk", milestone: "milestone", node: "wbs_node", stage: "stage", project: "project", sticker: "sticker", member: "member", attachment: "attachment", comment: "comment" };
+const KINDS: Record<string, KnowledgeEntityType> = { task: "task", document: "document", project_file: "project_file", risk: "risk", milestone: "milestone", node: "wbs_node", stage: "stage", project: "project", sticker: "sticker", member: "member", attachment: "attachment", comment: "comment" };
 const text = (value: unknown): string | null => typeof value === "string" && value.trim() ? value : null;
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 

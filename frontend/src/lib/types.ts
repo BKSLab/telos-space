@@ -564,6 +564,33 @@ export interface DocumentDetail extends DocumentListItem {
     created_at: string;
 }
 
+export type FileExtractionStatus = "pending" | "processing" | "ready" | "empty" | "unsupported" | "failed";
+export type FileIndexStatus = "pending" | "processing" | "ready" | "failed" | "disabled";
+
+export interface ProjectFile {
+    id: number;
+    project_id: number;
+    uploaded_by_user_id: number | null;
+    original_name: string;
+    content_type: string;
+    size: number;
+    created_at: string;
+    content_url: string;
+    extraction_status: FileExtractionStatus;
+    extraction_detail: string | null;
+    index_status: FileIndexStatus;
+    index_detail: string | null;
+    indexed_at: string | null;
+    summary: string | null;
+}
+
+export interface ProjectFileDetail extends ProjectFile {
+    text: string;
+    text_total_chars: number;
+    text_offset: number;
+    next_offset: number | null;
+}
+
 export interface LinkedDocument {
     link_id: number;
     document_id: number;
@@ -594,6 +621,7 @@ export type KnowledgeEntityType =
     | "project"
     | "task"
     | "document"
+    | "project_file"
     | "comment"
     | "attachment"
     | "milestone"

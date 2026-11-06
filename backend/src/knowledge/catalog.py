@@ -26,6 +26,7 @@ class SourceType(StrEnum):
     DOCUMENT = "document"
     COMMENT = "comment"
     ATTACHMENT = "attachment"
+    PROJECT_FILE = "project_file"
     MILESTONE = "milestone"
     RISK = "risk"
     WBS_NODE = "wbs_node"
@@ -65,9 +66,31 @@ def policy(
 
 
 POLICIES = (
-    policy("task_reports", "task", SourceType.TASK_REPORT, "Отчёт по задаче",
+    policy(
+        "project_files",
+        "project",
+        SourceType.PROJECT_FILE,
+        "Файл проекта",
+        "id project_id uploaded_by_user_id original_name storage_key content_type size content_hash retry_requested_at deleted_at created_at updated_at",
+        "",
+        "original_name",
+    ),
+    policy(
+        "knowledge_project_file_texts",
+        "project_file",
+        None,
+        "Извлечённый текст файла проекта",
+        "project_file_id text status detail original_chars content_hash index_status index_detail indexed_hash embedding_signature indexed_at updated_at",
+        invalidates_index=False,
+    ),
+    policy(
+        "task_reports",
+        "task",
+        SourceType.TASK_REPORT,
+        "Отчёт по задаче",
         "id task_id revision body_md author_name source_comment_id source_comment_original_id source_author_name created_at",
-        "body_md author_name"),
+        "body_md author_name",
+    ),
     policy(
         "projects",
         "self",
@@ -226,7 +249,7 @@ POLICIES = (
         "project",
         None,
         "Кэш описания источника",
-        "project_id source_id document_id attachment_id content_hash summary updated_at",
+        "project_id source_id document_id attachment_id project_file_id content_hash summary updated_at",
         invalidates_index=False,
     ),
 )
@@ -264,15 +287,29 @@ EXCLUDED_FIELDS = {
         "author_id": "Связь с учётной записью; публичное имя автора включено.",
     },
     "project_stickers": {
-        key: "Визуальная геометрия доски." for key in ("canvas_x", "canvas_y", "height", "width", "z_index")
+        key: "Визуальная геометрия доски."
+        for key in ("canvas_x", "canvas_y", "height", "width", "z_index")
     },
     "projects": {
         key: "Оформление/сортировка либо производный индекс."
-        for key in ("color", "icon", "icon_image_key", "icon_image_content_type", "order_index", "search_vector")
+        for key in (
+            "color",
+            "icon",
+            "icon_image_key",
+            "icon_image_content_type",
+            "order_index",
+            "search_vector",
+        )
     },
     "tasks": {
         key: "Визуальная геометрия либо производный индекс."
-        for key in ("canvas_x", "canvas_y", "search_vector", "attention_revision", "attention_deadline_revision")
+        for key in (
+            "canvas_x",
+            "canvas_y",
+            "search_vector",
+            "attention_revision",
+            "attention_deadline_revision",
+        )
     },
     "users": {
         key: "Данные учётной записи вне публичной проектной идентичности."
@@ -459,15 +496,20 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
     attachments_text = {
         item["attachment_id"]: item for item in rows.get("knowledge_attachment_texts", [])
     }
+    project_files_text = {
+        item["project_file_id"]: item for item in rows.get("knowledge_project_file_texts", [])
+    }
     task_keys = {row["id"]: f"{project['key']}-{row['number']}" for row in rows.get("tasks", [])}
     for rule in POLICIES:
         if rule.kind is None:
             continue
         for row in rows.get(rule.table, []):
+            if rule.kind is SourceType.PROJECT_FILE and row.get("deleted_at"):
+                continue
             properties = {
                 key: value
                 for key, value in row.items()
-                if key not in {"storage_key", "extracted_text"}
+                if key not in {"storage_key", "extracted_text", "retry_requested_at", "deleted_at"}
             }
             title = str(row.get(rule.title_field) or rule.label).strip()
             if rule.title_field in rule.semantic:
@@ -504,12 +546,14 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
                     user.get(part) or "" for part in ("last_name", "first_name", "middle_name")
                 ).strip() or user.get("username", "Участник")
                 text_parts.extend([f"Имя: {title}", f"Логин: {user.get('username', '')}"])
-            if rule.kind is SourceType.ATTACHMENT:
-                extracted = attachments_text.get(row["id"], {})
+            if rule.kind in {SourceType.ATTACHMENT, SourceType.PROJECT_FILE}:
+                extracted = (
+                    project_files_text if rule.kind is SourceType.PROJECT_FILE else attachments_text
+                ).get(row["id"], {})
                 properties["extraction"] = {
                     key: value
                     for key, value in extracted.items()
-                    if key not in {"text", "attachment_id", "updated_at"}
+                    if key in {"status", "detail", "original_chars", "content_hash"}
                 }
                 if extracted.get("text"):
                     text_parts.append(f"## Содержимое файла\n{extracted['text']}")
