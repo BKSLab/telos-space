@@ -25,6 +25,9 @@ class TaskParticipantSchema(BaseModel):
 class TaskSchema(BaseModel):
     """Задача проекта с агрегированным контекстом."""
 
+    revision: int = Field(
+        1, ge=1, description="Текущая версия общих полей и назначений задачи.", examples=[3]
+    )
     checklist: TaskChecklistSchema | None = Field(None, description="Чек-лист задачи или null.")
     checklist_revision: int = Field(
         0, ge=0, description="Текущая версия чек-листа для записи.", examples=[2]
@@ -301,6 +304,13 @@ class TaskRephraseResultSchema(BaseModel):
 class TaskUpdateSchema(BaseModel):
     """Тело запроса для частичного обновления задачи."""
 
+    expected_revision: int | None = Field(
+        None,
+        ge=1,
+        strict=True,
+        description="Версия из чтения задачи; при несовпадении 409 без изменений. Без неё сохраняется прежнее поведение.",
+        examples=[3],
+    )
     checklist: TaskChecklistSchema | None = Field(
         None,
         description="Полный чек-лист в новом порядке; null удаляет, отсутствие поля сохраняет.",

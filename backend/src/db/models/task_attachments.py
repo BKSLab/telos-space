@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -26,6 +27,7 @@ class TaskAttachment(Base):
     __tablename__ = "task_attachments"
     __table_args__ = (
         UniqueConstraint("storage_key", name="uq_task_attachments_storage_key"),
+        UniqueConstraint("id", "task_id", name="uq_task_attachments_id_task"),
         CheckConstraint("size > 0", name="ck_task_attachments_size_positive"),
     )
 
@@ -46,6 +48,14 @@ class TaskAttachment(Base):
         nullable=False,
         doc="Исходное имя файла для отображения пользователю.",
         comment="Исходное имя файла без компонентов пути.",
+    )
+    caption: Mapped[str | None] = mapped_column(
+        Text, doc="Подпись пользователя.", comment="Необязательная подпись к оригиналу файла."
+    )
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        doc="Автор загрузки.",
+        comment="Локальный пользователь; NULL у прежних загрузок.",
     )
     storage_key: Mapped[str] = mapped_column(
         String(length=255),

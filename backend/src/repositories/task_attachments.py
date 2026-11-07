@@ -1,11 +1,12 @@
 import logging
 
-from sqlalchemy import Result, func, select
+from sqlalchemy import Result, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.task_attachments import TaskAttachment
 from src.exceptions.task_attachments import TaskAttachmentsRepositoryError
+from src.repositories.file_processing_state import attachment_processing_query
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,32 @@ class TaskAttachmentsRepository:
 
     def __init__(self, db_session: AsyncSession) -> None:
         self.db_session = db_session
+
+    async def get_processing_states(self, attachment_ids: list[int]) -> dict[int, dict]:
+        """Читает состояния пачки файлов без N+1 и без полного извлечённого текста.
+
+        Args:
+            attachment_ids: Идентификаторы уже доступных пользователю оригиналов.
+        Returns:
+            Состояния этапов по ID оригинала.
+        Raises:
+            TaskAttachmentsRepositoryError: SELECT завершился ошибкой.
+        """
+        if not attachment_ids:
+            return {}
+        try:
+            result = await self.db_session.execute(
+                attachment_processing_query().where(TaskAttachment.id.in_(attachment_ids))
+            )
+            return {
+                row["id"]: {key: value for key, value in row.items() if key != "id"}
+                for row in result.mappings()
+            }
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise TaskAttachmentsRepositoryError(
+                "Не удалось прочитать состояния файлов задачи."
+            ) from error
 
     async def get_for_task(self, task_id: int) -> list[TaskAttachment]:
         """Возвращает файлы задачи в хронологическом порядке.
@@ -135,6 +162,8 @@ class TaskAttachmentsRepository:
         storage_key: str,
         content_type: str,
         size: int,
+        caption: str | None = None,
+        uploaded_by_user_id: int | None = None,
     ) -> TaskAttachment:
         """Сохраняет метаданные нового файла задачи.
 
@@ -158,6 +187,8 @@ class TaskAttachmentsRepository:
                 storage_key=storage_key,
                 content_type=content_type,
                 size=size,
+                caption=caption,
+                uploaded_by_user_id=uploaded_by_user_id,
             )
             self.db_session.add(attachment)
             await self.db_session.flush()
@@ -167,6 +198,60 @@ class TaskAttachmentsRepository:
             logger.error("❌ Не удалось сохранить файл задачи id=%s.", task_id, exc_info=True)
             raise TaskAttachmentsRepositoryError(
                 f"Ошибка сохранения файла задачи id={task_id}."
+            ) from error
+
+    async def get_many_for_task(
+        self, *, task_id: int, attachment_ids: list[int]
+    ) -> list[TaskAttachment]:
+        """Читает ограниченный набор существующих оригиналов одной задачи.
+
+        Args:
+            task_id: Задача-владелец всех выбранных оригиналов.
+            attachment_ids: Проверенные уникальные идентификаторы, не более десяти.
+        Returns:
+            Найденные оригиналы без запросов на каждый файл.
+        Raises:
+            TaskAttachmentsRepositoryError: SQL завершился ошибкой.
+        """
+        try:
+            result = await self.db_session.execute(
+                select(TaskAttachment).where(
+                    TaskAttachment.task_id == task_id, TaskAttachment.id.in_(attachment_ids)
+                )
+            )
+            return list(result.scalars())
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise TaskAttachmentsRepositoryError(
+                "Не удалось прочитать выбранные файлы задачи."
+            ) from error
+
+    async def update_caption(
+        self, *, task_id: int, attachment_id: int, caption: str | None
+    ) -> TaskAttachment | None:
+        """Меняет только подпись оригинала с ограничением задачи и RETURNING.
+
+        Args:
+            task_id: Задача-владелец.
+            attachment_id: Оригинал для изменения подписи.
+            caption: Нормализованная подпись либо None.
+        Returns:
+            Изменённый файл или None для чужого/удалённого оригинала.
+        Raises:
+            TaskAttachmentsRepositoryError: UPDATE завершился ошибкой.
+        """
+        try:
+            result = await self.db_session.execute(
+                update(TaskAttachment)
+                .where(TaskAttachment.task_id == task_id, TaskAttachment.id == attachment_id)
+                .values(caption=caption)
+                .returning(TaskAttachment)
+            )
+            return result.scalar_one_or_none()
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise TaskAttachmentsRepositoryError(
+                "Не удалось изменить подпись файла задачи."
             ) from error
 
     async def delete(self, attachment: TaskAttachment) -> None:

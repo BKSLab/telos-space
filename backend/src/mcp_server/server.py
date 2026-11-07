@@ -52,6 +52,10 @@ INSTRUCTIONS = """TELOS SPACE — пространство проектов и �
 Ключ проекта PROJ, задачи PROJ-142.
 Инструменты tt_ используют те же сервисы и права владельца ключа, что REST.
 Списки постраничные: учитывай limit, offset и next_offset. Не выдумывай ID.
+Описания в карточках и комментарии в списке — превью до 2000 символов.
+Метаданные *_meta содержат truncated, полную length в Unicode code points
+и вызов read_full; tt_get_task/tt_get_project с full_text=true и tt_get_comment
+возвращают полный исходный текст без разбиения на части.
 Поле url содержит проверенную ссылку. Каталог tt_list_project_tools раскрывает
 общие операции, включая ИСР. Для изменений нужны соответствующие права;
 опасные действия запрашивают отдельное подтверждение пользователя."""
@@ -66,6 +70,10 @@ mcp_server = MCPServer(
 
 ProjectKey = Annotated[str, Field(description="Ключ проекта, например PROJ.")]
 TaskKey = Annotated[str, Field(description="Ключ задачи, например PROJ-142.")]
+FullText = Annotated[
+    bool,
+    Field(description="Вернуть полное описание без обрезки; false — превью до 2000 символов."),
+]
 
 
 def links_of(tools: ToolContext):
@@ -124,11 +132,15 @@ async def list_projects(context: Context) -> list[dict]:
     title="Карточка проекта",
     description=(
         "Возвращает описание проекта, его стадии и число задач в каждой стадии. "
-        "Проект задаётся ключом, например PROJ."
+        "По умолчанию описание — превью до 2000 символов; description_meta содержит "
+        "факт обрезки, полную длину и вызов для дочитывания. full_text=true возвращает "
+        "полный исходный Markdown. Проект задаётся ключом, например PROJ."
     ),
     scope=SCOPE_PROJECTS_READ,
 )
-async def get_project(context: Context, project_key: ProjectKey) -> dict:
+async def get_project(
+    context: Context, project_key: ProjectKey, full_text: FullText = False
+) -> dict:
     """Возвращает подробную карточку проекта."""
     async with tool_context(context) as tools:
         project_id = await resolve_project(tools, project_key)
@@ -136,7 +148,10 @@ async def get_project(context: Context, project_key: ProjectKey) -> dict:
             overview = await tools.services.query.get_project_overview(project_id=project_id)
         except ApplicationError as error:
             raise ToolError("Не удалось получить состав проекта.") from error
-        return put_url(project_detail(overview), links_of(tools).project(project_key))
+        return put_url(
+            project_detail(overview, full_text=full_text, include_text_metadata=True),
+            links_of(tools).project(project_key),
+        )
 
 
 @tt_tool(
@@ -299,13 +314,16 @@ async def search_tasks(
     name="tt_get_task",
     title="Карточка задачи",
     description=(
-        "Возвращает задачу целиком: описание, стадию, приоритет, исполнителя, сроки, "
+        "Возвращает карточку задачи: описание, стадию, приоритет, исполнителя, сроки, "
         "чек-лист, актуальный опубликованный отчёт, участников (исполнитель, постановщик, наблюдатели) и ссылку. "
-        "Задача задаётся ключом, например PROJ-142."
+        "По умолчанию описание — превью до 2000 символов; description_meta содержит "
+        "факт обрезки, полную длину и вызов для дочитывания. full_text=true возвращает "
+        "полный исходный Markdown. Задача задаётся ключом, например PROJ-142."
+        " revision — версия общих полей для expected_revision при изменении."
     ),
     scope=SCOPE_TASKS_READ,
 )
-async def get_task(context: Context, task_key: TaskKey) -> dict:
+async def get_task(context: Context, task_key: TaskKey, full_text: FullText = False) -> dict:
     """Возвращает подробную карточку задачи."""
     async with tool_context(context) as tools:
         resolved = await resolve_task(tools, task_key)
@@ -314,9 +332,10 @@ async def get_task(context: Context, task_key: TaskKey) -> dict:
             full = await tools.services.tasks.get_task(resolved.task_id)
         except ApplicationError as error:
             raise ToolError("Не удалось получить задачу.") from error
-        item = task_detail(details)
+        item = task_detail(details, full_text=full_text, include_text_metadata=True)
         item.update(
-            start_date=full.start_date.isoformat() if full.start_date else None,
+            revision=details.revision,
+            start_date=details.start_date.isoformat() if details.start_date else None,
             checklist_revision=full.checklist_revision,
             report=full.report.model_dump(mode="json") if full.report else None,
             participants=[
@@ -335,7 +354,9 @@ async def get_task(context: Context, task_key: TaskKey) -> dict:
     name="tt_list_comments",
     title="Комментарии задачи",
     description=(
-        "Возвращает комментарии задачи в порядке добавления; comment_id нужен "
+        "Возвращает комментарии задачи в порядке добавления с превью текста до "
+        "2000 символов. body_meta содержит факт обрезки, полную длину и вызов "
+        "tt_get_comment для полного чтения. comment_id нужен также "
         "tt_update_comment и tt_delete_comment."
     ),
     scope=SCOPE_TASKS_READ,
@@ -359,7 +380,47 @@ async def list_comments(
             )
         except ApplicationError as error:
             raise ToolError("Не удалось получить комментарии.") from error
-        return [{**comment_item(item), "comment_id": item.comment_id} for item in comments]
+        return [
+            {**comment_item(item, include_text_metadata=True), "comment_id": item.comment_id}
+            for item in comments
+        ]
+
+
+@tt_tool(
+    name="tt_get_comment",
+    title="Полный комментарий задачи",
+    description=(
+        "Возвращает полный исходный Markdown комментария без обрезки. "
+        "Используйте task_key и comment_id из tt_list_comments; проверяются "
+        "принадлежность комментария задаче и текущий проект задачи."
+    ),
+    scope=SCOPE_TASKS_READ,
+)
+async def get_comment(
+    context: Context,
+    task_key: TaskKey,
+    comment_id: Annotated[int, Field(description="Идентификатор комментария из списка.", gt=0)],
+) -> dict:
+    """Возвращает полный комментарий доступной задачи."""
+    async with tool_context(context) as tools:
+        resolved = await resolve_task(tools, task_key)
+        try:
+            comment = await tools.services.query.get_comment(
+                task_id=resolved.task_id,
+                project_id=resolved.project_id,
+                task_key=resolved.task_key,
+                comment_id=comment_id,
+            )
+        except ApplicationError as error:
+            raise ToolError("Комментарий недоступен.") from error
+        return with_task_url(
+            tools,
+            {
+                **comment_item(comment, full_text=True, include_text_metadata=True),
+                "comment_id": comment.comment_id,
+            },
+            resolved.task_id,
+        )
 
 
 @tt_tool(

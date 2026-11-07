@@ -133,6 +133,28 @@ async def test_repeated_sync_is_idempotent_and_metadata_needs_no_embeddings(tmp_
     await service.qdrant_client.close()
 
 
+async def test_production_cache_only_indexer_never_reads_or_recognizes_pending_original(tmp_path):
+    rows = base_rows()
+    rows["task_attachments"] = [
+        {
+            "id": 15,
+            "task_id": 7,
+            "original_name": "pending.png",
+            "storage_key": "missing.png",
+            "content_type": "image/png",
+            "size": 100,
+        }
+    ]
+    service = build_service(tmp_path, rows=rows)
+    service.extract_originals = False
+    action = await service.prepare(SimpleNamespace(project_id=1))
+    await service.extract(action)
+    service.attachment_storage.resolve.assert_not_called()
+    assert action.extractions == []
+    assert action.catalog.sources["attachment:15"].properties["extraction"]["status"] == "pending"
+    await service.qdrant_client.close()
+
+
 async def test_changes_shrink_chunks_and_keep_unrelated_sources(tmp_path):
     service = build_service(tmp_path)
     rows = base_rows()

@@ -2,8 +2,8 @@
 
 Наружу отдаются отображаемые ключи (``PROJ-142``), а не числовые
 идентификаторы: агент оперирует тем же, что видит человек в интерфейсе.
-Длинные тексты обрезаются с явной пометкой, иначе один вызов инструмента
-способен занять весь контекст вызывающей модели.
+Превью длинных текстов обрезаются с явной пометкой и метаданными;
+отдельное чтение возвращает исходный текст без потерь.
 
 На вход принимаются DTO сервисного слоя, а не ORM-модели: представление
 не должно зависеть от того, как данные хранятся.
@@ -49,11 +49,13 @@ def project_summary(project: ProjectSummaryDto) -> dict:
     }
 
 
-def project_detail(overview: ProjectOverviewDto) -> dict:
-    """Возвращает подробную карточку проекта со стадиями."""
-    return {
+def project_detail(
+    overview: ProjectOverviewDto, *, full_text: bool = False, include_text_metadata: bool = False
+) -> dict:
+    """Возвращает карточку проекта с превью или полным описанием."""
+    result = {
         **project_summary(overview.summary),
-        "description": shorten(overview.description),
+        "description": overview.description if full_text else shorten(overview.description),
         "total_tasks": overview.total_tasks,
         "stages": [
             {
@@ -64,6 +66,16 @@ def project_detail(overview: ProjectOverviewDto) -> dict:
             for stage in overview.stages
         ],
     }
+    if include_text_metadata:
+        result["description_meta"] = _text_metadata(
+            overview.description,
+            full_text=full_text,
+            read_full={
+                "tool": "tt_get_project",
+                "arguments": {"project_key": overview.summary.project_key, "full_text": True},
+            },
+        )
+    return result
 
 
 def task_summary(task: TaskSummaryDto) -> dict:
@@ -80,22 +92,61 @@ def task_summary(task: TaskSummaryDto) -> dict:
     }
 
 
-def task_detail(details: TaskDetailsDto) -> dict:
-    """Возвращает подробную карточку задачи."""
-    return {
+def task_detail(
+    details: TaskDetailsDto, *, full_text: bool = False, include_text_metadata: bool = False
+) -> dict:
+    """Возвращает карточку задачи с превью или полным описанием."""
+    result = {
         **task_summary(details.summary),
         "role": details.role,
         "wbs_path": details.wbs_path,
-        "description": shorten(details.description),
+        "description": details.description if full_text else shorten(details.description),
         "comment_count": details.comment_count,
     }
+    if include_text_metadata:
+        result["description_meta"] = _text_metadata(
+            details.description,
+            full_text=full_text,
+            read_full={
+                "tool": "tt_get_task",
+                "arguments": {"task_key": details.summary.task_key, "full_text": True},
+            },
+        )
+    return result
 
 
-def comment_item(comment: CommentDto) -> dict:
-    """Возвращает комментарий задачи."""
-    return {
+def comment_item(
+    comment: CommentDto, *, full_text: bool = False, include_text_metadata: bool = False
+) -> dict:
+    """Возвращает комментарий с превью или полным текстом."""
+    result = {
         "task_key": comment.task_key,
         "author": comment.author,
         "created_at": comment.created_at.isoformat(),
-        "body": shorten(comment.body),
+        "body": comment.body if full_text else shorten(comment.body),
+    }
+    if include_text_metadata:
+        result["body_meta"] = _text_metadata(
+            comment.body,
+            full_text=full_text,
+            read_full=(
+                {
+                    "tool": "tt_get_comment",
+                    "arguments": {"task_key": comment.task_key, "comment_id": comment.comment_id},
+                }
+                if comment.comment_id is not None else None
+            ),
+        )
+    return result
+
+
+def _text_metadata(text: str | None, *, full_text: bool, read_full: dict | None) -> dict:
+    """Описывает обрезку по исходному тексту, независимо от его содержимого."""
+    length = len(text) if text is not None else 0
+    truncated = not full_text and length > TEXT_LIMIT
+    return {
+        "truncated": truncated,
+        "length": length,
+        "length_unit": "unicode_code_points",
+        "read_full": read_full if truncated else None,
     }

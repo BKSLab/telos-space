@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.schemas.task_attachments import TaskAttachmentSchema
 from src.schemas.users import UserSummarySchema
 
 
@@ -26,12 +27,14 @@ class CommentSchema(BaseModel):
         None,
         description="Автор комментария; null — пользователь удалён из трекера.",
     )
+
     @field_validator("author", mode="before")
     @classmethod
     def serialize_author(cls, value):
         if value is None or isinstance(value, (dict, UserSummarySchema)):
             return value
         from src.services.auth import to_user_summary
+
         return to_user_summary(value)
 
     author_name: str | None = Field(
@@ -48,6 +51,9 @@ class CommentSchema(BaseModel):
         ...,
         description="Дата создания комментария.",
         examples=["2026-08-02T12:00:00Z"],
+    )
+    attachments: list[TaskAttachmentSchema] = Field(
+        default_factory=list, description="Связанные оригиналы той же задачи.", examples=[[]]
     )
 
 

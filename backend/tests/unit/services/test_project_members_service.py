@@ -134,7 +134,12 @@ async def test_remove_member_clears_executor_labels_and_assignments() -> None:
     removed = member(2, membership_id=12)
     members.get.return_value = removed
     participants = AsyncMock(spec=TaskParticipantsRepository)
-    participants.get_for_project_member.return_value = [SimpleNamespace(task_id=31)]
+    participants.get_for_project_member.return_value = [
+        SimpleNamespace(task_id=31, role=TaskParticipantRole.EXECUTOR),
+        SimpleNamespace(task_id=31, role=TaskParticipantRole.REPORTER),
+        SimpleNamespace(task_id=32, role=TaskParticipantRole.OBSERVER),
+        SimpleNamespace(task_id=33, role=TaskParticipantRole.REPORTER),
+    ]
     tasks = AsyncMock(spec=TasksRepository)
     unit_of_work = AsyncMock(spec=UnitOfWork)
 
@@ -147,9 +152,9 @@ async def test_remove_member_clears_executor_labels_and_assignments() -> None:
 
     participants.get_for_project_member.assert_awaited_once_with(
         project_member_id=12,
-        role=TaskParticipantRole.EXECUTOR,
     )
     tasks.clear_assignees.assert_awaited_once_with(task_ids=[31])
+    tasks.bump_revisions.assert_awaited_once_with(task_ids={32, 33})
     members.delete.assert_awaited_once_with(member=removed)
     unit_of_work.commit.assert_awaited_once()
 

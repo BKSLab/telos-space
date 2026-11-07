@@ -14,9 +14,11 @@ test("загрузка → извлечение → знания; Markdown-до�
     await page.goto("/projects/DEMO/docs");
     await expect(page.getByText("Файлов пока нет", { exact: true })).toBeVisible();
     await page.getByLabel("Загрузить файл", { exact: true }).setInputFiles({ name: "plan.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF plan") });
-    await expect(page.getByRole("button", { name: /Загрузка…/ })).toBeDisabled();
+    await page.getByLabel("Подпись к plan.pdf").fill("План запуска");
+    await page.getByRole("dialog", { name: "Загрузить файлы" }).getByRole("button", { name: "Загрузить", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Загрузить файлы" }).getByRole("button", { name: "Загрузка…", exact: true })).toBeDisabled();
     release();
-    await expect(row(page).getByText("Текст: в очереди", { exact: true })).toBeVisible();
+    await expect(row(page).getByText("Готовим текст", { exact: true })).toBeVisible();
     Object.assign(state.files[0], { extraction_status: "processing" });
     await expect(row(page).getByText("Извлекаем текст", { exact: true })).toBeVisible();
     Object.assign(state.files[0], { extraction_status: "ready", index_status: "processing" });
@@ -28,6 +30,8 @@ test("загрузка → извлечение → знания; Markdown-до�
     expect(upload?.contentType).toContain("multipart/form-data; boundary=");
     expect(upload?.body).toContain('name="file"; filename="plan.pdf"');
     expect(upload?.body).toContain("%PDF plan");
+    expect(upload?.body).toContain('name="caption"');
+    expect(upload?.body).toContain("План запуска");
     await page.screenshot({ path: testInfo.outputPath("project-files-desktop.png") });
     expect(state.errors).toEqual([]);
 });
@@ -40,6 +44,11 @@ test("частичная ошибка загрузки сохраняет усп
         { name: "plan.pdf", mimeType: "application/pdf", buffer: Buffer.from("plan") },
         { name: "error.pdf", mimeType: "application/pdf", buffer: Buffer.from("error") },
     ]);
+    const upload = page.getByRole("dialog", { name: "Загрузить файлы" });
+    await upload.getByRole("button", { name: "Загрузить", exact: true }).click();
+    await expect(upload.getByText(/«error.pdf»: Хранилище временно недоступно/)).toBeVisible();
+    await upload.getByRole("button", { name: "Отмена", exact: true }).click();
+    await expect(upload).toHaveCount(0);
     await expect(page.getByText("Загружено файлов: 1", { exact: true })).toBeVisible();
     await expect(page.getByText(/«error.pdf»: Хранилище временно недоступно/)).toBeVisible();
     await expect(row(page)).toBeVisible();
@@ -51,13 +60,13 @@ test("ошибка извлечения и индексации; явный по
     const state = await installProjectFilesApi(page, [projectFile({ extraction_status: "failed", extraction_detail: "Повреждённый PDF", index_status: "failed", index_detail: "Текст недоступен" })]);
     await page.goto("/projects/DEMO/docs");
     await expect(row(page).getByText("Ошибка извлечения", { exact: true })).toBeVisible();
-    await expect(row(page).getByText("Ошибка индексации", { exact: true })).toBeVisible();
+    await expect(row(page).getByText("Не удалось добавить в знания", { exact: true })).toBeVisible();
     state.retryError = true;
     await row(page).getByRole("button", { name: "Повторить обработку plan.pdf" }).click();
     await expect(page.getByText("Обработка временно недоступна", { exact: true })).toBeVisible();
     state.retryError = false;
     await row(page).getByRole("button", { name: "Повторить обработку plan.pdf" }).click();
-    await expect(row(page).getByText("Текст: в очереди", { exact: true })).toBeVisible();
+    await expect(row(page).getByText("Готовим текст", { exact: true })).toBeVisible();
     await expect(row(page).getByRole("button", { name: "Повторить обработку plan.pdf" })).toBeDisabled();
     Object.assign(state.files[0], { extraction_status: "ready", index_status: "ready" });
     await expect(row(page).getByText("В знаниях Ариса", { exact: true })).toBeVisible();
@@ -141,9 +150,9 @@ test("список загружает следующую сотню и ищет 
     await expect(row(page, "file-101.txt")).toBeVisible();
     expect(state.requests.some((request) => request.url.searchParams.get("offset") === "100")).toBe(true);
     await page.getByLabel("Поиск документов и файлов проекта").fill("file-101");
-    await expect(page.getByRole("button", { name: /^Открыть файл / })).toHaveCount(1);
-    await expect(row(page, "file-101.txt")).toBeVisible();
-    expect(state.requests.at(-1)?.url.searchParams.get("search")).toBe("file-101");
+    await expect(page.getByRole("list", { name: "Результаты поиска файлов" }).getByRole("listitem")).toHaveCount(1);
+    await expect(page.getByRole("link", { name: "Скачать файл file-101.txt" })).toBeVisible();
+    expect(state.requests.at(-1)?.url.searchParams.get("q")).toBe("file-101");
     expect(state.errors).toEqual([]);
 });
 
@@ -163,17 +172,31 @@ test("ошибка чтения текста и явный повтор; отс�
     expect(state.errors).toEqual([]);
 });
 
-test("отключённые знания не запускают polling списка и текста", async ({ page }) => {
+test("завершённое распознавание и выключенные знания не запускают polling", async ({ page }) => {
     await page.clock.install();
-    const state = await installProjectFilesApi(page, [projectFile({ extraction_status: "pending", index_status: "disabled" })]);
+    const state = await installProjectFilesApi(page, [projectFile({ extraction_status: "disabled", fts_status: "ready", index_status: "disabled" })]);
     await page.goto("/projects/DEMO/docs?file=5");
     const dialog = page.getByRole("dialog", { name: "plan.pdf", exact: true });
-    await expect(dialog.getByText("Извлечение отключено", { exact: true })).toBeVisible();
-    await expect(dialog.getByText("Обработка файла отключена. Оригинал доступен для скачивания.", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Распознавание отключено", { exact: true })).toBeVisible();
+    await expect(dialog.getByText("Распознавание изображения отключено. Оригинал, название и подпись доступны.", { exact: true })).toBeVisible();
     await expect(dialog.getByRole("link", { name: "Скачать оригинал" })).toBeVisible();
     const requestCount = state.requests.length;
     await page.clock.fastForward(12_000);
     expect(state.requests).toHaveLength(requestCount);
+    expect(state.errors).toEqual([]);
+});
+
+test("локальный текст и поиск обновляются при выключенных знаниях", async ({ page }) => {
+    await page.clock.install();
+    const state = await installProjectFilesApi(page, [projectFile({ extraction_status: "processing", fts_status: "pending", index_status: "disabled" })]);
+    await page.goto("/projects/DEMO/docs");
+    await expect(row(page).getByText("Извлекаем текст", { exact: true })).toBeVisible();
+    Object.assign(state.files[0], { extraction_status: "ready", fts_status: "ready" });
+    await page.clock.fastForward(2100);
+    await expect(row(page).getByText("В поиске", { exact: true })).toBeVisible();
+    const reads = state.requests.length;
+    await page.clock.fastForward(10_000);
+    expect(state.requests).toHaveLength(reads);
     expect(state.errors).toEqual([]);
 });
 

@@ -187,31 +187,21 @@ class _OutsideTasks:
         """Отображаемый ключ: по ключу потока или ``T`` у разовой задачи."""
         return build_task_key(project_key=PERSONAL_TASK_KEY, number=task.number)
 
-class AnalyticsService:
-    """Аналитический свод дашборда: разбор состояния работ моделью.
 
-    Сервис ничего не меняет в проектах. Он собирает срез рабочего пространства,
-    просит модель объяснить, что в нём важно, сверяет ответ с реальными
-    задачами и сохраняет результат, чтобы свод не пропадал при перезагрузке
-    страницы.
-    """
+class AnalyticsReportReader:
+    """Читает сохранённые аналитические своды без клиента модели."""
 
     def __init__(
         self,
         *,
         scope: AnalyticsDbScopeFactory,
-        llm_client: LlmClient,
-    ):
-        """Создаёт сервис аналитического свода.
+    ) -> None:
+        """Получает фабрику короткой области чтения сохранённого анализа.
 
         Args:
-            scope: Фабрика короткой области работы с базой. Между сбором
-                данных и записью результата стоит вызов модели, поэтому
-                соединение на это время удерживаться не должно.
-            llm_client: Клиент chat completions.
+            scope: Фабрика области с журналом сводов и актуальным членством.
         """
         self.scope = scope
-        self.llm_client = llm_client
 
     async def get_latest(
         self,
@@ -248,6 +238,33 @@ class AnalyticsService:
         if report is None:
             return None
         return _to_report_schema(report=report, project=report.project)
+
+
+class AnalyticsService(AnalyticsReportReader):
+    """Аналитический свод дашборда: разбор состояния работ моделью.
+
+    Сервис ничего не меняет в проектах. Он собирает срез рабочего пространства,
+    просит модель объяснить, что в нём важно, сверяет ответ с реальными
+    задачами и сохраняет результат, чтобы свод не пропадал при перезагрузке
+    страницы.
+    """
+
+    def __init__(
+        self,
+        *,
+        scope: AnalyticsDbScopeFactory,
+        llm_client: LlmClient,
+    ) -> None:
+        """Создаёт сервис аналитического свода.
+
+        Args:
+            scope: Фабрика короткой области работы с базой. Между сбором
+                данных и записью результата стоит вызов модели, поэтому
+                соединение на это время удерживаться не должно.
+            llm_client: Клиент chat completions.
+        """
+        super().__init__(scope=scope)
+        self.llm_client = llm_client
 
     async def generate(
         self,

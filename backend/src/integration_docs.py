@@ -27,6 +27,14 @@ SUBSCRIPTIONS = {("GET", "/api/v1/ics/{token}.ics")}
 DETACHED_SCOPES = {
     ("GET", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/content"): SCOPE_TASKS_READ,
 }
+# Эти сценарии проверяют READ/WRITE в короткой сервисной auth/access области.
+DETACHED_WRITE_ROUTES = {
+    ("POST", "/api/v1/projects/{project_id}/files"),
+    ("POST", "/api/v1/tasks/{task_id}/attachments"),
+    ("PATCH", "/api/v1/tasks/{task_id}/attachments/{attachment_id}"),
+    ("POST", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/retry"),
+    ("POST", "/api/v1/tasks/{task_id}/comments/with-files"),
+}
 
 
 def dependency_names(route: APIRoute) -> set[str]:
@@ -86,7 +94,7 @@ def _http_entries(app, schema: dict) -> list[dict]:
             route = routes[pair]
             names = dependency_names(route)
             session = "require_session" in names
-            write = bool(names & {"require_write_scope", "require_chat_write_scope"})
+            write = bool(names & {"require_write_scope", "require_chat_write_scope"}) or pair in DETACHED_WRITE_ROUTES
             scope = required_scope(method, path) or DETACHED_SCOPES.get(pair)
             scopes = list(dict.fromkeys([scope, *extra_scopes(method, path)])) if scope else None
             description = operation.get("description", "")

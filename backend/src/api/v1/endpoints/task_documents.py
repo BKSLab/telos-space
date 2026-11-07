@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, UploadFile, status
 
 from src.api.v1.responses import NOT_FOUND_RESPONSE, SERVER_ERROR_RESPONSE, VALIDATION_RESPONSE
 from src.dependencies.access import require_task_access
@@ -33,6 +33,7 @@ async def import_task_document(
     file: Annotated[UploadFile, File(description="Документ размером до 10 МБ.")],
     principal: PrincipalDep,
     service: TaskDocumentImportServiceDep,
+    caption: Annotated[str | None, Form(max_length=2000)] = None,
 ) -> TaskDocumentImportSchema:
     """Импортирует один новый документ и связывает его с задачей."""
     try:
@@ -43,6 +44,7 @@ async def import_task_document(
             file_name=file.filename or "",
             content_type=file.content_type,
             content=content,
+            caption=caption,
         )
     except (TaskDocumentImportServiceError, KnowledgeProviderError) as error:
         logger.exception("❌ Ошибка импорта документа в задачу id=%s.", task_id)

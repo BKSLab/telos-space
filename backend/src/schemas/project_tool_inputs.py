@@ -128,9 +128,31 @@ class RiskListInput(ProjectRiskFilters, ToolInput):
 class TaskCreateInput(TaskCreateSchema, ToolInput):
     """Новая задача с ролевыми назначениями и необязательным чек-листом."""
 
+    stage_name: str | None = Field(
+        None, description="Название стадии вместо stage_id; разрешается только при первом исполнении."
+    )
+    executor_username: str | None = Field(
+        None, description="Логин исполнителя вместо executor_id; пустая строка снимает назначение."
+    )
+    observer_usernames: list[str] | None = Field(
+        None, max_length=50, description="Логины наблюдателей вместо observer_ids."
+    )
+
+    @model_validator(mode="after")
+    def single_assignment_reference(self) -> "TaskCreateInput":
+        """Назначение указывается именем либо ID, без неоднозначного смешения."""
+        for name, identity in (
+            ("stage_name", "stage_id"),
+            ("executor_username", "executor_id"),
+            ("observer_usernames", "observer_ids"),
+        ):
+            if getattr(self, name) is not None and identity in self.model_fields_set:
+                raise ValueError(f"Укажите только одно из полей {name} и {identity}.")
+        return self
+
 
 class TaskChangesInput(TaskUpdateSchema, ToolInput):
-    """Изменения задачи; отсутствие поля сохраняет прежнее значение."""
+    """Изменения задачи с необязательной expected_revision из свежего get_task."""
 
 
 class TaskUpdateInput(TaskInput):

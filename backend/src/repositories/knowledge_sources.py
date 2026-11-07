@@ -19,9 +19,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Base
+from src.db.models.documents import Document
+from src.db.models.file_search_chunks import FileSearchChunk
 from src.db.models.knowledge_attachment_texts import KnowledgeAttachmentText
 from src.db.models.knowledge_project_file_texts import KnowledgeProjectFileText
 from src.db.models.project_files import ProjectFile
+from src.db.models.task_attachments import TaskAttachment
+from src.db.models.tasks import Task
 from src.exceptions.knowledge import KnowledgeIndexJobsRepositoryError
 from src.knowledge.catalog import POLICIES, SourcePolicy, SourceType
 
@@ -124,33 +128,80 @@ class KnowledgeSourcesRepository:
         rules = [
             rule
             for rule in POLICIES
-            if rule.kind and (entity_type is None or rule.kind == entity_type)
+            if rule.kind
+            and (entity_type is None or rule.kind == entity_type)
+            and rule.kind
+            not in {SourceType.ATTACHMENT, SourceType.PROJECT_FILE, SourceType.DOCUMENT}
         ]
-        sources = union_all(*[_select_rows(rule, project_id) for rule in rules]).subquery()
-        searchable = sources.c.data.op("-")(literal("storage_key"))
         language = cast(literal("russian"), REGCONFIG)
-        search_text = cast(searchable, Text)
-        # Один tsvector ограничен PostgreSQL по размеру и позициям. Окна с
-        # перекрытием сохраняют поиск в хвосте больших файлов без обрезки.
-        parts = (
-            func.generate_series(0, cast(func.floor(func.length(search_text) / 16000), Integer))
-            .table_valued("part")
-            .render_derived()
-            .lateral()
-        )
-        vector = func.to_tsvector(
-            language, func.substr(search_text, parts.c.part * 16000 + 1, 18048)
-        )
         terms = func.websearch_to_tsquery(language, query)
-        rank = func.max(func.ts_rank_cd(vector, terms))
-        entity_id = sources.c.data["id"].astext
-        try:
-            rows = await self.db_session.execute(
-                select(sources.c.entity_type, entity_id, rank.label("rank"))
+        branches = []
+        if rules:
+            sources = union_all(*[_select_rows(rule, project_id) for rule in rules]).subquery()
+            searchable = sources.c.data.op("-")(literal("storage_key"))
+            search_text = cast(searchable, Text)
+            parts = (
+                func.generate_series(0, cast(func.floor(func.length(search_text) / 16000), Integer))
+                .table_valued("part")
+                .render_derived()
+                .lateral()
+            )
+            vector = func.to_tsvector(
+                language, func.substr(search_text, parts.c.part * 16000 + 1, 18048)
+            )
+            entity_id = sources.c.data["id"].astext
+            branches.append(
+                select(
+                    sources.c.entity_type,
+                    entity_id.label("entity_id"),
+                    func.ts_rank_cd(vector, terms).label("rank"),
+                )
                 .select_from(sources.join(parts, true()))
                 .where(vector.op("@@")(terms))
-                .group_by(sources.c.entity_type, entity_id)
-                .order_by(rank.desc(), sources.c.entity_type, entity_id)
+            )
+        chunks = FileSearchChunk
+        if entity_type in {None, SourceType.ATTACHMENT}:
+            branches.append(
+                select(
+                    literal(SourceType.ATTACHMENT.value).label("entity_type"),
+                    cast(TaskAttachment.id, Text).label("entity_id"),
+                    func.ts_rank_cd(chunks.search_vector, terms).label("rank"),
+                )
+                .select_from(chunks)
+                .join(TaskAttachment, TaskAttachment.id == chunks.attachment_id)
+                .join(Task, Task.id == TaskAttachment.task_id)
+                .where(Task.project_id == project_id, chunks.search_vector.op("@@")(terms))
+            )
+        if entity_type in {None, SourceType.PROJECT_FILE}:
+            branches.append(
+                select(
+                    literal(SourceType.PROJECT_FILE.value).label("entity_type"),
+                    cast(ProjectFile.id, Text).label("entity_id"),
+                    func.ts_rank_cd(chunks.search_vector, terms).label("rank"),
+                )
+                .select_from(chunks)
+                .join(ProjectFile, ProjectFile.id == chunks.project_file_id)
+                .where(
+                    ProjectFile.project_id == project_id,
+                    ProjectFile.deleted_at.is_(None),
+                    chunks.search_vector.op("@@")(terms),
+                )
+            )
+        if entity_type in {None, SourceType.DOCUMENT}:
+            branches.append(
+                select(
+                    literal(SourceType.DOCUMENT.value).label("entity_type"),
+                    cast(Document.id, Text).label("entity_id"),
+                    func.ts_rank_cd(Document.search_vector, terms).label("rank"),
+                ).where(Document.project_id == project_id, Document.search_vector.op("@@")(terms))
+            )
+        matched = union_all(*branches).subquery("matched_knowledge_sources")
+        rank = func.max(matched.c.rank)
+        try:
+            rows = await self.db_session.execute(
+                select(matched.c.entity_type, matched.c.entity_id, rank.label("rank"))
+                .group_by(matched.c.entity_type, matched.c.entity_id)
+                .order_by(rank.desc(), matched.c.entity_type, matched.c.entity_id)
                 .offset(offset)
                 .limit(limit)
             )
@@ -192,7 +243,7 @@ class KnowledgeSourcesRepository:
             select(
                 ProjectFile.id,
                 literal(""),
-                literal("processing"),
+                literal("pending"),
                 literal(0),
                 ProjectFile.content_hash,
                 literal("processing"),
@@ -204,10 +255,7 @@ class KnowledgeSourcesRepository:
                 statement.on_conflict_do_update(
                     index_elements=[cached.project_file_id],
                     set_={
-                        "status": case(
-                            (cached.status.in_(["ready", "empty", "unsupported"]), cached.status),
-                            else_="processing",
-                        ),
+                        "status": cached.status,
                         "index_status": case(
                             (
                                 (cached.indexed_hash == statement.excluded.content_hash)
@@ -330,18 +378,12 @@ class KnowledgeSourcesRepository:
                     cached.project_file_id == file_id, cached.content_hash == content_hash, active
                 )
                 .values(
-                    status=case(
-                        (cached.status.in_(["pending", "processing"]), "failed"),
-                        else_=cached.status,
+                    index_status=case(
+                        (ready, "ready"),
+                        (cached.status.in_(["pending", "processing"]), "pending"),
+                        (cached.status.in_(["empty", "unsupported", "disabled"]), "skipped"),
+                        else_="failed",
                     ),
-                    detail=case(
-                        (
-                            cached.status.in_(["pending", "processing"]),
-                            "Не удалось сохранить извлечённый текст. Повторите обработку файла.",
-                        ),
-                        else_=cached.detail,
-                    ),
-                    index_status=case((ready, "ready"), else_="failed"),
                     index_detail=case(
                         (ready, None), else_=detail or "Текст файла пока не проиндексирован."
                     ),

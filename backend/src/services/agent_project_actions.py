@@ -1,6 +1,7 @@
 """Паспорт, команда, доски, стикеры и реестр рисков проекта."""
 
 from src.agent.tools import AgentToolContext
+from src.exceptions.agent_tools import AgentToolAccessError, AgentToolConflictError
 from src.schemas import project_tool_inputs as inputs
 from src.schemas.project_risks import ProjectRiskFilters
 from src.services.agent_action_helpers import page
@@ -19,6 +20,51 @@ async def get_project(
             for item in await db.projects.get_deadline_history(ctx.project_id)
         ],
         "source_id": f"project:{ctx.project_id}",
+    }
+
+
+async def get_latest_project_summary(
+    db: AgentProjectToolScope, ctx: AgentToolContext, args: inputs.EmptyInput
+) -> dict:
+    """Читает полный сохранённый анализ текущего проекта без новой генерации.
+
+    Args:
+        db: Явные зависимости инструмента проекта.
+        ctx: Проект и пользователь, определённые сервером.
+        args: Пустые аргументы без возможности выбрать чужую область анализа.
+
+    Returns:
+        Сохранённый анализ с датой и происхождением либо явное отсутствие свода.
+
+    Raises:
+        AgentToolConflictError: Если серверный контекст не содержит проект.
+        AgentToolAccessError: Если пользователь не аутентифицирован.
+        ProjectNotFoundError: Если актуальное членство больше не даёт доступ.
+        AnalyticsServiceError: Если прочитать сохранённый анализ не удалось.
+    """
+    if ctx.project_id is None:
+        raise AgentToolConflictError("Действию нужен проект.")
+    if ctx.user_id is None:
+        raise AgentToolAccessError("Инструменту необходим аутентифицированный участник.")
+    report = await db.analytics_reader.get_latest(user_id=ctx.user_id, project_id=ctx.project_id)
+    if report is None:
+        return {
+            "found": False,
+            "report": None,
+            "source_id": None,
+            "provenance": "generated_analysis",
+            "message": "Сохранённой сводки проекта нет: анализ ещё не формировали.",
+        }
+    return {
+        "found": True,
+        "report": report.model_dump(mode="json"),
+        "source_id": f"analytics_report:{report.id}",
+        "provenance": "generated_analysis",
+        "message": (
+            f"Сохранённый анализ на дату {report.created_at.isoformat()}. "
+            "Он отражает состояние проекта на момент формирования; "
+            "текущее состояние могло измениться."
+        ),
     }
 
 

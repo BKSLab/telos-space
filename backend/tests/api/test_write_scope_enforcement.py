@@ -2,9 +2,12 @@
 
 Route-graph тест доказывает, что зависимость подключена. Этот — что она
 действительно останавливает запрос: токен на чтение получает 403 и не
-доходит до сервиса.
+доходит до доменных репозиториев и файлового I/O.
 """
 
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,6 +15,11 @@ from httpx import AsyncClient
 
 from main import app
 from src.db.models.api_tokens import ApiTokenScope
+from src.dependencies.file_comments import (
+    get_file_comments_service,
+    get_task_file_mutations_service,
+)
+from src.dependencies.scopes import get_project_files_service
 from src.dependencies.services import (
     get_project_agent_service,
     get_users_service,
@@ -19,10 +27,21 @@ from src.dependencies.services import (
 )
 from src.schemas.knowledge import KnowledgeAnswerSchema
 from src.schemas.wbs_suggestion import WbsSuggestionSchema
+from src.services.auth import AuthService
+from src.services.file_comments import FileCommentsService
+from src.services.file_metadata import TaskFileMutationsService
 from src.services.project_agent import ProjectAgentService
+from src.services.project_files import ProjectFilesService
 from src.services.users import UsersService
 from src.services.wbs_suggestion import WbsSuggestionService
-from tests.api.bearer_doubles import auth_header, install_bearer_auth, user_schema
+from src.storage.task_attachments import TaskAttachmentStorage
+from tests.api.bearer_doubles import (
+    FakeTokensRepository,
+    FakeUsersRepository,
+    auth_header,
+    install_bearer_auth,
+    user_schema,
+)
 
 # По одному представителю каждого класса доменных мутаций.
 MUTATION_SAMPLES = [
@@ -54,10 +73,18 @@ MUTATION_SAMPLES = [
     ("DELETE", "/api/v1/documents/1", {}),
     ("POST", "/api/v1/document-links", {"json": {"document_id": 1, "task_id": 1}}),
     ("DELETE", "/api/v1/document-links/1", {}),
-    ("POST", "/api/v1/projects/1/milestones", {"json": {"title": "Веха", "due_date": "2026-10-01"}}),
+    (
+        "POST",
+        "/api/v1/projects/1/milestones",
+        {"json": {"title": "Веха", "due_date": "2026-10-01"}},
+    ),
     ("PATCH", "/api/v1/projects/1/milestones/1", {"json": {"title": "Другая"}}),
     ("DELETE", "/api/v1/projects/1/milestones/1", {}),
-    ("POST", "/api/v1/projects/1/task-dependencies", {"json": {"predecessor_id": 1, "successor_id": 2}}),
+    (
+        "POST",
+        "/api/v1/projects/1/task-dependencies",
+        {"json": {"predecessor_id": 1, "successor_id": 2}},
+    ),
     ("DELETE", "/api/v1/projects/1/task-dependencies/1", {}),
     ("POST", "/api/v1/projects/1/board/stickers", {"json": {"body": "Текст"}}),
     ("PATCH", "/api/v1/projects/1/board/stickers/1", {"json": {"body": "Другой"}}),
@@ -65,6 +92,25 @@ MUTATION_SAMPLES = [
     ("POST", "/api/v1/projects/1/calendar/scenarios/apply", {"json": {"changes": []}}),
     ("POST", "/api/v1/projects/1/knowledge/reindex", {}),
     ("POST", "/api/v1/tasks/1/attachments", {"files": {"file": ("a.txt", b"x", "text/plain")}}),
+    ("PATCH", "/api/v1/tasks/1/attachments/1", {"json": {"caption": "Новая подпись"}}),
+    ("POST", "/api/v1/tasks/1/attachments/1/retry", {}),
+    (
+        "POST",
+        "/api/v1/tasks/1/comments/with-files",
+        {
+            "data": {
+                "request_id": "00000000-0000-4000-8000-000000000001",
+                "body_md": "Текст",
+                "captions": '["Подпись"]',
+                "attachment_ids": "[1]",
+            },
+            "files": {"files": ("a.txt", b"x", "text/plain")},
+        },
+    ),
+    ("POST", "/api/v1/projects/1/files", {"files": {"file": ("a.txt", b"x", "text/plain")}}),
+    ("PATCH", "/api/v1/projects/1/files/1", {"json": {"caption": "Новая подпись"}}),
+    ("POST", "/api/v1/projects/1/files/1/retry", {}),
+    ("DELETE", "/api/v1/projects/1/files/1", {}),
     ("DELETE", "/api/v1/tasks/1/attachments/1", {}),
     (
         "POST",
@@ -82,15 +128,36 @@ READ_ONLY_POST_SAMPLES = [
 
 
 @pytest.fixture
-def bearer_token(anonymous_app) -> callable:
+def bearer_token(anonymous_app) -> Callable[[ApiTokenScope], AsyncMock]:
     """Ставит в граф аутентификацию по токену с выбранными правами.
 
-    Доменные сервисы подменяются заглушками: тест проверяет guard прав, а
-    не поведение сценариев за ним.
+    Обычные доменные сервисы подменяются. Файловые сценарии с короткой
+    областью используют настоящий AuthService и имеют доступ только к
+    его репозиториям в памяти: обход guard выявит обращение к отсутствующей
+    доменной зависимости, вместо незаметного вызова настоящей БД.
     """
 
-    def install(scope: ApiTokenScope) -> None:
+    def install(scope: ApiTokenScope) -> AsyncMock:
         install_bearer_auth(scope)
+        auth = AuthService(
+            users_repository=FakeUsersRepository(),
+            tokens_repository=FakeTokensRepository(scope),
+            invite_code="synthetic-invite",
+        )
+
+        @asynccontextmanager
+        async def file_scope() -> AsyncIterator[SimpleNamespace]:
+            yield SimpleNamespace(auth=auth)
+
+        storage = AsyncMock(spec=TaskAttachmentStorage)
+        task_files = TaskFileMutationsService(scope=file_scope, storage=storage)
+        comments = FileCommentsService(scope=file_scope, storage=storage, knowledge_enabled=False)
+        project_files = ProjectFilesService(
+            scope=file_scope,
+            storage=storage,
+            max_file_size=10 * 1024 * 1024,
+            knowledge_enabled=False,
+        )
 
         users_service = AsyncMock(spec=UsersService)
         users_service.get_user.return_value = user_schema()
@@ -107,8 +174,12 @@ def bearer_token(anonymous_app) -> callable:
                 get_users_service: lambda: users_service,
                 get_wbs_suggestion_service: lambda: suggestion_service,
                 get_project_agent_service: lambda: agent_service,
+                get_task_file_mutations_service: lambda: task_files,
+                get_file_comments_service: lambda: comments,
+                get_project_files_service: lambda: project_files,
             }
         )
+        return storage
 
     return install
 
@@ -132,7 +203,7 @@ async def test_read_token_cannot_mutate_any_class_of_mutation(
     отдельные тесты давало сорок с лишним идентификаторов при одном
     проверяемом правиле.
     """
-    bearer_token(ApiTokenScope.READ)
+    storage = bearer_token(ApiTokenScope.READ)
     offenders: list[str] = []
 
     for method, path, payload in MUTATION_SAMPLES:
@@ -143,6 +214,7 @@ async def test_read_token_cannot_mutate_any_class_of_mutation(
             offenders.append(f"{method} {path} -> чужая формулировка отказа: {response.json()}")
 
     assert not offenders, "Токену на чтение доступны мутации:\n  " + "\n  ".join(offenders)
+    assert storage.mock_calls == [], "READ-токен дошёл до файлового хранилища."
 
 
 async def test_read_token_passes_read_only_posts(

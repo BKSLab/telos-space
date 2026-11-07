@@ -80,6 +80,10 @@ async def set_watchers(
     task_key: TaskKey,
     observers: Annotated[list[str], Field(description="Логины наблюдателей.")],
     actor: Actor = None,
+    expected_revision: Annotated[
+        int | None,
+        Field(ge=1, strict=True, description="Ожидаемая revision задачи из tt_get_task; без неё прежнее поведение."),
+    ] = None,
 ) -> dict:
     """Заменяет наблюдателей тем же сценарием, что PATCH /tasks/{id}."""
     async with tool_context(context) as tools:
@@ -87,10 +91,13 @@ async def set_watchers(
         observer_ids = [
             await member_user_id(tools, resolved.project_id, login) for login in observers
         ]
+        payload = {"observer_ids": observer_ids}
+        if expected_revision is not None:
+            payload["expected_revision"] = expected_revision
         try:
             updated = await tools.services.tasks.update_task(
                 task_id=resolved.task_id,
-                data={"observer_ids": observer_ids},
+                data=payload,
                 updated_by_user_id=tools.principal.user_id,
             )
         except ApplicationError as error:
@@ -98,7 +105,11 @@ async def set_watchers(
         watchers = [
             part.user.username for part in updated.participants if part.role.value == "OBSERVER"
         ]
-        return with_task_url(tools, {"task_key": updated.key, "observers": watchers}, updated.id)
+        return with_task_url(
+            tools,
+            {"task_key": updated.key, "observers": watchers, "revision": getattr(updated, "revision", 1)},
+            updated.id,
+        )
 
 
 # ── Зависимости ────────────────────────────────────────────────────────────

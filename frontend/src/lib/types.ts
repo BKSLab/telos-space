@@ -183,6 +183,7 @@ export type SearchMatchSource =
     | null;
 
 export interface Task {
+    revision?: number;
     checklist?: TaskChecklist | null;
     checklist_revision?: number;
     id: number;
@@ -430,6 +431,7 @@ export interface TaskCreate {
 }
 
 export interface TaskUpdate {
+    expected_revision?: number;
     title?: string;
     checklist?: TaskChecklist | null;
     checklist_revision?: number;
@@ -476,6 +478,7 @@ export interface TaskComment {
     author_name: string | null;
     body_md: string;
     created_at: string;
+    attachments?: TaskAttachment[];
 }
 
 export interface TaskAttachment {
@@ -487,6 +490,15 @@ export interface TaskAttachment {
     created_at: string;
     content_url: string;
     previewable: boolean;
+    preview_url?: string | null;
+    caption?: string | null;
+    uploaded_by_user_id?: number | null;
+    extraction_status?: FileExtractionStatus;
+    extraction_detail?: string | null;
+    fts_status?: "pending" | "ready" | "failed";
+    fts_detail?: string | null;
+    index_status?: FileIndexStatus;
+    index_detail?: string | null;
 }
 
 export interface TaskRephraseResult {
@@ -564,7 +576,7 @@ export interface DocumentDetail extends DocumentListItem {
     created_at: string;
 }
 
-export type FileExtractionStatus = "pending" | "processing" | "ready" | "empty" | "unsupported" | "failed";
+export type FileExtractionStatus = "pending" | "processing" | "ready" | "empty" | "unsupported" | "failed" | "disabled";
 export type FileIndexStatus = "pending" | "processing" | "ready" | "failed" | "disabled";
 
 export interface ProjectFile {
@@ -582,6 +594,36 @@ export interface ProjectFile {
     index_detail: string | null;
     indexed_at: string | null;
     summary: string | null;
+    caption?: string | null;
+    previewable?: boolean;
+    preview_url?: string | null;
+    fts_status?: "pending" | "ready" | "failed";
+    fts_detail?: string | null;
+}
+
+export type FileSearchScope = "all" | "project_files" | "task_files" | "documents";
+
+export interface FileSearchItem {
+    source_type: "project_file" | "task_attachment" | "document";
+    source_id: number;
+    project_id: number | null;
+    task_id: number | null;
+    task_key: string | null;
+    task_title: string | null;
+    document_slug: string | null;
+    title: string;
+    caption: string | null;
+    content_type: string | null;
+    preview_url: string | null;
+    excerpt: string;
+    rank: number;
+}
+
+export interface FileSearchPage {
+    items: FileSearchItem[];
+    total: number;
+    limit: number;
+    offset: number;
 }
 
 export interface ProjectFileDetail extends ProjectFile {

@@ -17,6 +17,7 @@ from datetime import date, datetime
 from src.db.models.projects import Project
 from src.exceptions.base import RepositoryError
 from src.exceptions.projects import ProjectNotFoundError, ProjectsServiceError
+from src.exceptions.task_comments import TaskCommentNotFoundError
 from src.exceptions.tasks import TaskNotFoundError
 from src.knowledge.catalog import SourceType, build_catalog
 from src.knowledge.context import read_catalog, retrieve
@@ -99,6 +100,8 @@ class TaskDetailsDto:
     wbs_path: str | None
     description: str | None
     comment_count: int
+    revision: int = 1
+    start_date: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +147,24 @@ class ResolvedTask:
 def build_task_key(project_key: str, number: int) -> str:
     """Возвращает отображаемый идентификатор задачи вида ``PROJ-142``."""
     return f"{project_key}-{number}"
+
+
+def resolve_stage_reference(stages: list[StageRefDto], stage_name: str) -> StageRefDto:
+    """Находит стадию по имени одинаково для первого вызова и обычного чтения.
+
+    Args:
+        stages: Стадии уже проверенного проекта.
+        stage_name: Название без учёта регистра и внешних пробелов.
+    Returns:
+        Стадия проекта.
+    Raises:
+        UnknownStageError: Если название отсутствует в проекте.
+    """
+    wanted = stage_name.strip().casefold()
+    for stage in stages:
+        if stage.name.casefold() == wanted:
+            return stage
+    raise UnknownStageError(stage_name=stage_name, known=[item.name for item in stages])
 
 
 class ProjectQueryService:
@@ -427,6 +448,8 @@ class ProjectQueryService:
             wbs_path=wbs_path,
             description=task.description_md,
             comment_count=len(comments),
+            revision=getattr(task, "revision", 1),
+            start_date=task.start_date,
         )
 
     async def list_comments(self, *, task_id: int, task_key: str, limit: int) -> list[CommentDto]:
@@ -447,6 +470,47 @@ class ProjectQueryService:
             )
             for comment in comments[:limit]
         ]
+
+    async def get_comment(
+        self, *, task_id: int, project_id: int, task_key: str, comment_id: int
+    ) -> CommentDto:
+        """Возвращает полный комментарий в проверенном контексте задачи.
+
+        Args:
+            task_id: Задача, доступ к которой проверен вызывающим сервисом доступа.
+            project_id: Проверенный проект; задача должна всё ещё принадлежать ему.
+            task_key: Отображаемый ключ задачи.
+            comment_id: Идентификатор комментария из списка задачи.
+
+        Returns:
+            Комментарий с исходным текстом без нормализации и обрезки.
+
+        Raises:
+            TaskNotFoundError: Если задача удалена или перемещена в другой контекст.
+            TaskCommentNotFoundError: Если комментарий отсутствует или из другой задачи.
+            ProjectsServiceError: Если прочитать комментарий не удалось.
+        """
+        try:
+            async with self.scope() as db:
+                task = await db.tasks.get_by_id(task_id=task_id)
+                if task is None or task.project_id != project_id:
+                    raise TaskNotFoundError(task_id=task_id)
+                comment = await db.comments.get_by_id(comment_id=comment_id)
+                if comment is None or comment.task_id != task_id:
+                    raise TaskCommentNotFoundError(comment_id)
+                return CommentDto(
+                    task_key=task_key,
+                    author=comment.author_name,
+                    created_at=comment.created_at,
+                    body=comment.body_md,
+                    comment_id=comment.id,
+                )
+        except RepositoryError as error:
+            logger.error(
+                "❌ Не удалось получить комментарий id=%s задачи id=%s.",
+                comment_id, task_id, exc_info=True,
+            )
+            raise ProjectsServiceError(str(error)) from error
 
     async def search_tasks(
         self,
@@ -534,15 +598,10 @@ class ProjectQueryService:
             logger.error("❌ Не удалось получить стадии проекта id=%s.", project_id, exc_info=True)
             raise ProjectsServiceError(str(error)) from error
 
-        wanted = stage_name.strip().casefold()
-        for stage in stages:
-            if stage.name.casefold() == wanted:
-                return StageRefDto(
-                    stage_id=stage.id,
-                    name=stage.name,
-                    is_done_stage=stage.is_done_stage,
-                )
-        raise UnknownStageError(stage_name=stage_name, known=[item.name for item in stages])
+        return resolve_stage_reference(
+            [StageRefDto(stage.id, stage.name, stage.is_done_stage) for stage in stages],
+            stage_name,
+        )
 
     async def get_project_key(self, *, project_id: int) -> str:
         """Возвращает отображаемый ключ проекта."""

@@ -24,6 +24,7 @@ from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
 from src.repositories.task_attachments import TaskAttachmentsRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
+from src.schemas.file_metadata import normalize_caption
 from src.schemas.task_attachments import TaskAttachmentSchema
 from src.services.knowledge_events import KnowledgeEvents
 from src.storage.task_attachments import TaskAttachmentStorage
@@ -98,12 +99,14 @@ class TaskAttachmentsService:
         storage: TaskAttachmentStorage,
         unit_of_work: UnitOfWork,
         knowledge_events: KnowledgeEvents,
+        knowledge_enabled: bool = True,
     ) -> None:
         self.attachments_repository = attachments_repository
         self.tasks_repository = tasks_repository
         self.storage = storage
         self.unit_of_work = unit_of_work
         self.knowledge_events = knowledge_events
+        self.knowledge_enabled = knowledge_enabled
 
     @property
     def max_file_size(self) -> int:
@@ -126,7 +129,21 @@ class TaskAttachmentsService:
         try:
             await self._ensure_task_exists(task_id)
             attachments = await self.attachments_repository.get_for_task(task_id=task_id)
-            return [self._to_schema(attachment) for attachment in attachments]
+            states = (
+                await self.attachments_repository.get_processing_states(
+                    [item.id for item in attachments]
+                )
+                if attachments
+                else {}
+            )
+            result = [self._to_schema(attachment) for attachment in attachments]
+            for item in result:
+                state = states.get(item.id, {})
+                if not self.knowledge_enabled:
+                    state.update(index_status="disabled", index_detail=None)
+                for key, value in state.items():
+                    setattr(item, key, value)
+            return result
         except (TaskAttachmentsRepositoryError, TasksRepositoryError) as error:
             logger.error("❌ Ошибка получения файлов задачи id=%s.", task_id, exc_info=True)
             raise TaskAttachmentsServiceError(str(error)) from error
@@ -139,6 +156,11 @@ class TaskAttachmentsService:
         content_type: str | None,
         content: bytes,
         index_for_knowledge: bool = True,
+        caption: str | None = None,
+        uploaded_by_user_id: int | None = None,
+        prepared_storage_key: str | None = None,
+        task: Task | None = None,
+        current_file_count: int | None = None,
     ) -> StoredAttachment:
         """Сохраняет файл, оставляя финальный commit владельцу сценария.
 
@@ -166,28 +188,38 @@ class TaskAttachmentsService:
         """
         storage_key: str | None = None
         try:
-            task = await self._ensure_task_exists(task_id)
+            task = task if task is not None else await self._ensure_task_exists(task_id)
+            if task.id != task_id:
+                raise TaskAttachmentValidationError("Оригинал принадлежит другой задаче.")
             if (
-                await self.attachments_repository.get_count_for_task(task_id)
-                >= self.MAX_FILES_PER_TASK
-            ):
+                current_file_count
+                if current_file_count is not None
+                else await self.attachments_repository.get_count_for_task(task_id)
+            ) >= self.MAX_FILES_PER_TASK:
                 raise TaskAttachmentLimitError(max_files=self.MAX_FILES_PER_TASK)
             original_name, extension, effective_content_type = self._validate_file(
                 file_name=file_name,
                 content_type=content_type,
                 content=content,
+                max_file_size=self.MAX_FILE_SIZE,
             )
-            storage_key = await self.storage.save(
-                task_id=task_id,
-                extension=extension,
-                content=content,
-            )
+            try:
+                caption = normalize_caption(caption)
+            except ValueError as error:
+                raise TaskAttachmentValidationError(str(error)) from error
+            storage_key = prepared_storage_key
+            if storage_key is None:
+                storage_key = await self.storage.save(
+                    task_id=task_id, extension=extension, content=content
+                )
             attachment = await self.attachments_repository.save(
                 task_id=task_id,
                 original_name=original_name,
                 storage_key=storage_key,
                 content_type=effective_content_type,
                 size=len(content),
+                caption=caption,
+                uploaded_by_user_id=uploaded_by_user_id,
             )
             logger.info(
                 "✅ Файл %r добавлен к задаче id=%s. Размер: %s байт.",
@@ -201,10 +233,10 @@ class TaskAttachmentsService:
                     entity_type=KnowledgeEntityType.ATTACHMENT,
                     entity_id=attachment.id,
                 )
-            return StoredAttachment(
-                attachment=self._to_schema(attachment),
-                storage_key=storage_key,
-            )
+            schema = self._to_schema(attachment)
+            if task.project_id is None or not self.knowledge_enabled:
+                schema.index_status = "disabled"
+            return StoredAttachment(attachment=schema, storage_key=storage_key)
         except (
             TaskAttachmentStorageError,
             TaskAttachmentsRepositoryError,
@@ -232,6 +264,8 @@ class TaskAttachmentsService:
         content_type: str | None,
         content: bytes,
         index_for_knowledge: bool = True,
+        caption: str | None = None,
+        uploaded_by_user_id: int | None = None,
     ) -> TaskAttachmentSchema:
         """Проверяет и сохраняет новый файл задачи как самостоятельную запись.
 
@@ -259,6 +293,8 @@ class TaskAttachmentsService:
             content_type=content_type,
             content=content,
             index_for_knowledge=index_for_knowledge,
+            caption=caption,
+            uploaded_by_user_id=uploaded_by_user_id,
         )
         try:
             await self.unit_of_work.commit()
@@ -325,8 +361,10 @@ class TaskAttachmentsService:
             TaskAttachmentsServiceError: Если удалить метаданные не удалось.
         """
         try:
+            task = await self.tasks_repository.get_for_update(task_id=task_id)
+            if task is None:
+                raise TaskNotFoundError(task_id)
             attachment = await self._get_attachment(task_id, attachment_id)
-            task = await self._ensure_task_exists(task_id)
             storage_key = attachment.storage_key
             await self.attachments_repository.delete(attachment=attachment)
             await self.knowledge_events.delete(
@@ -374,35 +412,39 @@ class TaskAttachmentsService:
             raise TaskAttachmentNotFoundError(attachment_id=attachment_id)
         return attachment
 
+    @classmethod
     def validate_file(
-        self,
+        cls,
         *,
         file_name: str,
         content_type: str | None,
         content: bytes,
     ) -> tuple[str, str, str]:
         """Проверяет загрузку до выбора задачи, используя общие ограничения файлов."""
-        return self._validate_file(file_name=file_name, content_type=content_type, content=content)
+        return cls._validate_file(file_name=file_name, content_type=content_type, content=content)
 
+    @classmethod
     def _validate_file(
-        self,
+        cls,
         *,
         file_name: str,
         content_type: str | None,
         content: bytes,
+        max_file_size: int | None = None,
     ) -> tuple[str, str, str]:
         """Нормализует имя и проверяет размер и расширение файла."""
         if not content:
             raise TaskAttachmentValidationError("Нельзя загрузить пустой файл.")
-        if len(content) > self.MAX_FILE_SIZE:
-            raise TaskAttachmentTooLargeError(max_size_mb=self.MAX_FILE_SIZE // 1024 // 1024)
+        limit = cls.MAX_FILE_SIZE if max_file_size is None else max_file_size
+        if len(content) > limit:
+            raise TaskAttachmentTooLargeError(max_size_mb=limit // 1024 // 1024)
         original_name = Path((file_name or "").replace("\\", "/")).name.strip()
         if not original_name or "\x00" in original_name:
             raise TaskAttachmentValidationError("Имя файла некорректно.")
         if len(original_name) > 512:
             raise TaskAttachmentValidationError("Имя файла длиннее 512 символов.")
         extension = Path(original_name).suffix.lower()
-        if extension not in self.ALLOWED_EXTENSIONS:
+        if extension not in cls.ALLOWED_EXTENSIONS:
             raise TaskAttachmentUnsupportedTypeError(extension=extension)
         guessed_type = mimetypes.guess_type(original_name)[0]
         effective_content_type = (
@@ -419,6 +461,8 @@ class TaskAttachmentsService:
             id=attachment.id,
             task_id=attachment.task_id,
             original_name=attachment.original_name,
+            caption=getattr(attachment, "caption", None),
+            uploaded_by_user_id=getattr(attachment, "uploaded_by_user_id", None),
             content_type=attachment.content_type,
             size=attachment.size,
             created_at=attachment.created_at,

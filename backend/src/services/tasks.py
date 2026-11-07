@@ -31,6 +31,8 @@ from src.exceptions.tasks import (
     TaskParticipantNotProjectMemberError,
     TaskPersonNotFoundError,
     TaskReporterPermissionError,
+    TaskRevisionConflictError,
+    TaskRevisionValidationError,
     TasksRepositoryError,
     TasksServiceError,
     TaskStatusOfProjectTaskError,
@@ -350,7 +352,7 @@ class TasksService:
 
         Args:
             task_id: Идентификатор задачи.
-            data: Изменяемые поля задачи.
+            data: Изменяемые поля и необязательная expected_revision из чтения задачи.
 
         Returns:
             Обновлённая задача.
@@ -361,22 +363,31 @@ class TasksService:
         """
         try:
             payload = dict(data)
+            expected_task_revision = payload.pop("expected_revision", None)
+            if expected_task_revision is not None and (
+                type(expected_task_revision) is not int or expected_task_revision < 1
+            ):
+                raise TaskRevisionValidationError("Недопустимая expected_revision.")
             if "checklist" in payload:
                 expected_revision = payload.pop("checklist_revision", None)
                 if type(expected_revision) is not int or expected_revision < 0:
                     raise TaskChecklistValidationError("Не указана текущая версия чек-листа.")
                 payload["checklist"] = _normalize_checklist(payload["checklist"])
-                task = await self.tasks_repository.get_for_update(task_id=task_id)
-                if task is None:
-                    raise TaskNotFoundError(task_id=task_id)
+            elif "checklist_revision" in payload:
+                raise TaskChecklistValidationError("Нельзя менять версию отдельно.")
+
+            # Блокировка и populate_existing исключают проверку по старому ORM-снимку.
+            task = await self.tasks_repository.get_for_update(task_id=task_id)
+            if task is None:
+                raise TaskNotFoundError(task_id=task_id)
+            if expected_task_revision is not None and task.revision != expected_task_revision:
+                await self.unit_of_work.rollback()
+                raise TaskRevisionConflictError("Версия задачи изменилась после чтения.")
+            if "checklist" in payload:
                 if task.checklist_revision != expected_revision:
                     await self.unit_of_work.rollback()
                     raise TaskChecklistConflictError("Версия чек-листа изменилась.")
                 payload["checklist_revision"] = expected_revision + 1
-            else:
-                if "checklist_revision" in payload:
-                    raise TaskChecklistValidationError("Нельзя менять версию отдельно.")
-                task = await self._get_task(task_id=task_id)
             key_prefix = await self._key_prefix(task)
             participant_patch = self._extract_participant_data(payload)
             self._validate_schedule(
@@ -433,7 +444,9 @@ class TasksService:
 
             await self._record_field_changes(task=task, data=payload)
             updated = (
-                await self.tasks_repository.update(task=task, data=payload) if payload else task
+                await self.tasks_repository.update(task=task, data=payload)
+                if payload or assignments is not None
+                else task
             )
             if assignments is not None:
                 await self._replace_participants(
@@ -1097,6 +1110,7 @@ def to_task_schema(
     """
     return TaskSchema(
         id=task.id,
+        revision=getattr(task, "revision", 1),
         kind=task_kind(task),
         project_id=task.project_id,
         stage_id=task.stage_id,

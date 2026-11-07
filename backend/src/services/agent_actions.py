@@ -22,6 +22,7 @@ from src.exceptions.agent_tools import (
     AgentToolDecidedError,
     AgentToolExpiredError,
     AgentToolOperationError,
+    AgentToolRequestConflictError,
     AgentToolsServiceError,
 )
 from src.exceptions.base import RepositoryError, ServiceError
@@ -107,7 +108,7 @@ class AgentActionsService:
             previous = await db.runs.get_request(actor.project_id, actor.user_id, request_id)
             if previous is not None:
                 if previous.tool_name != name or previous.arguments != payload:
-                    raise AgentToolConflictError(
+                    raise AgentToolRequestConflictError(
                         "Ключ вызова уже использован с другими аргументами."
                     )
                 if previous.status in {"completed", "pending", "rejected"}:

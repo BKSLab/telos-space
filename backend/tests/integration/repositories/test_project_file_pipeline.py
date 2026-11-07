@@ -14,6 +14,7 @@ from src.clients.embedding import EmbeddingClient
 from src.clients.llm import LlmClient
 from src.clients.qdrant import ProjectQdrantClient
 from src.clients.vision import DisabledVisionCapability
+from src.db.models.file_processing_jobs import FileProcessingJob
 from src.db.models.knowledge_project_file_texts import KnowledgeProjectFileText
 from src.db.models.project_files import ProjectFile
 from src.exceptions.clients import EmbeddingClientError
@@ -144,7 +145,7 @@ async def test_worker_recovers_embedding_failure_and_cleans_deleted_source(
 async def test_nul_text_and_persistence_failure_do_not_leave_files_processing(
     db_session, project, user, tmp_path, monkeypatch
 ):
-    """NUL нормализуется; сбой записи оставляет доступный повтор для обоих файлов."""
+    """NUL нормализуется; сбой semantic-записи не забирает работу base-очереди."""
     storage = TaskAttachmentStorage(tmp_path)
     originals = {}
     for name, content in [
@@ -190,7 +191,24 @@ async def test_nul_text_and_persistence_failure_do_not_leave_files_processing(
         )
         assert len(states) == 2
         assert all(
-            row.status == "failed" and row.index_status == "failed" and row.detail for row in states
+            row.status == "pending" and row.index_status == "pending" and row.detail is None
+            for row in states
+        )
+        base_jobs = (
+            (
+                await db_session.execute(
+                    select(FileProcessingJob).where(
+                        FileProcessingJob.project_file_id.in_(originals)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert {row.project_file_id for row in base_jobs} == set(originals)
+        assert all(
+            row.status == "pending" and row.attempts == 0 and row.lease_token is None
+            for row in base_jobs
         )
         embeddings.get_embeddings.assert_not_awaited()
         result = await worker._prepare_and_execute_job(job)

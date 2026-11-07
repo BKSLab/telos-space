@@ -1,6 +1,7 @@
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, Eye, Paperclip, Plus, Send, X } from "lucide-react";
+import { AgentFileList } from "@/components/files/AgentFileList";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import type { AgentMessage, Project, Task } from "@/lib/types";
 import { useTimConversations } from "@/lib/useTimConversations";
@@ -192,7 +193,7 @@ export function TimPanel({ userId, onClose, embedded = false }: { userId: number
                                 : message.role === "assistant" ? (message.content.trim() ? <TimMarkdown content={message.content} /> : null)
                                 : <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{message.content}</p>}
                             {asked && <p className="mt-1 text-[10px] opacity-75" title="Страница, с которой задан вопрос — её видел Арис">{asked}</p>}
-                            {(message.files ?? []).map((file) => <p key={file.id} className="mt-2 flex min-w-0 items-center gap-1 text-[12px]"><Paperclip size={12} className="shrink-0" /><span className="min-w-0 break-words">{file.original_name}</span></p>)}
+                            {(message.files?.length ?? 0) > 0 && <div className="mt-2"><AgentFileList files={message.files!} conversationId={message.conversation_id} /></div>}
                             {actions.map((action) => <AgentActionCard key={action.id} action={action} project={project} sources={message.sources}
                                 pending={chat.decide.isPending && chat.decide.variables?.actionId === action.id}
                                 onDecision={(decision) => chat.decide.mutate({ id: conversationId!, actionId: action.id, decision })}
@@ -213,10 +214,7 @@ export function TimPanel({ userId, onClose, embedded = false }: { userId: number
 
         <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }} className="chat-personal-composer shrink-0 border-t border-line-subtle px-3 py-2.5">
             {chatError && <ErrorMessage title="Арис сейчас недоступен" message={(chatError as Error).message} />}
-            {selectedFiles.length > 0 && <ul aria-label="Файлы для отправки" className="chat-draft-items mb-2 flex flex-wrap gap-1.5 text-[11px]">{selectedFiles.map((file) => <li key={file.id} className="chat-draft-chip flex items-center gap-1 rounded bg-sunken px-2 py-1 text-secondary">
-                <Paperclip size={11} className="shrink-0" /><span className="max-w-40 truncate">{file.original_name}</span>
-                <button type="button" aria-label={`Убрать ${file.original_name}`} title="Не отправлять этот файл" disabled={sending || busy} onClick={() => void removeFile(file.id)}><X size={11} /></button>
-            </li>)}</ul>}
+            {selectedFiles.length > 0 && conversationId !== null && <div aria-label="Файлы для отправки" className="chat-draft-items mb-2 flex"><AgentFileList files={selectedFiles} conversationId={conversationId} onRemove={id => void removeFile(id)} removeDisabled={sending || busy} /></div>}
             <div className="flex items-end gap-1.5 rounded-[var(--radius-card)] border border-ai-border bg-surface p-1.5 focus-within:border-ai-blue/55">
                 <input type="file" multiple ref={fileInput} aria-label="Файлы для Ариса" className="hidden" onChange={(event) => { void uploadFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
                 <IconButton label="Приложить файл для Ариса: до 5 штук, до 10 МБ каждый" disabled={sending || busy || loading || selectedFiles.length >= 5} onClick={() => fileInput.current?.click()}><Paperclip size={15} /></IconButton>

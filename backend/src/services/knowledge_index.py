@@ -54,6 +54,7 @@ class KnowledgeIndexService:
         embedding_client: EmbeddingClient,
         qdrant_client: ProjectQdrantClient,
         vision: VisionCapability,
+        extract_originals: bool = True,
     ):
         self.sources_repository = sources_repository
         self.files_repository = files_repository
@@ -67,6 +68,7 @@ class KnowledgeIndexService:
         self.embedding_client = embedding_client
         self.qdrant_client = qdrant_client
         self.vision = vision
+        self.extract_originals = extract_originals
 
     async def prepare(self, job: KnowledgeIndexJob) -> PreparedIndexAction:
         """Обычная мутация и полная пересборка читают один и тот же каталог."""
@@ -79,7 +81,15 @@ class KnowledgeIndexService:
         return PreparedIndexAction(job.project_id, build_catalog(job.project_id, rows))
 
     async def extract(self, action: PreparedIndexAction) -> None:
-        """Читает файлы и vision после закрытия DB-области."""
+        """Использует общий кеш; извлечение production выполняет отдельная очередь.
+
+        Явный режим extract_originals оставлен для автономных прежних клиентов
+        индексатора. Composition приложения его отключает, поэтому vision
+        оригинала вызывается только владельцем FileProcessingJob.
+        """
+        if not self.extract_originals:
+            action.catalog = build_catalog(action.project_id, action.catalog.rows)
+            return
         rows = action.catalog.rows
         cached = {row["attachment_id"]: row for row in rows.get("knowledge_attachment_texts", [])}
         for attachment in rows.get("task_attachments", []):

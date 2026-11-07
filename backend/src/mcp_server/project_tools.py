@@ -37,6 +37,45 @@ class ActionApproval(BaseModel):
 
 
 @tt_tool(
+    name="tt_get_latest_project_summary",
+    scope=SCOPE_PROJECTS_READ,
+    title="Последний сохранённый обзор проекта",
+    description=(
+        "Читает последний сохранённый обзор Ариса со вкладки «Обзор»: дату, автора, "
+        "оценку, находки, результаты и рекомендации целиком. found=false означает, "
+        "что обзор ещё не создавался. Это исторический анализ на created_at; "
+        "новый разбор и вызов модели не выполняются."
+    ),
+)
+async def get_latest_project_summary(
+    context: Context,
+    project_key: Annotated[str, Field(description="Ключ проекта, например PROJ.")],
+) -> dict:
+    """Возвращает ту же сохранённую сводку, что читает HTTP-интерфейс.
+
+    Args:
+        context: Аутентифицированный вызов MCP.
+        project_key: Ключ доступного проекта.
+    Returns:
+        Последний полный обзор либо явный результат его отсутствия.
+    Raises:
+        ToolError: При отказе аутентификации, scope или текущего доступа.
+    """
+    async with tool_context(context, require_write=False) as tools:
+        project_id = await resolve_project(tools, project_key)
+        actions = tools.services.actions
+        actor = AgentToolContext(
+            project_id=project_id, user_id=tools.principal.user_id, can_write=False,
+        )
+    try:
+        return await actions.execute(
+            context=actor, name="get_latest_project_summary", arguments={},
+        )
+    except AgentToolsServiceError as error:
+        raise ToolError(error.detail) from error
+
+
+@tt_tool(
     name="tt_list_project_tools",
     scope=SCOPE_PROJECTS_READ,
     title="Каталог действий проекта",

@@ -1,6 +1,7 @@
 """HTTP-контракт, настоящая авторизация и приватная выдача файлов чата."""
 
 import asyncio
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -8,6 +9,7 @@ from uuid import uuid4
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from PIL import Image
 from sqlalchemy import delete
 
 from src.api.v1.endpoints.project_chats import download_router, router
@@ -43,7 +45,7 @@ async def chat_http(chat_env):
 
     async def transport(scope, receive, send):
         async def checked_send(event):
-            if scope["path"].endswith("/content") and event["type"] == "http.response.body":
+            if scope["path"].endswith(("/content", "/preview")) and event["type"] == "http.response.body":
                 assert chat_env.engine.sync_engine.pool.checkedout() == 0
             await send(event)
 
@@ -152,3 +154,44 @@ async def test_http_files_are_private_and_download_releases_database(chat_http, 
         headers=credentials(1),
     )
     assert invalid.status_code == 422
+
+
+async def test_http_image_previews_keep_draft_and_message_permissions(chat_http, chat_env, monkeypatch):
+    """Локальный preview использует права оригинала и освобождает пул до decode."""
+    content = BytesIO()
+    Image.new("RGB", (1200, 800), "navy").save(content, format="PNG")
+    prepare = chat_env.files.storage.prepare_preview
+
+    async def checked_preview(key):
+        assert chat_env.engine.pool.checkedout() == 0
+        return await prepare(key)
+
+    monkeypatch.setattr(chat_env.files.storage, "prepare_preview", checked_preview)
+    path = "/api/v1/projects/1/chat"
+    uploaded = await chat_http.post(
+        f"{path}/attachments",
+        files={"file": ("Фото.png", content.getvalue(), "image/png")},
+        headers=credentials(1),
+    )
+    assert uploaded.status_code == 201
+    file_id = uploaded.json()["id"]
+    preview = f"{path}/attachments/{file_id}/preview"
+    assert (await chat_http.get(preview)).status_code == 401
+    assert (await chat_http.get(preview, headers=credentials(2))).status_code == 404
+    shown = await chat_http.get(preview, headers=credentials(1))
+    assert shown.status_code == 200
+    assert shown.headers["content-type"] == "image/jpeg"
+    with Image.open(BytesIO(shown.content)) as decoded:
+        assert max(decoded.size) <= 640
+    sent = await chat_http.post(
+        f"{path}/messages", headers=credentials(1),
+        json={"client_message_id": str(uuid4()), "attachment_ids": [file_id]},
+    )
+    assert sent.status_code == 201
+    assert (await chat_http.get(preview, headers=credentials(2))).status_code == 200
+    deleted = await chat_http.request(
+        "DELETE", f"{path}/messages/{sent.json()['id']}",
+        json={"expected_revision": 1}, headers=credentials(1),
+    )
+    assert deleted.status_code == 200
+    assert (await chat_http.get(preview, headers=credentials(1))).status_code == 404

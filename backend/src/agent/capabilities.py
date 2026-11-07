@@ -71,8 +71,9 @@ WORKFLOWS = (
     ),
     Workflow(
         "reports",
-        "Опубликованные итоговые отчёты задач: наличие, полная сводка, чтение и новая версия.",
-        frozenset({"list_task_reports", "get_task_report", "publish_task_report"}),
+        "Сохранённый обзор/разбор проекта Ариса, последняя аналитическая сводка; "
+        "опубликованные итоговые отчёты задач: наличие, чтение и новая версия.",
+        frozenset({"get_latest_project_summary", "list_task_reports", "get_task_report", "publish_task_report"}),
     ),
     Workflow(
         "project",

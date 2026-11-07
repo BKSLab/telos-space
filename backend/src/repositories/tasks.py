@@ -893,11 +893,13 @@ class TasksRepository:
             result = await self.db_session.execute(
                 update(Task)
                 .where(Task.wbs_node_id.in_(node_ids))
-                .values(wbs_node_id=None, wbs_position=None)
-                .execution_options(synchronize_session="fetch")
+                .values(wbs_node_id=None, wbs_position=None, revision=Task.revision + 1)
+                .returning(Task)
+                .execution_options(populate_existing=True, synchronize_session="fetch")
             )
+            changed = result.scalars().all()
             await self.db_session.flush()
-            return int(result.rowcount or 0)
+            return len(changed)
         except (SQLAlchemyError, Exception) as error:
             await self.db_session.rollback()
             logger.error("❌ Не удалось снять привязку задач к разделам ИСР.", exc_info=True)
@@ -947,11 +949,17 @@ class TasksRepository:
         if not positions:
             return
         try:
-            result: Result = await self.db_session.execute(
-                select(Task).where(Task.id.in_(positions))
+            result = await self.db_session.execute(
+                update(Task)
+                .where(Task.id.in_(positions))
+                .values(
+                    wbs_position=case(positions, value=Task.id),
+                    revision=Task.revision + 1,
+                )
+                .returning(Task)
+                .execution_options(populate_existing=True, synchronize_session="fetch")
             )
-            for task in result.scalars().all():
-                task.wbs_position = positions[task.id]
+            result.scalars().all()
             await self.db_session.flush()
         except (SQLAlchemyError, Exception) as error:
             await self.db_session.rollback()
@@ -994,23 +1002,27 @@ class TasksRepository:
             raise TasksRepositoryError("Ошибка сохранения задачи.") from error
 
     async def update(self, task: Task, data: dict) -> Task:
-        """Обновляет задачу и возвращает сохранённую модель.
+        """Обновляет задачу и атомарно увеличивает её версию.
 
         Args:
             task: Изменяемая ORM-модель задачи.
             data: Новые значения полей.
 
         Returns:
-            Обновлённая задача.
+            Обновлённая задача с актуальной версией из RETURNING.
 
         Raises:
             TasksRepositoryError: Если обновить задачу не удалось.
         """
         try:
-            for field, value in data.items():
-                setattr(task, field, value)
-            await self.db_session.flush()
-            return task
+            result = await self.db_session.execute(
+                update(Task)
+                .where(Task.id == task.id)
+                .values(**{**data, "revision": Task.revision + 1})
+                .returning(Task)
+                .execution_options(populate_existing=True, synchronize_session="fetch")
+            )
+            return result.scalar_one()
         except (SQLAlchemyError, Exception) as error:
             await self.db_session.rollback()
             logger.error("❌ Не удалось обновить задачу id=%s.", task.id, exc_info=True)
@@ -1021,17 +1033,45 @@ class TasksRepository:
         if not task_ids:
             return
         try:
-            await self.db_session.execute(
+            result = await self.db_session.execute(
                 update(Task)
                 .where(Task.id.in_(task_ids))
-                .values(assignee=None)
-                .execution_options(synchronize_session="fetch")
+                .values(assignee=None, revision=Task.revision + 1)
+                .returning(Task)
+                .execution_options(populate_existing=True, synchronize_session="fetch")
             )
+            result.scalars().all()
             await self.db_session.flush()
         except (SQLAlchemyError, Exception) as error:
             await self.db_session.rollback()
             logger.error("❌ Не удалось очистить исполнителей задач.", exc_info=True)
             raise TasksRepositoryError("Ошибка очистки исполнителей задач.") from error
+
+    async def bump_revisions(self, *, task_ids: set[int]) -> None:
+        """Повышает версии задач после изменения только ролевых назначений.
+
+        Args:
+            task_ids: Задачи с изменившимся составом участников.
+
+        Raises:
+            TasksRepositoryError: Если повысить версии не удалось.
+        """
+        if not task_ids:
+            return
+        try:
+            result = await self.db_session.execute(
+                update(Task)
+                .where(Task.id.in_(task_ids))
+                .values(revision=Task.revision + 1)
+                .returning(Task)
+                .execution_options(populate_existing=True, synchronize_session="fetch")
+            )
+            result.scalars().all()
+            await self.db_session.flush()
+        except (SQLAlchemyError, Exception) as error:
+            await self.db_session.rollback()
+            logger.error("❌ Не удалось повысить версии задач.", exc_info=True)
+            raise TasksRepositoryError("Ошибка обновления версий задач.") from error
 
     async def delete(self, task: Task) -> None:
         """Удаляет задачу.
@@ -1057,12 +1097,14 @@ class TasksRepository:
         """Календарь проектных и разовых задач с доступом по локальным назначениям."""
         try:
             async with self.db_session.begin_nested():
-                await self.db_session.execute(
+                result = await self.db_session.execute(
                     update(Task)
                     .where(Task.id == task_id)
-                    .values(**data)
-                    .execution_options(synchronize_session="fetch")
+                    .values(**{**data, "revision": Task.revision + 1})
+                    .returning(Task)
+                    .execution_options(populate_existing=True, synchronize_session="fetch")
                 )
+                result.scalars().all()
         except IntegrityError as error:
             if get_integrity_constraint_name(error) in TASK_NUMBER_CONSTRAINTS:
                 logger.warning("⚠️ Номер %s в цели переноса занят.", data.get("number"))

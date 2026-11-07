@@ -71,8 +71,8 @@ POLICIES = (
         "project",
         SourceType.PROJECT_FILE,
         "Файл проекта",
-        "id project_id uploaded_by_user_id original_name storage_key content_type size content_hash retry_requested_at deleted_at created_at updated_at",
-        "",
+        "id project_id uploaded_by_user_id original_name caption storage_key content_type size content_hash retry_requested_at deleted_at created_at updated_at",
+        "caption",
         "original_name",
     ),
     policy(
@@ -130,8 +130,8 @@ POLICIES = (
         "task",
         SourceType.ATTACHMENT,
         "Вложение",
-        "id task_id original_name storage_key content_type size created_at",
-        "",
+        "id task_id uploaded_by_user_id original_name caption storage_key content_type size created_at",
+        "caption",
         "original_name",
     ),
     policy(
@@ -212,6 +212,10 @@ POLICIES = (
     ),
     # Связи входят в граф обоих концов; голые идентификаторы не образуют embeddings.
     policy("document_links", "task", None, "Документ задачи", "id document_id task_id"),
+    policy(
+        "task_comment_attachments", "task", None, "Вложение комментария",
+        "comment_id attachment_id task_id",
+    ),
     policy("project_sticker_task_links", "task", None, "Стикер задачи", "sticker_id task_id"),
     policy(
         "task_dependencies",
@@ -277,6 +281,9 @@ EXCLUDED_TABLES = {
     "agent_files": "Приватные загрузки диалогов; только прикреплённые к задачам копии становятся знаниями проекта.",
     "api_tokens": "Секреты и авторизация не являются знаниями проекта.",
     "knowledge_index_jobs": "Служебная очередь синхронизации.",
+    "file_comment_submissions": "Квитанции повторов; комментарии и файлы индексируются самостоятельно.",
+    "file_processing_jobs": "Независимая служебная очередь извлечения текста файлов.",
+    "file_search_chunks": "Производный FTS-индекс; исходный текст включён через оригинал файла.",
 }
 EXCLUDED_FIELDS = {
     "task_reports": {"author_id": "Технический ID автора; снимок имени включён."},
@@ -302,11 +309,12 @@ EXCLUDED_FIELDS = {
         )
     },
     "tasks": {
-        key: "Визуальная геометрия либо производный индекс."
+        key: "Визуальная геометрия, служебная версия либо производный индекс."
         for key in (
             "canvas_x",
             "canvas_y",
             "search_vector",
+            "revision",
             "attention_revision",
             "attention_deadline_revision",
         )
@@ -326,6 +334,7 @@ EXCLUDED_FIELDS = {
 }
 
 FIELD_LABELS = {
+    "caption": "Комментарий к файлу",
     "description_md": "Описание",
     "description": "Описание",
     "content_md": "Содержание",
@@ -630,6 +639,13 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             f"attachment:{row.get('origin_attachment_id')}",
             "derived_from",
             "represented_by",
+        )
+    for row in rows.get("task_comment_attachments", []):
+        catalog.link(
+            f"comment:{row['comment_id']}",
+            f"attachment:{row['attachment_id']}",
+            "attached_file",
+            "attached_to_comment",
         )
     for member in rows.get("project_members", []):
         if member["user_id"] == project["owner_id"]:

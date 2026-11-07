@@ -81,6 +81,7 @@ def make_task(
     now = datetime.now(UTC)
     return SimpleNamespace(
         id=task_id,
+        revision=1,
         project_id=1,
         stage_id=stage_id,
         wbs_node_id=None,
@@ -122,6 +123,8 @@ def build_service(
     participants = participants_repository or AsyncMock(spec=TaskParticipantsRepository)
     if participants_repository is None:
         participants.get_by_task_ids.return_value = {}
+    if tasks_repository is not None:
+        tasks_repository.get_for_update.side_effect = tasks_repository.get_by_id
     return TasksService(
         tasks_repository=tasks_repository or AsyncMock(spec=TasksRepository),
         members_repository=members_repository or AsyncMock(spec=ProjectMembersRepository),

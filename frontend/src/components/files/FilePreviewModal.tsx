@@ -12,7 +12,7 @@ export function FilePreviewModal({
     onClose: () => void;
 }) {
     const [failedPreviewKey, setFailedPreviewKey] = useState<string | null>(null);
-    const previewKey = `${file?.key ?? ""}:${file?.url ?? ""}`;
+    const previewKey = `${file?.key ?? ""}:${file?.previewUrl ?? ""}`;
     const loadFailed = failedPreviewKey === previewKey;
 
     if (!file) {
@@ -53,11 +53,11 @@ export function FilePreviewModal({
                 ) : undefined
             }
         >
-            {file.url && (
+            {file.previewUrl && (
                 <div className="flex min-h-52 items-center justify-center overflow-hidden rounded-[var(--radius-card)] bg-app/70">
                     {!loadFailed ? (
                         <img
-                            src={file.url}
+                            src={file.previewUrl}
                             alt={file.name}
                             className="max-h-[62vh] max-w-full object-contain"
                             onError={() => setFailedPreviewKey(previewKey)}

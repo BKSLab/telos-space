@@ -84,6 +84,7 @@ class TaskDocumentImportService:
         file_name: str,
         content_type: str | None,
         content: bytes,
+        caption: str | None = None,
     ) -> TaskDocumentImportSchema:
         """Сохраняет исходник, извлекает текст и создаёт связь документа с задачей.
 
@@ -124,6 +125,8 @@ class TaskDocumentImportService:
                     file_name=safe_name,
                     content_type=content_type,
                     content=content,
+                    caption=caption,
+                    uploaded_by_user_id=user_id,
                     index_for_knowledge=False,
                 )
                 storage_key = stored.storage_key

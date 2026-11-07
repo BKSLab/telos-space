@@ -334,9 +334,9 @@ async def get_task(
     dependencies=[Depends(require_write_scope), Depends(require_task_access)],
     status_code=status.HTTP_200_OK,
     summary="Изменить задачу",
-    description="Частично обновляет поля задачи и фиксирует значимые изменения в истории. Для изменения checklist передайте весь чек-лист и текущую checklist_revision. null удаляет чек-лист, отсутствие поля сохраняет его. Устаревшая версия возвращает 409 без изменений.",
+    description="Частично обновляет поля задачи и фиксирует значимые изменения в истории. Передайте expected_revision из карточки задачи для защиты общих полей и назначений: устаревшая версия возвращает 409 без изменений. Без expected_revision сохраняется прежняя запись без проверки общей версии. Для изменения checklist передайте весь чек-лист и текущую checklist_revision; эта версия проверяется отдельно. null удаляет чек-лист, отсутствие поля сохраняет его.",
     operation_id="updateTask",
-    response_description="Обновлённая задача с новой версией чек-листа, если он изменён.",
+    response_description="Обновлённая задача с актуальной revision и новой checklist_revision, если чек-лист изменён.",
     responses={404: NOT_FOUND_RESPONSE, 409: CONFLICT_RESPONSE, 422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     response_model=TaskSchema,
 )

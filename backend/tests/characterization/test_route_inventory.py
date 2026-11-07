@@ -13,6 +13,19 @@ from fastapi.routing import APIRoute
 from main import app
 
 FROZEN_ROUTES: set[tuple[str, str]] = {
+    ("GET", "/api/v1/projects/{project_id}/files/search"),
+    ("GET", "/api/v1/tasks/{task_id}/files/search"),
+    ("GET", "/api/v1/projects/{project_id}/files/{file_id}/preview"),
+    ("GET", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/preview"),
+    ("GET", "/api/v1/projects/{project_id}/chat/attachments/{file_id}/preview"),
+    ("GET", "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/content"),
+    ("GET", "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/preview"),
+    ("GET", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/content"),
+    ("GET", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/preview"),
+    ("PATCH", "/api/v1/projects/{project_id}/files/{file_id}"),
+    ("PATCH", "/api/v1/tasks/{task_id}/attachments/{attachment_id}"),
+    ("POST", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/retry"),
+    ("POST", "/api/v1/tasks/{task_id}/comments/with-files"),
     ("GET", "/api/v1/projects/{project_id}/files"),
     ("POST", "/api/v1/projects/{project_id}/files"),
     ("GET", "/api/v1/projects/{project_id}/files/{file_id}"),
@@ -310,8 +323,8 @@ def test_non_get_routes_are_fully_classified() -> None:
     )
 
     mutations = non_get - explicit
-    assert len(non_get) == 130, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
-    assert len(mutations) == 109, f"Изменилось число доменных мутаций: {len(mutations)}"
+    assert len(non_get) == 134, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
+    assert len(mutations) == 113, f"Изменилось число доменных мутаций: {len(mutations)}"
 
 
 def test_every_route_has_unique_method_and_path() -> None:

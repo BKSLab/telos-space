@@ -4,7 +4,10 @@ import asyncio
 import os
 import shutil
 import uuid
+import warnings
 from pathlib import Path, PurePosixPath
+
+from PIL import Image, ImageOps
 
 from src.exceptions.storage import TaskAttachmentStorageError
 
@@ -14,6 +17,58 @@ class TaskAttachmentStorage:
 
     def __init__(self, root: Path) -> None:
         self.root = root
+
+    PREVIEW_SIZE = (640, 640)
+    PREVIEW_MAX_PIXELS = 25_000_000
+
+    async def prepare_preview(self, storage_key: str) -> Path | None:
+        """Создаёт ограниченную JPEG-миниатюру локально без БД и внешних API.
+
+        Args:
+            storage_key: Проверенный ключ оригинала в этом хранилище.
+        Returns:
+            Путь к миниатюре либо None для нерастрового/повреждённого оригинала.
+        Raises:
+            TaskAttachmentStorageError: Оригинал отсутствует или запись недоступна.
+        """
+        try:
+            return await asyncio.to_thread(self._prepare_preview_sync, storage_key)
+        except (OSError, ValueError) as error:
+            raise TaskAttachmentStorageError("Не удалось подготовить миниатюру.") from error
+
+    def _prepare_preview_sync(self, storage_key: str) -> Path | None:
+        original = self.resolve(storage_key)
+        preview = original.with_name(original.name + ".preview.jpg")
+        root = self.root.resolve()
+        if root not in preview.resolve().parents:
+            raise ValueError("Миниатюра находится вне uploads.")
+        if preview.is_file():
+            return preview
+        temporary = preview.with_name(f".{preview.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", Image.DecompressionBombWarning)
+                    with Image.open(original) as source:
+                        if source.format not in {"JPEG", "PNG", "GIF", "BMP", "WEBP", "AVIF"}:
+                            return None
+                        if source.width * source.height > self.PREVIEW_MAX_PIXELS:
+                            return None
+                        source.seek(0)
+                        source.thumbnail(self.PREVIEW_SIZE, Image.Resampling.LANCZOS)
+                        image = ImageOps.exif_transpose(source).convert("RGB")
+            except (
+                OSError,
+                SyntaxError,
+                Image.DecompressionBombError,
+                Image.DecompressionBombWarning,
+            ):
+                return None
+            image.save(temporary, "JPEG", quality=85, optimize=True)
+            os.replace(temporary, preview)
+            return preview
+        finally:
+            temporary.unlink(missing_ok=True)
 
     async def save(self, task_id: int, extension: str, content: bytes) -> str:
         """Атомарно сохраняет файл и возвращает относительный storage key.
@@ -51,6 +106,9 @@ class TaskAttachmentStorage:
         try:
             path = self.resolve(storage_key)
             await asyncio.to_thread(path.unlink, missing_ok=True)
+            await asyncio.to_thread(
+                path.with_name(path.name + ".preview.jpg").unlink, missing_ok=True
+            )
         except (OSError, ValueError) as error:
             raise TaskAttachmentStorageError(str(error)) from error
 
@@ -83,6 +141,9 @@ class TaskAttachmentStorage:
             if root not in target.parents:
                 raise ValueError("Файл находится вне корня uploads.")
             await asyncio.to_thread(target.unlink, missing_ok=True)
+            await asyncio.to_thread(
+                target.with_name(target.name + ".preview.jpg").unlink, missing_ok=True
+            )
         except (OSError, ValueError) as error:
             raise TaskAttachmentStorageError(str(error)) from error
 

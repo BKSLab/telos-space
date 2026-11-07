@@ -19,9 +19,9 @@ BEGIN
         ELSE COALESCE((SELECT is_done_stage FROM project_stages WHERE id=OLD.stage_id), false) END;
     new_closed := CASE WHEN NEW.project_id IS NULL THEN NEW.status::text IN ('DONE','CANCELLED')
         ELSE COALESCE((SELECT is_done_stage FROM project_stages WHERE id=NEW.stage_id), false) END;
-    IF (to_jsonb(NEW) - ARRAY['updated_at','search_vector','position','attention_revision','attention_deadline_revision'])
+    IF (to_jsonb(NEW) - ARRAY['updated_at','search_vector','position','revision','attention_revision','attention_deadline_revision'])
         IS DISTINCT FROM
-       (to_jsonb(OLD) - ARRAY['updated_at','search_vector','position','attention_revision','attention_deadline_revision'])
+       (to_jsonb(OLD) - ARRAY['updated_at','search_vector','position','revision','attention_revision','attention_deadline_revision'])
        OR NEW.attention_revision IS DISTINCT FROM OLD.attention_revision THEN
         NEW.attention_revision := OLD.attention_revision + 1;
     ELSE

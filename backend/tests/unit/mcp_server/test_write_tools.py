@@ -77,7 +77,7 @@ async def test_create_task_passes_only_given_fields(write_tools) -> None:
 
     payload = services.tasks.create_task.await_args.kwargs["data"]
     assert payload == {"title": "Новая"}
-    assert result == {"task_key": TASK_KEY, "title": "Задача", "created": True}
+    assert result == {"task_key": TASK_KEY, "title": "Задача", "created": True, "revision": 1}
 
 
 async def test_create_task_uses_the_owner_of_the_token_as_author(write_tools) -> None:
@@ -193,7 +193,7 @@ async def test_update_task_touches_only_given_fields_and_clears_by_empty_value(w
         "data": {"title": "Другой"},
         "updated_by_user_id": 1,
     }
-    assert result == {"task_key": TASK_KEY, "updated_fields": ["title"]}
+    assert result == {"task_key": TASK_KEY, "updated_fields": ["title"], "revision": 1}
     # Пустая строка снимает исполнителя и не ищет пользователя.
     services = write_tools()
 

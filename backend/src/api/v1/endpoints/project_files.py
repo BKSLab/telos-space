@@ -3,7 +3,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from src.api.v1.responses import NOT_FOUND_RESPONSE, SERVER_ERROR_RESPONSE, VALIDATION_RESPONSE
@@ -15,10 +15,15 @@ from src.dependencies.auth import (
     SessionCookieDep,
     require_write_scope,
 )
+from src.dependencies.file_comments import FilePreviewsServiceDep
 from src.dependencies.scopes import ProjectFilesServiceDep
 from src.exceptions.access import AccessServiceError
+from src.exceptions.api_tokens import InsufficientTokenScopeError
+from src.exceptions.auth import AuthServiceError
 from src.exceptions.project_files import ProjectFilesServiceError
+from src.schemas.file_metadata import FileCaptionUpdateSchema
 from src.schemas.project_files import ProjectFileDetailSchema, ProjectFileSchema
+from src.services.file_metadata import FILE_PREVIEW_ERRORS
 from src.services.project_files import PROJECT_FILE_DOWNLOAD_ERRORS
 from src.utils.api_tokens import extract_bearer_secret
 
@@ -88,13 +93,12 @@ async def get_project_files(
         )
         logger.info("✅ Получено %s файлов проекта %s.", len(result), project_id)
         return result
-    except FILE_ERRORS as error:
+    except (*FILE_ERRORS, AuthServiceError, InsufficientTokenScopeError) as error:
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
 @router.post(
     "/projects/{project_id}/files",
-    dependencies=[Depends(require_write_scope), Depends(require_project_access)],
     status_code=201,
     summary="Загрузить файл проекта",
     description="Сохраняет оригинал и атомарно ставит обработку в очередь. Распознавание выполняется в фоне.",
@@ -109,9 +113,13 @@ async def get_project_files(
 )
 async def upload_project_file(
     project_id: ProjectId,
-    principal: PrincipalDep,
     service: ProjectFilesServiceDep,
     file: Annotated[UploadFile, File(description="Поддерживаемый документ или изображение.")],
+    caption: Annotated[
+        str | None, Form(max_length=4000, description="Пользовательская подпись оригинала.")
+    ] = None,
+    session_cookie: SessionCookieDep = None,
+    authorization: AuthorizationHeaderDep = None,
 ) -> ProjectFileSchema:
     """Принимает ограниченный multipart-файл и гарантированно закрывает его.
 
@@ -130,13 +138,15 @@ async def upload_project_file(
         uploaded = await read_upload(file, max_size=service.max_file_size)
         result = await service.upload(
             project_id=project_id,
-            user_id=principal.user_id,
             file_name=uploaded.name,
             content=uploaded.content,
+            caption=caption,
+            session_token=session_cookie,
+            bearer_secret=extract_bearer_secret(authorization),
         )
         logger.info("✅ Файл %s проекта %s сохранён.", result.id, project_id)
         return result
-    except FILE_ERRORS as error:
+    except (*FILE_ERRORS, AuthServiceError, InsufficientTokenScopeError) as error:
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
     finally:
         await file.close()
@@ -314,4 +324,98 @@ async def delete_project_file(
         logger.info("✅ Файл %s скрыт и ожидает очистки.", file_id)
         return Response(status_code=204)
     except FILE_ERRORS as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
+
+
+@router.patch(
+    "/projects/{project_id}/files/{file_id}",
+    dependencies=[Depends(require_write_scope), Depends(require_project_access)],
+    summary="Изменить подпись файла проекта",
+    description="Меняет пользовательскую подпись того же оригинала, сохраняя извлечённый текст.",
+    operation_id="updateProjectFileCaption",
+    response_description="Метаданные файла с новой подписью.",
+    response_model=ProjectFileSchema,
+    responses=RESPONSES,
+)
+async def update_project_file_caption(
+    project_id: ProjectId,
+    file_id: FileId,
+    data: FileCaptionUpdateSchema,
+    principal: PrincipalDep,
+    service: ProjectFilesServiceDep,
+) -> ProjectFileSchema:
+    """Меняет подпись доступного оригинала проекта.
+
+    Args:
+        project_id: Текущий проект-владелец.
+        file_id: Оригинал для изменения подписи.
+        data: Новая подпись либо null для её удаления.
+        principal: Аутентифицированный локальный пользователь.
+        service: Общий сервис метаданных проекта.
+    Returns:
+        Метаданные того же файла с актуальными состояниями обработки.
+    Raises:
+        HTTPException: Доступ отсутствует или подпись не удалось сохранить.
+    """
+    logger.info("🚀 Изменение подписи файла %s проекта %s.", file_id, project_id)
+    try:
+        result = await service.update_caption(
+            project_id=project_id, file_id=file_id, user_id=principal.user_id, caption=data.caption
+        )
+        logger.info("✅ Подпись файла %s изменена.", file_id)
+        return result
+    except FILE_ERRORS as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
+
+
+@router.get(
+    "/projects/{project_id}/files/{file_id}/preview",
+    summary="Открыть миниатюру файла проекта",
+    description="Проверяет текущие права и выдаёт ограниченную локальную JPEG-миниатюру без AI API.",
+    operation_id="getProjectFilePreview",
+    response_description="Защищённая JPEG-миниатюра оригинала.",
+    response_class=FileResponse,
+    responses=RESPONSES,
+)
+async def get_project_file_preview(
+    project_id: ProjectId,
+    file_id: FileId,
+    service: FilePreviewsServiceDep,
+    session_cookie: SessionCookieDep = None,
+    authorization: AuthorizationHeaderDep = None,
+) -> FileResponse:
+    """Отдаёт миниатюру после закрытия короткой auth/access области.
+
+    Args:
+        project_id: Проект-владелец оригинала.
+        file_id: Оригинал для предпросмотра.
+        service: Сервис защищённых локальных миниатюр.
+        session_cookie: Cookie сессии.
+        authorization: Bearer-заголовок с приоритетом перед cookie.
+    Returns:
+        Ограниченный безопасный растр без активного содержимого оригинала.
+    Raises:
+        HTTPException: Пользователь, оригинал или миниатюра недоступны.
+    """
+    logger.info("🚀 Миниатюра файла %s проекта %s.", file_id, project_id)
+    try:
+        download = await service.prepare_project(
+            project_id=project_id,
+            file_id=file_id,
+            session_token=session_cookie,
+            bearer_secret=extract_bearer_secret(authorization),
+        )
+        logger.info("✅ Миниатюра файла %s подготовлена.", file_id)
+        return FileResponse(
+            path=download.path,
+            media_type=download.media_type,
+            filename=download.filename,
+            content_disposition_type="inline",
+            headers={
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; sandbox",
+            },
+        )
+    except FILE_PREVIEW_ERRORS as error:
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error

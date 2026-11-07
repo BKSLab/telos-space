@@ -40,6 +40,20 @@ class TaskVersionConflictError(TasksServiceError):
     detail = "Задача изменилась. Прочитайте свежую версию перед удалением."
 
 
+class TaskRevisionConflictError(TasksServiceError):
+    """Общие поля задачи изменились после чтения её версии."""
+
+    status_code = status.HTTP_409_CONFLICT
+    detail = "Задача изменилась. Перечитайте её и повторите изменения."
+
+
+class TaskRevisionValidationError(TasksServiceError):
+    """Ожидаемая версия задачи не является положительным целым числом."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    detail = "Ожидаемая версия задачи должна быть положительным целым числом."
+
+
 class TaskChecklistValidationError(TasksServiceError):
     """Пункты или версия чек-листа не соответствуют контракту."""
 

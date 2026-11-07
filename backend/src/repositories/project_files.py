@@ -5,10 +5,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Executable
 
+from src.db.models.file_processing_jobs import FileProcessingJob
 from src.db.models.knowledge_project_file_texts import KnowledgeProjectFileText
 from src.db.models.knowledge_source_summaries import KnowledgeSourceSummary
 from src.db.models.project_files import ProjectFile
 from src.exceptions.project_files import ProjectFilesRepositoryError
+from src.repositories.file_processing_state import fts_state_columns
 
 
 def _metadata_query() -> Select:
@@ -21,9 +23,11 @@ def _metadata_query() -> Select:
             cached.index_status,
             cached.index_detail,
             cached.indexed_at,
+            *fts_state_columns(FileProcessingJob.status, cached.status, FileProcessingJob.detail),
             KnowledgeSourceSummary.summary,
         )
         .outerjoin(cached, cached.project_file_id == ProjectFile.id)
+        .outerjoin(FileProcessingJob, FileProcessingJob.project_file_id == ProjectFile.id)
         .outerjoin(KnowledgeSourceSummary, KnowledgeSourceSummary.project_file_id == ProjectFile.id)
     )
 
@@ -128,6 +132,33 @@ class ProjectFilesRepository:
             )
             .values(deleted_at=func.now())
         )
+
+    async def update_caption(
+        self, *, project_id: int, file_id: int, caption: str | None
+    ) -> dict | None:
+        """Меняет подпись активного оригинала без сброса извлечённого текста.
+
+        Args:
+            project_id: Текущий проект-владелец.
+            file_id: Идентификатор оригинала.
+            caption: Нормализованная подпись либо None.
+        Returns:
+            Изменённые метаданные или None, если активный файл не найден.
+        Raises:
+            ProjectFilesRepositoryError: UPDATE завершился ошибкой.
+        """
+        result = await self._execute(
+            update(ProjectFile)
+            .where(
+                ProjectFile.project_id == project_id,
+                ProjectFile.id == file_id,
+                ProjectFile.deleted_at.is_(None),
+            )
+            .values(caption=caption)
+            .returning(*ProjectFile.__table__.c)
+        )
+        row = result.mappings().one_or_none()
+        return dict(row) if row else None
 
     async def request_retry(self, *, project_id: int, file_id: int) -> None:
         """Изменяет источник, атомарно создавая задание outbox.

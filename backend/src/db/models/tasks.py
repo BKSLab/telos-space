@@ -52,6 +52,7 @@ class Task(Base, TimestampMixin):
     __tablename__ = "tasks"
     __table_args__ = (
         UniqueConstraint("project_id", "number", name="uq_tasks_project_number"),
+        CheckConstraint("revision >= 1", name="ck_tasks_revision_positive"),
         CheckConstraint("project_id IS NOT NULL OR (wbs_node_id IS NULL AND wbs_position IS NULL AND canvas_x IS NULL AND canvas_y IS NULL)", name="ck_tasks_personal_no_wbs"),
         Index("ix_tasks_search_vector", "search_vector", postgresql_using="gin"),
         Index("ix_tasks_project_due_date", "project_id", "due_date"),
@@ -84,6 +85,14 @@ class Task(Base, TimestampMixin):
         nullable=True,
         doc="Состояние задачи вне проекта; у проектной задачи его задаёт стадия.",
         comment="Статус разовой задачи; NULL у проектной задачи.",
+    )
+    revision: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="1",
+        default=1,
+        doc="Текущая версия задачи для защиты от устаревших изменений.",
+        comment="Монотонная версия общих полей и назначений задачи.",
     )
     attention_revision: Mapped[int] = mapped_column(
         Integer,

@@ -4,12 +4,16 @@ import { ChevronLeft, ChevronRight, Download, Paperclip, RotateCw, Trash2 } from
 import { api, apiUrl, endpoints, queryKeys } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/dates";
-import { formatFileSize } from "@/lib/files";
+import { formatFileSize, type FileDescriptor } from "@/lib/files";
+import { projectFileDescriptor } from "@/lib/fileDescriptors";
 import { EXTRACTION_LABELS, INDEX_LABELS, isProjectFileProcessing, PROJECT_FILE_TEXT_PAGE_SIZE, projectFilesPollInterval } from "@/lib/projectFiles";
 import type { ProjectFile, ProjectFileDetail } from "@/lib/types";
 import type { useProjectFiles } from "@/lib/useProjectFiles";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Field";
+import { FileList } from "./FileList";
+import { FileTile } from "./FileTile";
+import { FilePreviewModal } from "./FilePreviewModal";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 
@@ -26,6 +30,7 @@ export function ProjectFilesSection({
     onCloseFile: () => void;
 }) {
     const [deleteTarget, setDeleteTarget] = useState<ProjectFile | null>(null);
+    const [previewFile, setPreviewFile] = useState<FileDescriptor | null>(null);
     const files = model.files.data?.pages.flat() ?? [];
 
     function confirmDelete(file: ProjectFile) {
@@ -80,23 +85,14 @@ export function ProjectFilesSection({
                 <ul className="flex min-w-0 flex-col gap-2">
                     {files.map((file) => (
                         <li key={file.id}>
-                            <Card className="flex min-w-0 flex-wrap items-start gap-2 px-3 py-3">
-                                <button
-                                    type="button"
-                                    aria-label={`Открыть файл ${file.original_name}`}
-                                    className="touch-target min-w-0 flex-1 rounded text-left focus-visible:outline-2 focus-visible:outline-accent"
-                                    onClick={() => onOpenFile(file.id)}
-                                >
-                                    <span className="flex min-w-0 items-start gap-2">
-                                        <Paperclip size={15} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
-                                        <span className="min-w-0 flex-1">
-                                            <span className="block text-[14px] font-medium break-words text-primary [overflow-wrap:anywhere]">{file.original_name}</span>
-                                            <span className="mt-0.5 block text-[11px] text-muted">{formatFileSize(file.size)} · Загружен {formatRelative(file.created_at)}</span>
-                                        </span>
-                                    </span>
+                            <FileTile file={projectFileDescriptor(file)} onPreview={setPreviewFile} className="w-full sm:w-full">
+                                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                                    <button type="button" aria-label={`Открыть файл ${file.original_name}`} onClick={() => onOpenFile(file.id)}
+                                        className="touch-target rounded text-[12px] font-medium text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent">Текст и сведения</button>
+                                    <span className="text-[11px] text-muted">Загружен {formatRelative(file.created_at)}</span>
+                                </div>
                                     <FileStatus file={file} />
                                     {file.summary && <span className="mt-2 line-clamp-2 block text-[12px] break-words text-secondary">{file.summary}</span>}
-                                </button>
                                 <div className="flex shrink-0 items-center gap-1">
                                     <a
                                         href={apiUrl(endpoints.projectFileContent(projectId, file.id))}
@@ -112,7 +108,7 @@ export function ProjectFilesSection({
                                         <Trash2 size={15} aria-hidden="true" />
                                     </IconButton>
                                 </div>
-                            </Card>
+                            </FileTile>
                         </li>
                     ))}
                 </ul>
@@ -131,8 +127,10 @@ export function ProjectFilesSection({
                     onClose={onCloseFile}
                     onDelete={confirmDelete}
                     retry={model.retry}
+                    captionMutation={model.caption}
                 />
             )}
+            <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
             <Modal
                 title="Удалить файл проекта?"
                 isOpen={deleteTarget !== null}
@@ -158,8 +156,9 @@ function FileStatus({ file }: { file: ProjectFile }) {
     return (
         <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
             <span className={cn(file.extraction_status === "failed" ? "text-danger" : "text-secondary")}>
-                {file.extraction_status === "pending" && file.index_status === "disabled" ? "Извлечение отключено" : EXTRACTION_LABELS[file.extraction_status]}
+                {EXTRACTION_LABELS[file.extraction_status]}
             </span>
+            {file.fts_status && <span className={file.fts_status === "failed" ? "text-danger" : "text-muted"}>{file.fts_status === "pending" ? "Готовим для поиска" : file.fts_status === "ready" ? "В поиске" : "Поиск временно недоступен"}</span>}
             <span className={cn(file.index_status === "failed" ? "text-danger" : "text-muted")}>
                 {INDEX_LABELS[file.index_status]}
             </span>
@@ -167,14 +166,17 @@ function FileStatus({ file }: { file: ProjectFile }) {
     );
 }
 
-function ProjectFileDialog({ projectId, fileId, onClose, onDelete, retry }: {
+function ProjectFileDialog({ projectId, fileId, onClose, onDelete, retry, captionMutation }: {
     projectId: number;
     fileId: number;
     onClose: () => void;
     onDelete: (file: ProjectFile) => void;
     retry: FilesModel["retry"];
+    captionMutation: FilesModel["caption"];
 }) {
     const [offsets, setOffsets] = useState([0]);
+    const [captionDraft, setCaptionDraft] = useState("");
+    const [editingCaption, setEditingCaption] = useState(false);
     const offset = offsets[offsets.length - 1];
     const detail = useQuery({
         queryKey: queryKeys.projectFile(projectId, fileId, offset),
@@ -214,6 +216,14 @@ function ProjectFileDialog({ projectId, fileId, onClose, onDelete, retry }: {
                     <Button disabled={detail.isFetching} onClick={() => void detail.refetch()}>Повторить загрузку текста</Button>
                 } />}
                 {file && <>
+                    <FileList files={[projectFileDescriptor(file)]} />
+                    {editingCaption ? <div className="flex flex-col gap-2">
+                        <Input aria-label="Подпись к файлу" value={captionDraft} maxLength={2000} disabled={captionMutation.isPending} onChange={event => setCaptionDraft(event.target.value)} />
+                        {captionMutation.error && <ErrorMessage message={captionMutation.error.message} />}
+                        <div className="flex gap-2"><Button disabled={captionMutation.isPending} onClick={async () => {
+                            try { await captionMutation.mutateAsync({ fileId, caption: captionDraft.trim() || null }); setEditingCaption(false); } catch { /* Черновик сохраняется. */ }
+                        }}>Сохранить подпись</Button><Button disabled={captionMutation.isPending} onClick={() => setEditingCaption(false)}>Отмена</Button></div>
+                    </div> : <Button className="self-start" onClick={() => { captionMutation.reset(); setCaptionDraft(file.caption ?? ""); setEditingCaption(true); }}>{file.caption ? "Изменить подпись" : "Добавить подпись"}</Button>}
                     <div>
                         <FileStatus file={file} />
                         {file.extraction_detail && <p className="mt-2 text-[13px] break-words text-secondary">{file.extraction_detail}</p>}
@@ -229,8 +239,8 @@ function ProjectFileDialog({ projectId, fileId, onClose, onDelete, retry }: {
                         </nav>
                         <pre aria-label="Извлечённый текст" tabIndex={0} className="whitespace-pre-wrap rounded-[var(--radius-control)] bg-app/60 px-3 py-3 font-sans text-[13px] leading-relaxed break-words text-primary [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-accent">{file.text}</pre>
                     </> : <p role="status" className="text-[13px] text-muted">
-                        {file.extraction_status === "pending" && file.index_status === "disabled"
-                            ? "Обработка файла отключена. Оригинал доступен для скачивания."
+                        {file.extraction_status === "disabled"
+                            ? "Распознавание изображения отключено. Оригинал, название и подпись доступны."
                             : isProjectFileProcessing(file) ? "Файл обрабатывается. Текст появится автоматически." : "Извлечённого текста нет. Вы можете скачать оригинал или повторить обработку."}
                     </p>}
                 </>}

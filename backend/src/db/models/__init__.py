@@ -1,4 +1,5 @@
 from src.db.chat_ddl import register_chat_ddl
+from src.db.file_processing_ddl import register_file_processing_ddl
 from src.db.knowledge_outbox import register_outbox_ddl
 from src.db.task_attention_ddl import register_attention_ddl
 
@@ -23,6 +24,9 @@ from .chat_reactions import ChatReaction
 from .chat_read_states import ChatReadState
 from .document_links import DocumentLink
 from .documents import Document
+from .file_comment_submissions import FileCommentSubmission
+from .file_processing_jobs import FileProcessingJob
+from .file_search_chunks import FileSearchChunk
 from .knowledge_attachment_texts import KnowledgeAttachmentText
 from .knowledge_index_jobs import (
     KnowledgeEntityType,
@@ -44,6 +48,7 @@ from .project_stickers import ProjectSticker, ProjectStickerColor, ProjectSticke
 from .projects import Project, ProjectStatus
 from .task_activity import TaskActivity, TaskActivityEventType
 from .task_attachments import TaskAttachment
+from .task_comment_attachments import TaskCommentAttachment
 from .task_comments import TaskComment
 from .task_dependencies import TaskDependency, TaskDependencyType
 from .task_participants import TaskParticipant, TaskParticipantRole
@@ -73,6 +78,9 @@ __all__ = [
     "ApiToken",
     "ApiTokenScope",
     "Base",
+    "FileCommentSubmission",
+    "FileProcessingJob",
+    "FileSearchChunk",
     "ChatAttachment",
     "ChatEvent",
     "ChatMessageEntity",
@@ -106,6 +114,7 @@ __all__ = [
     "TaskActivityEventType",
     "TaskAttachment",
     "TaskComment",
+    "TaskCommentAttachment",
     "TaskDependency",
     "TaskDependencyType",
     "TaskParticipant",
@@ -122,3 +131,4 @@ register_chat_ddl(Base.metadata)
 
 
 register_attention_ddl(Base.metadata)
+register_file_processing_ddl(Base.metadata)

@@ -42,7 +42,7 @@ def create_service() -> tuple[
 @pytest.mark.asyncio
 async def test_upload_attachment_saves_safe_name_and_metadata() -> None:
     service, attachments_repository, tasks_repository, storage = create_service()
-    tasks_repository.get_by_id.return_value = SimpleNamespace(id=1, project_id=1)
+    tasks_repository.get_by_id.return_value = SimpleNamespace(id=7, project_id=1)
     attachments_repository.get_count_for_task.return_value = 0
     storage.save.return_value = "tasks/7/abc.pdf"
     attachments_repository.save.return_value = SimpleNamespace(

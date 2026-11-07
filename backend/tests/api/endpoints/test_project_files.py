@@ -15,6 +15,7 @@ from src.db.models.api_tokens import ApiTokenScope
 from src.dependencies.auth import get_principal
 from src.dependencies.scopes import get_project_files_service
 from src.exceptions.access import ResourceNotAvailableError
+from src.exceptions.api_keys import ApiKeyScopeError
 from src.exceptions.auth import NotAuthenticatedError
 from src.exceptions.project_files import (
     ProjectFileNotFoundError,
@@ -76,7 +77,8 @@ async def test_file_routes_return_pending_upload_text_page_and_retry_status(
     assert "text" not in uploaded.json()
     assert "storage_key" not in uploaded.json()
     files_service.upload.assert_awaited_once_with(
-        project_id=2, user_id=1, file_name="plan.txt", content=b"plan"
+        project_id=2, file_name="plan.txt", content=b"plan", caption=None,
+        session_token=None, bearer_secret=None,
     )
 
     listed = await api_client.get(
@@ -160,13 +162,15 @@ async def test_read_token_reads_files_but_cannot_upload_retry_or_delete(
     for url in ["/api/v1/projects/2/files", "/api/v1/projects/2/files/7"]:
         assert (await api_client.get(url)).status_code == 200
 
+    # Upload performs auth inside its short service scope; the transport forwards the refusal.
+    files_service.upload.side_effect = ApiKeyScopeError("projects:write", [])
     uploaded = await api_client.post(
         "/api/v1/projects/2/files", files={"file": ("plan.txt", b"plan", "text/plain")}
     )
     retried = await api_client.post("/api/v1/projects/2/files/7/retry")
     deleted = await api_client.delete("/api/v1/projects/2/files/7")
     assert [response.status_code for response in (uploaded, retried, deleted)] == [403, 403, 403]
-    files_service.upload.assert_not_awaited()
+    files_service.upload.assert_awaited_once()
     files_service.retry.assert_not_awaited()
     files_service.delete_file.assert_not_awaited()
 

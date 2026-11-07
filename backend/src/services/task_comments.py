@@ -36,6 +36,7 @@ class TaskCommentsService:
         unit_of_work: UnitOfWork,
         knowledge_events: KnowledgeEvents,
         users_repository: UsersRepository | None = None,
+        knowledge_enabled: bool = True,
     ):
         self.users_repository = users_repository
         self.comments_repository = comments_repository
@@ -43,6 +44,7 @@ class TaskCommentsService:
         self.activity_repository = activity_repository
         self.unit_of_work = unit_of_work
         self.knowledge_events = knowledge_events
+        self.knowledge_enabled = knowledge_enabled
 
     async def get_comments(self, task_id: int) -> list[CommentSchema]:
         """Возвращает комментарии существующей задачи.
@@ -62,7 +64,7 @@ class TaskCommentsService:
             if task is None:
                 raise TaskNotFoundError(task_id=task_id)
             comments = await self.comments_repository.get_for_task(task_id=task_id)
-            return [CommentSchema.model_validate(comment) for comment in comments]
+            return await self._schemas(comments)
         except (TaskCommentsRepositoryError, TasksRepositoryError) as error:
             logger.error("❌ Ошибка получения комментариев задачи id=%s.", task_id, exc_info=True)
             raise TaskCommentsServiceError(str(error)) from error
@@ -97,8 +99,11 @@ class TaskCommentsService:
             task = await self.tasks_repository.get_by_id(task_id=task_id)
             if task is None:
                 raise TaskNotFoundError(task_id=task_id)
-            author = (await self.users_repository.get_by_id(user_id=author_id)
-                      if self.users_repository is not None and author_id is not None else None)
+            author = (
+                await self.users_repository.get_by_id(user_id=author_id)
+                if self.users_repository is not None and author_id is not None
+                else None
+            )
             comment = await self.comments_repository.save(
                 task_id=task_id,
                 author_id=author_id,
@@ -117,9 +122,11 @@ class TaskCommentsService:
                 entity_id=comment.id,
             )
             await self.unit_of_work.commit()
-            return CommentSchema.model_validate(
-                await self.comments_repository.get_by_id(comment_id=comment.id)
-            )
+            return (
+                await self._schemas(
+                    [await self.comments_repository.get_by_id(comment_id=comment.id)]
+                )
+            )[0]
         except (
             TaskCommentsRepositoryError,
             TasksRepositoryError,
@@ -137,7 +144,7 @@ class TaskCommentsService:
             item = await self.comments_repository.get_by_id(comment_id)
             if item is None:
                 raise TaskCommentNotFoundError(comment_id)
-            return CommentSchema.model_validate(item)
+            return (await self._schemas([item]))[0]
         except TaskCommentsRepositoryError as error:
             raise TaskCommentsServiceError(str(error)) from error
 
@@ -171,9 +178,11 @@ class TaskCommentsService:
                 entity_id=comment.id,
             )
             await self.unit_of_work.commit()
-            return CommentSchema.model_validate(
-                await self.comments_repository.get_by_id(comment_id=comment.id)
-            )
+            return (
+                await self._schemas(
+                    [await self.comments_repository.get_by_id(comment_id=comment.id)]
+                )
+            )[0]
         except (
             TaskCommentsRepositoryError,
             TasksRepositoryError,
@@ -216,3 +225,17 @@ class TaskCommentsService:
         ) as error:
             logger.error("❌ Ошибка удаления комментария id=%s.", comment_id, exc_info=True)
             raise TaskCommentsServiceError(str(error)) from error
+
+    async def _schemas(self, comments: list) -> list[CommentSchema]:
+        result = [CommentSchema.model_validate(comment) for comment in comments]
+        if not any(item.attachments for item in result):
+            return result
+        states = await self.comments_repository.get_attachment_states([item.id for item in result])
+        for comment in result:
+            for attachment in comment.attachments:
+                state = states.get(attachment.id, {})
+                if not self.knowledge_enabled:
+                    state.update(index_status="disabled", index_detail=None)
+                for key, value in state.items():
+                    setattr(attachment, key, value)
+        return result

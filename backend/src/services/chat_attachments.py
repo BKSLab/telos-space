@@ -124,7 +124,7 @@ class ChatAttachmentsService:
             raise ChatServiceError(str(error)) from error
 
     async def content(
-        self, project_id: int, file_id, *, session_token, bearer_secret
+        self, project_id: int, file_id, *, session_token, bearer_secret, thumbnail: bool = False
     ) -> ChatFileContent:
         """Авторизует скачивание без request-scoped сессии во время передачи файла."""
         principal = await self.chat.authenticate(
@@ -144,13 +144,19 @@ class ChatAttachmentsService:
                     raise ChatNotFoundError("Сообщение удалено.")
             key, name, content_type = row.storage_key, row.original_name, row.content_type
         try:
-            path = self.storage.resolve(key)
+            path = (
+                await self.storage.prepare_preview(key)
+                if thumbnail and content_type in IMAGE_TYPES.values()
+                else self.storage.resolve(key)
+            )
+            if thumbnail and (content_type not in IMAGE_TYPES.values() or path is None):
+                raise ChatNotFoundError("Предпросмотр изображения недоступен.")
         except TaskAttachmentStorageError as error:
             raise ChatNotFoundError(str(error)) from error
         return ChatFileContent(
             path=path,
-            original_name=name,
-            content_type=content_type,
+            original_name=f"{Path(name).stem}.jpg" if thumbnail else name,
+            content_type="image/jpeg" if thumbnail else content_type,
             previewable=content_type in IMAGE_TYPES.values(),
         )
 

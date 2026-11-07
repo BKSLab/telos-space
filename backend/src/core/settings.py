@@ -210,6 +210,15 @@ class DBSettings(SettingsBase):
         )
 
 
+class FileProcessingSettings(SettingsBase):
+    """Извлечение и обычный поиск файлов, независимо от семантического индекса."""
+
+    file_processing_poll_seconds: float = Field(default=2.0, gt=0)
+    file_processing_max_attempts: int = Field(default=5, ge=1)
+    file_processing_lease_seconds: float = Field(default=1200.0, ge=30)
+    file_processing_retry_seconds: float = Field(default=30.0, gt=0)
+
+
 class AgentSettings(SettingsBase):
     """Ресурсные пределы постоянных диалогов проектного агента."""
 
@@ -275,6 +284,7 @@ class Settings(BaseSettings):
     llm: LlmSettings = Field(default_factory=LlmSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
+    file_processing: FileProcessingSettings = Field(default_factory=FileProcessingSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
     chat: ChatSettings = Field(default_factory=ChatSettings)
     mcp: McpSettings = Field(default_factory=McpSettings)

@@ -5,6 +5,29 @@ export interface FileDescriptor {
     size: number | null;
     mime: string | null;
     previewable: boolean;
+    previewUrl?: string | null;
+    caption?: string | null;
+    status?: string | null;
+    retryable?: boolean;
+}
+
+export interface FileUploadDraft {
+    file: File;
+    caption: string;
+}
+
+export function fileDraftKey(file: File): string {
+    return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+export function mergeFileDrafts(current: FileUploadDraft[], incoming: File[]): FileUploadDraft[] {
+    const keys = new Set(current.map(({ file }) => fileDraftKey(file)));
+    return [...current, ...incoming.filter(file => {
+        const key = fileDraftKey(file);
+        if (keys.has(key)) return false;
+        keys.add(key);
+        return true;
+    }).map(file => ({ file, caption: "" }))];
 }
 
 export type FileCategory =

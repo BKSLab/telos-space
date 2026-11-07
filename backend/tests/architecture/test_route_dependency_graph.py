@@ -62,18 +62,35 @@ STREAMING_ROUTES = {
     ("GET", "/api/v1/projects/{project_id}/files/{file_id}/content"),
     ("GET", "/api/v1/projects/{project_id}/chat/attachments/{file_id}/content"),
     ("GET", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/content"),
+    ("GET", "/api/v1/projects/{project_id}/files/{file_id}/preview"),
+    ("GET", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/preview"),
+    ("GET", "/api/v1/projects/{project_id}/chat/attachments/{file_id}/preview"),
+    ("GET", "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/content"),
+    ("GET", "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/preview"),
+    ("GET", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/content"),
+    ("GET", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/preview"),
+}
+
+# Авторизация мутаций выполняется перед IO и повторно перед атомарной записью.
+# READ/ttk и отзыв membership проверяют настоящие HTTP/PG сценарии файлов.
+DETACHED_WRITE_SERVICES = {
+    ("POST", "/api/v1/projects/{project_id}/files"): "get_project_files_service",
+    ("POST", "/api/v1/tasks/{task_id}/attachments"): "get_task_file_mutations_service",
+    ("PATCH", "/api/v1/tasks/{task_id}/attachments/{attachment_id}"): "get_task_file_mutations_service",
+    ("POST", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/retry"): "get_task_file_mutations_service",
+    ("POST", "/api/v1/tasks/{task_id}/comments/with-files"): "get_file_comments_service",
 }
 
 # Авторизация этого AI-сценария, как и выдачи файла, целиком выполняется
 # в короткой DB-фазе сервиса и проверяется его контрактными тестами.
-DETACHED_AUTH_ROUTES = STREAMING_ROUTES | {
+DETACHED_AUTH_ROUTES = STREAMING_ROUTES | DETACHED_WRITE_SERVICES.keys() | {
     ("POST", "/api/v1/projects/{project_id}/risks/field-suggestion"),
     ("POST", "/api/v1/projects/{project_id}/tasks/checklist-suggestion"),
     ("POST", "/api/v1/projects/{project_id}/risks/suggestions"),
 }
 
-EXPECTED_NON_GET_TOTAL = 130
-EXPECTED_MUTATION_TOTAL = 109
+EXPECTED_NON_GET_TOTAL = 134
+EXPECTED_MUTATION_TOTAL = 113
 
 
 def route_dependencies(route: APIRoute) -> set[str]:
@@ -199,12 +216,16 @@ def test_write_scope_is_required_exactly_where_it_should_be() -> None:
     unprotected = [
         f"{method} {path}"
         for method, path, route in mutation_routes()
-        if not {"require_write_scope", "require_chat_write_scope"} & route_dependencies(route)
+        if (method, path) not in DETACHED_WRITE_SERVICES
+        and not {"require_write_scope", "require_chat_write_scope"} & route_dependencies(route)
     ]
 
     assert not unprotected, "Маршруты изменяют данные без проверки scope записи:\n  " + "\n  ".join(
         sorted(unprotected)
     )
+    detached = {(method, path): route for method, path, route in api_routes()}
+    for pair, service in DETACHED_WRITE_SERVICES.items():
+        assert service in route_dependencies(detached[pair]), f"{pair} должен проверять права через {service}"
     # Расчёт и предпросмотр остаются доступны токену на чтение.
     wrongly_protected = [
         f"{method} {path}"

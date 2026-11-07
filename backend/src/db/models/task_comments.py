@@ -3,13 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Computed, DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import Computed, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
 if TYPE_CHECKING:
+    from .task_attachments import TaskAttachment
     from .tasks import Task
     from .users import User
 
@@ -20,6 +21,8 @@ class TaskComment(Base):
     __tablename__ = "task_comments"
     __table_args__ = (
         Index("ix_task_comments_search_vector", "search_vector", postgresql_using="gin"),
+        UniqueConstraint("id", "task_id", name="uq_task_comments_id_task"),
+        Index("ix_task_comments_task_id", "task_id"),
     )
 
     id: Mapped[int] = mapped_column(
@@ -73,6 +76,15 @@ class TaskComment(Base):
 
     task: Mapped[Task] = relationship("Task", back_populates="comments")
     author: Mapped[User | None] = relationship("User", lazy="raise_on_sql")
+    attachments: Mapped[list[TaskAttachment]] = relationship(
+        "TaskAttachment",
+        secondary="task_comment_attachments",
+        primaryjoin="TaskComment.id == TaskCommentAttachment.comment_id",
+        secondaryjoin="TaskAttachment.id == TaskCommentAttachment.attachment_id",
+        viewonly=True,
+        lazy="raise_on_sql",
+        order_by="TaskAttachment.created_at, TaskAttachment.id",
+    )
 
     def __repr__(self) -> str:
         return f"<TaskComment(id={self.id}, task_id={self.task_id})>"

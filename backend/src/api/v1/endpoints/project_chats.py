@@ -348,6 +348,43 @@ async def delete_attachment(
 
 
 @download_router.get(
+    "/attachments/{file_id}/preview",
+    response_class=FileResponse,
+    summary="Предпросмотр изображения чата",
+    description="Возвращает локальную миниатюру после проверки видимости файла; vision не требуется.",
+    operation_id="previewProjectChatAttachment",
+    **READ_DOCS,
+)
+async def attachment_preview(
+    project_id: ProjectIdPath,
+    file_id: UUID,
+    service: ChatFilesServiceDep,
+    session_cookie: SessionCookieDep = None,
+    authorization: AuthorizationHeaderDep = None,
+):
+    """Миниатюра защищена теми же правами, что и оригинал."""
+    with chat_errors():
+        result = await service.content(
+            project_id,
+            file_id,
+            session_token=session_cookie,
+            bearer_secret=extract_bearer_secret(authorization),
+            thumbnail=True,
+        )
+    return FileResponse(
+        result.path,
+        filename=result.original_name,
+        media_type=result.content_type,
+        content_disposition_type="inline",
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+        },
+    )
+
+
+@download_router.get(
     "/attachments/{file_id}/content",
     response_class=FileResponse,
     summary="Скачать или просмотреть вложение",

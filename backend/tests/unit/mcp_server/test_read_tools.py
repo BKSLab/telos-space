@@ -328,6 +328,12 @@ async def test_list_comments_returns_body_and_author(tools) -> None:
             "author": "Борис",
             "created_at": "2026-09-01T10:00:00+00:00",
             "body": "Текст",
+            "body_meta": {
+                "truncated": False,
+                "length": 5,
+                "length_unit": "unicode_code_points",
+                "read_full": None,
+            },
         }
     ]
 

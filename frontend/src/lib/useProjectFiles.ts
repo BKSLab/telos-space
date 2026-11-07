@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import { api, endpoints, queryKeys } from "./api";
 import { PROJECT_FILE_PAGE_SIZE, projectFilesPollInterval } from "./projectFiles";
 import type { ProjectFile } from "./types";
+import type { FileUploadDraft } from "./files";
 
 export function useProjectFiles(projectId: number, search: string) {
     const queryClient = useQueryClient();
@@ -25,22 +26,31 @@ export function useProjectFiles(projectId: number, search: string) {
     }
 
     const upload = useMutation({
-        mutationFn: async (incoming: File[]) => {
+        mutationFn: async (incoming: FileUploadDraft[]) => {
             const errors: string[] = [];
+            const failed: FileUploadDraft[] = [];
             let uploaded = 0;
-            for (const file of incoming) {
+            for (const draft of incoming) {
+                const { file, caption } = draft;
                 const body = new FormData();
                 body.append("file", file);
+                if (caption.trim()) body.append("caption", caption.trim());
                 try {
                     await api.postForm<ProjectFile>(endpoints.projectFiles(projectId), body);
                     uploaded += 1;
                     refresh();
                 } catch (error) {
                     errors.push(`«${file.name}»: ${(error as Error).message}`);
+                    failed.push(draft);
                 }
             }
-            return { uploaded, errors };
+            return { uploaded, errors, failed };
         },
+    });
+    const caption = useMutation({
+        mutationFn: ({ fileId, caption }: { fileId: number; caption: string | null }) =>
+            api.patch<ProjectFile>(endpoints.projectFile(projectId, fileId), { caption }),
+        onSuccess: refresh,
     });
     const retry = useMutation({
         mutationFn: (fileId: number) => api.post<ProjectFile>(endpoints.projectFileRetry(projectId, fileId)),
@@ -54,5 +64,5 @@ export function useProjectFiles(projectId: number, search: string) {
         },
     });
 
-    return { files, upload, retry, remove };
+    return { files, upload, retry, remove, caption };
 }

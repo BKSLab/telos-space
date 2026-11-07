@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, WandSparkles } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
+import { fileDraftKey } from "@/lib/files";
 import type {
     DocumentListItem,
     ProjectMember,
@@ -65,6 +66,7 @@ export function CreateTaskDialog({
     const [observerIds, setObserverIds] = useState<number[]>([]);
     const [selectedDocumentIds, setSelectedDocumentIds] = useState<number[]>([]);
     const [newDocumentFiles, setNewDocumentFiles] = useState<File[]>([]);
+    const [fileCaptions, setFileCaptions] = useState<Record<string, string>>({});
     const [documentError, setDocumentError] = useState<string | null>(null);
 
     const currentUserQuery = useCurrentUser();
@@ -101,6 +103,7 @@ export function CreateTaskDialog({
         setObserverIds([]);
         setSelectedDocumentIds([]);
         setNewDocumentFiles([]);
+        setFileCaptions({});
         setDocumentError(null);
     }
 
@@ -135,6 +138,8 @@ export function CreateTaskDialog({
                 try {
                     const body = new FormData();
                     body.append("file", file);
+                    const caption = fileCaptions[fileDraftKey(file)]?.trim();
+                    if (caption) body.append("caption", caption);
                     await api.postForm<TaskDocumentImport>(
                         endpoints.taskDocumentImport(task.id),
                         body,
@@ -390,11 +395,13 @@ export function CreateTaskDialog({
                         documents={documentsQuery.data ?? []}
                         selectedDocumentIds={selectedDocumentIds}
                         files={newDocumentFiles}
+                        captions={fileCaptions}
                         disabled={isBusy}
                         loading={documentsQuery.isPending}
                         error={documentError}
                         onSelectedDocumentIdsChange={setSelectedDocumentIds}
                         onFilesChange={setNewDocumentFiles}
+                        onCaptionsChange={setFileCaptions}
                         onError={setDocumentError}
                     />
                 </section>

@@ -9,11 +9,13 @@
 
 import logging
 from typing import Annotated
+from uuid import UUID
 
 from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
+from src.agent.tools import AgentToolContext
 from src.db.models.project_milestones import ProjectMilestoneStatus
 from src.exceptions.access import AccessServiceError, ResourceWriteRequiredError
 from src.exceptions.base import ApplicationError
@@ -48,7 +50,8 @@ Actor = Annotated[str | None, Field(description="Логин текущего п�
     description=(
         "Создаёт задачу в проекте. Без указания стадии задача попадает в начальную "
         "стадию проекта — крайнюю левую колонку доски, обычно «Бэклог». Возвращает "
-        "ключ и ссылку на задачу."
+        "ключ и ссылку на задачу. Для безопасного повтора после потери ответа "
+        "передайте тот же request_id и те же аргументы."
     ),
     scope=SCOPE_TASKS_WRITE,
 )
@@ -81,6 +84,10 @@ async def create_task(
     start_date: Annotated[str | None, Field(description="Начало в формате ГГГГ-ММ-ДД.")] = None,
     due_date: Annotated[str | None, Field(description="Срок в формате ГГГГ-ММ-ДД.")] = None,
     actor: Actor = None,
+    request_id: Annotated[
+        UUID | None,
+        Field(description="Стабильный UUID операции: повтор с тем же ключом не создаёт новую задачу."),
+    ] = None,
 ) -> dict:
     """Создаёт задачу в доступном проекте."""
     async with tool_context(context, require_write=True) as tools:
@@ -89,23 +96,44 @@ async def create_task(
         if description is not None:
             payload["description_md"] = description
         if stage is not None:
-            payload["stage_id"] = (await resolve_stage(tools, project_id, stage)).stage_id
+            if request_id is not None:
+                payload["stage_name"] = stage
+            else:
+                payload["stage_id"] = (await resolve_stage(tools, project_id, stage)).stage_id
         if priority is not None:
             payload["priority"] = parse_priority(priority)
         if assignee is not None:
-            payload["executor_id"] = (
-                await member_user_id(tools, project_id, assignee) if assignee.strip() else None
-            )
+            if request_id is not None:
+                payload["executor_username"] = assignee
+            else:
+                payload["executor_id"] = (
+                    await member_user_id(tools, project_id, assignee) if assignee.strip() else None
+                )
         if observers:
-            payload["observer_ids"] = [
-                await member_user_id(tools, project_id, login) for login in observers
-            ]
+            if request_id is not None:
+                payload["observer_usernames"] = observers
+            else:
+                payload["observer_ids"] = [
+                    await member_user_id(tools, project_id, login) for login in observers
+                ]
         if start_date is not None:
             payload["start_date"] = parse_date(start_date)
         if due_date is not None:
             payload["due_date"] = parse_date(due_date)
 
         try:
+            if request_id is not None:
+                result = await repeatable_write(
+                    tools, project_id=project_id, name="create_task",
+                    arguments=payload, request_id=request_id,
+                )
+                created = result["task"]
+                return with_task_url(
+                    tools,
+                    {"task_key": created["key"], "title": created["title"], "created": True,
+                     "revision": created.get("revision", 1)},
+                    created["id"],
+                )
             created = await tools.services.tasks.create_task(
                 project_id=project_id,
                 data=payload,
@@ -114,7 +142,10 @@ async def create_task(
         except ApplicationError as error:
             raise ToolError(domain_message(error, "Не удалось создать задачу.")) from error
         return with_task_url(
-            tools, {"task_key": created.key, "title": created.title, "created": True}, created.id
+            tools,
+            {"task_key": created.key, "title": created.title, "created": True,
+             "revision": getattr(created, "revision", 1)},
+            created.id,
         )
 
 
@@ -124,7 +155,9 @@ async def create_task(
     description=(
         "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, "
         "приоритет, исполнитель, сроки. Стадия — tt_move_task, чек-лист — "
-        "tt_set_checklist, наблюдатели — tt_set_watchers."
+        "tt_set_checklist, наблюдатели — tt_set_watchers. Передавайте expected_revision "
+        "из tt_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется "
+        "прежнее поведение без защиты от затирания чужой правки."
     ),
     scope=SCOPE_TASKS_WRITE,
 )
@@ -154,6 +187,10 @@ async def update_task(
         Field(description="Срок в формате ГГГГ-ММ-ДД; пустая строка снимает срок."),
     ] = None,
     actor: Actor = None,
+    expected_revision: Annotated[
+        int | None,
+        Field(ge=1, strict=True, description="Ожидаемая revision из tt_get_task; устаревшая версия даёт конфликт."),
+    ] = None,
 ) -> dict:
     """Изменяет переданные поля задачи."""
     async with tool_context(context, require_write=True) as tools:
@@ -177,6 +214,9 @@ async def update_task(
             payload["due_date"] = parse_date(due_date) if due_date.strip() else None
         if not payload:
             raise ToolError("Не передано ни одного поля для изменения.")
+        updated_fields = sorted(payload)
+        if expected_revision is not None:
+            payload["expected_revision"] = expected_revision
 
         try:
             updated = await tools.services.tasks.update_task(
@@ -187,7 +227,9 @@ async def update_task(
         except ApplicationError as error:
             raise ToolError(domain_message(error, "Не удалось изменить задачу.")) from error
         return with_task_url(
-            tools, {"task_key": updated.key, "updated_fields": sorted(payload)}, updated.id
+            tools,
+            {"task_key": updated.key, "updated_fields": updated_fields, "revision": getattr(updated, "revision", 1)},
+            updated.id,
         )
 
 
@@ -285,7 +327,8 @@ async def transfer_task(
     title="Изменить плановые даты задачи",
     description=(
         "Изменяет start_date и/или due_date задачи через доменный сервис и историю. "
-        "Пустая строка снимает дату."
+        "Пустая строка снимает дату. expected_revision из tt_get_task защищает "
+        "от изменения поверх устаревшей версии; без него действует прежнее поведение."
     ),
     scope=SCOPE_TASKS_WRITE,
 )
@@ -301,6 +344,10 @@ async def set_task_dates(
         Field(description="Завершение ГГГГ-ММ-ДД; пустая строка снимает срок."),
     ] = None,
     actor: Actor = None,
+    expected_revision: Annotated[
+        int | None,
+        Field(ge=1, strict=True, description="Ожидаемая revision общих полей из tt_get_task."),
+    ] = None,
 ) -> dict:
     """Меняет только явно переданные календарные поля задачи."""
     async with tool_context(context, require_write=True) as tools:
@@ -312,6 +359,9 @@ async def set_task_dates(
             payload["due_date"] = parse_date(due_date) if due_date.strip() else None
         if not payload:
             raise ToolError("Не передано ни одной даты для изменения.")
+        updated_fields = sorted(payload)
+        if expected_revision is not None:
+            payload["expected_revision"] = expected_revision
         try:
             updated = await tools.services.tasks.update_task(
                 task_id=resolved.task_id,
@@ -324,7 +374,8 @@ async def set_task_dates(
             "task_key": updated.key,
             "start_date": updated.start_date.isoformat() if updated.start_date else None,
             "due_date": updated.due_date.isoformat() if updated.due_date else None,
-            "updated_fields": sorted(payload),
+            "updated_fields": updated_fields,
+            "revision": getattr(updated, "revision", 1),
         }
 
 
@@ -375,7 +426,8 @@ async def delete_task(
     title="Добавить комментарий к задаче",
     description=(
         "Добавляет комментарий к задаче от имени проверенного пользователя запроса "
-        "и фиксирует событие в её истории. Автор определяется сервером."
+        "и фиксирует событие в её истории. Автор определяется сервером. "
+        "Повторяйте тот же request_id и текст после потери ответа, чтобы не создать дубль."
     ),
     scope=SCOPE_COMMENTS_WRITE,
 )
@@ -388,12 +440,31 @@ async def add_comment(
         str | None,
         Field(description="Прежнее поле подписи: принимается для совместимости, автор определяется сервером."),
     ] = None,
+    request_id: Annotated[
+        UUID | None,
+        Field(description="Стабильный UUID операции: повтор с тем же ключом не добавляет ещё один комментарий."),
+    ] = None,
 ) -> dict:
     """Добавляет комментарий к задаче."""
     async with tool_context(context, require_write=True) as tools:
         resolved = await resolve_task(tools, task_key)
 
         try:
+            if request_id is not None:
+                result = await repeatable_write(
+                    tools, project_id=resolved.project_id, name="add_comment",
+                    arguments={"task_id": resolved.task_id, "body_md": body},
+                    request_id=request_id,
+                )
+                comment = result["comment"]
+                return with_task_url(
+                    tools,
+                    {
+                        "comment_id": comment["id"], "task_key": resolved.task_key,
+                        "author": comment["author_name"], "created_at": comment["created_at"],
+                    },
+                    resolved.task_id,
+                )
             comment = await tools.services.comments.add_comment(
                 task_id=resolved.task_id, author_id=tools.principal.user_id, body_md=body,
             )
@@ -520,6 +591,42 @@ async def create_milestone(
 
 
 # ── Общие помощники инструментов записи ────────────────────────────────────
+
+
+async def repeatable_write(
+    tools: ToolContext, *, project_id: int, name: str, arguments: dict, request_id: UUID,
+) -> dict:
+    """Исполняет прямую запись с общей квитанцией и проверяет доступ к результату.
+
+    Args:
+        tools: Аутентифицированный контекст MCP с проверенным scope записи.
+        project_id: Текущий проект операции.
+        name: Создание задачи или добавление комментария из общего каталога.
+        arguments: Нормализованные доменные аргументы.
+        request_id: Стабильный ключ вызова, общий для основных и прежних имён.
+    Returns:
+        Сохранённый результат доменного действия.
+    Raises:
+        ApplicationError: При конфликте ключа или отказе доступа к результату.
+        ToolError: Если результат больше не принадлежит доступному контексту.
+    """
+    response = await tools.services.actions.execute(
+        context=AgentToolContext(
+            project_id=project_id, user_id=tools.principal.user_id,
+            can_write=tools.principal.can_write, request_id=request_id,
+            allowed_tools=frozenset({name}),
+        ),
+        name=name, arguments=arguments,
+    )
+    result = response["action"]["result"]
+    task_id = result["task"]["id"] if name == "create_task" else arguments["task_id"]
+    # Квитанция не даёт доступ к задаче, перенесённой в другой проект или удалённой.
+    grant = await tools.services.access.ensure_task_access(
+        task_id=task_id, user_id=tools.principal.user_id,
+    )
+    if grant.project_id != project_id or not grant.can_write:
+        raise ToolError(PROJECT_NOT_AVAILABLE)
+    return result
 
 
 async def resolve_stage(tools: ToolContext, project_id: int, stage: str) -> StageRefDto:

@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from src.api.middleware.api_key_usage import ApiKeyUsageMiddleware
 from src.api.middleware.request_actor import RequestActorMiddleware
 from src.api.v1.endpoints.agent_conversations import router as agent_conversations_router
+from src.api.v1.endpoints.agent_file_content import router as agent_file_content_router
 from src.api.v1.endpoints.agent_pending import router as agent_pending_router
 from src.api.v1.endpoints.agent_requests import router as agent_requests_router
 from src.api.v1.endpoints.analytics import router as analytics_router
@@ -27,6 +28,7 @@ from src.api.v1.endpoints.calendar_workload import router as calendar_workload_r
 from src.api.v1.endpoints.dashboard import router as dashboard_router
 from src.api.v1.endpoints.document_links import router as document_links_router
 from src.api.v1.endpoints.documents import router as documents_router
+from src.api.v1.endpoints.file_search import router as file_search_router
 from src.api.v1.endpoints.free_boards import router as free_boards_router
 from src.api.v1.endpoints.knowledge import router as knowledge_router
 from src.api.v1.endpoints.milestones import router as milestones_router
@@ -53,6 +55,7 @@ from src.api.v1.endpoints.task_checklists import router as task_checklists_route
 from src.api.v1.endpoints.task_comments import router as task_comments_router
 from src.api.v1.endpoints.task_dependencies import router as task_dependencies_router
 from src.api.v1.endpoints.task_documents import router as task_documents_router
+from src.api.v1.endpoints.task_file_comments import router as task_file_comments_router
 from src.api.v1.endpoints.task_moves import router as task_moves_router
 from src.api.v1.endpoints.task_reports import router as task_reports_router
 from src.api.v1.endpoints.tasks import router as tasks_router
@@ -68,6 +71,7 @@ from src.core.app_state import (
 from src.core.config_logger import configure_logging
 from src.core.settings import get_settings
 from src.db.session import async_session_factory, engine
+from src.dependencies.file_processing import build_file_processing_worker
 from src.dependencies.scopes import build_api_key_usage_recorder
 from src.dependencies.services import build_agent_worker
 from src.dependencies.task_attention import build_task_attention_runtime
@@ -81,6 +85,8 @@ from src.knowledge.runtime import (
 )
 from src.mcp_server.server import build_mcp_app, mcp_server
 from src.realtime.runtime import CHAT_RUNTIME_KEY, build_chat_runtime
+from src.services.file_processing import FileProcessingConfig
+from src.storage.task_attachments import TaskAttachmentStorage
 from src.utils.check_db import check_db_connection
 
 configure_logging()
@@ -115,6 +121,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[dict[str, object]]:
         qdrant_client=qdrant_client,
     )
     worker_stop = asyncio.Event()
+    files_settings = settings.file_processing
+    file_worker = build_file_processing_worker(
+        session_factory=async_session_factory,
+        storage=TaskAttachmentStorage(settings.app.uploads_path),
+        vision=runtime.vision,
+        config=FileProcessingConfig(
+            poll_seconds=files_settings.file_processing_poll_seconds,
+            max_attempts=files_settings.file_processing_max_attempts,
+            lease_seconds=files_settings.file_processing_lease_seconds,
+            retry_seconds=files_settings.file_processing_retry_seconds,
+        ),
+    )
+    file_worker_task = asyncio.create_task(
+        file_worker.run(worker_stop), name="file-text-processor"
+    )
     worker_task: asyncio.Task | None = None
     if settings.knowledge.knowledge_enabled:
         try:
@@ -165,6 +186,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[dict[str, object]]:
         agent_task.cancel()
         with suppress(asyncio.CancelledError):
             await agent_task
+        file_worker_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await file_worker_task
         if worker_task is not None:
             worker_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -259,15 +283,18 @@ for api_router in (
     tasks_router,
     wbs_nodes_router,
     documents_router,
+    file_search_router,
     project_files_router,
     document_links_router,
     task_comments_router,
+    task_file_comments_router,
     task_dependencies_router,
     task_activity_router,
     task_attachments_router,
     task_documents_router,
     knowledge_router,
     agent_conversations_router,
+    agent_file_content_router,
     project_chats_router,
     chat_download_router,
     project_chat_ws_router,

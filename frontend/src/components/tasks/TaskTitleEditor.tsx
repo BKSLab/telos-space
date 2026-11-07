@@ -7,30 +7,32 @@ const TITLE_MAX = 512;
 
 interface TaskTitleEditorProps {
     title: string;
+    revision?: number;
     canEdit: boolean;
     readOnlyHint?: string;
     saving: boolean;
     error?: string;
     /** true — сохранено, правка закрывается; false — ошибка остаётся у поля. */
-    onSave: (title: string) => Promise<boolean>;
+    onSave: (title: string, revision: number | undefined) => Promise<boolean>;
+    onEditStart?: () => void;
 }
 
 /**
  * Название задачи в шапке карточки: карандаш — правка по месту,
  * Enter — сохранить, Esc — отменить. Пустое название не сохраняется.
  */
-export function TaskTitleEditor({ title, canEdit, readOnlyHint, saving, error, onSave }: TaskTitleEditorProps) {
-    const [draft, setDraft] = useState<string | null>(null);
-    const trimmed = draft?.trim() ?? "";
+export function TaskTitleEditor({ title, revision, canEdit, readOnlyHint, saving, error, onSave, onEditStart }: TaskTitleEditorProps) {
+    const [draft, setDraft] = useState<{ value: string; revision: number | undefined } | null>(null);
+    const trimmed = draft?.value.trim() ?? "";
     const invalid = draft !== null && trimmed === "" ? "Название не может быть пустым" : undefined;
 
     const submit = async () => {
-        if (draft === null || invalid) return;
+        if (draft === null || invalid || saving) return;
         if (trimmed === title) {
             setDraft(null);
             return;
         }
-        if (await onSave(trimmed)) setDraft(null);
+        if (await onSave(trimmed, draft.revision)) setDraft(null);
     };
 
     if (draft === null) {
@@ -38,7 +40,7 @@ export function TaskTitleEditor({ title, canEdit, readOnlyHint, saving, error, o
             <div className="flex items-start gap-1.5">
                 <h2 className="min-w-0 flex-1 text-[15px] leading-snug font-semibold break-words text-primary">{title}</h2>
                 {canEdit ? (
-                    <IconButton label="Переименовать задачу" size="sm" onClick={() => setDraft(title)}>
+                    <IconButton label="Переименовать задачу" size="sm" disabled={saving} onClick={() => { onEditStart?.(); setDraft({ value: title, revision }); }}>
                         <Pencil size={13} aria-hidden="true" />
                     </IconButton>
                 ) : (
@@ -59,11 +61,11 @@ export function TaskTitleEditor({ title, canEdit, readOnlyHint, saving, error, o
             <Input
                 autoFocus
                 aria-label="Название задачи"
-                value={draft}
+                value={draft.value}
                 maxLength={TITLE_MAX}
                 disabled={saving}
                 aria-invalid={Boolean(invalid || error)}
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => setDraft({ ...draft, value: event.target.value })}
                 onKeyDown={(event) => {
                     if (event.key === "Escape") {
                         // Esc закрывает правку, а не всю карточку.

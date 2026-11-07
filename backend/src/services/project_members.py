@@ -168,12 +168,19 @@ class ProjectMembersService:
             if member.role is ProjectRole.OWNER:
                 raise ProjectOwnerRemovalError()
 
-            executor_assignments = await self.participants_repository.get_for_project_member(
+            assignments = await self.participants_repository.get_for_project_member(
                 project_member_id=member.id,
-                role=TaskParticipantRole.EXECUTOR,
             )
+            executor_task_ids = {
+                assignment.task_id
+                for assignment in assignments
+                if assignment.role is TaskParticipantRole.EXECUTOR
+            }
             await self.tasks_repository.clear_assignees(
-                task_ids=[assignment.task_id for assignment in executor_assignments]
+                task_ids=sorted(executor_task_ids)
+            )
+            await self.tasks_repository.bump_revisions(
+                task_ids={assignment.task_id for assignment in assignments} - executor_task_ids
             )
             # Все ролевые назначения удалятся через FK ON DELETE CASCADE.
             risk_ids = await self.risks_repository.clear_owner(

@@ -1149,6 +1149,19 @@
             ],
             "title": "Executor Id"
           },
+          "executor_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Логин исполнителя вместо executor_id; пустая строка снимает назначение.",
+            "title": "Executor Username"
+          },
           "observer_ids": {
             "description": "Пользователи-наблюдатели из команды проекта.",
             "examples": [
@@ -1163,6 +1176,23 @@
             "maxItems": 50,
             "title": "Observer Ids",
             "type": "array"
+          },
+          "observer_usernames": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Логины наблюдателей вместо observer_ids.",
+            "title": "Observer Usernames"
           },
           "priority": {
             "$ref": "#/$defs/TaskPriority",
@@ -1219,6 +1249,19 @@
               1
             ],
             "title": "Stage Id"
+          },
+          "stage_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Название стадии вместо stage_id; разрешается только при первом исполнении.",
+            "title": "Stage Name"
           },
           "start_date": {
             "anyOf": [
@@ -2133,6 +2176,32 @@
       "requiresConfirmation": false,
       "scopes": null,
       "summary": "Прочитать документ",
+      "write": false
+    },
+    {
+      "description": "Последний сохранённый анализ текущего проекта целиком: дата, автор, модель, находки, прогресс, рекомендации и границы контекста. Это состояние на дату формирования; новый анализ не запускается. Если свода нет, сообщает об отсутствии.",
+      "group": "projects",
+      "id": "mcp-action-094c18eb76e0668a",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "Инструмент без аргументов.",
+        "properties": {},
+        "title": "EmptyInput",
+        "type": "object"
+      },
+      "kind": "action",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "name": "get_latest_project_summary",
+      "needsProject": true,
+      "ownerOnly": false,
+      "requiresConfirmation": false,
+      "scopes": [
+        "projects:read"
+      ],
+      "summary": "Прочитать сохранённую сводку проекта",
       "write": false
     },
     {
@@ -5327,7 +5396,7 @@
           },
           "TaskChangesInput": {
             "additionalProperties": false,
-            "description": "Изменения задачи; отсутствие поля сохраняет прежнее значение.",
+            "description": "Изменения задачи с необязательной expected_revision из свежего get_task.",
             "example": {
               "priority": "URGENT"
             },
@@ -5427,6 +5496,23 @@
                   7
                 ],
                 "title": "Executor Id"
+              },
+              "expected_revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Версия из чтения задачи; при несовпадении 409 без изменений. Без неё сохраняется прежнее поведение.",
+                "examples": [
+                  3
+                ],
+                "title": "Expected Revision"
               },
               "observer_ids": {
                 "anyOf": [
@@ -12189,6 +12275,200 @@
     },
     {
       "access": "authenticated",
+      "description": "Проверяет владельца диалога и текущий доступ в проекте.",
+      "group": "agent-files",
+      "id": "api-ea60fa66cb840840",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/content",
+      "operationId": "downloadProjectAgentFile",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "conversation_id",
+          "required": true,
+          "schema": {
+            "exclusiveMinimum": 0,
+            "title": "Conversation Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/content",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Successful Response"
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          },
+          "description": "Validation Error"
+        }
+      },
+      "scopes": null,
+      "summary": "Скачать приватный файл проектного диалога"
+    },
+    {
+      "access": "authenticated",
+      "description": "Проверяет владельца диалога и текущий доступ; локальная миниатюра без vision.",
+      "group": "agent-files",
+      "id": "api-68141ee58e481c3b",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/preview",
+      "operationId": "previewProjectAgentFile",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "conversation_id",
+          "required": true,
+          "schema": {
+            "exclusiveMinimum": 0,
+            "title": "Conversation Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/preview",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Successful Response"
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          },
+          "description": "Validation Error"
+        }
+      },
+      "scopes": null,
+      "summary": "Предпросмотр приватного изображения проектного диалога"
+    },
+    {
+      "access": "authenticated",
       "description": "Возвращает реплики, источники и состояние ожидаемого ответа. История доступна только владельцу диалога с действующим участием в проекте.",
       "group": "project agent",
       "id": "api-a2f084a48522b080",
@@ -16908,6 +17188,106 @@
     },
     {
       "access": "authenticated",
+      "description": "Возвращает локальную миниатюру после проверки видимости файла; vision не требуется.",
+      "group": "project chat",
+      "id": "api-a81ec54c673c3430",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/chat/attachments/{file_id}/preview",
+      "operationId": "previewProjectChatAttachment",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/chat/attachments/{file_id}/preview",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Данные общего чата проекта."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно прав."
+        },
+        "404": {
+          "description": "Чат или объект недоступен."
+        },
+        "409": {
+          "description": "Версия сообщения изменилась."
+        },
+        "422": {
+          "description": "Некорректные поля."
+        },
+        "429": {
+          "description": "Слишком много действий."
+        },
+        "503": {
+          "description": "Realtime временно недоступен."
+        }
+      },
+      "scopes": null,
+      "summary": "Предпросмотр изображения чата"
+    },
+    {
+      "access": "authenticated",
       "description": "Возвращает доступные задачи, документы, риски, вехи и WBS-узлы только текущего проекта.",
       "group": "project chat",
       "id": "api-a4956c18f118f1d3",
@@ -18663,12 +19043,15 @@
       "operationId": "uploadProjectFile",
       "parameters": [
         {
-          "description": "Идентификатор проекта.",
+          "description": "Проект-владелец файла.",
           "in": "path",
           "name": "project_id",
           "required": true,
           "schema": {
-            "description": "Идентификатор проекта.",
+            "description": "Проект-владелец файла.",
+            "examples": [
+              2
+            ],
             "exclusiveMinimum": 0,
             "title": "Project Id",
             "type": "integer"
@@ -18776,6 +19159,212 @@
         "projects:write"
       ],
       "summary": "Загрузить файл проекта"
+    },
+    {
+      "access": "authenticated",
+      "description": "Ищет по названию, подписи и извлечённому тексту оригиналов и документов. Доступность embeddings и Qdrant не влияет на поиск.",
+      "group": "file-search",
+      "id": "api-2c298e8ad048c912",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/files/search",
+      "operationId": "searchProjectFiles",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Слова, фраза или websearch-запрос.",
+          "in": "query",
+          "name": "q",
+          "required": true,
+          "schema": {
+            "description": "Слова, фраза или websearch-запрос.",
+            "examples": [
+              "поставка оборудования"
+            ],
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        {
+          "description": "Виды источников.",
+          "in": "query",
+          "name": "scope",
+          "required": false,
+          "schema": {
+            "default": "all",
+            "description": "Виды источников.",
+            "enum": [
+              "all",
+              "project_files",
+              "task_files",
+              "documents"
+            ],
+            "examples": [
+              "all"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        {
+          "description": "Задача текущего проекта: её вложения и связанные документы.",
+          "in": "query",
+          "name": "task_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Задача текущего проекта: её вложения и связанные документы.",
+            "examples": [
+              7
+            ],
+            "title": "Task Id"
+          }
+        },
+        {
+          "description": "Число первичных источников на странице.",
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "default": 30,
+            "description": "Число первичных источников на странице.",
+            "examples": [
+              30
+            ],
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Смещение страницы.",
+          "in": "query",
+          "name": "offset",
+          "required": false,
+          "schema": {
+            "default": 0,
+            "description": "Смещение страницы.",
+            "examples": [
+              0
+            ],
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/files/search",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileSearchPageSchema"
+              }
+            }
+          },
+          "description": "Страница совпавших первичных источников."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:read"
+      ],
+      "summary": "Найти файлы проекта"
     },
     {
       "access": "authenticated",
@@ -19062,6 +19651,143 @@
     },
     {
       "access": "authenticated",
+      "description": "Меняет пользовательскую подпись того же оригинала, сохраняя извлечённый текст.",
+      "group": "project-files",
+      "id": "api-8e6cf1a20f3a33d8",
+      "kind": "http",
+      "legacy": [
+        "WRITE"
+      ],
+      "method": "PATCH",
+      "name": "PATCH /api/v1/projects/{project_id}/files/{file_id}",
+      "operationId": "updateProjectFileCaption",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Идентификатор файла проекта.",
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор файла проекта.",
+            "examples": [
+              5
+            ],
+            "exclusiveMinimum": 0,
+            "title": "File Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/files/{file_id}",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FileCaptionUpdateSchema"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectFileSchema"
+              }
+            }
+          },
+          "description": "Метаданные файла с новой подписью."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:write"
+      ],
+      "summary": "Изменить подпись файла проекта"
+    },
+    {
+      "access": "authenticated",
       "description": "Проверяет доступ в короткой области БД и отдаёт оригинал как вложение.",
       "group": "project-files",
       "id": "api-491ee82e2945f4e4",
@@ -19184,6 +19910,131 @@
         "projects:read"
       ],
       "summary": "Скачать оригинал файла проекта"
+    },
+    {
+      "access": "authenticated",
+      "description": "Проверяет текущие права и выдаёт ограниченную локальную JPEG-миниатюру без AI API.",
+      "group": "project-files",
+      "id": "api-d8bf00b8d7a609b3",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/files/{file_id}/preview",
+      "operationId": "getProjectFilePreview",
+      "parameters": [
+        {
+          "description": "Проект-владелец файла.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Проект-владелец файла.",
+            "examples": [
+              2
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Идентификатор файла проекта.",
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор файла проекта.",
+            "examples": [
+              5
+            ],
+            "exclusiveMinimum": 0,
+            "title": "File Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/files/{file_id}/preview",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Защищённая JPEG-миниатюра оригинала."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:read"
+      ],
+      "summary": "Открыть миниатюру файла проекта"
     },
     {
       "access": "authenticated",
@@ -25892,7 +26743,7 @@
     },
     {
       "access": "authenticated",
-      "description": "Частично обновляет поля задачи и фиксирует значимые изменения в истории. Для изменения checklist передайте весь чек-лист и текущую checklist_revision. null удаляет чек-лист, отсутствие поля сохраняет его. Устаревшая версия возвращает 409 без изменений.",
+      "description": "Частично обновляет поля задачи и фиксирует значимые изменения в истории. Передайте expected_revision из карточки задачи для защиты общих полей и назначений: устаревшая версия возвращает 409 без изменений. Без expected_revision сохраняется прежняя запись без проверки общей версии. Для изменения checklist передайте весь чек-лист и текущую checklist_revision; эта версия проверяется отдельно. null удаляет чек-лист, отсутствие поля сохраняет его.",
       "group": "tasks",
       "id": "api-d073a1081fe23f8e",
       "kind": "http",
@@ -25968,7 +26819,7 @@
               }
             }
           },
-          "description": "Обновлённая задача с новой версией чек-листа, если он изменён."
+          "description": "Обновлённая задача с актуальной revision и новой checklist_revision, если чек-лист изменён."
         },
         "404": {
           "content": {
@@ -26254,12 +27105,12 @@
       "operationId": "uploadTaskAttachment",
       "parameters": [
         {
-          "description": "Идентификатор задачи.",
+          "description": "Идентификатор задачи канбана.",
           "in": "path",
           "name": "task_id",
           "required": true,
           "schema": {
-            "description": "Идентификатор задачи.",
+            "description": "Идентификатор задачи канбана.",
             "exclusiveMinimum": 0,
             "title": "Task Id",
             "type": "integer"
@@ -26381,7 +27232,9 @@
           "description": "Внутренняя ошибка обработки запроса."
         }
       },
-      "scopes": null,
+      "scopes": [
+        "tasks:write"
+      ],
       "summary": "Прикрепить файл к задаче"
     },
     {
@@ -26493,6 +27346,146 @@
       },
       "scopes": null,
       "summary": "Удалить файл задачи"
+    },
+    {
+      "access": "authenticated",
+      "description": "Обновляет подпись того же оригинала без повторного извлечения текста.",
+      "group": "task-attachments",
+      "id": "api-869deeffe4c4c741",
+      "kind": "http",
+      "legacy": [
+        "WRITE"
+      ],
+      "method": "PATCH",
+      "name": "PATCH /api/v1/tasks/{task_id}/attachments/{attachment_id}",
+      "operationId": "updateTaskAttachmentCaption",
+      "parameters": [
+        {
+          "description": "Текущая задача оригинала.",
+          "in": "path",
+          "name": "task_id",
+          "required": true,
+          "schema": {
+            "description": "Текущая задача оригинала.",
+            "examples": [
+              12
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Task Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Идентификатор оригинала.",
+          "in": "path",
+          "name": "attachment_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор оригинала.",
+            "examples": [
+              4
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Attachment Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/tasks/{task_id}/attachments/{attachment_id}",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FileCaptionUpdateSchema"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskAttachmentSchema"
+              }
+            }
+          },
+          "description": "Метаданные оригинала с новой подписью."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "tasks:write"
+      ],
+      "summary": "Изменить подпись файла задачи"
     },
     {
       "access": "authenticated",
@@ -26611,6 +27604,262 @@
         "tasks:read"
       ],
       "summary": "Открыть или скачать файл задачи"
+    },
+    {
+      "access": "authenticated",
+      "description": "После проверки актуального доступа выдаёт ограниченную локальную JPEG-миниатюру без внешних API.",
+      "group": "task-attachments",
+      "id": "api-6dcafba9143a8dba",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/tasks/{task_id}/attachments/{attachment_id}/preview",
+      "operationId": "getTaskAttachmentPreview",
+      "parameters": [
+        {
+          "description": "Текущая задача оригинала.",
+          "in": "path",
+          "name": "task_id",
+          "required": true,
+          "schema": {
+            "description": "Текущая задача оригинала.",
+            "examples": [
+              12
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Task Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Идентификатор оригинала.",
+          "in": "path",
+          "name": "attachment_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор оригинала.",
+            "examples": [
+              4
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Attachment Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/tasks/{task_id}/attachments/{attachment_id}/preview",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Локальная JPEG-миниатюра безопасного растрового оригинала."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "tasks:read"
+      ],
+      "summary": "Открыть миниатюру файла задачи"
+    },
+    {
+      "access": "authenticated",
+      "description": "Требует tasks:write. Ставит обработку в устойчивую очередь, сохраняя готовый текст и действующий lease; не вызывает AI API синхронно.",
+      "group": "task-attachments",
+      "id": "api-80bd08315c16e05d",
+      "kind": "http",
+      "legacy": [
+        "WRITE"
+      ],
+      "method": "POST",
+      "name": "POST /api/v1/tasks/{task_id}/attachments/{attachment_id}/retry",
+      "operationId": "retryTaskAttachment",
+      "parameters": [
+        {
+          "description": "Текущая задача оригинала.",
+          "in": "path",
+          "name": "task_id",
+          "required": true,
+          "schema": {
+            "description": "Текущая задача оригинала.",
+            "examples": [
+              12
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Task Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Идентификатор оригинала.",
+          "in": "path",
+          "name": "attachment_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор оригинала.",
+            "examples": [
+              4
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Attachment Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/tasks/{task_id}/attachments/{attachment_id}/retry",
+      "requestBody": null,
+      "responses": {
+        "202": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskAttachmentSchema"
+              }
+            }
+          },
+          "description": "Метаданные файла и состояния запрошенного повтора."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "tasks:write"
+      ],
+      "summary": "Повторить обработку файла задачи"
     },
     {
       "access": "authenticated",
@@ -27042,6 +28291,147 @@
     },
     {
       "access": "authenticated",
+      "description": "Одной транзакцией сохраняет комментарий и до десяти файлов (новые плюс существующие оригиналы той же задачи), каждый новый до 10 МиБ. Требуется comments:write, а при наличии файлов также tasks:write. Повтор request_id с прежними аргументами возвращает исходный результат.",
+      "group": "task-comments",
+      "id": "api-08d811fae9c4db02",
+      "kind": "http",
+      "legacy": [
+        "WRITE"
+      ],
+      "method": "POST",
+      "name": "POST /api/v1/tasks/{task_id}/comments/with-files",
+      "operationId": "createTaskCommentWithFiles",
+      "parameters": [
+        {
+          "description": "Текущая задача комментария и оригиналов.",
+          "in": "path",
+          "name": "task_id",
+          "required": true,
+          "schema": {
+            "description": "Текущая задача комментария и оригиналов.",
+            "examples": [
+              12
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Task Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/tasks/{task_id}/comments/with-files",
+      "requestBody": {
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_createTaskCommentWithFiles"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "201": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentSchema"
+              }
+            }
+          },
+          "description": "Сохранённый комментарий с метаданными его файлов."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "409": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Операция недоступна."
+              }
+            }
+          },
+          "description": "Операция конфликтует с текущим состоянием данных."
+        },
+        "413": {
+          "description": "Оригинал превышает 10 МиБ."
+        },
+        "415": {
+          "description": "Неподдерживаемый формат оригинала."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "comments:write"
+      ],
+      "summary": "Отправить комментарий с файлами"
+    },
+    {
+      "access": "authenticated",
       "description": "Сохраняет исходный файл в задаче, извлекает его текст, создаёт документ проекта и сразу связывает его с задачей.",
       "group": "task-documents",
       "id": "api-b449ff44eb720028",
@@ -27153,6 +28543,169 @@
       },
       "scopes": null,
       "summary": "Импортировать документ в задачу"
+    },
+    {
+      "access": "authenticated",
+      "description": "Ищет собственные вложения задачи и связанные markdown-документы в её текущем проекте. Поддерживает личные задачи.",
+      "group": "file-search",
+      "id": "api-edb9a9946cda07ee",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/tasks/{task_id}/files/search",
+      "operationId": "searchTaskFiles",
+      "parameters": [
+        {
+          "description": "Идентификатор задачи.",
+          "in": "path",
+          "name": "task_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор задачи.",
+            "exclusiveMinimum": 0,
+            "title": "Task Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Слова, фраза или websearch-запрос.",
+          "in": "query",
+          "name": "q",
+          "required": true,
+          "schema": {
+            "description": "Слова, фраза или websearch-запрос.",
+            "examples": [
+              "поставка оборудования"
+            ],
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        {
+          "description": "Число первичных источников на странице.",
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "default": 30,
+            "description": "Число первичных источников на странице.",
+            "examples": [
+              30
+            ],
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Смещение страницы.",
+          "in": "query",
+          "name": "offset",
+          "required": false,
+          "schema": {
+            "default": 0,
+            "description": "Смещение страницы.",
+            "examples": [
+              0
+            ],
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/tasks/{task_id}/files/search",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileSearchPageSchema"
+              }
+            }
+          },
+          "description": "Страница совпавших первичных источников."
+        },
+        "401": {
+          "description": "Требуется вход."
+        },
+        "403": {
+          "description": "Недостаточно scopes."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Ошибка валидации."
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "tasks:read"
+      ],
+      "summary": "Найти файлы задачи"
     },
     {
       "access": "authenticated",
@@ -29283,6 +30836,180 @@
     },
     {
       "access": "authenticated",
+      "description": "Доступен только владельцу диалога с актуальными правами; оригинал передаётся без DB-сессии.",
+      "group": "agent-files",
+      "id": "api-2963416e3ec290cf",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/tim/conversations/{conversation_id}/files/{file_id}/content",
+      "operationId": "downloadAgentFile",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "conversation_id",
+          "required": true,
+          "schema": {
+            "exclusiveMinimum": 0,
+            "title": "Conversation Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/content",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Successful Response"
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          },
+          "description": "Validation Error"
+        }
+      },
+      "scopes": null,
+      "summary": "Скачать приватный файл диалога"
+    },
+    {
+      "access": "authenticated",
+      "description": "Возвращает локальную миниатюру только владельцу диалога; vision не требуется.",
+      "group": "agent-files",
+      "id": "api-6d37e06bc6ae9ee6",
+      "kind": "http",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "method": "GET",
+      "name": "GET /api/v1/tim/conversations/{conversation_id}/files/{file_id}/preview",
+      "operationId": "previewAgentFile",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "conversation_id",
+          "required": true,
+          "schema": {
+            "exclusiveMinimum": 0,
+            "title": "Conversation Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "file_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "tracker_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracker Session"
+          }
+        }
+      ],
+      "path": "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/preview",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Successful Response"
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          },
+          "description": "Validation Error"
+        }
+      },
+      "scopes": null,
+      "summary": "Предпросмотр приватного изображения"
+    },
+    {
+      "access": "authenticated",
       "description": "Возвращает реплики, источники и состояние ожидаемого ответа. История доступна только владельцу диалога.",
       "group": "tim",
       "id": "api-5bc30d210cbf70fe",
@@ -31148,7 +32875,7 @@
   "mcp": [
     {
       "aliasFor": "tt_add_comment",
-      "description": "Добавляет комментарий к задаче от имени проверенного пользователя запроса и фиксирует событие в её истории. Автор определяется сервером. Требует право comments:write.",
+      "description": "Добавляет комментарий к задаче от имени проверенного пользователя запроса и фиксирует событие в её истории. Автор определяется сервером. Повторяйте тот же request_id и текст после потери ответа, чтобы не создать дубль. Требует право comments:write.",
       "group": "legacy-aliases",
       "id": "mcp-14a4e2b13d6fa400",
       "inputSchema": {
@@ -31184,6 +32911,20 @@
             "minLength": 1,
             "title": "Body",
             "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Стабильный UUID операции: повтор с тем же ключом не добавляет ещё один комментарий.",
+            "title": "Request Id"
           },
           "task_key": {
             "description": "Ключ задачи, например PROJ-142.",
@@ -31479,7 +33220,7 @@
     },
     {
       "aliasFor": "tt_create_task",
-      "description": "Создаёт задачу в проекте. Без указания стадии задача попадает в начальную стадию проекта — крайнюю левую колонку доски, обычно «Бэклог». Возвращает ключ и ссылку на задачу. Требует право tasks:write.",
+      "description": "Создаёт задачу в проекте. Без указания стадии задача попадает в начальную стадию проекта — крайнюю левую колонку доски, обычно «Бэклог». Возвращает ключ и ссылку на задачу. Для безопасного повтора после потери ответа передайте тот же request_id и те же аргументы. Требует право tasks:write.",
       "group": "legacy-aliases",
       "id": "mcp-fc7cff20decf8b06",
       "inputSchema": {
@@ -31569,6 +33310,20 @@
             "description": "Ключ проекта, например PROJ.",
             "title": "Project Key",
             "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Стабильный UUID операции: повтор с тем же ключом не создаёт новую задачу.",
+            "title": "Request Id"
           },
           "stage": {
             "anyOf": [
@@ -31813,11 +33568,17 @@
     },
     {
       "aliasFor": "tt_get_project",
-      "description": "Возвращает описание проекта, его стадии и число задач в каждой стадии. Проект задаётся ключом, например PROJ. Требует право projects:read.",
+      "description": "Возвращает прежнюю карточку проекта со стадиями и числом задач. Описание — превью до 2000 символов; full_text=true возвращает полный исходный Markdown. Структурные метаданные превью доступны в tt_get_project. Требует право projects:read.",
       "group": "legacy-aliases",
       "id": "mcp-d0572e06eb6b8416",
       "inputSchema": {
         "properties": {
+          "full_text": {
+            "default": false,
+            "description": "Вернуть полное описание без обрезки; false — превью до 2000 символов.",
+            "title": "Full Text",
+            "type": "boolean"
+          },
           "project_key": {
             "description": "Ключ проекта, например PROJ.",
             "title": "Project Key",
@@ -31886,11 +33647,17 @@
     },
     {
       "aliasFor": "tt_get_task",
-      "description": "Возвращает задачу целиком: описание, стадию, приоритет, исполнителя, сроки, чек-лист, актуальный опубликованный отчёт, участников (исполнитель, постановщик, наблюдатели) и ссылку. Задача задаётся ключом, например PROJ-142. Требует право tasks:read.",
+      "description": "Возвращает прежнюю карточку задачи с отчётом, участниками и ссылкой. Описание — превью до 2000 символов; full_text=true возвращает полный исходный Markdown. Структурные метаданные превью доступны в tt_get_task. Требует право tasks:read.",
       "group": "legacy-aliases",
       "id": "mcp-92ac4e14a27a92a4",
       "inputSchema": {
         "properties": {
+          "full_text": {
+            "default": false,
+            "description": "Вернуть полное описание без обрезки; false — превью до 2000 символов.",
+            "title": "Full Text",
+            "type": "boolean"
+          },
           "task_key": {
             "description": "Ключ задачи, например PROJ-142.",
             "title": "Task Key",
@@ -31918,7 +33685,7 @@
     },
     {
       "aliasFor": "tt_list_comments",
-      "description": "Возвращает комментарии задачи в порядке добавления; comment_id нужен tt_update_comment и tt_delete_comment. Требует право tasks:read.",
+      "description": "Возвращает прежний список комментариев с превью до 2000 символов. Используйте tt_list_comments для ID, метаданных обрезки и вызова tt_get_comment для полного чтения. Требует право tasks:read.",
       "group": "legacy-aliases",
       "id": "mcp-16229f2ae6abe319",
       "inputSchema": {
@@ -32841,7 +34608,7 @@
     },
     {
       "aliasFor": "tt_set_task_dates",
-      "description": "Изменяет start_date и/или due_date задачи через доменный сервис и историю. Пустая строка снимает дату. Требует право tasks:write.",
+      "description": "Изменяет start_date и/или due_date задачи через доменный сервис и историю. Пустая строка снимает дату. expected_revision из tt_get_task защищает от изменения поверх устаревшей версии; без него действует прежнее поведение. Требует право tasks:write.",
       "group": "legacy-aliases",
       "id": "mcp-9dbfbaac21c672ed",
       "inputSchema": {
@@ -32871,6 +34638,20 @@
             "default": null,
             "description": "Завершение ГГГГ-ММ-ДД; пустая строка снимает срок.",
             "title": "Due Date"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Ожидаемая revision общих полей из tt_get_task.",
+            "title": "Expected Revision"
           },
           "start_date": {
             "anyOf": [
@@ -32911,7 +34692,7 @@
     },
     {
       "aliasFor": null,
-      "description": "Добавляет комментарий к задаче от имени проверенного пользователя запроса и фиксирует событие в её истории. Автор определяется сервером. Требует право comments:write.",
+      "description": "Добавляет комментарий к задаче от имени проверенного пользователя запроса и фиксирует событие в её истории. Автор определяется сервером. Повторяйте тот же request_id и текст после потери ответа, чтобы не создать дубль. Требует право comments:write.",
       "group": "comments",
       "id": "mcp-975e2ab4040a8b01",
       "inputSchema": {
@@ -32947,6 +34728,20 @@
             "minLength": 1,
             "title": "Body",
             "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Стабильный UUID операции: повтор с тем же ключом не добавляет ещё один комментарий.",
+            "title": "Request Id"
           },
           "task_key": {
             "description": "Ключ задачи, например PROJ-142.",
@@ -33462,7 +35257,7 @@
     },
     {
       "aliasFor": null,
-      "description": "Создаёт задачу в проекте. Без указания стадии задача попадает в начальную стадию проекта — крайнюю левую колонку доски, обычно «Бэклог». Возвращает ключ и ссылку на задачу. Требует право tasks:write.",
+      "description": "Создаёт задачу в проекте. Без указания стадии задача попадает в начальную стадию проекта — крайнюю левую колонку доски, обычно «Бэклог». Возвращает ключ и ссылку на задачу. Для безопасного повтора после потери ответа передайте тот же request_id и те же аргументы. Требует право tasks:write.",
       "group": "agent",
       "id": "mcp-59bab5f6abfcf186",
       "inputSchema": {
@@ -33552,6 +35347,20 @@
             "description": "Ключ проекта, например PROJ.",
             "title": "Project Key",
             "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Стабильный UUID операции: повтор с тем же ключом не создаёт новую задачу.",
+            "title": "Request Id"
           },
           "stage": {
             "anyOf": [
@@ -34244,11 +36053,88 @@
     },
     {
       "aliasFor": null,
-      "description": "Возвращает описание проекта, его стадии и число задач в каждой стадии. Проект задаётся ключом, например PROJ. Требует право projects:read.",
+      "description": "Возвращает полный исходный Markdown комментария без обрезки. Используйте task_key и comment_id из tt_list_comments; проверяются принадлежность комментария задаче и текущий проект задачи. Требует право tasks:read.",
+      "group": "comments",
+      "id": "mcp-393afd1615326bd0",
+      "inputSchema": {
+        "properties": {
+          "comment_id": {
+            "description": "Идентификатор комментария из списка.",
+            "exclusiveMinimum": 0,
+            "title": "Comment Id",
+            "type": "integer"
+          },
+          "task_key": {
+            "description": "Ключ задачи, например PROJ-142.",
+            "title": "Task Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_key",
+          "comment_id"
+        ],
+        "title": "get_commentArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "name": "tt_get_comment",
+      "outputSchema": null,
+      "scopes": [
+        "tasks:read"
+      ],
+      "summary": "Полный комментарий задачи",
+      "write": false
+    },
+    {
+      "aliasFor": null,
+      "description": "Читает последний сохранённый обзор Ариса со вкладки «Обзор»: дату, автора, оценку, находки, результаты и рекомендации целиком. found=false означает, что обзор ещё не создавался. Это исторический анализ на created_at; новый разбор и вызов модели не выполняются. Требует право projects:read.",
+      "group": "projects",
+      "id": "mcp-817775bf3ef92d8e",
+      "inputSchema": {
+        "properties": {
+          "project_key": {
+            "description": "Ключ проекта, например PROJ.",
+            "title": "Project Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_key"
+        ],
+        "title": "get_latest_project_summaryArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "name": "tt_get_latest_project_summary",
+      "outputSchema": null,
+      "scopes": [
+        "projects:read"
+      ],
+      "summary": "Последний сохранённый обзор проекта",
+      "write": false
+    },
+    {
+      "aliasFor": null,
+      "description": "Возвращает описание проекта, его стадии и число задач в каждой стадии. По умолчанию описание — превью до 2000 символов; description_meta содержит факт обрезки, полную длину и вызов для дочитывания. full_text=true возвращает полный исходный Markdown. Проект задаётся ключом, например PROJ. Требует право projects:read.",
       "group": "projects",
       "id": "mcp-d2cc45a21e3cf53b",
       "inputSchema": {
         "properties": {
+          "full_text": {
+            "default": false,
+            "description": "Вернуть полное описание без обрезки; false — превью до 2000 символов.",
+            "title": "Full Text",
+            "type": "boolean"
+          },
           "project_key": {
             "description": "Ключ проекта, например PROJ.",
             "title": "Project Key",
@@ -34317,11 +36203,17 @@
     },
     {
       "aliasFor": null,
-      "description": "Возвращает задачу целиком: описание, стадию, приоритет, исполнителя, сроки, чек-лист, актуальный опубликованный отчёт, участников (исполнитель, постановщик, наблюдатели) и ссылку. Задача задаётся ключом, например PROJ-142. Требует право tasks:read.",
+      "description": "Возвращает карточку задачи: описание, стадию, приоритет, исполнителя, сроки, чек-лист, актуальный опубликованный отчёт, участников (исполнитель, постановщик, наблюдатели) и ссылку. По умолчанию описание — превью до 2000 символов; description_meta содержит факт обрезки, полную длину и вызов для дочитывания. full_text=true возвращает полный исходный Markdown. Задача задаётся ключом, например PROJ-142. revision — версия общих полей для expected_revision при изменении. Требует право tasks:read.",
       "group": "agent",
       "id": "mcp-ca542492dc7924e5",
       "inputSchema": {
         "properties": {
+          "full_text": {
+            "default": false,
+            "description": "Вернуть полное описание без обрезки; false — превью до 2000 символов.",
+            "title": "Full Text",
+            "type": "boolean"
+          },
           "task_key": {
             "description": "Ключ задачи, например PROJ-142.",
             "title": "Task Key",
@@ -34397,7 +36289,7 @@
     },
     {
       "aliasFor": null,
-      "description": "Возвращает комментарии задачи в порядке добавления; comment_id нужен tt_update_comment и tt_delete_comment. Требует право tasks:read.",
+      "description": "Возвращает комментарии задачи в порядке добавления с превью текста до 2000 символов. body_meta содержит факт обрезки, полную длину и вызов tt_get_comment для полного чтения. comment_id нужен также tt_update_comment и tt_delete_comment. Требует право tasks:read.",
       "group": "comments",
       "id": "mcp-13f8a3e352f3c383",
       "inputSchema": {
@@ -35965,7 +37857,7 @@
     },
     {
       "aliasFor": null,
-      "description": "Изменяет start_date и/или due_date задачи через доменный сервис и историю. Пустая строка снимает дату. Требует право tasks:write.",
+      "description": "Изменяет start_date и/или due_date задачи через доменный сервис и историю. Пустая строка снимает дату. expected_revision из tt_get_task защищает от изменения поверх устаревшей версии; без него действует прежнее поведение. Требует право tasks:write.",
       "group": "calendar",
       "id": "mcp-1d114b327e817538",
       "inputSchema": {
@@ -35995,6 +37887,20 @@
             "default": null,
             "description": "Завершение ГГГГ-ММ-ДД; пустая строка снимает срок.",
             "title": "Due Date"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Ожидаемая revision общих полей из tt_get_task.",
+            "title": "Expected Revision"
           },
           "start_date": {
             "anyOf": [
@@ -36052,6 +37958,20 @@
             "default": null,
             "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
             "title": "Actor"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Ожидаемая revision задачи из tt_get_task; без неё прежнее поведение.",
+            "title": "Expected Revision"
           },
           "observers": {
             "description": "Логины наблюдателей.",
@@ -36941,7 +38861,7 @@
     },
     {
       "aliasFor": null,
-      "description": "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, приоритет, исполнитель, сроки. Стадия — tt_move_task, чек-лист — tt_set_checklist, наблюдатели — tt_set_watchers. Требует право tasks:write.",
+      "description": "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, приоритет, исполнитель, сроки. Стадия — tt_move_task, чек-лист — tt_set_checklist, наблюдатели — tt_set_watchers. Передавайте expected_revision из tt_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется прежнее поведение без защиты от затирания чужой правки. Требует право tasks:write.",
       "group": "agent",
       "id": "mcp-7a1ce54e3ee97028",
       "inputSchema": {
@@ -36997,6 +38917,20 @@
             "default": null,
             "description": "Срок в формате ГГГГ-ММ-ДД; пустая строка снимает срок.",
             "title": "Due Date"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Ожидаемая revision из tt_get_task; устаревшая версия даёт конфликт.",
+            "title": "Expected Revision"
           },
           "priority": {
             "anyOf": [
@@ -37300,7 +39234,7 @@
     },
     {
       "aliasFor": "tt_update_task",
-      "description": "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, приоритет, исполнитель, сроки. Стадия — tt_move_task, чек-лист — tt_set_checklist, наблюдатели — tt_set_watchers. Требует право tasks:write.",
+      "description": "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, приоритет, исполнитель, сроки. Стадия — tt_move_task, чек-лист — tt_set_checklist, наблюдатели — tt_set_watchers. Передавайте expected_revision из tt_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется прежнее поведение без защиты от затирания чужой правки. Требует право tasks:write.",
       "group": "legacy-aliases",
       "id": "mcp-8694bccc45d521e1",
       "inputSchema": {
@@ -37356,6 +39290,20 @@
             "default": null,
             "description": "Срок в формате ГГГГ-ММ-ДД; пустая строка снимает срок.",
             "title": "Due Date"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Ожидаемая revision из tt_get_task; устаревшая версия даёт конфликт.",
+            "title": "Expected Revision"
           },
           "priority": {
             "anyOf": [
@@ -41599,8 +43547,82 @@
       "title": "BoardTemplateGroup",
       "type": "object"
     },
+    "Body_createTaskCommentWithFiles": {
+      "properties": {
+        "attachment_ids": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "JSON-массив ID существующих оригиналов той же задачи.",
+          "title": "Attachment Ids"
+        },
+        "body_md": {
+          "default": "",
+          "description": "Markdown; допускается пустой текст при наличии файлов.",
+          "maxLength": 50000,
+          "title": "Body Md",
+          "type": "string"
+        },
+        "captions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "JSON-массив подписей string/null в порядке новых files.",
+          "title": "Captions"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "format": "binary",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "До десяти новых файлов, каждый до 10 МиБ.",
+          "title": "Files"
+        },
+        "request_id": {
+          "description": "Стабильный UUID отправки, сохраняемый при повторе.",
+          "format": "uuid",
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "title": "Body_createTaskCommentWithFiles",
+      "type": "object"
+    },
     "Body_importTaskDocument": {
       "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Caption"
+        },
         "file": {
           "description": "Документ размером до 10 МБ.",
           "format": "binary",
@@ -41736,6 +43758,19 @@
     },
     "Body_uploadProjectFile": {
       "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пользовательская подпись оригинала.",
+          "title": "Caption"
+        },
         "file": {
           "description": "Поддерживаемый документ или изображение.",
           "format": "binary",
@@ -41766,6 +43801,19 @@
     },
     "Body_uploadTaskAttachment": {
       "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Подпись оригинала.",
+          "title": "Caption"
+        },
         "file": {
           "description": "Файл задачи размером до 10 МБ.",
           "format": "binary",
@@ -43402,6 +45450,17 @@
     "CommentSchema": {
       "description": "Комментарий задачи канбана.",
       "properties": {
+        "attachments": {
+          "description": "Связанные оригиналы той же задачи.",
+          "examples": [
+            []
+          ],
+          "items": {
+            "$ref": "#/components/schemas/TaskAttachmentSchema"
+          },
+          "title": "Attachments",
+          "type": "array"
+        },
         "author": {
           "anyOf": [
             {
@@ -44426,6 +46485,274 @@
         }
       },
       "title": "DocumentUpdateSchema",
+      "type": "object"
+    },
+    "FileCaptionUpdateSchema": {
+      "additionalProperties": false,
+      "description": "Явный null удаляет подпись; отсутствие caption считается ошибкой.",
+      "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пользовательская подпись; null удаляет подпись.",
+          "examples": [
+            "Согласованный макет"
+          ],
+          "title": "Caption"
+        }
+      },
+      "required": [
+        "caption"
+      ],
+      "title": "FileCaptionUpdateSchema",
+      "type": "object"
+    },
+    "FileSearchItemSchema": {
+      "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пользовательская подпись файла.",
+          "examples": [
+            "План поставки",
+            null
+          ],
+          "title": "Caption"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "MIME оригинала; null для markdown-документа.",
+          "examples": [
+            "application/pdf",
+            null
+          ],
+          "title": "Content Type"
+        },
+        "document_slug": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "URL-идентификатор найденного markdown-документа.",
+          "examples": [
+            "specification",
+            null
+          ],
+          "title": "Document Slug"
+        },
+        "excerpt": {
+          "description": "Ограниченный фрагмент с маркерами __FTS_START__/__FTS_END__, без HTML-разметки.",
+          "examples": [
+            "Согласовать __FTS_START__поставку__FTS_END__ оборудования."
+          ],
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "preview_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Защищённый URL локальной растровой миниатюры.",
+          "examples": [
+            null
+          ],
+          "title": "Preview Url"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Текущий проект; null для личной задачи.",
+          "examples": [
+            2,
+            null
+          ],
+          "title": "Project Id"
+        },
+        "rank": {
+          "description": "Относительная FTS-релевантность.",
+          "examples": [
+            0.25
+          ],
+          "title": "Rank",
+          "type": "number"
+        },
+        "source_id": {
+          "description": "ID оригинала или документа.",
+          "examples": [
+            12
+          ],
+          "title": "Source Id",
+          "type": "integer"
+        },
+        "source_type": {
+          "description": "Вид первичного источника.",
+          "enum": [
+            "project_file",
+            "task_attachment",
+            "document"
+          ],
+          "examples": [
+            "task_attachment"
+          ],
+          "title": "Source Type",
+          "type": "string"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Задача оригинала или отфильтрованной связи документа.",
+          "examples": [
+            7,
+            null
+          ],
+          "title": "Task Id"
+        },
+        "task_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Текущий отображаемый ключ задачи без дополнительного запроса.",
+          "examples": [
+            "PROJ-7",
+            "T-8",
+            null
+          ],
+          "title": "Task Key"
+        },
+        "task_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Текущий заголовок задачи без дополнительного запроса.",
+          "examples": [
+            "Подготовить поставку",
+            null
+          ],
+          "title": "Task Title"
+        },
+        "title": {
+          "description": "Исходное имя файла или заголовок документа.",
+          "examples": [
+            "План.pdf"
+          ],
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_type",
+        "source_id",
+        "project_id",
+        "task_id",
+        "title",
+        "caption",
+        "content_type",
+        "preview_url",
+        "excerpt",
+        "rank"
+      ],
+      "title": "FileSearchItemSchema",
+      "type": "object"
+    },
+    "FileSearchPageSchema": {
+      "properties": {
+        "items": {
+          "description": "Источники в порядке релевантности с устойчивым порядком при равенстве.",
+          "examples": [
+            []
+          ],
+          "items": {
+            "$ref": "#/components/schemas/FileSearchItemSchema"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "limit": {
+          "description": "Размер страницы.",
+          "examples": [
+            30
+          ],
+          "minimum": 1.0,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "description": "Смещение страницы.",
+          "examples": [
+            0
+          ],
+          "minimum": 0.0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "total": {
+          "description": "Число совпавших первичных источников.",
+          "examples": [
+            14
+          ],
+          "minimum": 0.0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "limit",
+        "offset"
+      ],
+      "title": "FileSearchPageSchema",
       "type": "object"
     },
     "HTTPValidationError": {
@@ -45858,6 +48185,16 @@
           ],
           "title": "Project Id"
         },
+        "revision": {
+          "default": 1,
+          "description": "Текущая версия общих полей и назначений задачи.",
+          "examples": [
+            3
+          ],
+          "minimum": 1.0,
+          "title": "Revision",
+          "type": "integer"
+        },
         "role": {
           "anyOf": [
             {
@@ -47105,6 +49442,21 @@
     "ProjectFileDetailSchema": {
       "description": "Одна страница извлечённого текста вместе с метаданными.",
       "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пользовательская подпись оригинала.",
+          "examples": [
+            null
+          ],
+          "title": "Caption"
+        },
         "content_type": {
           "description": "Определённый сервером MIME-тип.",
           "examples": [
@@ -47153,12 +49505,42 @@
             "ready",
             "empty",
             "unsupported",
-            "failed"
+            "failed",
+            "disabled"
           ],
           "examples": [
             "pending"
           ],
           "title": "Extraction Status",
+          "type": "string"
+        },
+        "fts_detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Безопасная диагностика FTS.",
+          "examples": [
+            null
+          ],
+          "title": "Fts Detail"
+        },
+        "fts_status": {
+          "default": "pending",
+          "description": "Состояние индекса PostgreSQL FTS.",
+          "enum": [
+            "pending",
+            "ready",
+            "failed"
+          ],
+          "examples": [
+            "pending"
+          ],
+          "title": "Fts Status",
           "type": "string"
         },
         "id": {
@@ -47237,6 +49619,30 @@
           ],
           "title": "Original Name",
           "type": "string"
+        },
+        "preview_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Защищённый URL локальной миниатюры.",
+          "examples": [
+            null
+          ],
+          "title": "Preview Url"
+        },
+        "previewable": {
+          "default": false,
+          "description": "Поддерживается локальная растровая миниатюра.",
+          "examples": [
+            false
+          ],
+          "title": "Previewable",
+          "type": "boolean"
         },
         "project_id": {
           "description": "Проект-владелец файла.",
@@ -47336,6 +49742,21 @@
     "ProjectFileSchema": {
       "description": "Оригинал и независимые состояния извлечения и индексации.",
       "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пользовательская подпись оригинала.",
+          "examples": [
+            null
+          ],
+          "title": "Caption"
+        },
         "content_type": {
           "description": "Определённый сервером MIME-тип.",
           "examples": [
@@ -47384,12 +49805,42 @@
             "ready",
             "empty",
             "unsupported",
-            "failed"
+            "failed",
+            "disabled"
           ],
           "examples": [
             "pending"
           ],
           "title": "Extraction Status",
+          "type": "string"
+        },
+        "fts_detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Безопасная диагностика FTS.",
+          "examples": [
+            null
+          ],
+          "title": "Fts Detail"
+        },
+        "fts_status": {
+          "default": "pending",
+          "description": "Состояние индекса PostgreSQL FTS.",
+          "enum": [
+            "pending",
+            "ready",
+            "failed"
+          ],
+          "examples": [
+            "pending"
+          ],
+          "title": "Fts Status",
           "type": "string"
         },
         "id": {
@@ -47453,6 +49904,30 @@
           ],
           "title": "Original Name",
           "type": "string"
+        },
+        "preview_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Защищённый URL локальной миниатюры.",
+          "examples": [
+            null
+          ],
+          "title": "Preview Url"
+        },
+        "previewable": {
+          "default": false,
+          "description": "Поддерживается локальная растровая миниатюра.",
+          "examples": [
+            false
+          ],
+          "title": "Previewable",
+          "type": "boolean"
         },
         "project_id": {
           "description": "Проект-владелец файла.",
@@ -50191,6 +52666,21 @@
     "TaskAttachmentSchema": {
       "description": "Метаданные прикреплённого к задаче файла.",
       "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пользовательская подпись файла.",
+          "examples": [
+            null
+          ],
+          "title": "Caption"
+        },
         "content_type": {
           "description": "MIME-тип файла.",
           "examples": [
@@ -50200,6 +52690,7 @@
           "type": "string"
         },
         "content_url": {
+          "default": "",
           "description": "Относительный URL просмотра или скачивания файла.",
           "examples": [
             "/api/v1/tasks/12/attachments/4/content"
@@ -50216,6 +52707,54 @@
           "title": "Created At",
           "type": "string"
         },
+        "extraction_detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пояснение извлечения текста.",
+          "examples": [
+            null
+          ],
+          "title": "Extraction Detail"
+        },
+        "extraction_status": {
+          "default": "pending",
+          "description": "Состояние сохранённого извлечения текста.",
+          "examples": [
+            "pending"
+          ],
+          "title": "Extraction Status",
+          "type": "string"
+        },
+        "fts_detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Безопасная диагностика FTS.",
+          "examples": [
+            null
+          ],
+          "title": "Fts Detail"
+        },
+        "fts_status": {
+          "default": "pending",
+          "description": "Состояние сохранённого PostgreSQL FTS.",
+          "examples": [
+            "pending"
+          ],
+          "title": "Fts Status",
+          "type": "string"
+        },
         "id": {
           "description": "Уникальный идентификатор файла.",
           "examples": [
@@ -50223,6 +52762,30 @@
           ],
           "title": "Id",
           "type": "integer"
+        },
+        "index_detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Пояснение семантической индексации.",
+          "examples": [
+            null
+          ],
+          "title": "Index Detail"
+        },
+        "index_status": {
+          "default": "pending",
+          "description": "Семантическая индексация; общая диагностика в знаниях проекта.",
+          "examples": [
+            "pending"
+          ],
+          "title": "Index Status",
+          "type": "string"
         },
         "original_name": {
           "description": "Исходное имя файла.",
@@ -50232,7 +52795,23 @@
           "title": "Original Name",
           "type": "string"
         },
+        "preview_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Защищённый URL локальной миниатюры.",
+          "examples": [
+            null
+          ],
+          "title": "Preview Url"
+        },
         "previewable": {
+          "default": false,
           "description": "Можно ли безопасно показать файл как изображение.",
           "examples": [
             false
@@ -50256,6 +52835,21 @@
           ],
           "title": "Task Id",
           "type": "integer"
+        },
+        "uploaded_by_user_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Автор загрузки; null у прежних файлов.",
+          "examples": [
+            1
+          ],
+          "title": "Uploaded By User Id"
         }
       },
       "required": [
@@ -50264,9 +52858,7 @@
         "original_name",
         "content_type",
         "size",
-        "created_at",
-        "content_url",
-        "previewable"
+        "created_at"
       ],
       "title": "TaskAttachmentSchema",
       "type": "object"
@@ -51190,6 +53782,16 @@
             }
           ],
           "description": "Актуальная опубликованная версия отчёта; null, если публикаций нет."
+        },
+        "revision": {
+          "default": 1,
+          "description": "Текущая версия общих полей и назначений задачи.",
+          "examples": [
+            3
+          ],
+          "minimum": 1.0,
+          "title": "Revision",
+          "type": "integer"
         },
         "role": {
           "anyOf": [
@@ -52144,6 +54746,16 @@
           ],
           "title": "Project Id"
         },
+        "revision": {
+          "default": 1,
+          "description": "Текущая версия общих полей и назначений задачи.",
+          "examples": [
+            3
+          ],
+          "minimum": 1.0,
+          "title": "Revision",
+          "type": "integer"
+        },
         "role": {
           "anyOf": [
             {
@@ -52420,6 +55032,22 @@
             7
           ],
           "title": "Executor Id"
+        },
+        "expected_revision": {
+          "anyOf": [
+            {
+              "minimum": 1.0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Версия из чтения задачи; при несовпадении 409 без изменений. Без неё сохраняется прежнее поведение.",
+          "examples": [
+            3
+          ],
+          "title": "Expected Revision"
         },
         "observer_ids": {
           "anyOf": [

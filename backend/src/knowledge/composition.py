@@ -74,6 +74,7 @@ def build_index_service_factory(
                 embedding_client=runtime.embedding_client,
                 qdrant_client=runtime.qdrant_client,
                 vision=runtime.vision,
+                extract_originals=False,
             )
 
     return factory

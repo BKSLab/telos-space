@@ -53,6 +53,7 @@ test("единое окно личного Ариса сохраняет чер�
     await page.getByRole("button", { name: "Свернуть чат" }).click();
     await openPersonalWindow(page);
     await expect(input).toHaveValue("Подготовь критерии приёмки");
+    await expect(page.getByRole("button", { name: "Приложить файл для Ариса: до 5 штук, до 10 МБ каждый", exact: true })).toBeEnabled();
     await page.getByLabel("Файлы для Ариса", { exact: true }).setInputFiles({ name: "acceptance.md", mimeType: "text/markdown", buffer: Buffer.from("Критерии") });
     await expect(page.getByRole("button", { name: "Убрать acceptance.md" })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Диалог с Арисом", exact: true })).toHaveValue("1");
@@ -313,6 +314,6 @@ test("файл загружается в личный диалог и сохра
     await page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true }).press("Enter");
     await expect(page.getByRole("button", { name: "Убрать acceptance.md" })).toHaveCount(0);
     await page.reload();
-    await expect(page.locator("p", { hasText: "acceptance.md" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Скачать файл acceptance.md" })).toBeVisible();
     expect(control.submissions[0].file_ids).toEqual(["f918d205-2ced-48eb-85f4-19b8e55ef361"]);
 });

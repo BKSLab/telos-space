@@ -913,6 +913,7 @@ DocumentLinksServiceDep = Annotated[
 
 
 def get_task_comments_service(
+    settings: SettingsDep,
     users_repository: UsersRepositoryDep,
     comments_repository: TaskCommentsRepositoryDep,
     tasks_repository: TasksRepositoryDep,
@@ -922,6 +923,7 @@ def get_task_comments_service(
 ) -> TaskCommentsService:
     """Создаёт сервис комментариев задач."""
     return TaskCommentsService(
+        knowledge_enabled=settings.knowledge.knowledge_enabled,
         users_repository=users_repository,
         comments_repository=comments_repository,
         tasks_repository=tasks_repository,
@@ -955,6 +957,7 @@ TaskActivityServiceDep = Annotated[
 
 
 def get_task_attachments_service(
+    settings: SettingsDep,
     attachments_repository: TaskAttachmentsRepositoryDep,
     tasks_repository: TasksRepositoryDep,
     storage: TaskAttachmentStorageDep,
@@ -963,6 +966,7 @@ def get_task_attachments_service(
 ) -> TaskAttachmentsService:
     """Создаёт сервис файлов задач."""
     return TaskAttachmentsService(
+        knowledge_enabled=settings.knowledge.knowledge_enabled,
         attachments_repository=attachments_repository,
         tasks_repository=tasks_repository,
         storage=storage,

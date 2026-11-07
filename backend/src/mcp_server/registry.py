@@ -167,14 +167,40 @@ def tt_tool(
                     result = await wrapper(*args, **kwargs)
                     if legacy_name == "list_tasks" and isinstance(result, dict):
                         return result["items"]
+                    if legacy_name in {"get_task", "get_project"} and isinstance(result, dict):
+                        return {key: value for key, value in result.items() if key not in {"description_meta", "revision"}}
+                    if legacy_name in {"create_task", "update_task", "set_task_dates"} and isinstance(result, dict):
+                        return {key: value for key, value in result.items() if key != "revision"}
                     if legacy_name == "list_comments" and isinstance(result, list):
-                        return [{key: value for key, value in item.items() if key != "comment_id"} for item in result]
+                        return [{key: value for key, value in item.items() if key not in {"comment_id", "body_meta"}} for item in result]
                     if legacy_name == "add_comment" and isinstance(result, dict):
                         return {key: value for key, value in result.items() if key != "comment_id"}
                     return result
                 finally:
                     _legacy_call.reset(legacy_token)
-            mcp_server.tool(name=legacy_name, title=title, description=description)(legacy_wrapper)
+            legacy_description = {
+                "get_project": (
+                    "Возвращает прежнюю карточку проекта со стадиями и числом задач. "
+                    "Описание — превью до 2000 символов; full_text=true возвращает полный "
+                    "исходный Markdown. Структурные метаданные превью доступны в tt_get_project."
+                ),
+                "get_task": (
+                    "Возвращает прежнюю карточку задачи с отчётом, участниками и ссылкой. "
+                    "Описание — превью до 2000 символов; full_text=true возвращает полный "
+                    "исходный Markdown. Структурные метаданные превью доступны в tt_get_task."
+                ),
+                "list_comments": (
+                    "Возвращает прежний список комментариев с превью до 2000 символов. "
+                    "Используйте tt_list_comments для ID, метаданных обрезки и вызова "
+                    "tt_get_comment для полного чтения."
+                ),
+            }.get(legacy_name)
+            mcp_server.tool(
+                name=legacy_name,
+                title=title,
+                description=(f"{legacy_description} Требует право {scope}."
+                             if legacy_description else description),
+            )(legacy_wrapper)
         # Наружу отдаётся обёртка: прямой вызов из кода и тестов проходит ту же
         # проверку права, что и вызов агента через транспорт.
         return wrapper

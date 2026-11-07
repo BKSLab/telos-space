@@ -48,6 +48,7 @@ ACTION_SCOPES: dict[str, str] = {
     "list_task_reports": SCOPE_TASKS_READ,
     "publish_task_report": SCOPE_TASKS_WRITE,
     "get_project": SCOPE_PROJECTS_READ,
+    "get_latest_project_summary": SCOPE_PROJECTS_READ,
     "list_members": SCOPE_PROJECTS_READ,
     "list_stages": SCOPE_PROJECTS_READ,
     "list_milestones": SCOPE_PROJECTS_READ,

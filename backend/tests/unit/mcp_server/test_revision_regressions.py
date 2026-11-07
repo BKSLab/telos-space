@@ -148,6 +148,7 @@ async def test_http_and_mcp_factories_save_authenticated_author_snapshot(monkeyp
     unit = AsyncMock(spec=UnitOfWork)
     knowledge = AsyncMock(spec=KnowledgeEvents)
     values = {
+        "settings": SimpleNamespace(knowledge=SimpleNamespace(knowledge_enabled=True)),
         "users_repository": users,
         "comments_repository": comments,
         "tasks_repository": tasks,
@@ -165,7 +166,7 @@ async def test_http_and_mcp_factories_save_authenticated_author_snapshot(monkeyp
         monkeypatch.setattr(mcp_services, name, lambda session, value=value: value)
     monkeypatch.setattr(mcp_services, "build_knowledge_events", lambda *args: knowledge)
     factories = [
-        lambda: mcp_services.build_comments_service(object(), object()),
+        lambda: mcp_services.build_comments_service(object(), values["settings"]),
         lambda: http_services.get_task_comments_service(
             **{
                 name: values[name]

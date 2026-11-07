@@ -70,6 +70,7 @@ from src.repositories.users import UsersRepository
 from src.repositories.wbs_nodes import WbsNodesRepository
 from src.services.access import AccessService
 from src.services.agent_tool_scope import AgentProjectToolScope, AgentProjectToolScopeFactory
+from src.services.analytics import AnalyticsReportReader
 from src.services.api_key_usage import ApiKeyUsageService
 from src.services.attachment_download import (
     AttachmentDownloadScope,
@@ -223,6 +224,12 @@ def build_agent_project_tool_scope(
                         repository=KnowledgeIndexJobsRepository(session),
                         enabled=settings.knowledge.knowledge_enabled,
                     )
+
+                    @asynccontextmanager
+                    async def analytics_scope() -> AsyncIterator[AnalyticsDbScope]:
+                        # Сессией и её транзакцией владеет внешняя область инструмента.
+                        yield _build_analytics_db_scope(session=session)
+
                     try:
                         yield AgentProjectToolScope(
                             projects=ProjectsService(
@@ -255,6 +262,7 @@ def build_agent_project_tool_scope(
                                 reports_repository=TaskReportsRepository(session),
                             ),
                             comments=TaskCommentsService(
+                                knowledge_enabled=settings.knowledge.knowledge_enabled,
                                 comments_repository=comments,
                                 tasks_repository=tasks,
                                 activity_repository=activity,
@@ -303,6 +311,7 @@ def build_agent_project_tool_scope(
                                 members_repository=members,
                             ),
                             attachments=TaskAttachmentsService(
+                                knowledge_enabled=settings.knowledge.knowledge_enabled,
                                 attachments_repository=TaskAttachmentsRepository(session),
                                 tasks_repository=tasks,
                                 storage=files,
@@ -357,6 +366,7 @@ def build_agent_project_tool_scope(
                                 unit_of_work=domain_uow,
                                 projects_repository=projects,
                             ),
+                            analytics_reader=AnalyticsReportReader(scope=analytics_scope),
                             access=access,
                             users=users,
                             conversations=AgentConversationsRepository(session),
@@ -617,6 +627,7 @@ def build_attachment_download_scope(
                     links_repository=DocumentLinksRepository(session),
                 ),
                 attachments_service=TaskAttachmentsService(
+                    knowledge_enabled=settings.knowledge.knowledge_enabled,
                     attachments_repository=TaskAttachmentsRepository(session),
                     tasks_repository=TasksRepository(session),
                     storage=storage,
@@ -780,6 +791,29 @@ TaskDescriptionScopeDep = Annotated[
 ]
 
 
+def _build_analytics_db_scope(*, session: AsyncSession) -> AnalyticsDbScope:
+    """Собирает зависимости аналитики на сессии, принадлежащей вызывающему коду."""
+    return AnalyticsDbScope(
+        attachments=TaskAttachmentsRepository(session),
+        participants=TaskParticipantsRepository(session),
+        risks=ProjectRiskRepository(session),
+        reports=AnalyticsReportsRepository(session),
+        projects=ProjectsRepository(session),
+        members=ProjectMembersRepository(session),
+        stages=ProjectStagesRepository(session),
+        tasks=TasksRepository(session),
+        comments=TaskCommentsRepository(session),
+        activity=TaskActivityRepository(session),
+        dependencies=TaskDependenciesRepository(session),
+        wbs_nodes=WbsNodesRepository(session),
+        milestones=MilestonesRepository(session),
+        stickers=ProjectStickersRepository(session),
+        documents=DocumentsRepository(session),
+        document_links=DocumentLinksRepository(session),
+        unit_of_work=UnitOfWork(session),
+    )
+
+
 def build_analytics_scope(
     *,
     session_factory: SessionFactory,
@@ -789,25 +823,7 @@ def build_analytics_scope(
     @asynccontextmanager
     async def scope() -> AsyncIterator[AnalyticsDbScope]:
         async with session_factory() as session:
-            yield AnalyticsDbScope(
-                attachments=TaskAttachmentsRepository(session),
-                participants=TaskParticipantsRepository(session),
-                risks=ProjectRiskRepository(session),
-                reports=AnalyticsReportsRepository(session),
-                projects=ProjectsRepository(session),
-                members=ProjectMembersRepository(session),
-                stages=ProjectStagesRepository(session),
-                tasks=TasksRepository(session),
-                comments=TaskCommentsRepository(session),
-                activity=TaskActivityRepository(session),
-                dependencies=TaskDependenciesRepository(session),
-                wbs_nodes=WbsNodesRepository(session),
-                milestones=MilestonesRepository(session),
-                stickers=ProjectStickersRepository(session),
-                documents=DocumentsRepository(session),
-                document_links=DocumentLinksRepository(session),
-                unit_of_work=UnitOfWork(session),
-            )
+            yield _build_analytics_db_scope(session=session)
 
     return scope
 
@@ -912,6 +928,7 @@ def build_task_document_import_scope(
                 knowledge_sources=KnowledgeSourcesRepository(session),
                 tasks=TasksRepository(session),
                 attachments=TaskAttachmentsService(
+                    knowledge_enabled=settings.knowledge.knowledge_enabled,
                     attachments_repository=TaskAttachmentsRepository(session),
                     tasks_repository=TasksRepository(session),
                     storage=storage,

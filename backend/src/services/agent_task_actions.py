@@ -9,6 +9,7 @@ from src.exceptions.projects import ProjectNotFoundError
 from src.schemas import project_tool_inputs as inputs
 from src.services.agent_action_helpers import checked_comment, checked_task, page
 from src.services.agent_tool_scope import AgentProjectToolScope
+from src.services.project_query import StageRefDto, resolve_stage_reference
 from src.services.tasks import build_task_key
 from src.utils.checklists import checklist_context
 
@@ -118,9 +119,31 @@ async def create_task(
     db: AgentProjectToolScope, ctx: AgentToolContext, args: inputs.TaskCreateInput
 ) -> dict:
     """Создаёт задачу через обычный сценарий нумерации и ролевых назначений."""
+    # Имена разрешаются после проверки квитанции в AgentActionsService:
+    # переименование стадии или удаление участника не ломает повтор исходного запроса.
+    payload = args.model_dump(
+        exclude_unset=True, exclude={"stage_name", "executor_username", "observer_usernames"},
+    )
+    if args.stage_name is not None:
+        stages = await db.stages.get_stage_list(ctx.project_id)
+        payload["stage_id"] = resolve_stage_reference(
+            [StageRefDto(stage.id, stage.name, stage.is_done_stage) for stage in stages],
+            args.stage_name,
+        ).stage_id
+    if args.executor_username is not None:
+        username = args.executor_username.strip()
+        payload["executor_id"] = (
+            await db.members.resolve_member_user_id(project_id=ctx.project_id, username=username)
+            if username else None
+        )
+    if args.observer_usernames is not None:
+        payload["observer_ids"] = [
+            await db.members.resolve_member_user_id(project_id=ctx.project_id, username=username)
+            for username in args.observer_usernames
+        ]
     task = await db.tasks.create_task(
         ctx.project_id,
-        args.model_dump(exclude_unset=True),
+        payload,
         created_by_user_id=ctx.user_id,
     )
     return {"task": task.model_dump(mode="json"), "source_id": f"task:{task.id}"}

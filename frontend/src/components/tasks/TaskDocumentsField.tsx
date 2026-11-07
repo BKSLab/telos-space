@@ -1,8 +1,8 @@
-import { FileText, Library, Paperclip, X } from "lucide-react";
-import { formatFileSize } from "@/lib/files";
+import { FileText, Library } from "lucide-react";
+import { fileDraftKey } from "@/lib/files";
 import { MAX_PROJECT_FILE_BATCH, MAX_PROJECT_FILE_SIZE, PROJECT_FILE_ACCEPT } from "@/lib/projectFiles";
 import type { DocumentListItem } from "@/lib/types";
-import { IconButton } from "@/components/ui/Button";
+import { FileDraftList } from "@/components/files/FileDraftList";
 import { Popover } from "@/components/ui/Popover";
 import {
     FileUploadControl,
@@ -12,11 +12,13 @@ interface TaskDocumentsFieldProps {
     documents: DocumentListItem[];
     selectedDocumentIds: number[];
     files: File[];
+    captions: Record<string, string>;
     disabled?: boolean;
     loading?: boolean;
     error?: string | null;
     onSelectedDocumentIdsChange: (ids: number[]) => void;
     onFilesChange: (files: File[]) => void;
+    onCaptionsChange: (captions: Record<string, string>) => void;
     onError: (message: string | null) => void;
 }
 
@@ -24,11 +26,13 @@ export function TaskDocumentsField({
     documents,
     selectedDocumentIds,
     files,
+    captions,
     disabled = false,
     loading = false,
     error,
     onSelectedDocumentIdsChange,
     onFilesChange,
+    onCaptionsChange,
     onError,
 }: TaskDocumentsFieldProps) {
     const selected = new Set(selectedDocumentIds);
@@ -120,30 +124,8 @@ export function TaskDocumentsField({
 
             {files.length > 0 && (
                 <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    {files.map((file) => (
-                        <div
-                            key={fileKey(file)}
-                            className="flex items-center gap-2 rounded-[var(--radius-control)] bg-white/[0.025] px-2.5 py-1.5"
-                        >
-                            <Paperclip size={13} className="shrink-0 text-muted" aria-hidden="true" />
-                            <span className="min-w-0 flex-1 truncate text-[12px] text-secondary">
-                                {file.name}
-                            </span>
-                            <span className="shrink-0 text-[10px] text-disabled">
-                                {formatFileSize(file.size)}
-                            </span>
-                            <IconButton
-                                label={`Убрать файл ${file.name}`}
-                                size="sm"
-                                disabled={disabled}
-                                onClick={() =>
-                                    onFilesChange(files.filter((item) => fileKey(item) !== fileKey(file)))
-                                }
-                            >
-                                <X size={12} aria-hidden="true" />
-                            </IconButton>
-                        </div>
-                    ))}
+                    <FileDraftList drafts={files.map(file => ({ file, caption: captions[fileDraftKey(file)] ?? "" }))} disabled={disabled}
+                        onChange={drafts => { onFilesChange(drafts.map(draft => draft.file)); onCaptionsChange(Object.fromEntries(drafts.map(draft => [fileDraftKey(draft.file), draft.caption]))); }} />
                 </div>
             )}
 
@@ -158,17 +140,13 @@ export function TaskDocumentsField({
 
 function mergeUniqueFiles(current: File[], incoming: File[]): File[] {
     const result = [...current];
-    const keys = new Set(current.map(fileKey));
+    const keys = new Set(current.map(fileDraftKey));
     for (const file of incoming) {
-        const key = fileKey(file);
+        const key = fileDraftKey(file);
         if (!keys.has(key)) {
             keys.add(key);
             result.push(file);
         }
     }
     return result;
-}
-
-function fileKey(file: File): string {
-    return `${file.name}:${file.size}:${file.lastModified}`;
 }

@@ -25,6 +25,7 @@ async def attach_uploaded_file(
         file_name=metadata.original_name,
         content_type=metadata.content_type,
         content=content,
+        uploaded_by_user_id=ctx.user_id,
     )
     return {"attachment": item.model_dump(mode="json"), "source_id": f"attachment:{item.id}"}
 
@@ -145,6 +146,7 @@ async def copy_attachment(
         file_name=source.original_name,
         content_type=source.content_type,
         content=content,
+        uploaded_by_user_id=ctx.user_id,
     )
     return {"attachment": item.model_dump(mode="json"), "source_id": f"attachment:{item.id}"}
 
@@ -161,6 +163,7 @@ async def create_text_attachment(
         file_name=args.file_name,
         content_type="text/plain",
         content=args.content.encode("utf-8"),
+        uploaded_by_user_id=ctx.user_id,
     )
     return {"attachment": item.model_dump(mode="json"), "source_id": f"attachment:{item.id}"}
 

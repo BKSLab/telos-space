@@ -3,10 +3,13 @@ import logging
 from sqlalchemy import Result, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
+from src.db.models.task_attachments import TaskAttachment
+from src.db.models.task_comment_attachments import TaskCommentAttachment
 from src.db.models.task_comments import TaskComment
 from src.exceptions.task_comments import TaskCommentsRepositoryError
+from src.repositories.file_processing_state import attachment_processing_query
 from src.utils.fts import (
     EXCERPT_HEADLINE_OPTIONS,
     HIGHLIGHT_START,
@@ -22,6 +25,37 @@ class TaskCommentsRepository:
 
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
+
+    async def get_attachment_states(self, comment_ids: list[int]) -> dict[int, dict]:
+        """Читает состояния всех файлов страницы комментариев одним JOIN.
+
+        Args:
+            comment_ids: Идентификаторы уже выбранных доступных комментариев.
+        Returns:
+            По одной ограниченной строке состояний на оригинал.
+        Raises:
+            TaskCommentsRepositoryError: SELECT завершился ошибкой.
+        """
+        if not comment_ids:
+            return {}
+        try:
+            result = await self.db_session.execute(
+                attachment_processing_query()
+                .join(
+                    TaskCommentAttachment, TaskCommentAttachment.attachment_id == TaskAttachment.id
+                )
+                .where(TaskCommentAttachment.comment_id.in_(comment_ids))
+                .distinct()
+            )
+            return {
+                row["id"]: {key: value for key, value in row.items() if key != "id"}
+                for row in result.mappings()
+            }
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise TaskCommentsRepositoryError(
+                "Не удалось прочитать состояния файлов комментариев."
+            ) from error
 
     async def update_text(
         self, comment_id: int, body_md: str, expected_body_md: str
@@ -57,7 +91,7 @@ class TaskCommentsRepository:
         try:
             result: Result = await self.db_session.execute(
                 select(TaskComment)
-                .options(selectinload(TaskComment.author))
+                .options(joinedload(TaskComment.author), selectinload(TaskComment.attachments))
                 .where(TaskComment.task_id == task_id)
                 .order_by(TaskComment.created_at, TaskComment.id)
             )
@@ -136,7 +170,7 @@ class TaskCommentsRepository:
         try:
             result: Result = await self.db_session.execute(
                 select(TaskComment)
-                .options(selectinload(TaskComment.author))
+                .options(joinedload(TaskComment.author), selectinload(TaskComment.attachments))
                 .where(TaskComment.id == comment_id)
                 .execution_options(populate_existing=True)
             )

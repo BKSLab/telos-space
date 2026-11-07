@@ -11,7 +11,11 @@ CREATE OR REPLACE FUNCTION knowledge_project_changed() RETURNS trigger AS $$
 DECLARE item jsonb; pid integer; items jsonb[];
 BEGIN
     IF TG_TABLE_NAME = 'task_attachments' AND TG_OP = 'UPDATE' THEN
-        DELETE FROM knowledge_attachment_texts WHERE attachment_id = NEW.id;
+        IF OLD.storage_key IS DISTINCT FROM NEW.storage_key
+            OR OLD.size IS DISTINCT FROM NEW.size
+            OR OLD.content_type IS DISTINCT FROM NEW.content_type THEN
+            DELETE FROM knowledge_attachment_texts WHERE attachment_id = NEW.id;
+        END IF;
     END IF;
     IF TG_OP = 'INSERT' THEN items := ARRAY[to_jsonb(NEW)];
     ELSIF TG_OP = 'DELETE' THEN items := ARRAY[to_jsonb(OLD)];

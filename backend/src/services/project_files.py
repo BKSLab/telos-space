@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from src.exceptions.access import AccessServiceError
+from src.exceptions.api_tokens import InsufficientTokenScopeError
 from src.exceptions.auth import AuthServiceError
 from src.exceptions.knowledge import KnowledgeIndexJobsRepositoryError
 from src.exceptions.project_files import (
@@ -27,12 +28,14 @@ from src.knowledge.extract import INDEXABLE_EXTENSIONS
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
 from src.repositories.project_files import ProjectFilesRepository
 from src.repositories.unit_of_work import UnitOfWork
+from src.schemas.file_metadata import normalize_caption
 from src.schemas.project_files import ProjectFileDetailSchema, ProjectFileSchema
 from src.services.access import AccessService
 from src.services.attachment_download import AttachmentDownload
 from src.services.auth import AuthService
 from src.storage.task_attachments import TaskAttachmentStorage
-from src.utils.api_scopes import SCOPE_PROJECTS_READ
+from src.utils.api_scopes import SCOPE_PROJECTS_READ, SCOPE_PROJECTS_WRITE
+from src.utils.file_previews import is_raster_previewable
 
 logger = logging.getLogger(__name__)
 DATA_ERRORS = (
@@ -111,7 +114,15 @@ class ProjectFilesService:
             raise ProjectFilesServiceError(str(error)) from error
 
     async def upload(
-        self, *, project_id: int, user_id: int, file_name: str, content: bytes
+        self,
+        *,
+        project_id: int,
+        file_name: str,
+        content: bytes,
+        user_id: int | None = None,
+        caption: str | None = None,
+        session_token: str | None = None,
+        bearer_secret: str | None = None,
     ) -> ProjectFileSchema:
         """Сохраняет оригинал и метаданные до фонового извлечения.
 
@@ -130,23 +141,42 @@ class ProjectFilesService:
             ProjectFilesServiceError: Не удалось сохранить оригинал и метаданные.
         """
         name, extension = self._validate(file_name, content)
+        try:
+            caption = normalize_caption(caption)
+        except ValueError as error:
+            raise ProjectFileValidationError(str(error)) from error
         storage_key = None
         committed = False
         try:
             async with self.scope() as db:
-                await db.access.ensure_project_access(project_id=project_id, user_id=user_id)
+                await self._authorize_upload(
+                    db,
+                    project_id=project_id,
+                    user_id=user_id,
+                    session_token=session_token,
+                    bearer_secret=bearer_secret,
+                )
             storage_key = await self.storage.save_in(
                 PurePosixPath("projects", str(project_id), "files"), extension, content
             )
             content_hash = await asyncio.to_thread(lambda: hashlib.sha256(content).hexdigest())
+            if is_raster_previewable(name, mimetypes.guess_type(name)[0] or ""):
+                await self.storage.prepare_preview(storage_key)
             async with self.scope() as db:
                 # Права могли измениться, пока оригинал записывался на диск.
-                await db.access.ensure_project_access(project_id=project_id, user_id=user_id)
+                uploader_id = await self._authorize_upload(
+                    db,
+                    project_id=project_id,
+                    user_id=user_id,
+                    session_token=session_token,
+                    bearer_secret=bearer_secret,
+                )
                 row = await db.files.save(
                     {
                         "project_id": project_id,
-                        "uploaded_by_user_id": user_id,
+                        "uploaded_by_user_id": uploader_id,
                         "original_name": name,
+                        "caption": caption,
                         "content_type": mimetypes.guess_type(name)[0] or "application/octet-stream",
                         "size": len(content),
                         "storage_key": storage_key,
@@ -169,6 +199,69 @@ class ProjectFilesService:
             if isinstance(error, (*DATA_ERRORS, TaskAttachmentStorageError)):
                 raise ProjectFilesServiceError(str(error)) from error
             raise
+
+    async def _authorize_upload(
+        self,
+        db: ProjectFilesScope,
+        *,
+        project_id: int,
+        user_id: int | None,
+        session_token: str | None,
+        bearer_secret: str | None,
+    ) -> int:
+        if user_id is None:
+            principal = await db.auth.resolve_principal(
+                session_token=session_token, bearer_secret=bearer_secret
+            )
+            if principal.api_key is None and not principal.can_write:
+                raise InsufficientTokenScopeError()
+            principal.require(SCOPE_PROJECTS_WRITE)
+            user_id = principal.user_id
+        grant = await db.access.ensure_project_access(project_id=project_id, user_id=user_id)
+        db.access.require_write(grant)
+        return user_id
+
+    async def update_caption(
+        self, *, project_id: int, file_id: int, user_id: int, caption: str | None
+    ) -> ProjectFileSchema:
+        """Меняет подпись без повторного разбора неизменяемого оригинала.
+
+        Args:
+            project_id: Проект-владелец файла.
+            file_id: Оригинал для изменения подписи.
+            user_id: Текущий локальный пользователь.
+            caption: Новая подпись либо None для очистки.
+        Returns:
+            Метаданные с актуальными состояниями извлечения и индексации.
+        Raises:
+            AccessServiceError: Пользователь не имеет доступа.
+            ProjectFileNotFoundError: Активного файла в этом проекте нет.
+            ProjectFileValidationError: Подпись некорректна.
+            ProjectFilesServiceError: Изменение не удалось сохранить.
+        """
+        try:
+            caption = normalize_caption(caption)
+        except ValueError as error:
+            raise ProjectFileValidationError(str(error)) from error
+        try:
+            async with self.scope() as db:
+                grant = await db.access.ensure_project_access(
+                    project_id=project_id, user_id=user_id
+                )
+                db.access.require_write(grant)
+                row = await db.files.get_by_id(project_id=project_id, file_id=file_id, max_chars=0)
+                if row is None:
+                    raise ProjectFileNotFoundError(str(file_id))
+                saved = await db.files.update_caption(
+                    project_id=project_id, file_id=file_id, caption=caption
+                )
+                if saved is None:
+                    raise ProjectFileNotFoundError(str(file_id))
+                await db.unit_of_work.commit()
+                row.update(saved)
+                return self._schema(row)
+        except DATA_ERRORS as error:
+            raise ProjectFilesServiceError(str(error)) from error
 
     async def get_file(
         self, *, project_id: int, file_id: int, user_id: int, offset: int, max_chars: int
@@ -251,8 +344,10 @@ class ProjectFilesService:
                 row = await db.files.get_by_id(project_id=project_id, file_id=file_id)
                 if row is None:
                     raise ProjectFileNotFoundError(str(file_id))
-                await db.sources.reset_project_file(file_id=file_id)
+                # Original → job → cache совпадает с порядком worker.persist;
+                # обратный порядок образует deadlock при одновременном повторе.
                 await db.files.request_retry(project_id=project_id, file_id=file_id)
+                await db.sources.reset_project_file(file_id=file_id)
                 await db.unit_of_work.commit()
                 row.update(
                     extraction_status="ready"
@@ -318,6 +413,12 @@ class ProjectFilesService:
         for field in ("extraction_detail", "index_detail", "indexed_at", "summary"):
             data.setdefault(field, None)
         data["content_url"] = f"/api/v1/projects/{row['project_id']}/files/{row['id']}/content"
+        data["previewable"] = is_raster_previewable(row["original_name"], row["content_type"])
+        data["preview_url"] = (
+            f"/api/v1/projects/{row['project_id']}/files/{row['id']}/preview"
+            if data["previewable"]
+            else None
+        )
         return ProjectFileSchema.model_validate(data)
 
     def _validate(self, name: str, content: bytes) -> tuple[str, str]:

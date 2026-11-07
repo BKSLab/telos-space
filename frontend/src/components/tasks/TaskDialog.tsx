@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlignLeft, FileText, FolderInput, History, Link2, ListChecks, MessageSquare, Paperclip, Pencil, Trash2, Users } from "lucide-react";
 import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
-import { api, apiUrl, endpoints, queryKeys } from "@/lib/api";
+import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { formatDateTime, formatRelative, toDateInputValue } from "@/lib/dates";
-import type { FileDescriptor } from "@/lib/files";
+import { formatDateTime, toDateInputValue } from "@/lib/dates";
 import type {
     DocumentListItem,
     LinkedDocument,
@@ -17,9 +16,10 @@ import type {
     TaskComment,
     TaskPriority,
     TaskStatus,
+    TaskUpdate,
     WbsStructure,
 } from "@/lib/types";
-import { fullName, PRIORITY_LABELS, PRIORITY_ORDER } from "@/lib/types";
+import { PRIORITY_LABELS, PRIORITY_ORDER } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
 import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -29,8 +29,8 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { PriorityBadge, StatusDot } from "@/components/ui/Badge";
 import { DueDate } from "@/components/ui/DueDate";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
-import { FileList } from "@/components/files/FileList";
-import { FileUploadControl } from "@/components/files/FileUploadControl";
+import { TaskFilesSection } from "@/components/tasks/TaskFilesSection";
+import { TaskCommentsSection } from "@/components/tasks/TaskCommentsSection";
 import { observerUserIds, participantUserId } from "@/lib/taskParticipants";
 import { useCurrentUser } from "@/lib/useAuth";
 import { TaskPeopleFields } from "@/components/tasks/TaskPeopleFields";
@@ -44,6 +44,7 @@ import { isClosedStatus, TASK_STATUS_LABELS, TASK_STATUS_ORDER, taskKind } from 
 import { moveDeniedHint } from "@/lib/taskMove";
 import { useTaskViewed } from "@/lib/useTaskViewed";
 import type { TaskViewToken } from "@/lib/taskAttention";
+import { taskFilesPollInterval } from "@/lib/projectFiles";
 import { useMediaQuery } from "@/lib/useCalendarView";
 
 const SECTIONS = [
@@ -57,7 +58,10 @@ const SECTIONS = [
     { id: "history", label: "История", icon: History },
 ] as const;
 type TaskSection = typeof SECTIONS[number]["id"];
+type TaskDateField = "start_date" | "due_date";
+type TaskDateDraft = { value: string; revision: number | undefined; changed: boolean };
 const PANEL_CLASS = "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-auto outline-none data-[inert]:hidden data-[focus-visible]:outline-2 data-[focus-visible]:-outline-offset-2 data-[focus-visible]:outline-accent/70";
+const TASK_CONFLICT_MESSAGE = "Задача уже изменена. Правки остались в черновике. Сверьте актуальные данные перед повторным сохранением.";
 
 const EVENT_LABELS: Record<TaskActivity["event_type"], string> = {
     STAGE_CHANGED: "Стадия",
@@ -110,18 +114,15 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
     const queryClient = useQueryClient();
     const vertical = useMediaQuery("(min-width: 640px)");
     const [section, setSection] = useState<TaskSection>("overview");
-    const filesSectionRef = useRef<HTMLDivElement>(null);
     const [isEditingDescription, setIsEditingDescription] = useState(false);
     const [descriptionDraft, setDescriptionDraft] = useState("");
-    const [commentDraft, setCommentDraft] = useState("");
+    const [descriptionRevision, setDescriptionRevision] = useState<number | undefined>();
+    const [dateDrafts, setDateDrafts] = useState<Partial<Record<TaskDateField, TaskDateDraft>>>({});
     const visibleCardRef = useRef<HTMLDivElement>(null);
     const reportTabRef = useRef<HTMLDivElement>(null);
     const [reportComment, setReportComment] = useState<TaskComment | null>(null);
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
-    const [editingComment, setEditingComment] = useState<TaskComment | null>(null);
-    const [commentEditDraft, setCommentEditDraft] = useState("");
     const [documentToLink, setDocumentToLink] = useState("");
-    const [attachmentError, setAttachmentError] = useState<string | null>(null);
     const currentUserQuery = useCurrentUser();
 
     const taskQuery = useQuery({
@@ -166,6 +167,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
     const attachmentsQuery = useQuery({
         queryKey: queryKeys.taskAttachments(taskId),
         queryFn: () => api.get<TaskAttachment[]>(endpoints.taskAttachments(taskId)),
+        refetchInterval: query => taskFilesPollInterval(query.state.data, query.state.status === "error"),
     });
     const linksQuery = useQuery({
         queryKey: queryKeys.taskLinks(taskId),
@@ -197,14 +199,47 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
     };
 
     const updateMutation = useMutation({
-        mutationFn: (data: Record<string, unknown>) =>
-            api.patch<Task>(endpoints.task(taskId), data),
-        onSuccess: (updated) => {
+        mutationFn: (data: TaskUpdate) =>
+            // Черновики передают свою версию явно, включая undefined для старого API.
+            api.patch<Task>(endpoints.task(taskId), { expected_revision: task?.revision, ...data }),
+        retry: false,
+        onSuccess: (updated, data) => {
             queryClient.setQueryData(queryKeys.task(taskId), updated);
-            setIsEditingDescription(false);
+            if ("description_md" in data) setIsEditingDescription(false);
+            for (const field of ["start_date", "due_date"] as const) {
+                if (field in data) clearDateDraft(field);
+            }
             invalidateTask();
         },
+        onError: error => {
+            if (error instanceof ApiError && error.status === 409) invalidateTask();
+        },
     });
+
+    function clearDateDraft(field: TaskDateField) {
+        setDateDrafts(current => {
+            const next = { ...current };
+            delete next[field];
+            return next;
+        });
+    }
+
+    function beginDateEdit(field: TaskDateField) {
+        setDateDrafts(current => current[field] ? current : {
+            ...current,
+            [field]: { value: toDateInputValue(task?.[field] ?? null), revision: task?.revision, changed: false },
+        });
+    }
+
+    function changeDate(field: TaskDateField, value: string) {
+        const draft = dateDrafts[field];
+        const revision = draft ? draft.revision : task?.revision;
+        setDateDrafts(current => ({ ...current, [field]: { value, revision, changed: true } }));
+        updateMutation.mutate({ [field]: value || null, expected_revision: revision });
+    }
+
+    const updateErrorMessage = updateMutation.error instanceof ApiError && updateMutation.error.status === 409
+        ? TASK_CONFLICT_MESSAGE : updateMutation.error?.message;
 
     const moveMutation = useMutation({
         mutationFn: (stageId: number) =>
@@ -212,29 +247,9 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
         onSuccess: invalidateTask,
     });
 
-    const commentMutation = useMutation({
-        mutationFn: () =>
-            api.post<TaskComment>(endpoints.taskComments(taskId), {
-                body_md: commentDraft,
-            }),
-        onSuccess: () => {
-            setCommentDraft("");
-            queryClient.invalidateQueries({ queryKey: queryKeys.taskComments(taskId) });
-            invalidateTask();
-        },
-    });
-
     const statusMutation = useMutation({
         mutationFn: (status: TaskStatus) => api.patch<Task>(endpoints.taskStatus(taskId), { status }),
         onSuccess: invalidateTask,
-    });
-    const editCommentMutation = useMutation({
-        mutationFn: () => api.patch<TaskComment>(`/api/v1/comments/${editingComment!.id}`, { body_md: commentEditDraft, expected_body_md: editingComment!.body_md }),
-        onSuccess: () => { setEditingComment(null); queryClient.invalidateQueries({ queryKey: queryKeys.taskComments(taskId) }); invalidateTask(); },
-    });
-    const deleteCommentMutation = useMutation({
-        mutationFn: (id: number) => api.delete(`/api/v1/comments/${id}`),
-        onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.taskComments(taskId) }); invalidateTask(); },
     });
 
     const linkMutation = useMutation({
@@ -243,6 +258,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
         onSuccess: () => {
             setDocumentToLink("");
             queryClient.invalidateQueries({ queryKey: queryKeys.taskLinks(taskId) });
+            invalidateTask();
         },
     });
 
@@ -250,46 +266,9 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
         mutationFn: (linkId: number) => api.delete(endpoints.link(linkId)),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.taskLinks(taskId) });
+            invalidateTask();
         },
     });
-
-    const uploadMutation = useMutation({
-        mutationFn: async (files: File[]) => {
-            for (const file of files) {
-                const body = new FormData();
-                body.append("file", file);
-                await api.postForm<TaskAttachment>(endpoints.taskAttachments(taskId), body);
-            }
-        },
-        onMutate: () => setAttachmentError(null),
-        onError: (error) => setAttachmentError((error as Error).message),
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.taskAttachments(taskId) });
-        },
-    });
-
-    const deleteAttachmentMutation = useMutation({
-        mutationFn: (attachmentId: number) =>
-            api.delete(endpoints.taskAttachment(taskId, attachmentId)),
-        onMutate: () => setAttachmentError(null),
-        onError: (error) => setAttachmentError((error as Error).message),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.taskAttachments(taskId) });
-        },
-    });
-
-    const attachmentFiles = useMemo<FileDescriptor[]>(
-        () =>
-            (attachmentsQuery.data ?? []).map((attachment) => ({
-                key: String(attachment.id),
-                name: attachment.original_name,
-                url: apiUrl(attachment.content_url),
-                size: attachment.size,
-                mime: attachment.content_type,
-                previewable: attachment.previewable,
-            })),
-        [attachmentsQuery.data],
-    );
 
     const unlinkedDocuments = useMemo(() => {
         const linkedIds = new Set((linksQuery.data ?? []).map((link) => link.document_id));
@@ -309,10 +288,9 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
             member.user.id === currentUserQuery.data?.id && member.role === "OWNER",
     );
     const mutationError =
-        statusMutation.error ?? editCommentMutation.error ?? deleteCommentMutation.error ??
+        statusMutation.error ??
         updateMutation.error ??
         moveMutation.error ??
-        commentMutation.error ??
         linkMutation.error ??
         unlinkMutation.error;
 
@@ -322,8 +300,9 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                 <span className="font-mono text-[11px] text-muted">{task.key}</span>
                 <PriorityBadge priority={task.priority} showLow />
             </div>
-            <TaskTitleEditor title={task.title} canEdit saving={updateMutation.isPending} error={updateMutation.error?.message}
-                onSave={async title => { try { await updateMutation.mutateAsync({ title }); return true; } catch { return false; } }} />
+            <TaskTitleEditor title={task.title} revision={task.revision} canEdit saving={updateMutation.isPending} error={updateErrorMessage}
+                onEditStart={updateMutation.reset}
+                onSave={async (title, revision) => { try { await updateMutation.mutateAsync({ title, expected_revision: revision }); return true; } catch { return false; } }} />
             <Button size="sm" variant="ghost" className="self-start" icon={<FolderInput size={13} />} disabled={Boolean(moveDeniedHint(kind, true, participantUserId(task, "REPORTER") === currentUserQuery.data?.id))}
                 title={moveDeniedHint(kind, true, participantUserId(task, "REPORTER") === currentUserQuery.data?.id)} onClick={() => setMoveDialogOpen(true)}>Переместить…</Button>
         </div>
@@ -357,7 +336,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                 <div ref={visibleCardRef} className="flex min-h-0 flex-1 flex-col">
                     {mutationError && (
                         <div className="shrink-0 border-b border-line px-5 py-3">
-                            <ErrorMessage message={(mutationError as Error).message} />
+                            <ErrorMessage title="Не удалось сохранить изменения" message={mutationError === updateMutation.error ? updateErrorMessage! : (mutationError as Error).message} />
                         </div>
                     )}
 
@@ -418,13 +397,12 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                                 <Input
                                                     id={id}
                                                     type="date"
-                                                    value={toDateInputValue(task.start_date)}
+                                                    value={dateDrafts.start_date?.value ?? toDateInputValue(task.start_date)}
                                                     max={task.due_date ?? undefined}
-                                                    onChange={(event) =>
-                                                        updateMutation.mutate({
-                                                            start_date: event.target.value || null,
-                                                        })
-                                                    }
+                                                    disabled={updateMutation.isPending}
+                                                    onFocus={() => beginDateEdit("start_date")}
+                                                    onBlur={() => { if (!dateDrafts.start_date?.changed) clearDateDraft("start_date"); }}
+                                                    onChange={event => changeDate("start_date", event.target.value)}
                                                 />
                                             )}
                                         </Field>
@@ -434,13 +412,12 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                                 <Input
                                                     id={id}
                                                     type="date"
-                                                    value={toDateInputValue(task.due_date)}
+                                                    value={dateDrafts.due_date?.value ?? toDateInputValue(task.due_date)}
                                                     min={task.start_date ?? undefined}
-                                                    onChange={(event) =>
-                                                        updateMutation.mutate({
-                                                            due_date: event.target.value || null,
-                                                        })
-                                                    }
+                                                    disabled={updateMutation.isPending}
+                                                    onFocus={() => beginDateEdit("due_date")}
+                                                    onBlur={() => { if (!dateDrafts.due_date?.changed) clearDateDraft("due_date"); }}
+                                                    onChange={event => changeDate("due_date", event.target.value)}
                                                 />
                                             )}
                                         </Field>
@@ -465,8 +442,11 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                             <IconButton
                                                 label="Редактировать описание"
                                                 size="sm"
+                                                disabled={updateMutation.isPending}
                                                 onClick={() => {
+                                                    updateMutation.reset();
                                                     setDescriptionDraft(task.description_md ?? "");
+                                                    setDescriptionRevision(task.revision);
                                                     setIsEditingDescription(true);
                                                 }}
                                             >
@@ -481,11 +461,13 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                                 rows={8}
                                                 value={descriptionDraft}
                                                 aria-label="Описание задачи в Markdown"
+                                                disabled={updateMutation.isPending}
                                                 onChange={(event) => setDescriptionDraft(event.target.value)}
                                             />
                                             <div className="flex justify-end gap-2">
                                                 <Button
                                                     size="sm"
+                                                    disabled={updateMutation.isPending}
                                                     onClick={() => setIsEditingDescription(false)}
                                                 >
                                                     Отмена
@@ -497,6 +479,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                                     onClick={() =>
                                                         updateMutation.mutate({
                                                             description_md: descriptionDraft || null,
+                                                            expected_revision: descriptionRevision,
                                                         })
                                                     }
                                                 >
@@ -613,78 +596,16 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                             </>}
                             <TabPanel id="files" shouldForceMount className={PANEL_CLASS}>
                                 <DrawerSection title="Файлы" count={attachmentsQuery.data?.length ?? null}>
-                                    <div ref={filesSectionRef} className="flex flex-col gap-2.5">
-                                        {attachmentError && <ErrorMessage message={attachmentError} />}
-                                        <FileList
-                                            files={attachmentFiles}
-                                            onRemove={(file) =>
-                                                deleteAttachmentMutation.mutate(Number(file.key))
-                                            }
-                                            removeDisabled={deleteAttachmentMutation.isPending}
-                                        />
-                                        <FileUploadControl
-                                            onFiles={(files) => uploadMutation.mutate(files)}
-                                            onError={setAttachmentError}
-                                            currentCount={attachmentFiles.length}
-                                            uploading={uploadMutation.isPending}
-                                            scopeRef={filesSectionRef}
-                                        />
-                                    </div>
+                                    <TaskFilesSection taskId={taskId} attachments={attachmentsQuery.data ?? []} linkedDocuments={linksQuery.data ?? []}
+                                        projectKey={projectId !== undefined ? task.key.slice(0, task.key.lastIndexOf("-")) : undefined}
+                                        onChange={invalidateTask} loading={attachmentsQuery.isPending} error={attachmentsQuery.error?.message} />
                                 </DrawerSection>
                             </TabPanel>
                             <TabPanel id="comments" shouldForceMount className={PANEL_CLASS}>
                                 <DrawerSection title="Комментарии" count={commentsQuery.data?.length ?? null}>
-                                    <div className="flex flex-col gap-2.5">
-                                        {commentsQuery.data?.map((comment) => (
-                                            <article
-                                                key={comment.id}
-                                                className="rounded-md border-l-2 border-accent-border bg-white/[0.025] px-2.5 py-2"
-                                            >
-                                                <div className="mb-1 flex items-center gap-2 text-[11px] text-muted">
-                                                    <MessageSquare size={11} aria-hidden="true" />
-                                                    <span className="font-medium text-secondary">
-                                                        {comment.author ? fullName(comment.author) : comment.author_name ?? "Без подписи"}
-                                                    </span>
-                                                    <time dateTime={comment.created_at}>
-                                                        {formatRelative(comment.created_at)}
-                                                    </time>
-                                                </div>
-                                                {editingComment?.id === comment.id ? <div className="flex flex-col gap-2"><Textarea aria-label="Изменить комментарий" value={commentEditDraft} onChange={event => setCommentEditDraft(event.target.value)} /><div className="flex gap-2"><Button size="sm" disabled={!commentEditDraft.trim() || editCommentMutation.isPending} onClick={() => editCommentMutation.mutate()}>Сохранить</Button><Button size="sm" variant="ghost" onClick={() => setEditingComment(null)}>Отмена</Button></div></div> : <p className="text-[13px] break-words whitespace-pre-wrap text-secondary">{comment.body_md}</p>}
-                                                <div className="mt-2 flex gap-2">
-                                                    {(!comment.author || comment.author.id === currentUserQuery.data?.id) && <>
-                                                        <Button size="sm" variant="ghost" onClick={() => { setEditingComment(comment); setCommentEditDraft(comment.body_md); }}>Изменить</Button>
-                                                        <Button size="sm" variant="ghost" disabled={deleteCommentMutation.isPending} onClick={() => deleteCommentMutation.mutate(comment.id)}>Удалить</Button>
-                                                    </>}
-                                                <Button size="sm" variant="ghost" onClick={() => { setReportComment(comment); setSection("report"); requestAnimationFrame(() => reportTabRef.current?.focus()); }}>Считать отчётом</Button>
-                                                </div>
-                                            </article>
-                                        ))}
-                                        {commentsQuery.data?.length === 0 && (
-                                            <p className="text-[13px] text-muted">Комментариев пока нет.</p>
-                                        )}
-
-                                        <div className="flex flex-col gap-2 pt-1">
-                                            <Textarea
-                                                rows={3}
-                                                value={commentDraft}
-                                                aria-label="Текст комментария"
-                                                placeholder="Написать комментарий…"
-                                                onChange={(event) => setCommentDraft(event.target.value)}
-                                            />
-                                            <div className="flex justify-end">
-                                                <Button
-                                                    size="sm"
-                                                    variant="primary"
-                                                    disabled={
-                                                        commentDraft.trim() === "" || commentMutation.isPending
-                                                    }
-                                                    onClick={() => commentMutation.mutate()}
-                                                >
-                                                    Отправить
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <TaskCommentsSection taskId={taskId} comments={commentsQuery.data ?? []} attachments={attachmentsQuery.data ?? []}
+                                        currentUserId={currentUserQuery.data?.id} onChange={invalidateTask} loading={commentsQuery.isPending} error={commentsQuery.error?.message}
+                                        onReport={comment => { setReportComment(comment); setSection("report"); requestAnimationFrame(() => reportTabRef.current?.focus()); }} />
                                 </DrawerSection>
                             </TabPanel>
                             <TabPanel id="report" shouldForceMount className={PANEL_CLASS}>

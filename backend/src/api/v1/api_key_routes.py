@@ -34,9 +34,12 @@ _P = "/api/v1"
 #: (HTTP-метод, шаблон маршрута) → требуемое право.
 API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
     ("GET", f"{_P}/projects/{{project_id}}/files"): SCOPE_PROJECTS_READ,
+    ("GET", f"{_P}/projects/{{project_id}}/files/search"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/files/{{file_id}}"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/files/{{file_id}}/content"): SCOPE_PROJECTS_READ,
+    ("GET", f"{_P}/projects/{{project_id}}/files/{{file_id}}/preview"): SCOPE_PROJECTS_READ,
     ("POST", f"{_P}/projects/{{project_id}}/files"): SCOPE_PROJECTS_WRITE,
+    ("PATCH", f"{_P}/projects/{{project_id}}/files/{{file_id}}"): SCOPE_PROJECTS_WRITE,
     ("POST", f"{_P}/projects/{{project_id}}/files/{{file_id}}/retry"): SCOPE_PROJECTS_WRITE,
     ("DELETE", f"{_P}/projects/{{project_id}}/files/{{file_id}}"): SCOPE_PROJECTS_WRITE,
     # ── Проекты: карточка, стадии, команда, вехи, календарь, риски ──────────
@@ -65,6 +68,11 @@ API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
     ("GET", f"{_P}/projects/{{project_id}}/task-reports"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/tasks/{{task_id}}/report/history"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/tasks/{{task_id}}/attachments"): SCOPE_TASKS_READ,
+    ("GET", f"{_P}/tasks/{{task_id}}/files/search"): SCOPE_TASKS_READ,
+    ("GET", f"{_P}/tasks/{{task_id}}/attachments/{{attachment_id}}/preview"): SCOPE_TASKS_READ,
+    ("POST", f"{_P}/tasks/{{task_id}}/attachments"): SCOPE_TASKS_WRITE,
+    ("PATCH", f"{_P}/tasks/{{task_id}}/attachments/{{attachment_id}}"): SCOPE_TASKS_WRITE,
+    ("POST", f"{_P}/tasks/{{task_id}}/attachments/{{attachment_id}}/retry"): SCOPE_TASKS_WRITE,
     ("GET", f"{_P}/tasks/{{task_id}}/move-to/preview"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/task-dependencies"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/my/tasks"): SCOPE_TASKS_READ,
@@ -89,6 +97,8 @@ API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
     ("DELETE", f"{_P}/tasks/{{task_id}}"): SCOPE_TASKS_DELETE,
     # ── Комментарии ─────────────────────────────────────────────────────────
     ("POST", f"{_P}/tasks/{{task_id}}/comments"): SCOPE_COMMENTS_WRITE,
+    # Дополнительное tasks:write проверяет составной сервис при наличии файлов.
+    ("POST", f"{_P}/tasks/{{task_id}}/comments/with-files"): SCOPE_COMMENTS_WRITE,
     ("PATCH", f"{_P}/comments/{{comment_id}}"): SCOPE_COMMENTS_WRITE,
     ("DELETE", f"{_P}/comments/{{comment_id}}"): SCOPE_COMMENTS_WRITE,
     # ── База знаний ─────────────────────────────────────────────────────────

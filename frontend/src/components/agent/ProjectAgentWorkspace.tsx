@@ -21,6 +21,7 @@ import { useAgentConversations } from "@/lib/useAgentConversations";
 import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 import { TimThinking } from "@/components/chat/TimChatReply";
 import { AgentEntityCard } from "@/components/agent/AgentEntityCard";
+import { AgentFileList } from "@/components/files/AgentFileList";
 import { actionSources } from "@/lib/agentCards";
 import { Button, IconButton } from "@/components/ui/Button";
 import { AgentActionCard } from "@/components/projects/AgentActionCard";
@@ -340,7 +341,7 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
                                                     {message.content}
                                                 </p>
                                             )}
-                                            {(message.files ?? []).map((file) => <p key={file.id} className="mt-2 flex min-w-0 items-center gap-1 text-[12px]"><Paperclip size={12} className="shrink-0" /><span className="min-w-0 break-words">{file.original_name}</span></p>)}
+                                            {(message.files?.length ?? 0) > 0 && <div className="mt-2"><AgentFileList files={message.files!} conversationId={message.conversation_id} projectId={project.id} /></div>}
                                             {(message.actions ?? []).map((action) => <AgentActionCard
                                                 key={action.id} action={action} project={project} sources={message.sources}
                                                 enabled={message.id === lastMessage?.id && !busy && !sending}
@@ -364,9 +365,7 @@ export function ProjectAgentWorkspace({ project, compact = false, knowledgeOnly 
 
                     <form onSubmit={onSubmit} className="chat-personal-composer shrink-0 border-t border-line-subtle bg-surface/55 px-4 py-3">
                         {chatError && <ErrorMessage title="Не удалось обновить диалог" message={(chatError as Error).message} />}
-                        {selectedFiles.length > 0 && <ul aria-label="Файлы для отправки" className="chat-draft-items mx-auto mb-2 flex max-w-3xl flex-wrap gap-2 text-[12px]">{selectedFiles.map((file) => <li key={file.id} className="chat-draft-chip flex items-center rounded border border-line px-2 py-1">
-                            <span className="truncate">{file.original_name}</span><button type="button" aria-label={`Убрать ${file.original_name}`} disabled={sending || busy} onClick={() => void removeFile(file.id)}>×</button>
-                        </li>)}</ul>}
+                        {selectedFiles.length > 0 && conversationId !== null && <div aria-label="Файлы для отправки" className="chat-draft-items mx-auto mb-2 flex max-w-3xl"><AgentFileList files={selectedFiles} conversationId={conversationId} projectId={project.id} onRemove={id => void removeFile(id)} removeDisabled={sending || busy} /></div>}
                         <div className="material-metal mx-auto flex max-w-3xl items-end gap-2 rounded-[var(--radius-card)] border border-ai-border p-2 transition-[border-color,box-shadow] focus-within:border-ai-blue/55 focus-within:shadow-focus">
                             <input type="file" multiple ref={fileInputRef} aria-label="Файлы для Ариса" className="hidden" onChange={(event) => { void uploadFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
                             <IconButton label="Добавить файл до 10 МБ" disabled={sending || busy || loading || selectedFiles.length >= 5} onClick={() => fileInputRef.current?.click()}><Paperclip size={16} /></IconButton>

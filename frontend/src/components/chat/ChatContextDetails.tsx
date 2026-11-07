@@ -5,6 +5,8 @@ import { api, ApiError, apiUrl, endpoints, queryKeys } from "@/lib/api";
 import type { ChatContextTarget } from "@/lib/chatContext";
 import { formatRelative } from "@/lib/dates";
 import { formatFileSize } from "@/lib/files";
+import { projectFileDescriptor } from "@/lib/fileDescriptors";
+import { FileList } from "@/components/files/FileList";
 import { EXTRACTION_LABELS, INDEX_LABELS, isProjectFileProcessing, PROJECT_FILE_TEXT_PAGE_SIZE, projectFilesPollInterval } from "@/lib/projectFiles";
 import type { DocumentDetail, ProjectFileDetail, ProjectStage, Task } from "@/lib/types";
 import { fullName } from "@/lib/types";
@@ -143,16 +145,17 @@ function FileContextDetails({ target, projectId, projectKey, onOpenFull }: ChatC
     if (detail.isPending || !detail.data) return <LoadingDetails />;
     const file = detail.data;
     if (file.project_id !== projectId) return <WrongProject />;
-    const extractionDisabled = file.extraction_status === "pending" && file.index_status === "disabled";
+    const extractionDisabled = file.extraction_status === "disabled";
 
     return <>
         <header className="flex min-w-0 flex-col gap-1.5">
             <h3 className="text-[15px] font-semibold break-words text-primary [overflow-wrap:anywhere]">{file.original_name}</h3>
             <p className="text-[12px] text-muted">{formatFileSize(file.size)} · Загружен {formatRelative(file.created_at)}</p>
         </header>
+        <FileList files={[projectFileDescriptor(file)]} />
         <div className="flex flex-col gap-2 text-[13px]">
             <div className="flex flex-wrap gap-x-3 gap-y-1">
-                <span className={file.extraction_status === "failed" ? "text-danger" : "text-secondary"}>{extractionDisabled ? "Извлечение отключено" : EXTRACTION_LABELS[file.extraction_status]}</span>
+                <span className={file.extraction_status === "failed" ? "text-danger" : "text-secondary"}>{EXTRACTION_LABELS[file.extraction_status]}</span>
                 <span className={file.index_status === "failed" ? "text-danger" : "text-muted"}>{INDEX_LABELS[file.index_status]}</span>
             </div>
             {file.extraction_detail && <p className="break-words text-secondary">{file.extraction_detail}</p>}
@@ -171,7 +174,7 @@ function FileContextDetails({ target, projectId, projectKey, onOpenFull }: ChatC
                 </nav>
                 <pre aria-label="Текст файла" tabIndex={0} className="whitespace-pre-wrap rounded-[var(--radius-control)] bg-app/60 px-3 py-3 font-sans text-[13px] leading-relaxed break-words text-primary [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-accent">{file.text}</pre>
             </> : <p role="status" className="text-[13px] text-muted">
-                {extractionDisabled ? "Обработка файла отключена. Оригинал доступен для скачивания."
+                {extractionDisabled ? "Распознавание изображения отключено. Оригинал, название и подпись доступны."
                     : isProjectFileProcessing(file) ? "Файл обрабатывается. Текст появится автоматически."
                         : "Извлечённого текста нет. Оригинал доступен для скачивания."}
             </p>}

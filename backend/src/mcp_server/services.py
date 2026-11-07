@@ -187,6 +187,7 @@ def build_tasks_service(session: AsyncSession, settings: Settings) -> TasksServi
 def build_comments_service(session: AsyncSession, settings: Settings) -> TaskCommentsService:
     """Создаёт сервис комментариев задач."""
     return TaskCommentsService(
+        knowledge_enabled=settings.knowledge.knowledge_enabled,
         users_repository=UsersRepository(session),
         comments_repository=TaskCommentsRepository(session),
         tasks_repository=TasksRepository(session),
@@ -297,6 +298,7 @@ def build_knowledge_search(
 def build_attachments_service(session: AsyncSession, settings: Settings) -> TaskAttachmentsService:
     """Общая локальная реализация вложений задач."""
     return TaskAttachmentsService(
+        knowledge_enabled=settings.knowledge.knowledge_enabled,
         attachments_repository=TaskAttachmentsRepository(session),
         tasks_repository=TasksRepository(session),
         unit_of_work=UnitOfWork(session),

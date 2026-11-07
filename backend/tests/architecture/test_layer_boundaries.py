@@ -37,6 +37,11 @@ COMPOSITION_MODULES = {
     SRC / "dependencies" / "clients.py",
     SRC / "dependencies" / "board_editor.py",
     SRC / "dependencies" / "task_attention.py",
+    # Короткие области извлечения, FTS, файловых операций и приватной выдачи.
+    SRC / "dependencies" / "file_processing.py",
+    SRC / "dependencies" / "file_search.py",
+    SRC / "dependencies" / "file_comments.py",
+    SRC / "dependencies" / "agent_file_content.py",
     SRC / "mcp_server" / "services.py",
     SRC / "mcp_server" / "app.py",
     SRC / "knowledge" / "composition.py",

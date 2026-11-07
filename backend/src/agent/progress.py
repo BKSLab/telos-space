@@ -49,6 +49,7 @@ PHRASES: dict[str, str] = {
     "search_sources": "Ищу в материалах проекта…",
     # Проект и задачи.
     "get_project": "Смотрю проект…",
+    "get_latest_project_summary": "Читаю последний сохранённый обзор проекта…",
     "update_project": "Обновляю проект…",
     "list_tasks": "Смотрю задачи проекта…",
     "list_task_reports": "Смотрю опубликованные отчёты проекта…",

@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 
 import src.main as main_module
 from src.core.app_state import RUNTIME_STATE_KEY, SETTINGS_STATE_KEY
+from src.core.settings import FileProcessingSettings
 from src.exceptions.clients import VectorStoreClientError
 
 
@@ -57,6 +58,7 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     qdrant_sdk = object()
     runtime = SimpleNamespace(
         qdrant_client=SimpleNamespace(backfill_payload_indexes=AsyncMock()),
+        vision=object(),
     )
     created = SimpleNamespace(http=0, qdrant=0, runtime=0)
 
@@ -73,8 +75,9 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         return runtime
 
     settings = SimpleNamespace(
-        app=SimpleNamespace(app_name="Test app", mcp_path="/mcp"),
+        app=SimpleNamespace(app_name="Test app", mcp_path="/mcp", uploads_path="uploads"),
         knowledge=SimpleNamespace(knowledge_enabled=True),
+        file_processing=FileProcessingSettings(_env_file=None),
     )
     close_runtime = AsyncMock()
     dispose_engine = AsyncMock()
@@ -102,6 +105,14 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(main_module, "build_knowledge_runtime", build_runtime)
     monkeypatch.setattr(main_module, "build_knowledge_worker", build_worker)
     agent_started = asyncio.Event()
+    files_started = asyncio.Event()
+
+    class FakeFileWorker:
+        async def run(self, stop_event):
+            files_started.set()
+            await stop_event.wait()
+
+    monkeypatch.setattr(main_module, "build_file_processing_worker", lambda **kwargs: FakeFileWorker())
 
     class FakeAgentWorker:
         async def run(self, stop_event):
@@ -136,6 +147,7 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 
     return SimpleNamespace(
         agent_worker_started=agent_started,
+        file_worker_started=files_started,
         db_session=db_session,
         runtime=runtime,
         settings=settings,
@@ -258,7 +270,19 @@ async def test_lifespan_does_not_start_the_worker_when_knowledge_is_disabled(
 
     async with main_module.lifespan(FastAPI()):
         await asyncio.wait_for(composition.agent_worker_started.wait(), timeout=1)
+        await asyncio.wait_for(composition.file_worker_started.wait(), timeout=1)
 
     assert composition.worker_started.is_set() is False
     assert composition.worker_built.runtime is None
+    composition.runtime.qdrant_client.backfill_payload_indexes.assert_not_awaited()
     composition.dispose_engine.assert_awaited_once_with()
+
+
+async def test_file_processing_starts_before_qdrant_backfill(composition):
+    """Даже ожидающий Qdrant не задерживает независимую обработку файлов."""
+    async def backfill():
+        await asyncio.wait_for(composition.file_worker_started.wait(), timeout=1)
+
+    composition.runtime.qdrant_client.backfill_payload_indexes.side_effect = backfill
+    async with main_module.lifespan(FastAPI()):
+        assert composition.file_worker_started.is_set()

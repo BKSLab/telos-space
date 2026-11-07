@@ -26,6 +26,12 @@ class AgentToolConflictError(AgentToolsServiceError):
     detail = "Состояние изменилось. Уточните действие по текущим данным."
 
 
+class AgentToolRequestConflictError(AgentToolConflictError):
+    """Квитанция того же ключа уже связана с другими аргументами или действием."""
+
+    detail = "Ключ повтора уже использован для другого запроса. Повторите исходные аргументы или задайте новый request_id."
+
+
 class AgentToolOperationError(AgentToolsServiceError):
     """Сохраняет безопасный контракт ошибки доменного сценария."""
 
