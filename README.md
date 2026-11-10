@@ -216,6 +216,15 @@ Compose и согласованно измените публичные URL, COR
 новой копии прежнюю удаляют. Копии находятся вне checkout. Исходники и
 собранную статику напрямую на сервер не копируйте.
 
+При изменении `nginx/nginx.conf` одиночный файловый bind-mount может
+продолжать читать прежний файл после `git pull`. Проверьте новую конфигурацию
+во временном контейнере без публикации портов, затем пересоздайте только nginx:
+
+```bash
+docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml run --rm --no-deps --entrypoint nginx nginx -t
+docker compose -p telos-space -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps --no-build --force-recreate nginx
+```
+
 При изменениях только frontend после `git pull --ff-only origin main` используйте:
 
 ```bash
