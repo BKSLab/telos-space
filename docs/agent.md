@@ -118,13 +118,13 @@ HTTP и MCP принимают ключи через `Authorization: Bearer`. RE
 
 ```powershell
 .\venv\Scripts\python.exe -m src.mcp_server.catalog_probe local --output "$env:TEMP/telos-mcp-local.json"
-.\venv\Scripts\python.exe -m src.mcp_server.catalog_probe remote http://127.0.0.1:8021/mcp/ --output "$env:TEMP/telos-mcp-server.json"
+.\venv\Scripts\python.exe -m src.mcp_server.catalog_probe remote http://127.0.0.1:8021/mcp/ --token-env TELOS_MCP_API_KEY --output "$env:TEMP/telos-mcp-server.json"
 .\venv\Scripts\python.exe -m src.mcp_server.catalog_probe compare "$env:TEMP/telos-mcp-local.json" "$env:TEMP/telos-mcp-server.json"
 ```
 
 Для основного backend замените адрес отдельного MCP-процесса своим `/mcp`.
-Если сервер требует ключ, передайте `--token-env TELOS_MCP_TOKEN` с именем уже
-заданной переменной окружения. Снимок и краткий вывод не содержат ключа и адреса
+Пример читает ключ из уже заданной переменной `TELOS_MCP_API_KEY`.
+Снимок и краткий вывод не содержат ключа и адреса
 сервера. `local` не читает `.env` и не открывает соединений; `remote` создаёт
 новую Streamable HTTP-сессию, проходит все страницы `tools/list` и не вызывает
 доменные инструменты. `compare` перечисляет добавленные, удалённые и изменённые
@@ -159,6 +159,22 @@ HTTP и MCP принимают ключи через `Authorization: Bearer`. RE
 Принудительное обновление прежнего контекста и отдельный перезапуск приложения
 Codex этим экспериментом не проверялись. Клиент раскрывает TypeScript-декларации,
 поэтому полное равенство клиентской JSON Schema/defaults/outputSchema не заявляется.
+
+После перевыпуска ключа замена User environment не обновляет окружение уже
+открытого Codex. Перезапустите приложение, чтобы оно получило новое значение;
+новая история субагента сама по себе не обновляет переменные процесса.
+
+Для автономной проверки через Codex CLI ограничьте дочерний процесс тремя
+чтениями: `telos_list_projects`, `telos_get_project`, `telos_get_task`.
+Уже разрешённым пользователем чтениям задайте отдельные
+`mcp_servers.telos-space.tools.<tool>.approval_mode="approve"`;
+при `approval_policy="never"` требующий подтверждения вызов иначе отклоняется
+до отправки на сервер. Эти overrides относятся только к дочернему процессу;
+права владельца ключа и scopes по-прежнему проверяет приложение. Описание
+параметров — в [официальной документации MCP](https://learn.chatgpt.com/docs/extend/mcp).
+Три нативных чтения проверяют вызовы клиента; полный каталог из 46 схем
+отдельно сравнивают через SDK. Проверки CLI не подтверждают обновление
+инструментов уже открытого интерфейса Codex.
 
 При этой сверке обнаружен конкретный предел клиентского TypeScript-представления:
 `telos_update_board_shapes.args.updates[].data.points` показан как
