@@ -66,7 +66,7 @@ def _group(name: str) -> str:
         ("documents", ("document",)),
         ("task-attachments", ("attachment",)),
         ("calendar", ("calendar", "milestone", "dates", "baseline", "dependency")),
-        ("agent", ("ask", "request", "pending")),
+        ("aris", ("ask", "request", "pending")),
         ("projects", ("project", "member", "stage")),
     ):
         if any(word in name for word in words):
@@ -120,7 +120,7 @@ def _http_entries(app, schema: dict) -> list[dict]:
                     if session
                     else "authenticated",
                     "scopes": scopes,
-                    "legacy": []
+                    "tokens": []
                     if session or pair in PUBLIC or pair in SUBSCRIPTIONS
                     else ["WRITE"]
                     if write
@@ -155,11 +155,11 @@ def _websockets(app) -> list[dict]:
                 "description": (
                     "Снимки task-attention и heartbeat ping. Авторизация cookie-сессией; внешние ключи и токены не принимаются. Origin проверяется при подключении."
                     if attention
-                    else "Команды и события общего чата: отправка, правка и удаление сообщения, реакции, прочтение, typing и ping. Каждая команда содержит UUID request_id; сервер отвечает ready, ack/error и событиями. Cookie либо прежний Bearer tt_; ключи ttk_ не принимаются. Для изменения данных нужен WRITE. Доступ перепроверяется во время соединения."
+                    else "Команды и события общего чата: отправка, правка и удаление сообщения, реакции, прочтение, typing и ping. Каждая команда содержит UUID request_id; сервер отвечает ready, ack/error и событиями. Cookie либо Bearer telos_token_; ключи telos_key_ не принимаются. Для изменения данных нужен WRITE. Доступ перепроверяется во время соединения."
                 ),
                 "access": "session" if attention else "authenticated",
                 "scopes": None,
-                "legacy": [] if attention else ["READ", "WRITE"],
+                "tokens": [] if attention else ["READ", "WRITE"],
                 "parameters": [
                     {"name": name, "in": "path", "required": True, "schema": {"type": "integer"}}
                     for name in route.param_convertors
@@ -193,7 +193,7 @@ async def build_catalog(app) -> dict:
                 "summary": spec.title,
                 "description": tool.description or spec.description,
                 "scopes": [spec.scope],
-                "legacy": ["WRITE"] if spec.write else ["READ", "WRITE"],
+                "tokens": ["WRITE"] if spec.write else ["READ", "WRITE"],
                 "write": spec.write,
                 "inputSchema": raw["inputSchema"],
                 "outputSchema": raw.get("outputSchema"),
@@ -211,7 +211,7 @@ async def build_catalog(app) -> dict:
                 "summary": action.title,
                 "description": action.description,
                 "scopes": list(dict.fromkeys(["projects:read", scope])) if scope else None,
-                "legacy": ["WRITE"] if action.mutating else ["READ", "WRITE"],
+                "tokens": ["WRITE"] if action.mutating else ["READ", "WRITE"],
                 "write": action.mutating,
                 "requiresConfirmation": action.requires_confirmation,
                 "ownerOnly": action.owner_only,

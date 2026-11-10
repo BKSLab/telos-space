@@ -1,4 +1,4 @@
-import { TimChatReply } from "@/components/chat/TimChatReply";
+import { ArisChatReply } from "@/components/chat/ArisChatReply";
 import { useRef, useState } from "react";
 import { Check, CornerUpLeft, MoreHorizontal, Pencil, Quote, RotateCw, SmilePlus, Trash2 } from "lucide-react";
 import { CHAT_REACTIONS, chatAuthorName, type ChatMessage as Message } from "@/lib/projectChat";
@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ChatEntityCard } from "@/components/chat/ChatEntityCard";
 import { ChatAttachment } from "@/components/chat/ChatAttachment";
 import { ChatText } from "@/components/chat/ChatText";
-import { AgentAvatar } from "@/components/brand/AgentAvatar";
+import { ArisAvatar } from "@/components/brand/ArisAvatar";
 
 interface Props { message: Message; highlighted?: boolean; onReply: (message: Message) => void; onQuote: (text: string) => void; onEdit: (message: Message) => void; onJump: (id: number) => void }
 
@@ -37,7 +37,7 @@ export function ChatMessage({ message, highlighted, onReply, onQuote, onEdit, on
     const interactive = canWrite && !message.deleted_at && !message.delivery;
     const initials = chatAuthorName(message, "?").split(" ").slice(0, 2).map((part) => part[0]).join("");
     return <article id={`chat-message-${message.id}`} data-message-id={message.id} data-message-seq={message.delivery ? undefined : message.seq} tabIndex={-1} aria-label={`Сообщение ${message.author_type === "AGENT" ? "Ариса" : chatAuthorName(message, "удалённого пользователя")}`} className={cn("group relative my-1 flex gap-3 rounded-xl px-3 py-4 text-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent sm:gap-4 sm:px-4", highlighted ? "bg-accent/[0.07]" : "hover:bg-control", message.delivery === "failed" && "bg-danger/[0.03]") }>
-        {message.author_type === "AGENT" ? <AgentAvatar className="mt-0.5" /> : <div aria-hidden="true" className={cn("material-metal mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-line text-[10px] font-semibold", own ? "text-accent" : "text-secondary")}>{initials}</div>}
+        {message.author_type === "AGENT" ? <ArisAvatar className="mt-0.5" /> : <div aria-hidden="true" className={cn("material-metal mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-line text-[10px] font-semibold", own ? "text-accent" : "text-secondary")}>{initials}</div>}
         <div className="min-w-0 flex-1">
             <div className={cn("mb-1.5 flex min-h-5 flex-wrap items-baseline gap-x-2 gap-y-0.5", interactive && "chat-message-meta pr-16")}>
                 <span className={cn("max-w-full text-[12px] font-semibold [overflow-wrap:anywhere]", message.author_type === "AGENT" ? "text-ai-blue" : "text-primary")}>{chatAuthorName(message, "Удалённый пользователь")}</span>
@@ -50,7 +50,7 @@ export function ChatMessage({ message, highlighted, onReply, onQuote, onEdit, on
                 <CornerUpLeft size={12} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" /><span className="min-w-0"><span className="block text-[10px] font-medium text-muted">{chatAuthorName(message.reply)}</span><span className="line-clamp-2">{message.reply.deleted ? "Сообщение удалено" : message.reply.content || "Вложение"}</span></span>
             </button>}
             {message.deleted_at ? <p className="text-xs italic text-muted">Сообщение удалено</p> : <>
-                <div ref={body} className="chat-content">{message.author_type === "AGENT" ? <TimChatReply message={message} /> : <ChatText content={message.content} />}</div>
+                <div ref={body} className="chat-content">{message.author_type === "AGENT" ? <ArisChatReply message={message} /> : <ChatText content={message.content} />}</div>
                 {!!message.mentions.length && <div className="mt-1 flex flex-wrap gap-1.5">{message.mentions.map((member) => <span key={member.id} className={cn("text-[11px]", member.id === userId ? "rounded bg-accent/10 px-1 text-accent" : "text-secondary")}>@{member.display_name}</span>)}</div>}
                 {!!message.entities.length && <div className="mt-3 flex flex-wrap gap-3">{message.entities.map((entity) => <ChatEntityCard key={`${entity.entity_type}:${entity.entity_id}`} entity={entity} projectId={projectId} />)}</div>}
                 {!!message.attachments.length && <div className="mt-3 flex min-w-0 flex-wrap gap-3">{message.attachments.map((file) => <ChatAttachment key={file.id} file={file} projectId={projectId} />)}</div>}

@@ -19,7 +19,7 @@ from src.dependencies.repositories import (
 from src.schemas.users import UserSchema
 from src.utils.api_tokens import hash_token_secret
 
-SECRET = "tt_test_token"
+SECRET = "telos_token_test_token"
 USER_ID = 1
 
 
@@ -60,7 +60,7 @@ def token(scope: ApiTokenScope) -> ApiToken:
         user_id=USER_ID,
         name="Внешний клиент",
         token_hash=hash_token_secret(SECRET),
-        prefix=SECRET[:8],
+        prefix=SECRET.removeprefix("telos_token_")[:8],
         scope=scope,
         expires_at=None,
         revoked_at=None,

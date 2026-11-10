@@ -80,7 +80,6 @@ async def tool_context(
     call = current_tool_call()
     writes = require_write if require_write is not None else bool(call and call.spec.write)
     authorization = _authorization_header(context)
-    api_key = _header(context, "x-api-key")
     runtime, settings, session_factory = _app_resources(context)
     async with session_factory() as session:
         services = build_tool_services(
@@ -91,7 +90,7 @@ async def tool_context(
         try:
             principal = await services.auth.resolve_principal(
                 session_token=None,
-                bearer_secret=api_key or extract_bearer_secret(authorization),
+                bearer_secret=extract_bearer_secret(authorization),
             )
         except AuthServiceError as error:
             # Клиенту не сообщается, чем именно плох токен: отозванный,
@@ -231,11 +230,4 @@ def _authorization_header(context: Context) -> str | None:
 
 def bearer_secret_of(context: Context) -> str | None:
     """Возвращает credentials транспорта для повторной проверки после ожидания lock."""
-    return _header(context, "x-api-key") or extract_bearer_secret(_authorization_header(context))
-
-
-def _header(context: Context, name: str) -> str | None:
-    for key, value in (context.headers or {}).items():
-        if key.lower() == name:
-            return value
-    return None
+    return extract_bearer_secret(_authorization_header(context))

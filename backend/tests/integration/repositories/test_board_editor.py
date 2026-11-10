@@ -14,11 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from main import app
 from src.db.models.api_tokens import ApiTokenScope
 from src.db.models.board_shapes import BoardShape, BoardShapeKind
+from src.db.models.board_stickers import BoardSticker
+from src.db.models.boards import Board
 from src.db.models.knowledge_index_jobs import KnowledgeIndexJob
-from src.db.models.project_boards import ProjectBoard
 from src.db.models.project_members import ProjectMember, ProjectRole
 from src.db.models.project_stages import ProjectStage
-from src.db.models.project_stickers import ProjectSticker
 from src.db.models.projects import Project
 from src.db.models.users import User
 from src.dependencies.auth import get_principal
@@ -30,16 +30,16 @@ from src.exceptions.board_editor import (
     BoardEditorValidationError,
     BoardObjectLockedError,
 )
-from src.exceptions.project_boards import (
-    ProjectBoardNotFoundError,
-    ProjectBoardRevisionConflictError,
+from src.exceptions.boards import (
+    BoardNotFoundError,
+    BoardRevisionConflictError,
 )
 from src.exceptions.projects import ProjectMemberUserNotFoundError
 from src.repositories.board_editor import BoardEditorRepository, BoardPromotionUnitOfWork
+from src.repositories.boards import BoardsRepository
 from src.repositories.document_links import DocumentLinksRepository
 from src.repositories.documents import DocumentsRepository
 from src.repositories.knowledge_index_jobs import KnowledgeIndexJobsRepository
-from src.repositories.project_boards import ProjectBoardsRepository
 from src.repositories.project_deadline_changes import ProjectDeadlineChangesRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_stages import ProjectStagesRepository
@@ -70,7 +70,7 @@ def service(session, *, repository=None):
         unit_of_work=BoardPromotionUnitOfWork(session),
         users_repository=UsersRepository(session),
         deadline_changes_repository=ProjectDeadlineChangesRepository(session),
-        boards_repository=ProjectBoardsRepository(session),
+        boards_repository=BoardsRepository(session),
     )
     access = get_access_service(
         members_repository=ProjectMembersRepository(session),
@@ -98,8 +98,8 @@ async def seed(session):
     )
     session.add_all([owner, other, viewer])
     await session.flush()
-    board = ProjectBoard(title="Идеи", created_by_user_id=owner.id, position=4)
-    foreign = ProjectBoard(title="Другая доска", created_by_user_id=owner.id)
+    board = Board(title="Идеи", created_by_user_id=owner.id, position=4)
+    foreign = Board(title="Другая доска", created_by_user_id=owner.id)
     session.add_all([board, foreign])
     await session.flush()
     shape = BoardShape(
@@ -122,7 +122,7 @@ async def seed(session):
         style={},
         label="Чужая",
     )
-    sticker = ProjectSticker(
+    sticker = BoardSticker(
         board_id=board.id,
         body="Заметка",
         created_by_user_id=owner.id,
@@ -226,7 +226,7 @@ async def test_metadata_reload_cas_and_foreign_refs(db_session):
     )
     assert reloaded.metadata == expected
     await db_session.commit()
-    with pytest.raises(ProjectBoardRevisionConflictError):
+    with pytest.raises(BoardRevisionConflictError):
         await editor.put_metadata(
             board_id=env.board_id,
             project_id=None,
@@ -275,7 +275,7 @@ async def test_promotion_preserves_ids_metadata_refs_and_project_defaults(db_ses
     boards = list(
         (
             await db_session.execute(
-                select(ProjectBoard).where(ProjectBoard.project_id == project_id)
+                select(Board).where(Board.project_id == project_id)
             )
         ).scalars()
     )
@@ -283,7 +283,7 @@ async def test_promotion_preserves_ids_metadata_refs_and_project_defaults(db_ses
     assert boards[0].position == 0
     assert boards[0].editor_metadata == metadata(env).model_dump(mode="json")
     shape = await db_session.get(BoardShape, env.shape_id)
-    sticker = await db_session.get(ProjectSticker, env.sticker_id)
+    sticker = await db_session.get(BoardSticker, env.sticker_id)
     assert shape.board_id == env.board_id and shape.revision == 1
     assert sticker.board_id == env.board_id and sticker.project_id == project_id
     assert sticker.revision == 2
@@ -339,9 +339,9 @@ async def test_promotion_preserves_ids_metadata_refs_and_project_defaults(db_ses
 async def test_promotion_custom_stages_and_access_denials(db_session):
     env = await seed(db_session)
     editor = service(db_session)
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await editor.promote(board_id=env.board_id, user_id=env.other_id, data=promotion())
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await editor.get_metadata(board_id=env.board_id, project_id=None, user_id=env.other_id)
     await db_session.rollback()
     result = await editor.promote(
@@ -380,7 +380,7 @@ async def test_promotion_custom_stages_and_access_denials(db_session):
             user_id=env.viewer_id,
         )
     await db_session.rollback()
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await editor.get_metadata(board_id=env.board_id, project_id=None, user_id=env.owner_id)
 
 
@@ -399,8 +399,8 @@ async def test_promotion_rolls_back_project_board_objects_and_outbox(db_session)
             data=promotion(key="ROLLBACK"),
         )
     db_session.expunge_all()
-    board = await db_session.get(ProjectBoard, env.board_id)
-    sticker = await db_session.get(ProjectSticker, env.sticker_id)
+    board = await db_session.get(Board, env.board_id)
+    sticker = await db_session.get(BoardSticker, env.sticker_id)
     assert board.project_id is None and board.revision == 1 and board.position == 4
     assert sticker.project_id is None and sticker.revision == 1
     assert (
@@ -415,7 +415,7 @@ async def test_promotion_rolls_back_project_board_objects_and_outbox(db_session)
 async def test_promotion_invalid_member_and_revision_leave_board_free(db_session):
     env = await seed(db_session)
     editor = service(db_session)
-    with pytest.raises(ProjectBoardRevisionConflictError):
+    with pytest.raises(BoardRevisionConflictError):
         await editor.promote(
             board_id=env.board_id, user_id=env.owner_id, data=promotion(revision=9)
         )
@@ -425,7 +425,7 @@ async def test_promotion_invalid_member_and_revision_leave_board_free(db_session
             user_id=env.owner_id,
             data=promotion(member_usernames=["missing.person"]),
         )
-    board = await db_session.get(ProjectBoard, env.board_id)
+    board = await db_session.get(Board, env.board_id)
     assert board.project_id is None and board.revision == 1
 
 
@@ -458,7 +458,7 @@ async def test_concurrent_cas_and_double_promotion(engine):
                     user_id=env.owner_id,
                     data=BoardEditorWrite(expected_revision=1, metadata=BoardEditorMetadata()),
                 )
-            except ProjectBoardRevisionConflictError as error:
+            except BoardRevisionConflictError as error:
                 return error
 
     keys = ["B" + uuid4().hex[:8].upper() for _ in range(2)]
@@ -476,7 +476,7 @@ async def test_concurrent_cas_and_double_promotion(engine):
 
     try:
         writes = await asyncio.gather(write("one"), write("two"))
-        assert sum(isinstance(result, ProjectBoardRevisionConflictError) for result in writes) == 1
+        assert sum(isinstance(result, BoardRevisionConflictError) for result in writes) == 1
         promotions = await asyncio.gather(*(promote(key) for key in keys))
         assert sum(isinstance(result, BoardAlreadyPromotedError) for result in promotions) == 1
         async with AsyncSession(engine) as session:
@@ -484,8 +484,8 @@ async def test_concurrent_cas_and_double_promotion(engine):
                 (await session.execute(select(Project).where(Project.key.in_(keys)))).scalars()
             )
             assert len(projects) == 1
-            board = await session.get(ProjectBoard, env.board_id)
-            sticker = await session.get(ProjectSticker, env.sticker_id)
+            board = await session.get(Board, env.board_id)
+            sticker = await session.get(BoardSticker, env.sticker_id)
             assert board.project_id == projects[0].id and board.revision == 3
             assert sticker.project_id == projects[0].id
     finally:
@@ -495,7 +495,7 @@ async def test_concurrent_cas_and_double_promotion(engine):
             )
             await session.execute(delete(Project).where(Project.key.in_(keys)))
             await session.execute(
-                delete(ProjectBoard).where(ProjectBoard.id.in_([env.board_id, env.foreign_id]))
+                delete(Board).where(Board.id.in_([env.board_id, env.foreign_id]))
             )
             await session.execute(
                 delete(User).where(User.id.in_([env.owner_id, env.other_id, env.viewer_id]))
@@ -623,7 +623,7 @@ async def test_promotion_rechecks_owner_after_waiting_for_row_lock(engine):
     async def promote():
         async with AsyncSession(engine, expire_on_commit=False) as session:
             # До блокировки в identity map лежит прежний owner; его нельзя использовать.
-            await session.get(ProjectBoard, env.board_id)
+            await session.get(Board, env.board_id)
             return await service(session, repository=SignalingRepository(session)).promote(
                 board_id=env.board_id,
                 user_id=env.owner_id,
@@ -638,7 +638,7 @@ async def test_promotion_rechecks_owner_after_waiting_for_row_lock(engine):
             task = asyncio.create_task(promote())
             await asyncio.wait_for(attempted.wait(), timeout=5)
             await owner_session.commit()
-            with pytest.raises(ProjectBoardNotFoundError):
+            with pytest.raises(BoardNotFoundError):
                 await asyncio.wait_for(task, timeout=5)
         async with AsyncSession(engine) as session:
             assert (
@@ -649,14 +649,14 @@ async def test_promotion_rechecks_owner_after_waiting_for_row_lock(engine):
                 )
                 == 0
             )
-            board = await session.get(ProjectBoard, env.board_id)
+            board = await session.get(Board, env.board_id)
             assert board.project_id is None and board.created_by_user_id == env.other_id
     finally:
         async with AsyncSession(engine) as session:
             await session.execute(delete(Project).where(Project.owner_id == env.owner_id))
             await session.execute(
-                delete(ProjectBoard).where(
-                    ProjectBoard.id.in_([env.board_id, env.foreign_id]),
+                delete(Board).where(
+                    Board.id.in_([env.board_id, env.foreign_id]),
                 )
             )
             await session.execute(

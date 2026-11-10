@@ -51,6 +51,21 @@ class ProjectStageNameConflictError(ProjectStagesServiceError):
         return f"Стадия с названием {self.name!r} уже существует в проекте."
 
 
+class ProjectStageNameNotFoundError(ProjectStagesServiceError):
+    """Название стадии не найдено; содержит варианты для исправления запроса."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+
+    def __init__(self, *, stage_name: str, known: list[str]) -> None:
+        self.stage_name = stage_name
+        self.known = known
+        super().__init__(error_details=f"Стадия {stage_name!r} не найдена.")
+
+    @property
+    def detail(self) -> str:
+        return f"Стадия не найдена. Доступные стадии: {', '.join(self.known)}."
+
+
 class ProjectStageHasTasksError(ProjectStagesServiceError):
     """Стадия содержит задачи и не может быть удалена."""
 

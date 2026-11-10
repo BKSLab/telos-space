@@ -103,19 +103,19 @@ test("мобильный канбан: выбор стадии и перенос
     state.stages.push({ ...state.stages[0], id: 2, name: "Готово", order_index: 1, is_done_stage: true });
     state.tasks = [{ ...state.tasks[0], position: 1000 }, { ...state.tasks[1], stage_id: 2, position: 5000 }];
     await installMockApi(page, state);
-    await page.route("**/api/v1/tasks/*/move", async route => {
+    await page.route("**/api/v1/tasks/*/stage-placement", async route => {
         const request = route.request();
         const headers = { "access-control-allow-origin": request.headers()["origin"] ?? "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "PATCH, OPTIONS" };
         if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
-        const task = state.tasks.find(item => request.url().includes(`/tasks/${item.id}/move`))!;
+        const task = state.tasks.find(item => request.url().includes(`/tasks/${item.id}/stage-placement`))!;
         const body = request.postDataJSON();
-        state.writes.push({ method: "PATCH", path: `/tasks/${task.id}/move`, body });
+        state.writes.push({ method: "PATCH", path: `/tasks/${task.id}/stage-placement`, body });
         Object.assign(task, body);
         return route.fulfill({ headers, json: task });
     });
     await page.goto("/projects/DEMO/board");
     await page.getByLabel("Стадия задачи DEMO-1", { exact: true }).selectOption("2");
-    await expect.poll(() => state.writes.some(write => write.path === "/tasks/100/move" && JSON.stringify(write.body) === JSON.stringify({ stage_id: 2, position: 6000 }))).toBe(true);
+    await expect.poll(() => state.writes.some(write => write.path === "/tasks/100/stage-placement" && JSON.stringify(write.body) === JSON.stringify({ stage_id: 2, position: 6000 }))).toBe(true);
     await page.getByRole("button", { name: "Следующая стадия" }).tap();
     const target = page.getByRole("region", { name: "Колонка Готово", exact: true });
     await expect(target.getByRole("heading", { level: 3 })).toHaveText([state.tasks[1].title, state.tasks[0].title]);

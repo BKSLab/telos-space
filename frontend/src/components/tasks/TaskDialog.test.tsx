@@ -174,13 +174,3 @@ it("выбор участника использует актуальную ве
     fireEvent.change(screen.getByRole("combobox", { name: "Исполнитель" }), { target: { value: "2" } });
     await waitFor(() => expect(patches()[0].body).toEqual({ executor_id: 2, expected_revision: 3 }));
 }, 15_000);
-
-it("сохраняет совместимость черновика без версии старого API при появлении новой версии в кэше", async () => {
-    const { patches, updateCache, user } = setup({ ...task, revision: undefined });
-    await user.click(await screen.findByRole("button", { name: "Редактировать описание" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Описание задачи в Markdown" }), { target: { value: "Совместимый черновик" } });
-    await updateCache({ revision: 3 });
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
-    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Описание задачи в Markdown" })).toBeNull());
-    expect(patches()[0].body).toEqual({ description_md: "Совместимый черновик" });
-}, 15_000);

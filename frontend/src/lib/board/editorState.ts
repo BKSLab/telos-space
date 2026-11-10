@@ -4,7 +4,7 @@ import { encodeTemplate } from "@/lib/board/metadata";
 import type { BoardGrouping } from "@/lib/board/group";
 import { lockedSelection } from "@/lib/board/group";
 import type { BoardTemplate, TemplateInsertion } from "@/lib/board/template";
-import type { ProjectSticker } from "@/lib/board/stickers";
+import type { BoardSticker } from "@/lib/board/stickers";
 import { defaultStyle, isConnectorKind, type BatchEditorState } from "@/lib/board/types";
 
 export interface LocalEditorValue extends BoardGrouping {
@@ -58,7 +58,7 @@ export function insertionObjects(
     for (const op of insertion.operations) {
         const key = keyMap.get(op.client_id)!;
         if (op.op === "create_sticker") {
-            const sticker: ProjectSticker = {
+            const sticker: BoardSticker = {
                 ...op.data, id: 0, project_id: projectId ?? 0, board_id: boardId, revision: 1,
                 created_by_user_id: null, created_by_username_snapshot: "", created_by_display_name_snapshot: "",
                 created_at: "", updated_at: "",

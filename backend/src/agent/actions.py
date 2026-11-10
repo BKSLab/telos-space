@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from src.agent.tim import PROJECT_MODES, TimMode
+from src.agent.aris import PROJECT_MODES, ArisMode
 from src.agent.tools import AgentToolContext
 from src.utils.tool_names import require_canonical_tool_name
 
@@ -30,7 +30,7 @@ class ProjectAction:
     owner_only: bool = False
     needs_project: bool = True
     """False — личное действие Ариса вне проекта (мои задачи, разовые)."""
-    modes: frozenset[TimMode] = PROJECT_MODES
+    modes: frozenset[ArisMode] = PROJECT_MODES
     """Режимы Ариса, в которых действие доступно модели; MCP режимы не проверяет."""
 
     def __post_init__(self) -> None:

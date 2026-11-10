@@ -2,13 +2,13 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, FolderKanban, ListTodo } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import { latestUpdate } from "@/lib/pulse";
+import { latestUpdate } from "@/lib/overview";
 import { cn } from "@/lib/cn";
 import { fullName, type MyTask, type Dashboard } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { DueDate } from "@/components/ui/DueDate";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
-import { PulseBoard } from "@/components/pulse/PulseBoard";
+import { ProjectSummaryPanel } from "@/components/overview/ProjectSummaryPanel";
 import { PortfolioAttention } from "@/components/dashboard/PortfolioAttention";
 import { OverviewTaskRow, TaskRow } from "@/components/dashboard/TaskRow";
 import { MetricCard, MetricGrid, OverviewPanel, TaskCompletion } from "@/components/dashboard/OverviewCards";
@@ -57,7 +57,7 @@ export function PortfolioSummary() {
                 <PortfolioAttention projects={data.projects} tasks={data.attention_tasks} overdue={data.totals.overdue_tasks} onOpenTask={setSelectedTaskId} />
             </div>
 
-            <PulseBoard onOpenTask={setSelectedTaskId}
+            <ProjectSummaryPanel onOpenTask={setSelectedTaskId}
                 dataUpdatedAt={latestUpdate([...data.projects, ...data.attention_tasks, ...data.recent_tasks, ...personalRows])}
                 blockedReason={activeProjects.length > 0 || data.has_outside_tasks ? undefined : "Нет проектов в работе и открытых разовых задач"} />
 

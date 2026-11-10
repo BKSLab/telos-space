@@ -1,7 +1,7 @@
 import { shapeToData, type IdRegistry, type Scene, type SceneObject } from "@/lib/board/scene";
 import { clampCoordinate } from "@/lib/board/geometry";
 import { isConnectorKind, type BatchOp, type BatchResponse, type BatchEditorState } from "@/lib/board/types";
-import type { ProjectStickerCreateInput } from "@/lib/board/stickers";
+import type { BoardStickerCreateInput } from "@/lib/board/stickers";
 
 export const SAVE_DEBOUNCE_MS = 300;
 export const MAX_BATCH_OPS = 500;
@@ -17,7 +17,7 @@ export interface SaveQueueOptions {
     debounceMs?: number;
 }
 
-export function stickerToData(object: Extract<SceneObject, { type: "sticker" }>): ProjectStickerCreateInput {
+export function stickerToData(object: Extract<SceneObject, { type: "sticker" }>): BoardStickerCreateInput {
     return {
         body: object.sticker.body, color: object.sticker.color, task_ids: object.sticker.task_ids,
         canvas_x: clampCoordinate(object.x), canvas_y: clampCoordinate(object.y),

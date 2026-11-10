@@ -41,7 +41,7 @@ class FakeContext:
     """Контекст вызова MCP с заголовком токена."""
 
     def __init__(self, headers: dict[str, str] | None = None) -> None:
-        self.headers = {"Authorization": "Bearer tt_test"} if headers is None else headers
+        self.headers = {"Authorization": "Bearer telos_token_test"} if headers is None else headers
 
 
 def make_principal(scope: ApiTokenScope = ApiTokenScope.READ) -> Principal:

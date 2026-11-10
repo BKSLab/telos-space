@@ -14,8 +14,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.clients.llm import LlmClient
+from src.exceptions.ai import AiProviderError
 from src.exceptions.clients import LlmClientError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.repositories.project_stages import ProjectStagesRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.task_activity import TaskActivityRepository
@@ -133,7 +133,7 @@ async def test_scope_is_released_even_when_the_model_fails() -> None:
     service = build_service(tracker)
     service.llm_client.get_structured_response.side_effect = LlmClientError("недоступен")
 
-    with pytest.raises(KnowledgeProviderError):
+    with pytest.raises(AiProviderError):
         await service.suggest(project_id=1)
 
     assert tracker.active is False

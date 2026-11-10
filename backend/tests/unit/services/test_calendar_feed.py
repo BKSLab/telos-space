@@ -47,7 +47,7 @@ async def test_telos_calendar_keeps_existing_task_milestone_and_project_deadline
     assert "PRODID:-//TELOS SPACE//Calendar//RU\r\n" in body
     assert "X-WR-CALNAME:TELOS SPACE — мои задачи\r\n" in body
     assert {line for line in body.split("\r\n") if line.startswith("UID:")} == {
-        "UID:task-7@vera-task-tracker",
-        "UID:milestone-8@vera-task-tracker",
-        "UID:project-deadline-4@vera-task-tracker",
+        "UID:task-7@telos-space",
+        "UID:milestone-8@telos-space",
+        "UID:project-deadline-4@telos-space",
     }

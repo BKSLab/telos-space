@@ -8,7 +8,6 @@ export interface ApiKey {
     owner_user_id: number | null;
     owner_name: string | null;
     /** Историческая метка старого API; интерфейс не разделяет ключи по типу. */
-    kind?: "service" | "personal";
     scopes: string[];
     expires_at: string | null;
     is_active: boolean;

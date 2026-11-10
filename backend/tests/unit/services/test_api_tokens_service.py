@@ -65,7 +65,7 @@ def _token(**overrides) -> ApiToken:
         "user_id": 1,
         "name": "Ноутбук",
         "token_hash": "hash",
-        "prefix": "tt_Ab",
+        "prefix": "Ab123456",
         "scope": ApiTokenScope.READ,
         "expires_at": None,
         "revoked_at": None,
@@ -87,11 +87,11 @@ async def test_issue_token_returns_secret_once_and_stores_only_hash() -> None:
         data=ApiTokenCreateSchema(name="Ноутбук", scope="WRITE", ttl_days=30),
     )
 
-    assert result.secret.startswith("tt_")
+    assert result.secret.startswith("telos_token_")
     assert repository.created["token_hash"] == hash_token_secret(result.secret)
     assert repository.created["token_hash"] != result.secret
     assert repository.created["scope"] is ApiTokenScope.WRITE
-    assert result.token.prefix == result.secret[:8]
+    assert result.token.prefix == result.secret[len("telos_token_"):][:8]
 
 
 async def test_issue_token_sets_lifetime_and_respects_the_limit() -> None:
@@ -160,12 +160,12 @@ async def test_token_list_and_revocation_keep_the_secret_safe() -> None:
 async def test_secret_is_resolved_by_hash_and_failures_are_wrapped() -> None:
     """Поиск идёт по хешу, сбой репозитория становится ошибкой сервиса."""
     # Поиск токена идёт по хешу, а не по самому секрету.
-    secret = "tt_test-secret"
+    secret = "telos_token_test-secret"
     repository = FakeTokensRepository(tokens=[_token(token_hash=hash_token_secret(secret))])
     service = ApiTokensService(tokens_repository=repository, max_active_tokens=MAX_ACTIVE_TOKENS)
 
     assert await service.resolve_secret(secret) is not None
-    assert await service.resolve_secret("tt_другой") is None
+    assert await service.resolve_secret("telos_token_другой") is None
     # Ошибка репозитория не утекает наружу в исходном виде.
     class BrokenRepository(FakeTokensRepository):
         async def get_by_user(self, user_id: int) -> list[ApiToken]:

@@ -37,7 +37,7 @@ export interface CatalogEntry {
     operationId?: string;
     access?: "public" | "subscription" | "session" | "authenticated";
     scopes: string[] | null;
-    legacy: string[];
+    tokens: string[];
     write?: boolean;
     requiresConfirmation?: boolean;
     ownerOnly?: boolean;
@@ -67,14 +67,15 @@ const GROUPS: Record<string, string> = {
     "task-dependencies": "Зависимости", milestones: "Вехи",
     calendar: "Календарь и вехи", "calendar-scenarios": "Перепланирование",
     "project-risks": "Риски", risks: "Риски", wbs: "Структура работ", structure: "Структура работ",
-    "free-board": "Доски", "project-board": "Доски", "board-editor": "Доски", boards: "Доски",
+    boards: "Доски",
     documents: "Документы", "document-links": "Связи документов",
-    "project knowledge": "Знания проекта", knowledge: "Знания проекта",
-    "project chat": "Общий чат проекта", "project agent": "Проектные диалоги Ариса",
-    agent: "Внешний вызов Ариса", tim: "Личный Арис",
+    "project-files": "Файлы проекта", "file-search": "Поиск файлов",
+    "project-knowledge": "Знания проекта", knowledge: "Знания проекта",
+    "project-chat": "Общий чат проекта", "project-aris": "Приватные диалоги проекта",
+    aris: "Арис",
     dashboard: "Аналитика", analytics: "Аналитика",
     auth: "Вход и сессия", users: "Профиль и пользователи",
-    "personal api keys": "API-ключи", "api tokens": "Прежние токены",
+    "api-keys": "API-ключи", "api-tokens": "READ/WRITE-токены",
     websocket: "WebSocket",
     "project-actions": "Каталог действий проекта",
 };
@@ -145,7 +146,7 @@ export function schemaDocument(schema: JsonSchema): { schema: JsonSchema; defini
 export function catalogSearchText(entry: CatalogEntry): string {
     let text = searchCache.get(entry);
     if (text === undefined) {
-        text = normalize(`${entry.name} ${entry.summary} ${entry.description} ${catalogGroup(entry)} ${entry.scopes?.join(" ") ?? ""} ${entry.legacy.join(" ")} ${schemaText(entry, entry.inputSchema, new Set())}`);
+        text = normalize(`${entry.name} ${entry.summary} ${entry.description} ${catalogGroup(entry)} ${entry.scopes?.join(" ") ?? ""} ${entry.tokens.join(" ")} ${schemaText(entry, entry.inputSchema, new Set())}`);
         searchCache.set(entry, text);
     }
     return text;

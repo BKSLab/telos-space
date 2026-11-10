@@ -5,7 +5,7 @@ import type { Task } from "../src/lib/types";
 const timestamp = "2026-09-06T10:00:00Z";
 const user = { id: 1, username: "vera", first_name: "Вера", last_name: "Иванова", middle_name: null, is_active: true, has_avatar: false };
 const project = { id: 1, key: "DEMO", name: "Интеграция CRM", description_md: "Запуск CRM", status: "ACTIVE", color: "#7299cc", icon: null, start_date: null, due_date: null, order_index: 0, created_at: timestamp, updated_at: timestamp };
-const task: Task = { id: 7, project_id: 1, stage_id: 1, key: "DEMO-142", number: 142, title: "Согласовать контракт API", description_md: "Ждём поставщика", priority: "HIGH", role: null, assignee: null, position: 1000, start_date: null, due_date: null, baseline_start_date: null, baseline_due_date: null, completed_at: null, participants: [], wbs_node_id: null, created_at: timestamp, updated_at: timestamp, comments_count: 0, last_comment: null, search_match_source: null, search_title: null, search_excerpt: null };
+const task: Task = { revision: 1, id: 7, project_id: 1, stage_id: 1, key: "DEMO-142", number: 142, title: "Согласовать контракт API", description_md: "Ждём поставщика", priority: "HIGH", role: null, assignee: null, position: 1000, start_date: null, due_date: null, baseline_start_date: null, baseline_due_date: null, completed_at: null, participants: [], wbs_node_id: null, created_at: timestamp, updated_at: timestamp, comments_count: 0, last_comment: null, search_match_source: null, search_title: null, search_excerpt: null };
 const baseRisk = { id: 12, key: "RISK-12", project_id: 1, title: "Задержка интеграции CRM", description: "Поставщик может задержать документацию.", probability: "HIGH", impact: "HIGH", risk_level: "HIGH", status: "OPEN", response_strategy: "MITIGATE", mitigation_plan: "Согласовать API заранее", response_plan: "Использовать резервный адаптер", owner_user_id: 1 as number | null, task_id: 7 as number | null, review_date: "2026-09-06" as string | null, source: "MANUAL", created_at: timestamp, updated_at: timestamp };
 type Risk = typeof baseRisk;
 const browserErrors = new WeakMap<Page, { kind: string; text: string; expected: boolean }[]>();
@@ -76,7 +76,7 @@ async function mockProject(page: Page, risks: Risk[] = [{ ...baseRisk }]) {
         if (path.endsWith("/auth/me")) return reply(user);
         if (path === "/api/v1/projects") return reply([project]);
         if (path === "/api/v1/projects/1") return reply(project);
-        if (path === "/api/v1/my/task-attention") return reply({ new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] });
+        if (path === "/api/v1/users/me/task-attention") return reply({ new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] });
         if (path === "/api/v1/projects/1/chat") return reply({ id: 1, project_id: 1, event_cursor: 0, last_read_seq: 0, unread_count: 0, members: [] });
         if (path === "/api/v1/projects/1/chat/events") return reply({ events: [], cursor: 0, has_more: false });
         if (path.endsWith("/stats")) return reply({ project_id: 1, total_tasks: 1, done_tasks: 0, in_progress_tasks: 1, overdue_tasks: 0, due_soon_tasks: 0, unassigned_tasks: 0, completion_rate: 0, next_due_date: null, stage_breakdown: [] });
@@ -121,7 +121,7 @@ async function mockProject(page: Page, risks: Risk[] = [{ ...baseRisk }]) {
         }
         return reply([]);
     });
-    await page.routeWebSocket("**/my/task-attention/ws", socket => socket.send(JSON.stringify({ type: "task-attention", data: { new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] } })));
+    await page.routeWebSocket("**/users/me/task-attention/ws", socket => socket.send(JSON.stringify({ type: "task-attention", data: { new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] } })));
     await page.routeWebSocket("**/projects/1/chat/ws", socket => socket.send(JSON.stringify({ type: "ready", project_id: 1, data: { heartbeat_seconds: 20, can_write: true, presence: [], typing: [] } })));
     return state;
 }

@@ -23,13 +23,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from .board_stickers import BoardSticker
+    from .boards import Board
     from .documents import Document
-    from .project_boards import ProjectBoard
     from .project_members import ProjectMember
     from .project_milestones import ProjectMilestone
     from .project_risks import ProjectRisk
     from .project_stages import ProjectStage
-    from .project_stickers import ProjectSticker
     from .task_dependencies import TaskDependency
     from .tasks import Task
     from .users import User
@@ -151,8 +151,8 @@ class Project(Base, TimestampMixin):
         comment="Взвешенный FTS-вектор названия и описания проекта.",
     )
 
-    boards: Mapped[list[ProjectBoard]] = relationship(
-        "ProjectBoard", back_populates="project", cascade="all, delete-orphan", passive_deletes=True,
+    boards: Mapped[list[Board]] = relationship(
+        "Board", back_populates="project", cascade="all, delete-orphan", passive_deletes=True,
     )
 
     owner: Mapped[User] = relationship("User", back_populates="owned_projects")
@@ -198,8 +198,8 @@ class Project(Base, TimestampMixin):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    stickers: Mapped[list[ProjectSticker]] = relationship(
-        "ProjectSticker",
+    stickers: Mapped[list[BoardSticker]] = relationship(
+        "BoardSticker",
         back_populates="project",
         cascade="all, delete-orphan",
         passive_deletes=True,

@@ -30,10 +30,12 @@ async def test_standalone_health_is_public_and_mcp_requires_local_credentials(mo
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         live = await client.get("/health/live")
         anonymous = await client.post("/mcp/", json={})
-        invalid = await client.post("/mcp/", json={}, headers={"X-API-Key": "ttk_invalid"})
+        invalid = await client.post("/mcp/", json={}, headers={"Authorization": "Bearer telos_key_invalid"})
+        removed_header = await client.post("/mcp/", json={}, headers={"X-API-Key": "telos_key_invalid"})
     assert live.status_code == 200 and live.json()["status"] == "ok"
     assert anonymous.status_code == invalid.status_code == 401
-    check.assert_awaited_once_with(None, "ttk_invalid")
+    assert removed_header.status_code == 401
+    check.assert_awaited_once_with("telos_key_invalid")
 
 
 async def test_canonical_list_tasks_returns_one_paginated_shape(tools):

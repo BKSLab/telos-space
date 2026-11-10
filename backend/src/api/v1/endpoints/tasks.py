@@ -28,8 +28,8 @@ from src.dependencies.services import (
 )
 from src.dependencies.task_attention import TaskAttentionServiceDep
 from src.exceptions.access import AccessServiceError
+from src.exceptions.ai import AiProviderError
 from src.exceptions.document_links import DocumentLinksServiceError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.project_stages import ProjectStagesServiceError
 from src.exceptions.projects import ProjectsServiceError
 from src.exceptions.task_attention import TaskAttentionServiceError
@@ -43,11 +43,11 @@ from src.schemas.tasks import (
     ProjectBaselineResultSchema,
     TaskCreateSchema,
     TaskDetailSchema,
-    TaskMoveSchema,
     TaskRephraseFile,
     TaskRephraseRequestSchema,
     TaskRephraseResultSchema,
     TaskSchema,
+    TaskStagePlacementSchema,
     TaskStatusUpdateSchema,
     TaskUpdateSchema,
 )
@@ -238,7 +238,7 @@ async def rephrase_task_description(
                 TaskRephraseFile(name=item.name, content=item.content) for item in read_files
             ],
         )
-    except (TasksServiceError, KnowledgeProviderError) as error:
+    except (TasksServiceError, AiProviderError) as error:
         logger.exception(
             "❌ Не удалось переформулировать описание в проекте id=%s.",
             project_id,
@@ -397,12 +397,12 @@ async def fix_task_baseline(
 
 
 @router.patch(
-    path="/tasks/{task_id}/move",
+    path="/tasks/{task_id}/stage-placement",
     dependencies=[Depends(require_write_scope), Depends(require_task_access)],
     status_code=status.HTTP_200_OK,
     summary="Переместить задачу",
     description="Переносит задачу в другую стадию доски с сохранением позиции.",
-    operation_id="moveTask",
+    operation_id="updateTaskStagePlacement",
     response_description="Перемещённая задача.",
     responses={
         404: NOT_FOUND_RESPONSE,
@@ -414,7 +414,7 @@ async def fix_task_baseline(
 )
 async def move_task(
     task_id: Annotated[int, Path(gt=0, description="Идентификатор задачи.")],
-    data: TaskMoveSchema,
+    data: TaskStagePlacementSchema,
     service: TasksServiceDep,
 ) -> TaskSchema:
     """Перемещает задачу по доске.
@@ -430,7 +430,7 @@ async def move_task(
     Raises:
         HTTPException: Если задача или стадия не найдены, либо переместить не удалось.
     """
-    logger.info("🚀 Запрос PATCH /tasks/%s/move. Стадия: %s.", task_id, data.stage_id)
+    logger.info("🚀 Запрос PATCH /tasks/%s/stage-placement. Стадия: %s.", task_id, data.stage_id)
     try:
         result = await service.move_task(
             task_id=task_id,
@@ -440,7 +440,7 @@ async def move_task(
         logger.info("✅ Задача id=%s перемещена в стадию %s.", task_id, data.stage_id)
         return result
     except TaskErrors as error:
-        logger.exception("❌ Ошибка PATCH /tasks/%s/move. Детали: %s", task_id, error)
+        logger.exception("❌ Ошибка PATCH /tasks/%s/stage-placement. Детали: %s", task_id, error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
@@ -557,9 +557,9 @@ async def fix_project_baseline(
     status_code=status.HTTP_201_CREATED,
     summary="Создать разовую задачу",
     description=(
-        "Создаёт задачу без проекта и без потока с номером вида T-123. Постановщик — "
-        "текущий пользователь; исполнитель и наблюдатели — любые сотрудники, "
-        "известные трекеру."
+        "Создаёт задачу без проекта с номером вида T-123. Постановщик — "
+        "текущий пользователь; исполнитель и наблюдатели — локальные пользователи, "
+        "зарегистрированные в TELOS SPACE."
     ),
     operation_id="createPersonalTask",
     responses={
@@ -588,11 +588,11 @@ async def create_personal_task(
 
 
 @router.get(
-    path="/my/tasks",
+    path="/users/me/tasks",
     status_code=status.HTTP_200_OK,
     summary="Мои задачи",
     description=(
-        "Всё, что на текущем пользователе: проектные задачи, задачи потоков и "
+        "Всё, что на текущем пользователе: проектные и "
         "разовые. role: all — все роли, doing — исполнитель, assigned — "
         "постановщик, watching — наблюдатель. Закрытые по умолчанию скрыты."
     ),
@@ -614,7 +614,7 @@ async def get_my_tasks(
     ] = None,
 ) -> list[MyTaskSchema]:
     """Возвращает задачи текущего пользователя."""
-    logger.info("🚀 Запрос GET /my/tasks. role=%s, include_closed=%s.", role, include_closed)
+    logger.info("🚀 Запрос GET /users/me/tasks. role=%s, include_closed=%s.", role, include_closed)
     try:
         result = await service.get_my_tasks(
             user_id=principal.user_id,
@@ -633,7 +633,7 @@ async def get_my_tasks(
         logger.info("✅ Мои задачи: %s.", len(result))
         return result
     except (*TaskErrors, TaskAttentionServiceError) as error:
-        logger.exception("❌ Ошибка GET /my/tasks.")
+        logger.exception("❌ Ошибка GET /users/me/tasks.")
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
@@ -643,7 +643,7 @@ async def get_my_tasks(
     status_code=status.HTTP_200_OK,
     summary="Сменить статус задачи вне проекта",
     description=(
-        "Меняет статус задачи потока или разовой задачи. У проектной задачи "
+        "Меняет статус разовой задачи. У проектной задачи "
         "состояние задаёт стадия — для неё 409."
     ),
     operation_id="changeTaskStatus",

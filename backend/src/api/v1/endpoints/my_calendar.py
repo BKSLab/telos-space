@@ -33,7 +33,7 @@ TodayQuery = Annotated[date, Query(description="Текущая дата в ча�
 
 
 @router.get(
-    path="/me/calendar",
+    path="/users/me/calendar",
     status_code=status.HTTP_200_OK,
     summary="Мой календарь",
     description=(
@@ -58,7 +58,7 @@ async def get_my_calendar(
     project_id: Annotated[int | None, Query(gt=0, description="Только этот проект.")] = None,
 ) -> MyCalendarResponseSchema:
     """Возвращает мой календарь в диапазоне."""
-    logger.info("🚀 Запрос GET /me/calendar. date_from=%s, date_to=%s.", date_from, date_to)
+    logger.info("🚀 Запрос GET /users/me/calendar. date_from=%s, date_to=%s.", date_from, date_to)
     try:
         return await service.get_my_range(
             user_id=principal.user_id,
@@ -70,12 +70,12 @@ async def get_my_calendar(
             project_id=project_id,
         )
     except CalendarServiceError as error:
-        logger.exception("❌ Ошибка GET /me/calendar. Детали: %s", error)
+        logger.exception("❌ Ошибка GET /users/me/calendar. Детали: %s", error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
 @router.get(
-    path="/me/calendar/unscheduled",
+    path="/users/me/calendar/unscheduled",
     status_code=status.HTTP_200_OK,
     summary="Мои задачи без дат",
     description="Курсорная страница моих незавершённых задач без start_date и due_date.",
@@ -92,13 +92,13 @@ async def get_my_unscheduled_tasks(
     limit: Annotated[int, Query(ge=1, le=100, description="Размер страницы.")] = 50,
 ) -> MyUnscheduledTasksPageSchema:
     """Возвращает страницу моих задач без дат."""
-    logger.info("🚀 Запрос GET /me/calendar/unscheduled. cursor=%s.", cursor)
+    logger.info("🚀 Запрос GET /users/me/calendar/unscheduled. cursor=%s.", cursor)
     try:
         return await service.get_my_unscheduled(
             user_id=principal.user_id, today=today, cursor=cursor, limit=limit
         )
     except CalendarServiceError as error:
-        logger.exception("❌ Ошибка GET /me/calendar/unscheduled. Детали: %s", error)
+        logger.exception("❌ Ошибка GET /users/me/calendar/unscheduled. Детали: %s", error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
@@ -156,7 +156,7 @@ async def get_holidays(
 
 
 @router.get(
-    path="/me/calendar/ics-token",
+    path="/users/me/calendar/ics-token",
     status_code=status.HTTP_200_OK,
     summary="Состояние ссылки подписки",
     description="Есть ли ссылка подписки на мой календарь; сама ссылка не возвращается.",
@@ -172,12 +172,12 @@ async def get_ics_token(
     try:
         return await service.get_status(principal.user_id)
     except CalendarFeedServiceError as error:
-        logger.exception("❌ Ошибка GET /me/calendar/ics-token. Детали: %s", error)
+        logger.exception("❌ Ошибка GET /users/me/calendar/ics-token. Детали: %s", error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
 @router.post(
-    path="/me/calendar/ics-token",
+    path="/users/me/calendar/ics-token",
     status_code=status.HTTP_201_CREATED,
     summary="Выпустить ссылку подписки",
     description=(
@@ -196,11 +196,11 @@ async def create_ics_token(
     app_url: PublicAppUrlDep,
 ) -> IcsTokenSchema:
     """Выпускает или перевыпускает ссылку подписки."""
-    logger.info("🚀 Запрос POST /me/calendar/ics-token. Пользователь id=%s.", principal.user_id)
+    logger.info("🚀 Запрос POST /users/me/calendar/ics-token. Пользователь id=%s.", principal.user_id)
     try:
         issued = await service.issue(principal.user_id)
     except CalendarFeedServiceError as error:
-        logger.exception("❌ Ошибка POST /me/calendar/ics-token. Детали: %s", error)
+        logger.exception("❌ Ошибка POST /users/me/calendar/ics-token. Детали: %s", error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
     return IcsTokenSchema(
         exists=True,
@@ -210,7 +210,7 @@ async def create_ics_token(
 
 
 @router.delete(
-    path="/me/calendar/ics-token",
+    path="/users/me/calendar/ics-token",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Отозвать ссылку подписки",
     description="Ссылка подписки перестаёт работать. Если ссылки нет — тоже 204.",
@@ -221,10 +221,10 @@ async def revoke_ics_token(
     principal: SessionPrincipalDep, service: CalendarFeedServiceDep
 ) -> Response:
     """Отзывает ссылку подписки."""
-    logger.info("🚀 Запрос DELETE /me/calendar/ics-token. Пользователь id=%s.", principal.user_id)
+    logger.info("🚀 Запрос DELETE /users/me/calendar/ics-token. Пользователь id=%s.", principal.user_id)
     try:
         await service.revoke(principal.user_id)
     except CalendarFeedServiceError as error:
-        logger.exception("❌ Ошибка DELETE /me/calendar/ics-token. Детали: %s", error)
+        logger.exception("❌ Ошибка DELETE /users/me/calendar/ics-token. Детали: %s", error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)

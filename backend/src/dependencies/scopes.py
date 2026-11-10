@@ -34,6 +34,8 @@ from src.repositories.api_keys import ApiKeysRepository
 from src.repositories.api_tokens import ApiTokensRepository
 from src.repositories.board_editor import BoardEditorRepository
 from src.repositories.board_shapes import BoardShapesRepository
+from src.repositories.board_stickers import BoardStickersRepository
+from src.repositories.boards import BoardsRepository
 from src.repositories.chat_agent_turns import ChatAgentTurnsRepository
 from src.repositories.chat_attachments import ChatAttachmentsRepository
 from src.repositories.chat_entity_lookup import ChatEntityLookupRepository
@@ -49,14 +51,12 @@ from src.repositories.documents import DocumentsRepository
 from src.repositories.knowledge_index_jobs import KnowledgeIndexJobsRepository
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
 from src.repositories.milestones import MilestonesRepository
-from src.repositories.project_boards import ProjectBoardsRepository
 from src.repositories.project_chats import ProjectChatsRepository
 from src.repositories.project_deadline_changes import ProjectDeadlineChangesRepository
 from src.repositories.project_files import ProjectFilesRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_risks import ProjectRiskRepository
 from src.repositories.project_stages import ProjectStagesRepository
-from src.repositories.project_stickers import ProjectStickersRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.task_activity import TaskActivityRepository
 from src.repositories.task_attachments import TaskAttachmentsRepository
@@ -78,6 +78,8 @@ from src.services.attachment_download import (
 )
 from src.services.auth import AuthService
 from src.services.board_shapes import BoardShapesService
+from src.services.board_stickers import BoardStickersService
+from src.services.boards import BoardsService
 from src.services.calendar import CalendarService
 from src.services.calendar_scenarios import CalendarScenarioService
 from src.services.chat_scope import ChatScope, ChatScopeFactory
@@ -85,20 +87,19 @@ from src.services.db_scope import (
     AgentConversationScope,
     AgentConversationScopeFactory,
     AnalyticsDbScope,
+    ArisChatScope,
+    ArisChatScopeFactory,
     ProjectAgentScope,
     ProjectQueryScope,
     ProjectQueryScopeFactory,
     TaskDescriptionScope,
     TaskDocumentImportScope,
-    TimChatScope,
-    TimChatScopeFactory,
     WbsSuggestionScope,
 )
 from src.services.document_links import DocumentLinksService
 from src.services.documents import DocumentsService
 from src.services.knowledge_events import KnowledgeEvents
 from src.services.milestones import MilestonesService
-from src.services.project_boards import ProjectBoardsService
 from src.services.project_files import (
     ProjectFilesScope,
     ProjectFilesScopeFactory,
@@ -107,7 +108,6 @@ from src.services.project_files import (
 from src.services.project_members import ProjectMembersService
 from src.services.project_risks import ProjectRiskService
 from src.services.project_stages import ProjectStagesService
-from src.services.project_stickers import ProjectStickersService
 from src.services.projects import ProjectsService
 from src.services.risk_suggestions import RiskSuggestionScope, RiskSuggestionScopeFactory
 from src.services.task_attachments import TaskAttachmentsService
@@ -244,7 +244,7 @@ def build_agent_project_tool_scope(
                                 deadline_changes_repository=ProjectDeadlineChangesRepository(
                                     session
                                 ),
-                                boards_repository=ProjectBoardsRepository(session),
+                                boards_repository=BoardsRepository(session),
                             ),
                             tasks=TasksService(
                                 tasks_repository=tasks,
@@ -283,11 +283,11 @@ def build_agent_project_tool_scope(
                                     avatar_storage=AvatarStorage(settings.auth.avatars_path),
                                 ),
                             ),
-                            stickers=ProjectStickersService(
-                                stickers_repository=ProjectStickersRepository(session),
+                            stickers=BoardStickersService(
+                                stickers_repository=BoardStickersRepository(session),
                                 tasks_repository=tasks,
                                 unit_of_work=domain_uow,
-                                boards_repository=ProjectBoardsRepository(session),
+                                boards_repository=BoardsRepository(session),
                                 shapes_repository=BoardShapesRepository(session),
                                 editor_repository=BoardEditorRepository(session),
                             ),
@@ -375,16 +375,16 @@ def build_agent_project_tool_scope(
                             unit_of_work=unit_of_work,
                             uploads=AgentFilesRepository(session),
                             upload_storage=upload_storage,
-                            boards=ProjectBoardsService(
-                                boards_repository=ProjectBoardsRepository(session),
-                                stickers_repository=ProjectStickersRepository(session),
+                            boards=BoardsService(
+                                boards_repository=BoardsRepository(session),
+                                stickers_repository=BoardStickersRepository(session),
                                 shapes_repository=BoardShapesRepository(session),
                                 unit_of_work=domain_uow,
                             ),
                             board_shapes=BoardShapesService(
-                                boards_repository=ProjectBoardsRepository(session),
+                                boards_repository=BoardsRepository(session),
                                 shapes_repository=BoardShapesRepository(session),
-                                stickers_repository=ProjectStickersRepository(session),
+                                stickers_repository=BoardStickersRepository(session),
                                 tasks_repository=tasks,
                                 unit_of_work=domain_uow,
                                 editor_repository=BoardEditorRepository(session),
@@ -453,9 +453,9 @@ def build_agent_conversation_scope(
                 unit_of_work=UnitOfWork(session),
                 projects=ProjectsRepository(session),
                 api_keys=ApiKeysRepository(session),
-                boards=ProjectBoardsRepository(session),
+                boards=BoardsRepository(session),
                 board_shapes=BoardShapesRepository(session),
-                board_stickers=ProjectStickersRepository(session),
+                board_stickers=BoardStickersRepository(session),
             )
 
     return scope
@@ -813,7 +813,7 @@ def _build_analytics_db_scope(*, session: AsyncSession) -> AnalyticsDbScope:
         dependencies=TaskDependenciesRepository(session),
         wbs_nodes=WbsNodesRepository(session),
         milestones=MilestonesRepository(session),
-        stickers=ProjectStickersRepository(session),
+        stickers=BoardStickersRepository(session),
         documents=DocumentsRepository(session),
         document_links=DocumentLinksRepository(session),
         unit_of_work=UnitOfWork(session),
@@ -850,7 +850,7 @@ def build_project_agent_scope(
     session_factory: SessionFactory,
     settings: Settings,
 ) -> Callable[[], AbstractAsyncContextManager[ProjectAgentScope]]:
-    """Собирает фабрику короткой области сценариев Project Agent."""
+    """Собирает фабрику короткой области сценариев Арис."""
 
     @asynccontextmanager
     async def scope() -> AsyncIterator[ProjectAgentScope]:
@@ -897,7 +897,7 @@ def build_project_agent_scope(
 def get_project_agent_scope(
     settings: SettingsDep,
 ) -> Callable[[], AbstractAsyncContextManager[ProjectAgentScope]]:
-    """Возвращает фабрику области для сценариев Project Agent."""
+    """Возвращает фабрику области для сценариев Арис."""
     return build_project_agent_scope(
         session_factory=async_session_factory,
         settings=settings,
@@ -978,11 +978,11 @@ TaskDocumentImportScopeDep = Annotated[
 ]
 
 
-def build_tim_chat_scope(*, session_factory: SessionFactory) -> TimChatScopeFactory:
+def build_aris_chat_scope(*, session_factory: SessionFactory) -> ArisChatScopeFactory:
     @asynccontextmanager
-    async def scope() -> AsyncIterator[TimChatScope]:
+    async def scope() -> AsyncIterator[ArisChatScope]:
         async with session_factory() as session:
-            yield TimChatScope(
+            yield ArisChatScope(
                 chats=ProjectChatsRepository(session),
                 messages=ChatMessagesRepository(session),
                 events=ChatEventsRepository(session),

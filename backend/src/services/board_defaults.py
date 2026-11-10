@@ -2,18 +2,18 @@
 
 import logging
 
-from src.db.models.project_boards import DEFAULT_BOARD_TITLE, ProjectBoard
-from src.repositories.project_boards import ProjectBoardsRepository
+from src.db.models.boards import DEFAULT_BOARD_TITLE, Board
+from src.repositories.boards import BoardsRepository
 
 logger = logging.getLogger(__name__)
 
 
 async def ensure_default_board(
-    boards_repository: ProjectBoardsRepository,
+    boards_repository: BoardsRepository,
     project_id: int,
     *,
     created_by_user_id: int | None,
-) -> ProjectBoard:
+) -> Board:
     """Возвращает первую активную доску, создавая «Основную», если досок нет.
 
     Проверка повторяется под блокировкой досок проекта: два параллельных

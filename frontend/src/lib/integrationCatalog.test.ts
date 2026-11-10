@@ -20,8 +20,6 @@ it("различает доступ и публикует единые имен�
     expect(integrationCatalog.api.find(entry => entry.method === "GET" && entry.path === "/api/v1/users/me/api-keys")?.access).toBe("session");
     expect(integrationCatalog.mcp.every(entry => entry.name.startsWith("telos_"))).toBe(true);
     expect(integrationCatalog.actions.every(entry => entry.name.startsWith("telos_"))).toBe(true);
-    expect(integrationCatalog.mcp.some(entry => entry.name === "add_comment")).toBe(false);
-    expect(integrationCatalog.mcp.some(entry => entry.name === "tt_add_comment")).toBe(false);
     const entries = [...catalogEntries("api"), ...catalogEntries("mcp")];
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
 });

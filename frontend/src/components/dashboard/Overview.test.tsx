@@ -11,10 +11,10 @@ import type { AnalyticsReport, Dashboard, DashboardProject, MyTask, Project, Pro
 import type { RiskSummary } from "@/lib/risks";
 import { useUiStore } from "@/stores/ui";
 import { PortfolioSummary } from "@/components/dashboard/PortfolioSummary";
-import { ProjectPulsePage } from "@/routes/ProjectPulsePage";
+import { ProjectOverviewPage } from "@/routes/ProjectOverviewPage";
 import { ProjectCard } from "@/components/dashboard/ProjectCard";
 import { TaskCompletion } from "@/components/dashboard/OverviewCards";
-import { PulseBoard } from "@/components/pulse/PulseBoard";
+import { ProjectSummaryPanel } from "@/components/overview/ProjectSummaryPanel";
 
 vi.mock("@/lib/useProjectOutlet", () => ({ useProjectOutlet: () => project }));
 
@@ -51,7 +51,7 @@ const historicalReport: AnalyticsReport = {
 };
 
 function task(id: number, stage_id: number, due_date: string | null, title: string): Task {
-    return { id, project_id: 7, stage_id, number: id, key: `DEMO-${id}`, title, due_date, description_md: null, priority: "LOW", role: null, assignee: null, participants: [],
+    return { revision: 1, id, project_id: 7, stage_id, number: id, key: `DEMO-${id}`, title, due_date, description_md: null, priority: "LOW", role: null, assignee: null, participants: [],
         start_date: null, baseline_start_date: null, baseline_due_date: null, completed_at: null, position: id,
         created_at: "2026-01-01T10:00:00Z", updated_at: "2026-11-02T10:00:00Z", comments_count: 0,
         last_comment: null, search_match_source: null, search_title: null, search_excerpt: null, wbs_node_id: null };
@@ -111,7 +111,7 @@ describe("обзоры", () => {
         const queryClient = client();
         seedProject(queryClient);
         queryClient.setQueryData(queryKeys.tasks(7), [task(11, 1, null, "Уточнить требования"), task(12, 2, "2020-01-01", "Открытая просроченная"), task(13, 3, "2019-01-01", "Завершённая со старым сроком"), task(14, 2, "2999-01-01", "Будущая задача")]);
-        renderPage(<ProjectPulsePage />, queryClient);
+        renderPage(<ProjectOverviewPage />, queryClient);
         expect(screen.queryByRole("button", { name: /Завершённая со старым сроком/ })).toBeNull();
         expect(screen.getByRole("progressbar", { name: "Доля задач в стадии «В работе»" }).getAttribute("aria-valuenow")).toBe("50");
         expect(screen.getByRole("img", { name: "Выполнено 1 из 4 задач: 25%" })).toBeTruthy();
@@ -124,7 +124,7 @@ describe("обзоры", () => {
         const queryClient = client();
         seedProject(queryClient);
         vi.spyOn(api, "get").mockRejectedValue(new Error("Список задач недоступен"));
-        renderPage(<ProjectPulsePage />, queryClient);
+        renderPage(<ProjectOverviewPage />, queryClient);
         expect(await screen.findByText("Задачи недоступны")).toBeTruthy();
         expect(screen.getByRole("region", { name: "Показатели проекта" })).toBeTruthy();
         expect(screen.getByRole("button", { name: "Повторить загрузку" })).toBeTruthy();
@@ -151,7 +151,7 @@ it("показывает дату старого вывода, раскрыва�
     queryClient.setQueryData(queryKeys.dashboardAnalytics(7), historicalReport);
     const onOpenTask = vi.fn();
     const post = vi.spyOn(api, "post").mockResolvedValue({ ...historicalReport, id: 2, headline: "Обновлённая оценка", created_at: "2999-01-01T10:00:00Z" });
-    renderPage(<PulseBoard projectId={7} dataUpdatedAt={project.updated_at} onOpenTask={onOpenTask} />, queryClient);
+    renderPage(<ProjectSummaryPanel projectId={7} dataUpdatedAt={project.updated_at} onOpenTask={onOpenTask} />, queryClient);
     expect(screen.getByText(/Данные менялись после разбора/)).toBeTruthy();
     const summary = screen.getByText(/Полный разбор ·/);
     const details = summary.closest("details")!;

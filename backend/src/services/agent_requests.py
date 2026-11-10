@@ -3,7 +3,7 @@
 Внешний клиент не видит карточек чата трекера, поэтому то, что в чате
 показывают карточки, здесь отдаётся структурой: задачи ответа со ссылками,
 выполненные действия (``done``) и предложенные (``pending``) — со ссылкой, по
-которой сотрудник сам подтверждает действие (``/?confirm=<id>``). Параметры
+которой пользователь сам подтверждает действие (``/?confirm=<id>``). Параметры
 действия берутся из журнала действий, а не из текста модели.
 """
 
@@ -61,9 +61,9 @@ class RequestLinks:
 def principal_key_scopes(principal: Principal) -> list[str] | None:
     """Права, которыми ограничены изменения агента; None — без ограничения ключом.
 
-    Сервисный ключ — ровно его права (ключ = права сотрудника ∩ права ключа).
+    Сервисный ключ — ровно его права (ключ = права пользователя ∩ права ключа).
     Личный токен на чтение изменений не разрешает. Вход через локальная сессия и токен на
-    запись ограничены только ролью сотрудника в проекте.
+    запись ограничены только ролью пользователя в проекте.
     """
     if principal.api_key is not None:
         return sorted(principal.api_key.scopes)
@@ -96,12 +96,12 @@ class AgentRequestsService:
     ) -> UUID:
         """Ставит вопрос внешнего агента в очередь ответов (канал api).
 
-        Беседа ищется по ключу ``conversation_id`` в пределах сотрудника и ключа
+        Беседа ищется по ключу ``conversation_id`` в пределах пользователя и ключа
         доступа: чужой ключ с тем же значением получает свою беседу. Без ключа
         беседы каждый вопрос — новый диалог.
 
         Args:
-            user_id: Сотрудник, от имени которого задан вопрос (владелец ключа ).
+            user_id: Пользователь, от имени которого задан вопрос (владелец ключа ).
             api_key_id: Сервисный ключ; None — локальная сессия или личный токен.
             data: Пересказ, дословная реплика, ключ беседы и контекст экрана.
             key_scopes: Права ключа на момент вопроса; None — без ограничения ключом.
@@ -115,7 +115,7 @@ class AgentRequestsService:
         async with self._scope() as db:
             user = await db.users.get_by_id(user_id)
             if user is None or not user.is_active:
-                raise AgentConversationNotFoundError("Сотрудник недоступен.")
+                raise AgentConversationNotFoundError("Пользователь недоступен.")
             await db.conversations.lock_external(user_id, api_key_id, f"request:{request_id}")
             existing = await db.messages.get_answer_by_request(request_id, user_id=user_id, api_key_id=api_key_id)
             if existing is not None:
@@ -172,7 +172,7 @@ class AgentRequestsService:
                         "files": [],
                         "verbatim": verbatim,
                         "key_scopes": sorted(key_scopes) if key_scopes is not None else None,
-                        # Экран трекера у сотрудника — подсказка «эта задача», не право.
+                        # Экран трекера у пользователя — подсказка «эта задача», не право.
                         "page_context": (
                             data.page_context.model_dump(mode="json") if data.page_context else None
                         ),
@@ -205,10 +205,10 @@ class AgentRequestsService:
     async def get_external_result(
         self, *, user_id: int, api_key_id: UUID | None, request_id: UUID
     ) -> AgentRequestResultSchema:
-        """Возвращает состояние вопроса только тому ключу и сотруднику, что его задали.
+        """Возвращает состояние вопроса только тому ключу и пользователю, что его задали.
 
         Args:
-            user_id: Сотрудник запроса результата.
+            user_id: Пользователь запроса результата.
             api_key_id: Ключ запроса результата; None — локальная сессия или личный токен.
             request_id: ID вопроса.
         Returns:

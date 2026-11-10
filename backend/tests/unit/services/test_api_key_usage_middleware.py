@@ -19,7 +19,7 @@ from src.services.auth import ApiKeyGrant
 @pytest.mark.parametrize("status", [200, 403])
 async def test_audit_keeps_local_actor_and_status_without_query_secrets(status):
     key = ApiKeyGrant(
-        key_id=uuid4(), label="Local integration", key_prefix="ttk_local",
+        key_id=uuid4(), label="Local integration", key_prefix="telos_key_local",
         scopes=frozenset(), owner_user_id=1,
     )
 

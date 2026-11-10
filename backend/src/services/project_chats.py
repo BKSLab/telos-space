@@ -5,9 +5,9 @@ from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from time import monotonic
-from uuid import NAMESPACE_URL, uuid5
+from uuid import uuid4
 
-from src.agent.tim import is_addressed_to_tim
+from src.agent.aris import is_addressed_to_aris
 from src.agent.wakeup import wake_agent_worker
 from src.exceptions.api_keys import ApiKeyRouteNotAllowedError
 from src.exceptions.base import RepositoryError
@@ -168,12 +168,12 @@ class ProjectChatService:
             )
             await self._save_links(db, row.id, data)
             await db.events.save(chat.id, seq, "message.created", {"message_id": row.id})
-            tim_called = is_addressed_to_tim(data.content)
-            if tim_called:
-                await self._call_tim(db, chat, project_id, user_id, row)
+            aris_called = is_addressed_to_aris(data.content)
+            if aris_called:
+                await self._call_aris(db, chat, project_id, user_id, row)
             result = (await self.presenter.messages(db, [row]))[0]
             await db.unit_of_work.commit()
-            if tim_called:
+            if aris_called:
                 wake_agent_worker()
             self.metrics["db_message_write_count"] += 1
             self.metrics["db_message_write_ms_sum"] += (monotonic() - started) * 1000
@@ -189,7 +189,7 @@ class ProjectChatService:
             )
             return result
 
-    async def _call_tim(self, db: ChatScope, chat, project_id: int, user_id: int, request) -> None:
+    async def _call_aris(self, db: ChatScope, chat, project_id: int, user_id: int, request) -> None:
         """Ставит ответ Ариса в очередь: пустое сообщение Ариса видно всем как «печатает».
 
         Ответ-заглушка и ход сохраняются в транзакции вопроса, поэтому вопрос
@@ -204,7 +204,7 @@ class ProjectChatService:
                 author_user_id=None,
                 author_kind="agent",
                 content="",
-                client_message_id=uuid5(NAMESPACE_URL, f"tim-reply:{request.id}"),
+                client_message_id=uuid4(),
                 reply_to_message_id=request.id,
             )
         )
@@ -220,7 +220,7 @@ class ProjectChatService:
         )
         await db.events.save(chat.id, seq, "message.created", {"message_id": reply.id})
         logger.info(
-            "tim.chat_turn_queued project_id=%s actor_id=%s request_id=%s reply_id=%s",
+            "aris.chat_turn_queued project_id=%s actor_id=%s request_id=%s reply_id=%s",
             project_id,
             user_id,
             request.id,

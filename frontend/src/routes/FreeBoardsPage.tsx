@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PenTool, Plus } from "lucide-react";
 import { ApiError, api, endpoints, queryKeys } from "@/lib/api";
 import { pendingBoardSaves } from "@/lib/board/saveQueue";
-import type { BoardContent, ProjectBoard } from "@/lib/board/types";
+import type { BoardContent, Board } from "@/lib/board/types";
 import { useToast } from "@/lib/toast";
 import { BoardEditor } from "@/components/board/BoardEditor";
 import { BoardTabs } from "@/components/board/BoardTabs";
@@ -23,7 +23,7 @@ function BoardSkeleton() {
     );
 }
 
-function nextBoardTitle(boards: ProjectBoard[]): string {
+function nextBoardTitle(boards: Board[]): string {
     const taken = new Set(boards.map((board) => board.title));
     for (let index = boards.length + 1; ; index += 1) {
         const title = `Доска ${index}`;
@@ -44,7 +44,7 @@ export function FreeBoardsPage() {
 
     const boardsQuery = useQuery({
         queryKey: boardsKey,
-        queryFn: () => api.get<ProjectBoard[]>(endpoints.freeBoards()),
+        queryFn: () => api.get<Board[]>(endpoints.freeBoards()),
         retry: 1,
     });
     const boards = boardsQuery.data ?? [];
@@ -76,7 +76,7 @@ export function FreeBoardsPage() {
         retry: 1,
     });
 
-    function selectBoard(board: ProjectBoard | null) {
+    function selectBoard(board: Board | null) {
         setSearchParams((current) => {
             const next = new URLSearchParams(current);
             if (board) next.set("board", String(board.id));
@@ -94,28 +94,28 @@ export function FreeBoardsPage() {
     }
 
     const createMutation = useMutation({
-        mutationFn: () => api.post<ProjectBoard>(endpoints.freeBoards(), { title: nextBoardTitle(boards) }),
+        mutationFn: () => api.post<Board>(endpoints.freeBoards(), { title: nextBoardTitle(boards) }),
         onSuccess: (created) => {
-            queryClient.setQueryData<ProjectBoard[]>(boardsKey, (current = []) => [...current, created]);
+            queryClient.setQueryData<Board[]>(boardsKey, (current = []) => [...current, created]);
             selectBoard(created);
         },
         onError: (error) => toast.error(`Доска не создана: ${conflictMessage(error, "ошибка сервера")}`),
     });
 
     const renameMutation = useMutation({
-        mutationFn: ({ board, title }: { board: ProjectBoard; title: string }) =>
-            api.patch<ProjectBoard>(endpoints.projectBoard(null, board.id), { title, revision: board.revision }),
+        mutationFn: ({ board, title }: { board: Board; title: string }) =>
+            api.patch<Board>(endpoints.board(null, board.id), { title, revision: board.revision }),
         onSuccess: (updated) => {
-            queryClient.setQueryData<ProjectBoard[]>(boardsKey, (current = []) => current.map((board) => (board.id === updated.id ? updated : board)));
+            queryClient.setQueryData<Board[]>(boardsKey, (current = []) => current.map((board) => (board.id === updated.id ? updated : board)));
         },
         onError: (error) => toast.error(`Доска не переименована: ${conflictMessage(error, "её изменили в другой вкладке, список обновлён")}`),
     });
 
     const deleteMutation = useMutation({
-        mutationFn: (board: ProjectBoard) => api.delete<void>(`${endpoints.projectBoard(null, board.id)}?revision=${board.revision}`),
+        mutationFn: (board: Board) => api.delete<void>(`${endpoints.board(null, board.id)}?revision=${board.revision}`),
         onSuccess: (_, deleted) => {
             const rest = boards.filter((board) => board.id !== deleted.id);
-            queryClient.setQueryData<ProjectBoard[]>(boardsKey, rest);
+            queryClient.setQueryData<Board[]>(boardsKey, rest);
             if (activeBoard?.id === deleted.id) selectBoard(rest[0] ?? null);
         },
     });

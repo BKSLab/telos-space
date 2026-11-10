@@ -1,7 +1,7 @@
 from fastapi import status
 
 from src.exceptions.base import RepositoryError
-from src.exceptions.project_boards import ProjectBoardsServiceError
+from src.exceptions.boards import BoardsServiceError
 
 
 class BoardShapesRepositoryError(RepositoryError):
@@ -10,7 +10,7 @@ class BoardShapesRepositoryError(RepositoryError):
     detail = "Ошибка базы данных при обработке фигур доски."
 
 
-class BoardShapesServiceError(ProjectBoardsServiceError):
+class BoardShapesServiceError(BoardsServiceError):
     """Ошибка бизнес-операции с фигурами доски."""
 
     detail = "Не удалось выполнить операцию с фигурами доски."

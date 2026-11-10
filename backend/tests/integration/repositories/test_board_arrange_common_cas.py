@@ -10,13 +10,13 @@ from src.schemas.board_shapes import (
     BoardShapeToStickerSchema,
     BoardShapeUpdateSchema,
 )
-from src.schemas.project_stickers import (
-    ProjectStickerCreateSchema,
-    ProjectStickerPositionUpdateSchema,
-    ProjectStickerUpdateSchema,
+from src.schemas.board_stickers import (
+    BoardStickerCreateSchema,
+    BoardStickerPositionUpdateSchema,
+    BoardStickerUpdateSchema,
 )
 from src.services.agent_board_actions import arrange_board_objects
-from src.services.project_stickers import ProjectStickersService
+from src.services.board_stickers import BoardStickersService
 from tests.integration.repositories.test_board_arrange_agent_batch import (
     arrangement,
     context,
@@ -44,7 +44,7 @@ async def test_single_editor_write_invalidates_board_cas(db_session, operation):
     db = services(db_session)
     args, _ = await arrangement(db, env)
     shapes = db.board_shapes
-    stickers = ProjectStickersService(
+    stickers = BoardStickersService(
         boards_repository=shapes.boards_repository,
         shapes_repository=shapes.shapes_repository,
         stickers_repository=shapes.stickers_repository,
@@ -88,21 +88,21 @@ async def test_single_editor_write_invalidates_board_cas(db_session, operation):
             author_id=env.owner_id,
             author_username="owner",
             author_display_name="Owner",
-            data=ProjectStickerCreateSchema(body="New"),
+            data=BoardStickerCreateSchema(body="New"),
         )
     elif operation == "move_sticker":
         await stickers.move_sticker(
             **scope,
             sticker_id=env.sticker_id,
             user_id=env.owner_id,
-            data=ProjectStickerPositionUpdateSchema(canvas_x=800, canvas_y=240),
+            data=BoardStickerPositionUpdateSchema(canvas_x=800, canvas_y=240),
         )
     elif operation == "update_sticker":
         await stickers.update_sticker(
             **scope,
             sticker_id=env.sticker_id,
             user_id=env.owner_id,
-            data=ProjectStickerUpdateSchema(revision=5, body="Manual change"),
+            data=BoardStickerUpdateSchema(revision=5, body="Manual change"),
         )
     else:
         await stickers.delete_sticker(

@@ -17,7 +17,7 @@ from src.schemas.api_tokens import (
     ApiTokenSchema,
 )
 
-router = APIRouter(prefix="/users/me/tokens", tags=["api tokens"])
+router = APIRouter(prefix="/users/me/tokens", tags=["api-tokens"])
 logger = logging.getLogger(__name__)
 
 FORBIDDEN_RESPONSE = {

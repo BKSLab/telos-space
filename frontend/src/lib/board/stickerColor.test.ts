@@ -58,7 +58,7 @@ describe.each(themes)("%s: текст на стикере любого цвет�
     });
 });
 
-describe("светлая тема: прежние бумажные цвета не меняются", () => {
+describe("светлая тема: бумажные цвета пресетов", () => {
     const lMin = parseThemeNumber(trackerCss, ":root {", "note-l-min");
     const lMax = parseThemeNumber(trackerCss, ":root {", "note-l-max");
     const cMax = parseThemeNumber(trackerCss, ":root {", "note-c-max");
@@ -71,9 +71,9 @@ describe("светлая тема: прежние бумажные цвета н
 });
 
 describe("цвет стикера", () => {
-    it("hex приводится к нижнему регистру, имена прежней палитры — к hex", () => {
+    it("hex приводится к нижнему регистру, неверный цвет заменяется умолчанием", () => {
         expect(normalizeStickerColor("#7C1623")).toBe("#7c1623");
-        expect(normalizeStickerColor("blue")).toBe("#c9edff");
+        expect(normalizeStickerColor("blue")).toBe(DEFAULT_STICKER_COLOR);
         expect(normalizeStickerColor("не цвет")).toBe(DEFAULT_STICKER_COLOR);
         expect(normalizeStickerColor(undefined)).toBe(DEFAULT_STICKER_COLOR);
     });

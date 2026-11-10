@@ -68,7 +68,7 @@
   .chat-personal-help { font-size: 10px; }
   .chat-personal-composer:focus-within .chat-personal-help-detail { display: none; }
   .chat-personal-message { max-width: 100%; }
-  .chat-project-agent { gap: .5rem; padding: .5rem; }
+  .chat-project-conversations { gap: .5rem; padding: .5rem; }
 }
 @media (max-height: 500px) and (max-width: 950px) {
   .chat-composer-hint, .chat-personal-help-detail, .chat-project-subtitle { display: none; }

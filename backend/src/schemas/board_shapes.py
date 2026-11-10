@@ -12,10 +12,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from src.db.models.board_shapes import LINEAR_KINDS, BoardShapeKind
 from src.schemas.board_editor_batch import BoardBatchEditorInsert, BoardBatchEditorState
-from src.schemas.project_stickers import (
-    ProjectStickerCreateSchema,
-    ProjectStickerPositionUpdateSchema,
-    ProjectStickerSchema,
+from src.schemas.board_stickers import (
+    BoardStickerCreateSchema,
+    BoardStickerPositionUpdateSchema,
+    BoardStickerSchema,
     StickerColor,
 )
 
@@ -265,14 +265,14 @@ class MoveStickerOperation(BaseModel):
     op: Literal["move_sticker"]
     id: int = Field(..., gt=0)
     revision: int | None = Field(None, ge=1)
-    data: ProjectStickerPositionUpdateSchema
+    data: BoardStickerPositionUpdateSchema
 
 
 class CreateStickerOperation(BaseModel):
     model_config = ConfigDict(extra="forbid")
     op: Literal["create_sticker"]
     client_id: ClientId
-    data: ProjectStickerCreateSchema
+    data: BoardStickerCreateSchema
 
 
 class UpdateStickerOperation(BaseModel):
@@ -280,7 +280,7 @@ class UpdateStickerOperation(BaseModel):
     op: Literal["update_sticker"]
     id: int = Field(..., gt=0)
     revision: int = Field(..., ge=1)
-    data: ProjectStickerCreateSchema
+    data: BoardStickerCreateSchema
 
 
 class DeleteStickerOperation(BaseModel):
@@ -335,7 +335,7 @@ class BoardBatchResultSchema(BaseModel):
 
     shapes: list[BoardShapeSchema]
     deleted_shape_ids: list[int]
-    stickers: list[ProjectStickerSchema]
+    stickers: list[BoardStickerSchema]
     id_map: dict[str, int]
     deleted_sticker_ids: list[int] = Field(default_factory=list)
     editor_state: dict[str, Any] | None = None
@@ -353,5 +353,5 @@ class BoardShapeToStickerSchema(BaseModel):
 class BoardShapeToStickerResultSchema(BaseModel):
     """Новый стикер и стрелки, перецепленные на него."""
 
-    sticker: ProjectStickerSchema
+    sticker: BoardStickerSchema
     updated_shapes: list[BoardShapeSchema]

@@ -6,6 +6,12 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Path
 from fastapi.responses import FileResponse
 
+from src.api.v1.responses import (
+    FORBIDDEN_RESPONSE,
+    NOT_FOUND_RESPONSE,
+    SERVER_ERROR_RESPONSE,
+    VALIDATION_RESPONSE,
+)
 from src.dependencies.agent_file_content import AgentFileContentServiceDep
 from src.dependencies.auth import AuthorizationHeaderDep, SessionCookieDep
 from src.exceptions.access import AccessServiceError
@@ -13,9 +19,16 @@ from src.exceptions.agent_files import AgentFilesServiceError
 from src.exceptions.auth import AuthServiceError
 from src.utils.api_tokens import extract_bearer_secret
 
-router = APIRouter(tags=["agent-files"])
+router = APIRouter()
 ConversationId = Annotated[int, Path(gt=0)]
 ProjectId = Annotated[int, Path(gt=0)]
+FILE_ERRORS = {
+    401: {"description": "Требуется вход."},
+    403: FORBIDDEN_RESPONSE,
+    404: NOT_FOUND_RESPONSE,
+    422: VALIDATION_RESPONSE,
+    500: SERVER_ERROR_RESPONSE,
+}
 
 
 async def _response(
@@ -54,11 +67,14 @@ async def _response(
 
 
 @router.get(
-    "/tim/conversations/{conversation_id}/files/{file_id}/content",
+    "/aris/conversations/{conversation_id}/files/{file_id}/content",
+    tags=["aris"],
     response_class=FileResponse,
     summary="Скачать приватный файл диалога",
     description="Доступен только владельцу диалога с актуальными правами; оригинал передаётся без DB-сессии.",
-    operation_id="downloadAgentFile",
+    operation_id="downloadArisFile",
+    response_description="Оригинал приватного файла.",
+    responses=FILE_ERRORS,
 )
 async def agent_file_content(
     conversation_id: ConversationId,
@@ -72,11 +88,14 @@ async def agent_file_content(
 
 
 @router.get(
-    "/tim/conversations/{conversation_id}/files/{file_id}/preview",
+    "/aris/conversations/{conversation_id}/files/{file_id}/preview",
+    tags=["aris"],
     response_class=FileResponse,
     summary="Предпросмотр приватного изображения",
     description="Возвращает локальную миниатюру только владельцу диалога; vision не требуется.",
-    operation_id="previewAgentFile",
+    operation_id="previewArisFile",
+    response_description="Приватная миниатюра изображения.",
+    responses=FILE_ERRORS,
 )
 async def agent_file_preview(
     conversation_id: ConversationId,
@@ -92,11 +111,14 @@ async def agent_file_preview(
 
 
 @router.get(
-    "/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/content",
+    "/projects/{project_id}/aris/conversations/{conversation_id}/files/{file_id}/content",
+    tags=["project-aris"],
     response_class=FileResponse,
     summary="Скачать приватный файл проектного диалога",
     description="Проверяет владельца диалога и текущий доступ в проекте.",
-    operation_id="downloadProjectAgentFile",
+    operation_id="downloadProjectArisFile",
+    response_description="Оригинал приватного файла в проектном диалоге.",
+    responses=FILE_ERRORS,
 )
 async def project_agent_file_content(
     project_id: ProjectId,
@@ -113,11 +135,14 @@ async def project_agent_file_content(
 
 
 @router.get(
-    "/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/preview",
+    "/projects/{project_id}/aris/conversations/{conversation_id}/files/{file_id}/preview",
+    tags=["project-aris"],
     response_class=FileResponse,
     summary="Предпросмотр приватного изображения проектного диалога",
     description="Проверяет владельца диалога и текущий доступ; локальная миниатюра без vision.",
-    operation_id="previewProjectAgentFile",
+    operation_id="previewProjectArisFile",
+    response_description="Приватная миниатюра в проектном диалоге.",
+    responses=FILE_ERRORS,
 )
 async def project_agent_file_preview(
     project_id: ProjectId,

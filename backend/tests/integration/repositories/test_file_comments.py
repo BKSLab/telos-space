@@ -37,7 +37,7 @@ from src.exceptions.file_comments import (
 )
 from src.exceptions.task_attachments import TaskAttachmentNotFoundError
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
-from src.schemas.task_moves import TaskMoveTargetSchema
+from src.schemas.task_transfers import TaskTransferTargetSchema
 from src.services.file_comments import CommentFileUpload, FileCommentsService
 from src.services.file_metadata import FilePreviewsService, TaskFileMutationsService
 from src.services.project_files import ProjectFilesService
@@ -283,7 +283,7 @@ async def test_delete_comment_retains_file_delete_file_unlinks_and_move_keeps_re
     async with env.factory() as db:
         _, moves = services(db, env.path)
         moved = await moves.move(
-            task_id=env.task_id, target=TaskMoveTargetSchema(project_id=2), user_id=1
+            task_id=env.task_id, target=TaskTransferTargetSchema(project_id=2), user_id=1
         )
         assert moved.task.id == env.task_id
     async with env.scope() as db:
@@ -336,7 +336,7 @@ async def test_comments_batch_load_has_constant_queries_and_preview_rechecks_cur
         assert image.size == (1600, 900)
     async with env.factory() as db:
         _, moves = services(db, env.path)
-        await moves.move(task_id=env.task_id, target=TaskMoveTargetSchema(project_id=2), user_id=1)
+        await moves.move(task_id=env.task_id, target=TaskTransferTargetSchema(project_id=2), user_id=1)
     with pytest.raises(ResourceNotAvailableError):
         await env.previews.prepare_task(
             task_id=env.task_id, attachment_id=file_id, session_token="user-2", bearer_secret=None

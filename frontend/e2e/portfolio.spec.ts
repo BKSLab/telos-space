@@ -22,7 +22,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     test(`каталог и сводка разделены, фильтры и крупные иконки доступны на ${width}px`, async ({ page }, info) => {
         await page.setViewportSize({ width, height: 900 });
         const state = await installPortfolioApi(page);
-        await page.goto("/projects");
+        await page.goto("/");
         await expect(page).toHaveURL(/\/\?view=projects$/);
         await expect(page.getByRole("heading", { name: "Портфель", exact: true })).toBeVisible();
         const catalog = page.getByRole("region", { name: "Каталог проектов" });

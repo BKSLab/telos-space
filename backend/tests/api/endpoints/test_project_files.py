@@ -208,7 +208,7 @@ async def test_detail_edit_capability_combines_api_key_scopes_and_current_domain
     for writable_scope, domain_write, expected in ((False, True, False), (True, False, False), (True, True, True)):
         scopes = {"projects:read", "projects:write"} if writable_scope else {"projects:read"}
         key = ApiKeyGrant(
-            key_id=UUID(int=1), label="Проверка", key_prefix="ttk_test", owner_user_id=1,
+            key_id=UUID(int=1), label="Проверка", key_prefix="12345678", owner_user_id=1,
             scopes=frozenset(scopes),
         )
         app.dependency_overrides[get_principal] = lambda key=key: replace(current_principal, api_key=key)

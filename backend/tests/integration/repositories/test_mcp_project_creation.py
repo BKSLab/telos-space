@@ -26,8 +26,8 @@ from src.core.settings import get_settings
 from src.db.models import AgentToolRun, Base, Project, ProjectMember, User
 from src.db.models.api_keys import ApiKey
 from src.db.models.api_tokens import ApiToken, ApiTokenScope
+from src.db.models.boards import Board
 from src.db.models.knowledge_index_jobs import KnowledgeIndexJob
-from src.db.models.project_boards import ProjectBoard
 from src.db.models.project_deadline_changes import ProjectDeadlineChange
 from src.db.models.project_stages import ProjectStage
 from src.dependencies.services import get_access_service, get_auth_service, get_projects_service
@@ -48,7 +48,7 @@ from src.utils.api_scopes import (
 from src.utils.api_tokens import generate_token_secret, hash_token_secret
 
 SCOPES = [SCOPE_PROJECTS_READ, SCOPE_PROJECTS_WRITE, SCOPE_TASKS_READ, SCOPE_TASKS_WRITE]
-BUSINESS_MODELS = (Project, ProjectMember, ProjectStage, ProjectBoard, ProjectDeadlineChange, KnowledgeIndexJob, AgentToolRun)
+BUSINESS_MODELS = (Project, ProjectMember, ProjectStage, Board, ProjectDeadlineChange, KnowledgeIndexJob, AgentToolRun)
 
 
 @pytest_asyncio.fixture
@@ -136,7 +136,7 @@ async def test_minimal_defaults_match_rest_and_owner_does_not_need_previous_memb
         assert [(member.user_id, member.role.value) for member in members] == [(stored.owner_id, "OWNER")]
         stages = list((await session.scalars(select(ProjectStage).order_by(ProjectStage.order_index))).all())
         assert [item.name for item in stages] == ["Бэклог", "В работе", "Ревью", "Тестирование", "Готово"]
-        board = (await session.scalars(select(ProjectBoard))).one()
+        board = (await session.scalars(select(Board))).one()
         assert board.project_id == stored.id and board.created_by_user_id == stored.owner_id
         receipt = (await session.scalars(select(AgentToolRun))).one()
         assert receipt.project_id is None and receipt.tool_name == "telos_create_project" and receipt.status == "completed"

@@ -15,11 +15,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from src.db.models.api_tokens import ApiTokenScope
 from src.db.models.project_milestones import ProjectMilestoneStatus
+from src.exceptions.project_stages import ProjectStageNameNotFoundError
 from src.exceptions.projects import ProjectMemberUserNotFoundError, ProjectNotFoundError
 from src.exceptions.tasks import TaskNotFoundError
 from src.mcp_server import write_tools as wt
 from src.schemas.enums import TaskPriority
-from src.services.project_query import ResolvedTask, StageRefDto, UnknownStageError
+from src.services.project_query import ResolvedTask, StageRefDto
 from tests.unit.mcp_server.conftest import PROJECT_ID, FakeContext
 
 TASK_ID = 7
@@ -221,7 +222,7 @@ async def test_move_task_resolves_stage_by_name(write_tools) -> None:
     assert result == {"task_key": TASK_KEY, "stage": "Готово", "is_done": True}
     # Неизвестная стадия отвечает списком доступных.
     services = write_tools()
-    services.query.resolve_stage.side_effect = UnknownStageError(
+    services.query.resolve_stage.side_effect = ProjectStageNameNotFoundError(
         stage_name="Ревью",
         known=["В работе", "Готово"],
     )

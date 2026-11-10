@@ -9,7 +9,7 @@ from qdrant_client import AsyncQdrantClient
 
 from src.clients.qdrant import ProjectQdrantClient
 from src.clients.vision import DisabledVisionCapability
-from src.exceptions.knowledge import KnowledgeProviderError
+from src.exceptions.ai import AiProviderError
 from src.knowledge.context import coverage, file_issues
 from src.repositories.knowledge_source_summaries import KnowledgeSourceSummariesRepository
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
@@ -248,7 +248,7 @@ async def test_failed_file_does_not_hide_other_sources_and_retry_recovers(tmp_pa
         {"id": 11, "task_id": 7, "original_name": "missing.txt", "storage_key": "missing.txt"}
     ]
     service = build_service(tmp_path, rows=rows)
-    with pytest.raises(KnowledgeProviderError):
+    with pytest.raises(AiProviderError):
         await sync(service)
     payloads = list((await service.qdrant_client.manifest(1)).values())
     assert {row["source_id"] for row in payloads} >= {"task:7", "risk:12", "attachment:11"}

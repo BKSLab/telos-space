@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile
 from fastapi.responses import FileResponse
 
+from src.api.v1.responses import VALIDATION_RESPONSE
 from src.api.v1.uploads import read_upload
 from src.dependencies.access import ProjectIdPath
 from src.dependencies.auth import (
@@ -46,7 +47,7 @@ ERRORS = {
     403: {"description": "Недостаточно прав."},
     404: {"description": "Чат или объект недоступен."},
     409: {"description": "Версия сообщения изменилась."},
-    422: {"description": "Некорректные поля."},
+    422: VALIDATION_RESPONSE,
     429: {"description": "Слишком много действий."},
     503: {"description": "Realtime временно недоступен."},
 }
@@ -54,10 +55,10 @@ READ_DOCS = dict(responses=ERRORS, response_description="Данные общег
 WRITE_DOCS = dict(**READ_DOCS, dependencies=[Depends(require_chat_write_scope)])
 router = APIRouter(
     prefix="/projects/{project_id}/chat",
-    tags=["project chat"],
+    tags=["project-chat"],
     dependencies=[Depends(require_chat_access)],
 )
-download_router = APIRouter(prefix="/projects/{project_id}/chat", tags=["project chat"])
+download_router = APIRouter(prefix="/projects/{project_id}/chat", tags=["project-chat"])
 MessageId = Annotated[int, Path(gt=0, description="ID сообщения текущего проекта.")]
 Limit = Annotated[int, Query(ge=1, le=100, description="Максимум сообщений страницы.")]
 Cursor = Annotated[int | None, Query(ge=0, description="Серверный seq сообщения.")]

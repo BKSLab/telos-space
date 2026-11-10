@@ -16,6 +16,7 @@ from datetime import date, datetime
 
 from src.db.models.projects import Project
 from src.exceptions.base import RepositoryError
+from src.exceptions.project_stages import ProjectStageNameNotFoundError
 from src.exceptions.projects import ProjectNotFoundError, ProjectsServiceError
 from src.exceptions.task_comments import TaskCommentNotFoundError
 from src.exceptions.tasks import TaskNotFoundError
@@ -158,13 +159,13 @@ def resolve_stage_reference(stages: list[StageRefDto], stage_name: str) -> Stage
     Returns:
         Стадия проекта.
     Raises:
-        UnknownStageError: Если название отсутствует в проекте.
+        ProjectStageNameNotFoundError: Если название отсутствует в проекте.
     """
     wanted = stage_name.strip().casefold()
     for stage in stages:
         if stage.name.casefold() == wanted:
             return stage
-    raise UnknownStageError(stage_name=stage_name, known=[item.name for item in stages])
+    raise ProjectStageNameNotFoundError(stage_name=stage_name, known=[item.name for item in stages])
 
 
 class ProjectQueryService:
@@ -389,7 +390,7 @@ class ProjectQueryService:
             wanted = stage_name.strip().casefold()
             matched = {item.id for item in stages if item.name.casefold() == wanted}
             if not matched:
-                raise UnknownStageError(
+                raise ProjectStageNameNotFoundError(
                     stage_name=stage_name,
                     known=[item.name for item in stages],
                 )
@@ -588,7 +589,7 @@ class ProjectQueryService:
         здесь, а не в обработчике инструмента.
 
         Raises:
-            UnknownStageError: Если стадии с таким названием нет.
+            ProjectStageNameNotFoundError: Если стадии с таким названием нет.
             ProjectsServiceError: Если прочитать стадии не удалось.
         """
         try:
@@ -644,23 +645,6 @@ class ProjectQueryService:
         if project is None:
             raise ProjectNotFoundError(project_id=project_id)
         return project
-
-
-class UnknownStageError(ProjectsServiceError):
-    """Стадия с таким названием в проекте не найдена.
-
-    Список известных стадий возвращается вместе с ошибкой: без него
-    вызывающему пришлось бы угадывать написание.
-    """
-
-    def __init__(self, *, stage_name: str, known: list[str]) -> None:
-        self.stage_name = stage_name
-        self.known = known
-        super().__init__(error_details=f"Стадия {stage_name!r} не найдена.")
-
-    @property
-    def detail(self) -> str:
-        return f"Стадия не найдена. Доступные стадии: {', '.join(self.known)}."
 
 
 def _project_summary(project) -> ProjectSummaryDto:

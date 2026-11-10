@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from src.db.models.board_shapes import BoardShape, BoardShapeKind
-from src.db.models.project_boards import ProjectBoard
+from src.db.models.boards import Board
 from src.repositories.board_editor import BoardEditorRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.schemas.board_editor import BoardEditorMetadata, BoardEditorWrite, BoardObjectRef
@@ -72,7 +72,7 @@ async def test_inserted_objects_and_metadata_share_one_rollback(db_session):
     await repository.save_metadata(board, updated)
     await UnitOfWork(db_session).rollback()
     db_session.expire_all()
-    restored = await db_session.get(ProjectBoard, env.board_id)
+    restored = await db_session.get(Board, env.board_id)
     assert restored.revision == 1 and restored.editor_metadata["locked"] == []
     assert await db_session.scalar(select(BoardShape.id).where(BoardShape.id == created_id)) is None
 

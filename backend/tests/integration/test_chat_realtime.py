@@ -17,7 +17,7 @@ from src.realtime.chat_hub import ChatHub
 from src.realtime.runtime import CHAT_RUNTIME_KEY
 from src.schemas.project_chats import ChatMessageCreate
 from src.services.chat_delivery import ChatDeliveryService
-from src.utils.api_tokens import hash_token_secret
+from src.utils.api_tokens import build_display_prefix, generate_token_secret, hash_token_secret
 from src.utils.tokens import create_access_token
 
 
@@ -234,14 +234,14 @@ async def test_reconnect_storm_releases_pool_and_read_token_cannot_send(runtimes
         finally:
             await asyncio.gather(*(socket.close() for socket in sockets))
         assert len(runtimes.first.hub.connections) == 0
-    secret = "test-chat-read-only-websocket"
+    secret = generate_token_secret()
     async with runtimes.env.factory() as db:
         db.add(
             ApiToken(
                 user_id=2,
                 name="WS read",
                 token_hash=hash_token_secret(secret),
-                prefix=secret[:8],
+                prefix=build_display_prefix(secret),
                 scope=ApiTokenScope.READ,
             )
         )

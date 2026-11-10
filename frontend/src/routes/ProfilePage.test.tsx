@@ -58,11 +58,11 @@ it("проверяет повтор пароля и сохраняет преж�
     await waitFor(() => expect(post).toHaveBeenCalledWith(authEndpoints.password(), { current_password: "OldTestPassword123!", password: "NewTestPassword123!", password_confirm: "NewTestPassword123!" }));
     await waitFor(() => expect((screen.getByLabelText("Новый пароль") as HTMLInputElement).value).toBe(""));
 });
-it("загружает прежние токены только по раскрытию блока", async () => {
+it("загружает READ/WRITE-токены только по раскрытию блока", async () => {
     const get = vi.spyOn(api, "get").mockResolvedValue([]);
     setup("/profile?tab=keys");
     expect(get).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByText("Прежние токены", { selector: "summary" }));
-    expect(await screen.findByText("Прежних токенов нет")).toBeTruthy();
+    await userEvent.click(screen.getByText("READ/WRITE-токены", { selector: "summary" }));
+    expect(await screen.findByText("READ/WRITE-токенов нет")).toBeTruthy();
     expect(get).toHaveBeenCalledWith(authEndpoints.apiTokens());
 });

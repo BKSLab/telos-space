@@ -129,7 +129,7 @@ def checks(case, answer, before, after, fixture):
     """Observable postconditions, not a general-purpose quality score."""
     content = answer.get("content", "")
     actions = answer.get("actions", [])
-    # TimAnswer допускает ответ только карточкой источника/текущего действия.
+    # ArisAnswer допускает ответ только карточкой источника/текущего действия.
     visible_cards = bool(answer.get("sources")) or any(
         action.get("status") in {"completed", "pending"} for action in actions
     )

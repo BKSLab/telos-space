@@ -226,7 +226,7 @@ def extract_ask_metrics(info: Mock) -> dict:
     """Извлекает JSON-метрики из единственной записи завершённого ask."""
     info.assert_called_once()
     message, payload = info.call_args.args
-    assert message == "Метрики Project Agent: %s"
+    assert message == "Метрики Арис: %s"
     return json.loads(payload)
 
 
@@ -311,7 +311,7 @@ async def test_task_workflow_loads_sql_once_without_embeddings_or_write_intent()
 @pytest.mark.asyncio
 async def test_card_only_answer_uses_verified_fields_and_keeps_conversation_context():
     from src.db.models.agent_messages import AgentMessage
-    from src.services.tim_widget import TimWidgetService
+    from src.services.agent_conversations import AgentConversationsService
 
     service, project, runtime, _db = build_service()
 
@@ -334,7 +334,7 @@ async def test_card_only_answer_uses_verified_fields_and_keeps_conversation_cont
     assert card.status == "В работе"
     assert card.priority == "HIGH"
     assert card.summary == "Согласовать владельцев рисков"
-    history = TimWidgetService._history(
+    history = AgentConversationsService._history(
         AgentMessage(
             role="assistant",
             content="",

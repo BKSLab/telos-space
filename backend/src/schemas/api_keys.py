@@ -2,7 +2,6 @@
 
 import uuid
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -102,16 +101,11 @@ class ApiKeySchema(BaseModel):
     id: uuid.UUID = Field(..., description="UUID ключа.")
     label: str = Field(..., description="Имя ключа.", examples=["Мой агент"])
     key_prefix: str = Field(
-        ..., description="Публичный префикс ключа для узнавания.", examples=["ttk_1a2b3c4d"]
+        ..., description="Публичный идентификатор ключа: восемь hex-символов.", examples=["1a2b3c4d"]
     )
     is_active: bool = Field(..., description="Принимается ли ключ.", examples=[True])
     owner_user_id: int | None = Field(None, description="Владелец ключа.", examples=[12])
     owner_name: str | None = Field(None, description="Имя владельца.", examples=["Иванов Иван"])
-    kind: str = Field(
-        ...,
-        description="Тип: personal — личный; service — интеграция владельца.",
-        examples=["service"],
-    )
     scopes: list[str] = Field(default_factory=list, description="Права ключа.")
     expires_at: datetime | None = Field(None, description="Срок действия; null — бессрочный.")
     last_used_at: datetime | None = Field(None, description="Последнее использование.")
@@ -138,7 +132,7 @@ class ApiKeyCreatedSchema(ApiKeySchema):
     raw_key: str = Field(
         ...,
         description="Полный ключ — показывается только при выдаче, затем недоступен.",
-        examples=["ttk_1a2b3c4d_0123456789abcdef0123456789abcdef"],
+        examples=["telos_key_1a2b3c4d_0123456789abcdef0123456789abcdef"],
     )
 
 
@@ -211,6 +205,7 @@ class PersonalApiKeyCreateSchema(BaseModel):
     """Тело запроса на выпуск личного ключа: владелец — сам пользователь."""
 
     model_config = ConfigDict(
+        extra="forbid",
         json_schema_extra={
             "example": {
                 "label": "Мой скрипт сверки",
@@ -223,7 +218,6 @@ class PersonalApiKeyCreateSchema(BaseModel):
     label: str = Field(
         ..., min_length=1, max_length=160, description="Имя ключа.", examples=["Мой скрипт"]
     )
-    kind: Literal["personal", "service"] = "personal"
     scopes: list[str] = Field(default_factory=list, description=_SCOPES_HELP)
     expires_at: datetime | None = Field(
         None,
@@ -242,6 +236,7 @@ class PersonalApiKeyUpdateSchema(BaseModel):
     """Частичное изменение личного ключа (права — только из белого списка)."""
 
     model_config = ConfigDict(
+        extra="forbid",
         json_schema_extra={"example": {"label": "Мой скрипт (прод)", "is_active": False}}
     )
 

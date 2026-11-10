@@ -23,17 +23,17 @@ export function ChatWorkspace({ children }: { children: ReactNode }) {
     const routeProject = projects?.find(item => item.key.toUpperCase() === projectKey?.toUpperCase());
     const selectedProject = projects?.find(item => item.id === selectedId);
     const section = match?.params["*"]?.replace(/\/$/, "");
-    const fullPage = section === "chat" || location.pathname.replace(/\/$/, "") === "/chat";
-    const view = new URLSearchParams(location.search).get("view");
-    const teamPageVisible = Boolean(routeProject && fullPage && view !== "personal" && view !== "knowledge" && view !== "vera");
+    const globalChatPage = location.pathname.replace(/\/$/, "") === "/chat";
+    const fullPage = section === "chat" || section === "conversations" || section === "knowledge" || globalChatPage;
+    const teamPageVisible = Boolean(routeProject && section === "chat");
     // Открытое окно закреплено за выбранной перепиской, а не за текущим маршрутом.
     const project = fullPage ? routeProject : panel === "team" ? selectedProject : routeProject ?? selectedProject;
     const visiblePanel = fullPage ? null : panel;
 
     useEffect(() => {
         if (fullPage && teamPageVisible && routeProject && (routeProject.id !== selectedId || useChatDockStore.getState().modes[userId] !== "team")) selectProject(userId, routeProject.id);
-        if (fullPage && (view === "vera" || location.pathname.replace(/\/$/, "") === "/chat") && useChatDockStore.getState().modes[userId] !== "personal") selectPersonal(userId);
-    }, [fullPage, teamPageVisible, routeProject, selectedId, userId, selectProject, selectPersonal, view, location.pathname]);
+        if (globalChatPage && useChatDockStore.getState().modes[userId] !== "personal") selectPersonal(userId);
+    }, [fullPage, teamPageVisible, routeProject, selectedId, userId, selectProject, selectPersonal, globalChatPage]);
     useEffect(() => { if (fullPage) open(null); }, [fullPage, open]);
     useEffect(() => () => { useChatDockStore.getState().open(null); }, [userId]);
 

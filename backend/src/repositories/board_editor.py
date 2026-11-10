@@ -7,9 +7,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.board_shapes import BoardShape
-from src.db.models.project_boards import ProjectBoard
-from src.db.models.project_stickers import ProjectSticker
-from src.exceptions.project_boards import ProjectBoardsRepositoryError
+from src.db.models.board_stickers import BoardSticker
+from src.db.models.boards import Board
+from src.exceptions.boards import BoardsRepositoryError
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
 from src.repositories.unit_of_work import UnitOfWork
 from src.schemas.board_editor import BoardEditorMetadata
@@ -33,14 +33,14 @@ class BoardEditorRepository:
     def __init__(self, db_session: AsyncSession):
         self.db_session = db_session
 
-    async def get_board(self, board_id: int, *, lock: bool = False) -> ProjectBoard | None:
+    async def get_board(self, board_id: int, *, lock: bool = False) -> Board | None:
         """Перечитывает строку; lock сериализует metadata, перенос и batch редактора."""
         try:
             query = (
-                select(ProjectBoard)
+                select(Board)
                 .where(
-                    ProjectBoard.id == board_id,
-                    ProjectBoard.archived_at.is_(None),
+                    Board.id == board_id,
+                    Board.archived_at.is_(None),
                 )
                 .execution_options(populate_existing=True)
             )
@@ -48,12 +48,12 @@ class BoardEditorRepository:
                 query = query.with_for_update()
             return (await self.db_session.execute(query)).scalar_one_or_none()
         except SQLAlchemyError as error:
-            raise ProjectBoardsRepositoryError("Ошибка чтения metadata доски.") from error
+            raise BoardsRepositoryError("Ошибка чтения metadata доски.") from error
 
     async def refs_exist(self, board_id: int, refs: set[tuple[str, int]]) -> bool:
         """Ссылки только внутри доски; key-share защищает их от удаления до commit."""
         try:
-            for kind, model in (("shape", BoardShape), ("sticker", ProjectSticker)):
+            for kind, model in (("shape", BoardShape), ("sticker", BoardSticker)):
                 ids = {object_id for ref_kind, object_id in refs if ref_kind == kind}
                 if not ids:
                     continue
@@ -70,58 +70,58 @@ class BoardEditorRepository:
                     return False
             return True
         except SQLAlchemyError as error:
-            raise ProjectBoardsRepositoryError("Ошибка проверки объектов metadata.") from error
+            raise BoardsRepositoryError("Ошибка проверки объектов metadata.") from error
 
-    async def save_metadata(self, board: ProjectBoard, metadata: BoardEditorMetadata) -> None:
+    async def save_metadata(self, board: Board, metadata: BoardEditorMetadata) -> None:
         """Вызывать только после блокировки строки и проверки revision."""
         try:
             board.editor_metadata = metadata.model_dump(mode="json")
             board.revision += 1
             await self.db_session.flush()
         except SQLAlchemyError as error:
-            raise ProjectBoardsRepositoryError("Ошибка сохранения metadata доски.") from error
+            raise BoardsRepositoryError("Ошибка сохранения metadata доски.") from error
 
-    async def bump_revision(self, board: ProjectBoard) -> None:
+    async def bump_revision(self, board: Board) -> None:
         """Вызывать под блокировкой строки при изменении сцены без metadata."""
         try:
             board.revision += 1
             await self.db_session.flush()
         except SQLAlchemyError as error:
-            raise ProjectBoardsRepositoryError("Ошибка сохранения ревизии доски.") from error
+            raise BoardsRepositoryError("Ошибка сохранения ревизии доски.") from error
 
     async def remove_project_default_boards(self, project_id: int) -> list[int]:
         """Удаляет только пустую доску нового незакоммиченного проекта."""
         try:
             result = await self.db_session.execute(
-                delete(ProjectBoard)
+                delete(Board)
                 .where(
-                    ProjectBoard.project_id == project_id,
-                    ~select(BoardShape.id).where(BoardShape.board_id == ProjectBoard.id).exists(),
-                    ~select(ProjectSticker.id)
-                    .where(ProjectSticker.board_id == ProjectBoard.id)
+                    Board.project_id == project_id,
+                    ~select(BoardShape.id).where(BoardShape.board_id == Board.id).exists(),
+                    ~select(BoardSticker.id)
+                    .where(BoardSticker.board_id == Board.id)
                     .exists(),
                 )
-                .returning(ProjectBoard.id)
+                .returning(Board.id)
             )
             return list(result.scalars())
         except SQLAlchemyError as error:
-            raise ProjectBoardsRepositoryError("Ошибка замены пустой доски проекта.") from error
+            raise BoardsRepositoryError("Ошибка замены пустой доски проекта.") from error
 
     async def move_stickers_to_project(self, board_id: int, project_id: int) -> None:
         try:
             await self.db_session.execute(
-                update(ProjectSticker)
-                .where(ProjectSticker.board_id == board_id)
+                update(BoardSticker)
+                .where(BoardSticker.board_id == board_id)
                 .values(
                     project_id=project_id,
-                    revision=ProjectSticker.revision + 1,
+                    revision=BoardSticker.revision + 1,
                     updated_at=func.now(),
                 )
             )
         except SQLAlchemyError as error:
-            raise ProjectBoardsRepositoryError("Ошибка переноса стикеров в проект.") from error
+            raise BoardsRepositoryError("Ошибка переноса стикеров в проект.") from error
 
-    async def attach_to_new_project(self, board: ProjectBoard, project_id: int) -> None:
+    async def attach_to_new_project(self, board: Board, project_id: int) -> None:
         """ORM flush получает timestamps из RETURNING (Base.eager_defaults)."""
         try:
             board.project_id = project_id
@@ -129,4 +129,4 @@ class BoardEditorRepository:
             board.revision += 1
             await self.db_session.flush()
         except SQLAlchemyError as error:
-            raise ProjectBoardsRepositoryError("Ошибка переноса доски в проект.") from error
+            raise BoardsRepositoryError("Ошибка переноса доски в проект.") from error

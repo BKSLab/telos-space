@@ -13,18 +13,18 @@ from pydantic import BaseModel
 from pydantic_ai.exceptions import AgentRunError
 from pydantic_ai.models import Model
 
+from src.agent.aris import ArisMode
 from src.agent.context import AgentContextBudget
 from src.agent.progress import SEARCH_PROJECT, ProgressReporter, ProgressSink
 from src.agent.runtime import (
     PROJECT_ACTION_TOOL,
-    TimAnswer,
-    TimDeps,
-    TimRunResult,
-    TimRuntime,
+    ArisAnswer,
+    ArisDeps,
+    ArisRunResult,
+    ArisRuntime,
     WriteGate,
 )
 from src.agent.runtime import metrics as runtime_metrics
-from src.agent.tim import TimMode
 from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor
 from src.clients.embedding import EmbeddingClient
 from src.clients.llm import LlmClient
@@ -33,15 +33,14 @@ from src.db.models.knowledge_index_jobs import (
     KnowledgeIndexStatus,
 )
 from src.db.models.projects import Project
+from src.exceptions.ai import AgentAnswerError, AiProviderError
 from src.exceptions.base import RepositoryError
 from src.exceptions.clients import ClientError
 from src.exceptions.knowledge import (
     KnowledgeDisabledError,
     KnowledgeEventsServiceError,
     KnowledgeIndexJobsRepositoryError,
-    KnowledgeProviderError,
     KnowledgeServiceError,
-    ProjectAgentError,
 )
 from src.exceptions.projects import ProjectNotFoundError
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
@@ -53,9 +52,9 @@ from src.knowledge.context import (
     retrieve,
 )
 from src.prompts.project_agent import (
+    ARIS_BASE_PROMPTS,
     PROJECT_AGENT_API_BASE_PROMPT,
     PROJECT_AGENT_WRITE_INTENT_PROMPT,
-    TIM_BASE_PROMPTS,
 )
 from src.schemas.knowledge import (
     KnowledgeAnswerSchema,
@@ -71,7 +70,7 @@ logger = logging.getLogger(__name__)
 PROJECT_DESCRIPTION_LIMIT = 400
 TEXT_FRAGMENT_LIMIT = 1200
 SOURCE_EXCERPT_LIMIT = 500
-#: Канал ответа внешнему клиенту (#40793).
+#: Канал ответа внешнему клиенту.
 API_CHANNEL = "api"
 EMPTY_ANSWER = (
     "Не удалось завершить проверку источников. Уточните вопрос или сузьте перечень объектов."
@@ -140,7 +139,7 @@ class _SourceRegistry:
 
 @dataclass(frozen=True, slots=True)
 class ProjectAgentConfig:
-    """Настройки семантического поиска, нужные Project Agent.
+    """Настройки семантического поиска, нужные Арис.
 
     Сервис получает только те значения, которые действительно использует,
     а не весь объект настроек приложения.
@@ -172,7 +171,7 @@ class ProjectAgentService:
         tools: AgentToolExecutor,
         agent_model: Model,
     ) -> None:
-        """Создаёт Project Agent.
+        """Создаёт Арис.
 
         Args:
             scope: Фабрика короткой области работы с базой. Между сбором
@@ -191,13 +190,13 @@ class ProjectAgentService:
         self.config = config
         self.tools = tools
         self.agent_model = agent_model
-        self._runtime: TimRuntime | None = None
+        self._runtime: ArisRuntime | None = None
 
     @property
-    def runtime(self) -> TimRuntime:
+    def runtime(self) -> ArisRuntime:
         """Агент PydanticAI над текущим реестром инструментов (строится один раз)."""
         if self._runtime is None or self._runtime.executor is not self.tools:
-            self._runtime = TimRuntime(model=self.agent_model, executor=self.tools)
+            self._runtime = ArisRuntime(model=self.agent_model, executor=self.tools)
         return self._runtime
 
     async def ask(
@@ -211,7 +210,7 @@ class ProjectAgentService:
         execution: AgentToolContext | None = None,
         action_history: list[dict[str, Any]] | None = None,
         uploaded_files: list[dict[str, Any]] | None = None,
-        mode: TimMode = TimMode.WIDGET_PROJECT,
+        mode: ArisMode = ArisMode.WIDGET_PROJECT,
         extra_context: dict[str, Any] | None = None,
         channel: str = "web",
         verbatim: str | None = None,
@@ -239,15 +238,15 @@ class ProjectAgentService:
             extra_context: Дополнительные поля входного JSON модели.
             channel: ``web`` — ответ в интерфейсе трекера с карточками; ``api`` —
                 ответ внешнему клиенту полным текстом со ссылками.
-            verbatim: Дословная реплика сотрудника в канале ``api``. Только она
+            verbatim: Дословная реплика пользователя в канале ``api``. Только она
                 разрешает запись; без неё вопрос выполняется на чтение.
             conversation_id: Диалог или ход чата — для трассировки.
             on_progress: Запись живого статуса ответа; сбой записи ответ не роняет.
         Returns:
             Ответ с источниками, проверенными в текущем проекте.
         Raises:
-            ProjectAgentError: При ошибке чтения данных проекта.
-            KnowledgeProviderError: Если модель не смогла подготовить ответ.
+            AgentAnswerError: При ошибке чтения данных проекта.
+            AiProviderError: Если модель не смогла подготовить ответ.
         """
         started = perf_counter()
         phases = {
@@ -262,15 +261,15 @@ class ProjectAgentService:
             project_id=project_id, user_id=(actor or {}).get("user_id")
         )
         if tool_context.project_id != project_id:
-            raise ProjectAgentError("Область инструментов не совпадает с проектом вопроса.")
-        if mode is TimMode.WIDGET_PERSONAL:
-            raise ProjectAgentError("Проектный ответ требует проектного режима.")
+            raise AgentAnswerError("Область инструментов не совпадает с проектом вопроса.")
+        if mode is ArisMode.WIDGET_PERSONAL:
+            raise AgentAnswerError("Проектный ответ требует проектного режима.")
         # В канале API пересказ вызывающего агента запись не разрешает: без
-        # дословной реплики сотрудника вопрос выполняется только на чтение.
+        # дословной реплики пользователя вопрос выполняется только на чтение.
         write_possible = tool_context.can_write and (not api_channel or verbatim is not None)
         tool_context = replace(tool_context, mode=mode, can_write=write_possible)
         progress = ProgressReporter(on_progress)
-        deps: TimDeps | None = None
+        deps: ArisDeps | None = None
         try:
             query = retrieval_query(question, history)
             registry = _SourceRegistry()
@@ -287,7 +286,7 @@ class ProjectAgentService:
                 "previous_actions": action_history or [],
                 "uploaded_files": uploaded_files or [],
             }
-            system_prompt = TIM_BASE_PROMPTS[mode]
+            system_prompt = ARIS_BASE_PROMPTS[mode]
             if api_channel:
                 system_prompt = PROJECT_AGENT_API_BASE_PROMPT
                 content.pop("mode", None)
@@ -358,7 +357,7 @@ class ProjectAgentService:
                         )
                     self._register_views(content, state["catalog"], registry)
 
-            deps = TimDeps(
+            deps = ArisDeps(
                 execution=tool_context,
                 executor=self.tools,
                 system_prompt=system_prompt,
@@ -412,7 +411,7 @@ class ProjectAgentService:
 
             deps.on_result = register
             phase = perf_counter()
-            run: TimRunResult | None = None
+            run: ArisRunResult | None = None
             try:
                 run = await self.runtime.run(
                     deps,
@@ -430,7 +429,7 @@ class ProjectAgentService:
                             project_id, await db.sources.get_project_rows(project_id)
                         )
                 catalog = state["catalog"]
-                output = run.output or TimAnswer()
+                output = run.output or ArisAnswer()
                 selected = []
                 seen_sources = set()
                 for handle in [*output.source_ids, *(member_handles if run.output else [])]:
@@ -465,17 +464,17 @@ class ProjectAgentService:
                     answer = EMPTY_ANSWER
                 return KnowledgeAnswerSchema(answer=answer, sources=selected)
             except AgentRunError as error:
-                raise KnowledgeProviderError(str(error)) from error
+                raise AiProviderError(str(error)) from error
             except ClientError as error:
-                raise KnowledgeProviderError(str(error)) from error
+                raise AiProviderError(str(error)) from error
             except RepositoryError as error:
-                raise ProjectAgentError(str(error)) from error
+                raise AgentAnswerError(str(error)) from error
             except ValueError as error:
-                raise ProjectAgentError(str(error)) from error
+                raise AgentAnswerError(str(error)) from error
             finally:
                 phases["llm"] = self._elapsed_ms(phase)
                 logger.info(
-                    "Метрики Project Agent: %s",
+                    "Метрики Арис: %s",
                     json.dumps(
                         {
                             "event": "project_agent.ask",
@@ -513,7 +512,7 @@ class ProjectAgentService:
         """Ответ Ариса в личном виджете, когда страница не указывает на проект.
 
         Каталога и RAG проекта здесь нет: модель видит только результаты
-        личных инструментов (мои задачи, поиск по всем проектам, потоки,
+        личных инструментов (мои задачи, поиск по всем проектам,
         разовые задачи) и telos_run_project_action для проекта по ключу.
 
         Args:
@@ -529,13 +528,13 @@ class ProjectAgentService:
         Returns:
             Ответ без карточек источников: объекты названы ключами в тексте.
         Raises:
-            ProjectAgentError: При ошибке чтения данных.
-            KnowledgeProviderError: Если модель не смогла подготовить ответ.
+            AgentAnswerError: При ошибке чтения данных.
+            AiProviderError: Если модель не смогла подготовить ответ.
         """
         started = perf_counter()
         question = question.strip()
         phases: dict[str, float | None] = {"write_intent": None}
-        mode = TimMode.WIDGET_PERSONAL
+        mode = ArisMode.WIDGET_PERSONAL
         tool_context = replace(execution, project_id=None, mode=mode)
         content = {
             "mode": mode.value,
@@ -548,14 +547,14 @@ class ProjectAgentService:
             "writes_allowed": tool_context.can_write,
             "previous_actions": action_history or [],
         }
-        system_prompt = TIM_BASE_PROMPTS[mode]
+        system_prompt = ARIS_BASE_PROMPTS[mode]
         budget = AgentContextBudget(
             system_prompt=system_prompt,
             max_tokens=self.config.context_tokens,
             history_tokens=self.config.history_tokens,
         )
         budget.prepare(content)
-        deps = TimDeps(
+        deps = ArisDeps(
             execution=tool_context,
             executor=self.tools,
             system_prompt=system_prompt,
@@ -572,7 +571,7 @@ class ProjectAgentService:
             else None,
             progress=ProgressReporter(on_progress),
         )
-        run: TimRunResult | None = None
+        run: ArisRunResult | None = None
         try:
             run = await self.runtime.run(
                 deps,
@@ -589,13 +588,13 @@ class ProjectAgentService:
             )
             return KnowledgeAnswerSchema(answer=answer, sources=[])
         except AgentRunError as error:
-            raise KnowledgeProviderError(str(error)) from error
+            raise AiProviderError(str(error)) from error
         except ClientError as error:
-            raise KnowledgeProviderError(str(error)) from error
+            raise AiProviderError(str(error)) from error
         except RepositoryError as error:
-            raise ProjectAgentError(str(error)) from error
+            raise AgentAnswerError(str(error)) from error
         except ValueError as error:
-            raise ProjectAgentError(str(error)) from error
+            raise AgentAnswerError(str(error)) from error
         finally:
             if deps.write_gate is not None:
                 deps.write_gate.close()
@@ -604,7 +603,7 @@ class ProjectAgentService:
                 "Метрики Ариса: %s",
                 json.dumps(
                     {
-                        "event": "tim.ask_personal",
+                        "event": "aris.ask_personal",
                         "total_ms": self._elapsed_ms(started),
                         "phases_ms": phases,
                         "agent": runtime_metrics(run) if run else None,
@@ -830,7 +829,7 @@ class ProjectAgentService:
                 fts_hits = await db.sources.search(project_id, query, entity_type=None, limit=30)
                 stages = await db.stages.get_by_project(project_id)
         except RepositoryError as error:
-            raise ProjectAgentError(str(error)) from error
+            raise AgentAnswerError(str(error)) from error
         phases["ranked_fts"] = self._elapsed_ms(phase)
         return project, catalog, fts_hits, stages
 

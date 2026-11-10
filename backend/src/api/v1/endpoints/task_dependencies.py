@@ -24,6 +24,9 @@ DependencyErrors = (TaskDependenciesServiceError, ProjectsServiceError, TasksSer
     response_model=list[TaskDependencySchema],
     responses={404: NOT_FOUND_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     summary="Получить зависимости задач проекта",
+    description="Возвращает направленные связи Finish-to-Start между задачами доступного проекта.",
+    operation_id="listProjectTaskDependencies",
+    response_description="Зависимости задач проекта.",
 )
 async def list_task_dependencies(
     project_id: Annotated[int, Path(gt=0)],
@@ -48,6 +51,9 @@ async def list_task_dependencies(
         500: SERVER_ERROR_RESPONSE,
     },
     summary="Создать зависимость задач",
+    description="Создаёт связь Finish-to-Start после проверки принадлежности задач и отсутствия цикла.",
+    operation_id="createProjectTaskDependency",
+    response_description="Созданная зависимость задач.",
 )
 async def create_task_dependency(
     project_id: Annotated[int, Path(gt=0)],
@@ -72,6 +78,9 @@ async def create_task_dependency(
     status_code=status.HTTP_204_NO_CONTENT,
     responses={404: NOT_FOUND_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     summary="Удалить зависимость задач",
+    description="Удаляет выбранную зависимость задач доступного проекта.",
+    operation_id="deleteProjectTaskDependency",
+    response_description="Зависимость удалена.",
 )
 async def delete_task_dependency(
     project_id: Annotated[int, Path(gt=0)],

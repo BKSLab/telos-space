@@ -19,16 +19,16 @@ from src.services.access import AccessService
 from src.services.analytics import AnalyticsReportReader
 from src.services.auth import AuthService
 from src.services.board_shapes import BoardShapesService
+from src.services.board_stickers import BoardStickersService
+from src.services.boards import BoardsService
 from src.services.calendar import CalendarService
 from src.services.calendar_scenarios import CalendarScenarioService
 from src.services.document_links import DocumentLinksService
 from src.services.documents import DocumentsService
 from src.services.milestones import MilestonesService
-from src.services.project_boards import ProjectBoardsService
 from src.services.project_members import ProjectMembersService
 from src.services.project_risks import ProjectRiskService
 from src.services.project_stages import ProjectStagesService
-from src.services.project_stickers import ProjectStickersService
 from src.services.projects import ProjectsService
 from src.services.task_attachments import TaskAttachmentsService
 from src.services.task_comments import TaskCommentsService
@@ -47,7 +47,7 @@ class AgentProjectToolScope:
     tasks: TasksService
     comments: TaskCommentsService
     members: ProjectMembersService
-    stickers: ProjectStickersService
+    stickers: BoardStickersService
     stages: ProjectStagesService
     documents: DocumentsService
     links: DocumentLinksService
@@ -67,7 +67,7 @@ class AgentProjectToolScope:
     uploads: AgentFilesRepository
     upload_storage: AgentToolFileStorage
     unit_of_work: AgentToolUnitOfWork
-    boards: ProjectBoardsService | None = None
+    boards: BoardsService | None = None
     board_shapes: BoardShapesService | None = None
     turns: ChatAgentTurnsRepository | None = None
     project_rows: ProjectsRepository | None = None

@@ -4,18 +4,18 @@ ARIS (Арис) — проектный менеджер TELOS SPACE. Он раб
 
 ## Интерфейсы и границы данных
 
-- Единственная проектная вкладка `/projects/:key/chat` объединяет командную переписку и обращение «Арис, …». Приватные проектные диалоги и управление знаниями доступны через меню на `/chat`; они используют [ProjectAgentWorkspace](../frontend/src/components/agent/ProjectAgentWorkspace.tsx). Старые `/agent` и `/knowledge` перенаправляют в соответствующий режим чата с сохранением параметров и hash.
+- Единственная проектная вкладка `/projects/:key/chat` объединяет командную переписку и обращение «Арис, …». Приватные проектные диалоги доступны на `/projects/:key/conversations` через [ProjectConversationWorkspace](../frontend/src/components/agent/ProjectConversationWorkspace.tsx), знания — на `/projects/:key/knowledge`. Обе страницы открываются из меню на `/chat`; знания не загружают приватные диалоги.
 - [Общее окно чатов](../frontend/src/components/chat/FloatingChatDock.tsx) с личным диалогом Ариса доступно на разных экранах. Проверенный контекст страницы определяет проект, задачу, доску и выделенные объекты; этот контекст сам по себе не даёт прав.
-- В общем чате проекта обращение «Арис, …» запускает ответ для всей команды. Режим `project_chat` ограничен этим проектом; личные режимы `widget_project` и `widget_personal` описаны в [tim.py](../backend/src/agent/tim.py).
-- Внешний клиент использует REST `POST /api/v1/agent/ask`, `GET /api/v1/agent/requests/{request_id}` или MCP `telos_ask_aris` / `telos_get_aris_result`.
+- В общем чате проекта обращение «Арис, …» запускает ответ для всей команды. Режим `project_chat` ограничен этим проектом; личные режимы `widget_project` и `widget_personal` описаны в [aris.py](../backend/src/agent/aris.py).
+- Внешний клиент использует REST `POST /api/v1/aris/requests`, `GET /api/v1/aris/requests/{request_id}` или MCP `telos_ask_aris` / `telos_get_aris_result`.
 
-Имя в интерфейсе — ARIS (Арис), в ответах и системной инструкции — «Арис, проектный менеджер» с мужским родом. Обращения «Арис, …» и «ARIS, …» распознаются в начале сообщения без учёта регистра, на границе имени; «Аристотель», «Арисон» и имя внутри фразы не вызывают помощника. Прежние имена больше не запускают его. Технические `Tim*`, API `/tim` и `/mcp`, storage keys, ключи `tt_`/`ttk_` и старые данные сохранены; пользовательские сообщения и историю не переписывают.
+Имя в интерфейсе — ARIS (Арис), в ответах и системной инструкции — «Арис, проектный менеджер» с мужским родом. Обращения «Арис, …» и «ARIS, …» распознаются в начале сообщения без учёта регистра, на границе имени; «Аристотель», «Арисон» и имя внутри фразы не вызывают помощника. Runtime и интерфейс используют имена `Aris*`; пользовательские сообщения, приватная история и идентификаторы записей сохраняются.
 
 Проект, инициатор и область записи задаются сервером. Проверяются активность пользователя, доступ к объекту и владелец диалога. Личная переписка и память не становятся общими фактами проекта. Внешние запросы дополнительно изолированы по владельцу и ID ключа.
 
 ## Исполнение и инструменты
 
-[ProjectAgentService](../backend/src/services/project_agent.py) собирает актуальные данные и запускает [TimRuntime](../backend/src/agent/runtime.py) на PydanticAI. [TrackerAgentService](../backend/src/services/tracker_agent.py) выбирает доступный проект либо личную область. OpenAI-совместимая модель настраивается через `AGENT_MODEL`, `LLM_API_KEY`, `LLM_API_BASE_URL` или `LLM_API_URL`; адаптер — [agent_model.py](../backend/src/clients/agent_model.py).
+[ProjectAgentService](../backend/src/services/project_agent.py) собирает актуальные данные и запускает [ArisRuntime](../backend/src/agent/runtime.py) на PydanticAI. [AgentRoutingService](../backend/src/services/agent_routing.py) выбирает доступный проект либо личную область. OpenAI-совместимая модель настраивается через `AGENT_MODEL`, `LLM_API_KEY`, `LLM_API_BASE_URL` или `LLM_API_URL`; адаптер — [agent_model.py](../backend/src/clients/agent_model.py).
 
 Runtime использует PydanticAI 2.59.0 (`pydantic-ai-slim[openai]`) и совместимый OpenAI SDK 3.26.0. Фильтрация инструментов и сокращение истории подключены через capabilities `PrepareTools` и `ProcessHistory`; инструменты создаются публичным `Tool.from_schema`. Явная стратегия `exhaustive` выполняет допустимые действия, даже если модель одновременно вернула итоговый ответ. Экспорт телеметрии отключён, в том числе при глобальном `Agent.instrument_all()`.
 
@@ -44,7 +44,7 @@ SQL-контекст читается при загрузке первого н�
 
 ## Очередь, повтор и транзакции
 
-[TimWidgetService](../backend/src/services/tim_widget.py) хранит диалоги и задания виджета, проектного интерфейса и внешнего API; [TimChatService](../backend/src/services/tim_chat.py) обслуживает общий чат. Их исполняет один [AgentWorker](../backend/src/agent/worker.py), собранный в DI. Он работает и при `KNOWLEDGE_ENABLED=false`.
+[AgentConversationsService](../backend/src/services/agent_conversations.py) хранит диалоги и задания виджета, проектного интерфейса и внешнего API; [ArisChatService](../backend/src/services/aris_chat.py) обслуживает общий чат. Их исполняет один [AgentWorker](../backend/src/agent/worker.py), собранный в DI. Он работает и при `KNOWLEDGE_ENABLED=false`.
 
 Вопрос и заготовка ответа сохраняются до вызова модели. Ответ проходит `queued → processing → completed/failed`. Захват очереди использует блокировки PostgreSQL; `run_id` защищает от завершения и записи устаревшей попытки. Истёкшее или прерванное выполнение становится ошибкой, которую пользователь может повторить. Закрытие браузера не отменяет сохранённое задание.
 
@@ -54,7 +54,14 @@ SQL-контекст читается при загрузке первого н�
 гонку при READ COMMITTED: конечный статус не показывается со старым пустым ответом.
 Допустимый итоговый ответ только карточкой сохраняется.
 
-Стабильный UUID `request_id` защищает отправку от сетевого дубля: тот же запрос возвращает прежний результат, несовместимое содержимое получает конфликт. В личном диалоге допускается один незавершённый ответ. Контракты HTTP — в [tim.py](../backend/src/api/v1/endpoints/tim.py), [agent_conversations.py](../backend/src/api/v1/endpoints/agent_conversations.py) и [agent_requests.py](../backend/src/api/v1/endpoints/agent_requests.py).
+Стабильный UUID `request_id` защищает отправку от сетевого дубля: тот же запрос возвращает прежний результат, несовместимое содержимое получает конфликт. В личном диалоге допускается один незавершённый ответ. Контракты HTTP — в [aris.py](../backend/src/api/v1/endpoints/aris.py), [agent_conversations.py](../backend/src/api/v1/endpoints/agent_conversations.py) и [agent_requests.py](../backend/src/api/v1/endpoints/agent_requests.py).
+
+У внутреннего действия без явно переданного `request_id` квитанция находится по
+ходу/реплике, пользователю, проекту, каноническому имени и нормализованным аргументам.
+Проверка актуальных прав и блокировка выполняются до поиска. При повторе берётся
+сохранённый UUID; новая операция получает идентификатор с нейтральным namespace.
+Заготовка ответа общего чата создаётся вместе с вопросом одной транзакцией;
+повтор отправки находится по пользовательскому UUID до создания второго ответа.
 
 Идемпотентность отдельного действия обеспечивают ключ вызова, advisory lock и уникальность журнала `agent_tool_runs`. Для повторной MCP-записи нужен тот же UUID и те же аргументы. Изменение домена и успешная квитанция фиксируются одной внешней транзакцией: [AgentToolUnitOfWork](../backend/src/repositories/unit_of_work.py) объединяет вложенные SAVEPOINT. Перед записью проверяются актуальная попытка и доступ. Созданные файлы компенсируются при rollback, удаление существующих откладывается до commit.
 
@@ -88,7 +95,7 @@ DB-соединение освобождается перед LLM, embeddings, Q
 
 Streamable HTTP доступен на прежнем `/mcp` основного backend и в отдельном приложении [mcp_server/app.py](../backend/src/mcp_server/app.py). Отдельный процесс запускается из `backend` командой `python -m src.mcp_server.worker` (`MCP_HOST`, `MCP_PORT=8021`), Compose — `docker compose --profile mcp up -d mcp`. Для queued `telos_ask_aris` нужен работающий backend с AgentWorker. `/health` и `/health/live` проверяют процесс, `/health/ready` — доступность PostgreSQL.
 
-MCP принимает локальный Bearer-токен или `X-API-Key`. Токены `tt_` имеют права READ/WRITE, ключи `ttk_` действуют от владельца с выбранными scopes; `actor` не позволяет сменить пользователя. Все инструменты MCP и Ариса имеют единственные имена `telos_<действие>_<сущность>`, проверяемые при регистрации. Реестр MCP — [registry.py](../backend/src/mcp_server/registry.py); каталог действий Ариса — [action_catalog.py](../backend/src/agent/action_catalog.py).
+HTTP и MCP принимают ключи через `Authorization: Bearer`. READ/WRITE-токен имеет формат `telos_token_<secret>`, ключ с выбранными scopes — `telos_key_<8 hex>_<32 hex>`. Публичный `key_prefix` содержит только восемь hex-символов; отображаемый префикс токена — восемь случайных символов после маркера. Ключ действует от владельца; `actor` не позволяет сменить пользователя. Все инструменты MCP и Ариса имеют единственные имена `telos_<действие>_<сущность>`, проверяемые при регистрации. Реестр MCP — [registry.py](../backend/src/mcp_server/registry.py); каталог действий Ариса — [action_catalog.py](../backend/src/agent/action_catalog.py).
 
 `telos_list_project_tools` раскрывает каталог и схемы; `telos_execute_project_tool` исполняет общие действия. Доступ к проекту и ресурсу проверяется при каждом вызове. Инструменты без регистрации прав закрыты для новых ключей. Все scopes заданы в [api_scopes.py](../backend/src/utils/api_scopes.py); управление ключами и токенами доступно только из локальной сессии. Секрет показывается при выпуске один раз, в БД хранится хэш.
 
@@ -162,7 +169,7 @@ Codex этим экспериментом не проверялись. Клие�
 ### Создание проекта через MCP
 
 `telos_create_project` работает без контекста существующего проекта. Обязательны
-`key`, `name` и UUID `request_id`; для `ttk_` требуется `projects:write`.
+`key`, `name` и UUID `request_id`; для `telos_key_` требуется `projects:write`.
 Прежний WRITE-токен сохраняет право создания, READ-токен его не получает.
 Владелец определяется сервером по текущему пользователю; неизвестные параметры,
 в том числе попытка передать другого владельца, отклоняются.
@@ -201,7 +208,7 @@ UUID и исходные аргументы нужно сохранить до �
 В MCP доступен `telos_get_latest_project_summary(project_key)` с правом
 `projects:read`; то же действие можно вызвать через `telos_execute_project_tool`
 с `name="telos_get_latest_project_summary"` и `arguments={}`. UUID повтора и право
-записи не требуются. Основные и прежние READ/WRITE-токены и `ttk_`-ключи
+записи не требуются. READ/WRITE-токены `telos_token_` и `telos_key_`-ключи
 используют текущие права локального владельца.
 
 Результат: `found`, полный `report` в формате `AnalyticsReportSchema`,
@@ -257,8 +264,8 @@ HTTP и агент используют общий `AnalyticsReportReader.get_la
 возвращает актуальную версию.
 
 Изменения через общие сервисы, переносы и пакетные операции повышают версию.
-Прежние клиенты без `expected_revision` продолжают работать и повышают её,
-но сами не получают защиты от устаревших правок. Чек-лист и итоговый отчёт
+Без `expected_revision` выполняется безусловная правка с повышением версии;
+проверка устаревшей версии включается передачей этого параметра. Чек-лист и итоговый отчёт
 сохраняют отдельные контракты версий. В карточке UI версия фиксируется при
 открытии черновика заголовка, описания или дат; конфликт сохраняет черновик
 и предлагает перечитать задачу без автоматической повторной записи.
@@ -329,7 +336,7 @@ fallback; это позволяет сравнивать обычный `openai`
 `AGENT_REASONING_ENABLED=false` выключает thinking, `AGENT_REASONING_EFFORT=none`
 передаёт соответствующий уровень в унифицированном объекте Polza `reasoning`.
 
-Основные проверки контрактов: [runtime/WriteGate](../backend/tests/unit/knowledge/test_tim_runtime.py), [MCP scopes и подтверждения](../backend/tests/unit/mcp_server/test_personal_mcp_contract.py), [сквозной PostgreSQL smoke](../backend/tests/integration/repositories/test_personal_workspace_smoke.py). Эти проверки с контролируемой моделью не заменяют оценку качества live LLM.
+Основные проверки контрактов: [runtime/WriteGate](../backend/tests/unit/knowledge/test_aris_runtime.py), [MCP scopes и подтверждения](../backend/tests/unit/mcp_server/test_personal_mcp_contract.py), [сквозной PostgreSQL smoke](../backend/tests/integration/repositories/test_personal_workspace_smoke.py). Эти проверки с контролируемой моделью не заменяют оценку качества live LLM.
 
 После изменяющего инструмента каталог обновляется до регистрации его текущего
 результата: новая сущность сразу получает проверенный `source_handle` для

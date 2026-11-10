@@ -1,9 +1,9 @@
 import type { BoardEditorState } from "@/lib/board/metadata";
-import type { ProjectStickerCreateInput, ProjectSticker } from "@/lib/board/stickers";
+import type { BoardStickerCreateInput, BoardSticker } from "@/lib/board/stickers";
 
 /** Доски проекта и фигуры на них — по контракту docs/boards-contract.md. */
 
-export interface ProjectBoard {
+export interface Board {
     id: number;
     project_id: number | null;
     title: string;
@@ -63,8 +63,8 @@ export interface BoardShape {
 }
 
 export interface BoardContent {
-    board: ProjectBoard;
-    stickers: ProjectSticker[];
+    board: Board;
+    stickers: BoardSticker[];
     shapes: BoardShape[];
 }
 
@@ -91,8 +91,8 @@ export type BatchOp =
     | { op: "create_shape"; client_id: string; data: ShapeData }
     | { op: "update_shape"; id: number; revision?: number; data: ShapeData }
     | { op: "delete_shape"; id: number; revision?: number }
-    | { op: "create_sticker"; client_id: string; data: ProjectStickerCreateInput }
-    | { op: "update_sticker"; id: number; revision: number; data: ProjectStickerCreateInput }
+    | { op: "create_sticker"; client_id: string; data: BoardStickerCreateInput }
+    | { op: "update_sticker"; id: number; revision: number; data: BoardStickerCreateInput }
     | { op: "delete_sticker"; id: number; revision: number }
     | { op: "move_sticker"; id: number; data: { canvas_x: number; canvas_y: number; width?: number; height?: number; z_index?: number } };
 
@@ -103,12 +103,12 @@ export interface BatchResponse {
     deleted_shape_ids: number[];
     deleted_sticker_ids?: number[];
     editor_state?: BoardEditorState | null;
-    stickers: ProjectSticker[];
+    stickers: BoardSticker[];
     id_map: Record<string, number>;
 }
 
 export interface ToStickerResponse {
-    sticker: ProjectSticker;
+    sticker: BoardSticker;
     updated_shapes: BoardShape[];
 }
 

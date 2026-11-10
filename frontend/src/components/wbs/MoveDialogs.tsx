@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Field";
 
-interface MoveTaskDialogProps {
+interface TransferTaskDialogProps {
     taskKey: string;
     roots: WbsTreeNode[];
     currentNodeId: number | null;
@@ -15,14 +15,14 @@ interface MoveTaskDialogProps {
 }
 
 /** Перенос задачи в раздел без мыши — обязательная альтернатива drag & drop. */
-export function MoveTaskDialog({
+export function TransferTaskDialog({
     taskKey,
     roots,
     currentNodeId,
     isOpen,
     onClose,
     onSubmit,
-}: MoveTaskDialogProps) {
+}: TransferTaskDialogProps) {
     const [search, setSearch] = useState("");
     const [selected, setSelected] = useState<string>(
         currentNodeId === null ? "" : String(currentNodeId),

@@ -10,10 +10,10 @@ from pathlib import Path
 
 from src.clients.llm import LlmClient
 from src.clients.vision import VisionCapability
+from src.exceptions.ai import AiProviderError
 from src.exceptions.api_keys import ApiKeyRouteNotAllowedError
 from src.exceptions.base import RepositoryError
 from src.exceptions.clients import ClientError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.projects import ProjectNotFoundError
 from src.exceptions.storage import TaskAttachmentStorageError
 from src.exceptions.tasks import (
@@ -125,7 +125,7 @@ class TaskChecklistSuggestionService:
             TaskContextFileError: Превышены ограничения файлов.
             TasksServiceError: Ошибка чтения.
             TaskChecklistGenerationError: Некорректный ответ модели.
-            KnowledgeProviderError: AI-провайдер недоступен.
+            AiProviderError: AI-провайдер недоступен.
         """
         warnings: list[str] = []
         files = [TaskRephraseFile(name=file.name[:512], content=file.content) for file in files]
@@ -224,7 +224,7 @@ class TaskChecklistSuggestionService:
                 warnings.append(f"Не удалось прочитать содержимое файла «{file.name}».")
                 continue
             except ClientError as error:
-                raise KnowledgeProviderError(str(error)) from error
+                raise AiProviderError(str(error)) from error
             if not extracted:
                 warnings.append(f"В файле «{file.name}» нет доступного текста.")
                 continue
@@ -258,7 +258,7 @@ class TaskChecklistSuggestionService:
             draft = ChecklistSuggestionDraftSchema.model_validate(draft)
         except ClientError as error:
             logger.error("❌ AI-провайдер недоступен при генерации чек-листа.", exc_info=True)
-            raise KnowledgeProviderError(str(error)) from error
+            raise AiProviderError(str(error)) from error
         except Exception as error:
             logger.error("❌ Некорректный AI-черновик чек-листа.", exc_info=True)
             raise TaskChecklistGenerationError(str(error)) from error

@@ -15,7 +15,7 @@ import {
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { CalendarDays, Filter, FolderKanban, Inbox, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CalendarPulseChips, type PulseChip } from "@/components/calendar/CalendarPulseChips";
+import { CalendarSummaryChips, type CalendarSummaryChip } from "@/components/calendar/CalendarSummaryChips";
 import { CalendarSidePanel } from "@/components/calendar/CalendarSidePanel";
 import { CalendarTask } from "@/components/calendar/CalendarTask";
 import { CalendarToolbar } from "@/components/calendar/CalendarToolbar";
@@ -157,7 +157,7 @@ function MyTasksCalendar() {
     const isPhone = useMediaQuery("(max-width: 1023px)");
     const isTouch = useMediaQuery("(pointer: coarse)");
     const viewState = useCalendarViewState(
-        isPhone ? "tt.calendar.my.view.phone" : "tt.calendar.my.view",
+        isPhone ? "telos.calendar.my.view.phone" : "telos.calendar.my.view",
         { view: "grid", gridScale: isPhone ? "week" : "month", timelineScale: "month" },
         today,
     );
@@ -169,8 +169,8 @@ function MyTasksCalendar() {
         [date, gridScale, timelineScale, view],
     );
     const { holidays } = useHolidays(range);
-    const [colorMode, setColorMode] = useStoredChoice<ColorMode>("tt.calendar.my.color", COLOR_MODES, "project");
-    const [isPanelOpen, setPanelOpen] = useStoredFlag("tt.calendar.my.panel", false);
+    const [colorMode, setColorMode] = useStoredChoice<ColorMode>("telos.calendar.my.color", COLOR_MODES, "project");
+    const [isPanelOpen, setPanelOpen] = useStoredFlag("telos.calendar.my.panel", false);
     const [createDate, setCreateDate] = useState<string | null>(null);
     const [activeTask, setActiveTask] = useState<CalendarGridTask | null>(null);
     const [deadlineTask, setDeadlineTask] = useState<CalendarGridTask | null>(null);
@@ -332,7 +332,7 @@ function MyTasksCalendar() {
     const overdue = summary?.overdue ?? tasks.filter((task) => task.is_overdue && !task.is_done).length;
     const dueInPeriod = tasks.filter((task) => task.due_date !== null && task.due_date >= range.dateFrom && task.due_date <= range.dateTo).length;
     const unscheduledCount = summary?.unscheduled ?? unscheduledTasks.length;
-    const chips: PulseChip[] = [
+    const chips: CalendarSummaryChip[] = [
         { id: "period", label: `${dueInPeriod} ${plural(dueInPeriod, "срок", "срока", "сроков")} в периоде`, title: "Ваших задач со сроком в показанном периоде", tone: "muted" },
         ...(overdue > 0 ? [{ id: "overdue", label: `${overdue} просрочено`, title: "Ваши незавершённые задачи с прошедшим сроком — по всем периодам", tone: "danger" as const }] : []),
         ...(summary && summary.due_soon > 0 ? [{ id: "soon", label: `${summary.due_soon} на 7 дней`, title: "Ваши задачи со сроком в ближайшие 7 дней", tone: "warn" as const }] : []),
@@ -435,7 +435,7 @@ function MyTasksCalendar() {
                         {isPanelOpen ? <PanelRightClose size={14} aria-hidden="true" /> : <PanelRightOpen size={14} aria-hidden="true" />}
                     </IconButton>
                 </CalendarToolbar>
-                <CalendarPulseChips chips={chips} />
+                <CalendarSummaryChips chips={chips} />
             </div>
             <DndContext
                 sensors={sensors}
@@ -589,7 +589,7 @@ function PortfolioCalendarView() {
     const projects = query.data?.projects ?? [];
     const overdue = projects.reduce((sum, project) => sum + project.overdue_tasks, 0);
     const late = projects.filter((project) => project.due_date !== null && project.due_date < today && project.status !== "COMPLETED" && project.status !== "ARCHIVED").length;
-    const chips: PulseChip[] = [
+    const chips: CalendarSummaryChip[] = [
         { id: "projects", label: `${projects.length} ${plural(projects.length, "проект", "проекта", "проектов")}`, title: "Проекты, которые вам видны", tone: "muted" },
         ...(overdue > 0 ? [{ id: "overdue", label: `${overdue} просроченных задач`, title: "Сумма просроченных задач по проектам", tone: "danger" as const }] : []),
         ...(late > 0 ? [{ id: "late", label: `${late} с прошедшим сроком проекта`, title: "Срок проекта прошёл, а проект не завершён", tone: "warn" as const }] : []),
@@ -607,7 +607,7 @@ function PortfolioCalendarView() {
                     onPrevious={() => update({ date: shiftTimelineAnchor(date, scale, -1) })}
                     onNext={() => update({ date: shiftTimelineAnchor(date, scale, 1) })}
                 />
-                <CalendarPulseChips chips={chips} />
+                <CalendarSummaryChips chips={chips} />
             </div>
             <div className="flex min-h-0 flex-1 flex-col p-2 sm:p-3 [@media(max-height:500px)]:min-h-[180px] [@media(max-height:500px)]:shrink-0">
                 {query.error && <ErrorMessage message={(query.error as Error).message} />}

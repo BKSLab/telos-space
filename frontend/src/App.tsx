@@ -1,9 +1,8 @@
-import { MyApiKeysPage } from "@/routes/MyApiKeysPage";
 import { MyTasksPage } from "@/routes/MyTasksPage";
 import { TaskAttentionProvider } from "@/components/tasks/TaskAttentionProvider";
 import { AgentConfirmModal } from "@/components/agent/AgentConfirmModal";
 import { Suspense, lazy } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { ChatWorkspace } from "@/components/chat/ChatWorkspace";
 import { AuthGuard } from "@/components/layout/AuthGuard";
@@ -16,12 +15,11 @@ import { TasksListPage } from "@/routes/TasksListPage";
 import { ProjectDocumentsPage } from "@/routes/ProjectDocumentsPage";
 import { DocumentDetailPage } from "@/routes/DocumentDetailPage";
 import { ProjectSettingsPage } from "@/routes/ProjectSettingsPage";
-import { ProjectAgentPage } from "@/routes/ProjectAgentPage";
+import { ProjectConversationsPage } from "@/routes/ProjectConversationsPage";
+import { ProjectKnowledgePage } from "@/routes/ProjectKnowledgePage";
 import { ProjectChatPage } from "@/routes/ProjectChatPage";
-import { ProjectChatRedirect } from "@/components/chat/ProjectChatRedirect";
-import { ProjectPulsePage } from "@/routes/ProjectPulsePage";
+import { ProjectOverviewPage } from "@/routes/ProjectOverviewPage";
 import { ProjectRisksPage } from "@/routes/ProjectRisksPage";
-import { McpPage } from "@/routes/McpPage";
 import { ProfilePage } from "@/routes/ProfilePage";
 import { LoginPage } from "@/routes/LoginPage";
 import { RegisterPage } from "@/routes/RegisterPage";
@@ -70,7 +68,7 @@ function CalendarFallback() {
     );
 }
 
-function ProjectBoardFallback() {
+function BoardFallback() {
     return (
         <div role="status" aria-label="Загрузка доски" className="p-4 sm:p-5">
             <Skeleton className="mb-5 h-10 w-56" />
@@ -93,18 +91,14 @@ function ProtectedApp() {
                         <Routes>
                             <Route path="/" element={<PortfolioPage />} />
                             <Route path="/chat" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><GlobalChatPage /></Suspense>} />
-                            <Route path="/boards" element={<Suspense fallback={<ProjectBoardFallback />}><FreeBoardsPage /></Suspense>} />
+                            <Route path="/boards" element={<Suspense fallback={<BoardFallback />}><FreeBoardsPage /></Suspense>} />
                             <Route path="/my-tasks" element={<MyTasksPage />} />
                             <Route path="/calendar" element={<Suspense fallback={<CalendarFallback />}><MyCalendarPage /></Suspense>} />
-                            <Route path="/my/tasks" element={<Navigate to="/my-tasks" replace />} />
-                            <Route path="/projects" element={<Navigate to="/?view=projects" replace />} />
                             <Route path="/projects/new" element={<NewProjectPage />} />
                             <Route path="/profile" element={<ProfilePage />} />
                             <Route path="/help/:sectionId?" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><HelpPage /></Suspense>} />
-                            <Route path="/my-api-keys" element={<MyApiKeysPage />} />
-                            <Route path="/mcp" element={<McpPage />} />
                             <Route path="/projects/:projectKey" element={<ProjectLayout />}>
-                                <Route index element={<ProjectPulsePage />} />
+                                <Route index element={<ProjectOverviewPage />} />
                                 <Route path="team" element={<ProjectTeamPage />} />
                                 <Route path="board" element={<BoardPage />} />
                                 <Route path="tasks" element={<TasksListPage />} />
@@ -128,16 +122,16 @@ function ProtectedApp() {
                                 <Route
                                     path="whiteboard"
                                     element={
-                                        <Suspense fallback={<ProjectBoardFallback />}>
+                                        <Suspense fallback={<BoardFallback />}>
                                             <ProjectBoardPage />
                                         </Suspense>
                                     }
                                 />
                                 <Route path="docs" element={<ProjectDocumentsPage />} />
                                 <Route path="docs/:slug" element={<DocumentDetailPage />} />
-                                <Route path="agent" element={<ProjectAgentPage />} />
                                 <Route path="chat" element={<ProjectChatPage />} />
-                                <Route path="knowledge" element={<ProjectChatRedirect view="knowledge" />} />
+                                <Route path="conversations" element={<ProjectConversationsPage />} />
+                                <Route path="knowledge" element={<ProjectKnowledgePage />} />
                                 <Route path="settings" element={<ProjectSettingsPage />} />
                             </Route>
                             <Route path="*" element={<NotFoundPage />} />

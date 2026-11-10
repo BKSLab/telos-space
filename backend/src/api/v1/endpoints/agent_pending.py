@@ -1,7 +1,6 @@
 """Подтверждение действий агента по ссылке ``?confirm=<id>`` (#40793).
 
-Ссылку получает человек, у которого нет чата агента трекера: например, агента
-позвал менеджерский агент внешний клиент. Решает только сам инициатор и только
+Ссылку получает пользователь, вызвавший Ариса через внешнего клиента. Решает только сам инициатор и только
 из интерфейса (вход через локальную сессию): токенам и сервисным ключам эти методы закрыты,
 иначе вызвавший агент подтвердил бы себе опасное действие сам.
 """
@@ -21,17 +20,17 @@ from src.schemas.agent_tools import AgentPendingActionSchema
 
 logger = logging.getLogger(__name__)
 
-CROSS_SITE_DECISION = "Решение принимается только со страницы трекера."
+CROSS_SITE_DECISION = "Решение принимается только со страницы TELOS SPACE."
 
 
 def require_same_origin(request: Request, settings: SettingsDep) -> None:
     """Отклоняет решение, отправленное со стороннего сайта от имени вошедшего человека.
 
-    Вход держится на cookie прокси локальную сессию, поэтому чужая страница могла бы отправить
+    Вход держится на cookie локальной сессии, поэтому чужая страница могла бы отправить
     форму на этот адрес. ``Sec-Fetch-Site: same-origin`` ставит сам браузер, страница
     его не подделает — так проходит и dev-прокси Vite, где ``Origin`` фронта не
     совпадает с ``Host`` бэкенда. Иначе сверяем ``Origin`` (браузер ставит его у POST)
-    с адресом трекера и разрешёнными источниками CORS, как у WebSocket чата.
+    с адресом TELOS SPACE и разрешёнными источниками CORS, как у WebSocket чата.
     """
     fetch_site = request.headers.get("sec-fetch-site")
     if fetch_site == "same-origin":
@@ -45,7 +44,7 @@ def require_same_origin(request: Request, settings: SettingsDep) -> None:
         raise HTTPException(status_code=403, detail=CROSS_SITE_DECISION)
 
 
-router = APIRouter(prefix="/agent/pending", tags=["project agent"])
+router = APIRouter(prefix="/aris/pending", tags=["aris"])
 
 ActionIdPath = Annotated[UUID, Path(description="ID действия из ссылки ?confirm=.")]
 ERRORS = {
@@ -74,9 +73,9 @@ DECISION_ERRORS = {
     "/{action_id}",
     response_model=AgentPendingActionSchema,
     summary="Действие агента, ожидающее подтверждения",
-    description="Что именно предложил сделать агент, в каком проекте, состояние и срок подтверждения. Доступно только пользовательу, от чьего имени шёл запрос; чужое действие — 404.",
+    description="Что именно предложил сделать агент, в каком проекте, состояние и срок подтверждения. Доступно только пользователю, от чьего имени шёл запрос; чужое действие — 404.",
     response_description="Предложенное действие.",
-    operation_id="getPendingAgentAction",
+    operation_id="getPendingArisAction",
     responses=ERRORS,
 )
 async def get_pending_action(
@@ -122,7 +121,7 @@ async def _decide(action_id: UUID, decision: str, principal, service) -> AgentPe
     summary="Подтвердить действие агента",
     description="Выполняет действие ровно с сохранёнными параметрами — тело запроса не принимается. Повторное решение — 409, истёкший срок — 410, чужое действие — 404.",
     response_description="Действие после выполнения.",
-    operation_id="confirmPendingAgentAction",
+    operation_id="confirmPendingArisAction",
     responses=DECISION_ERRORS,
 )
 async def confirm_pending_action(
@@ -139,7 +138,7 @@ async def confirm_pending_action(
     summary="Отклонить действие агента",
     description="Закрывает предложение без изменений в проекте. Отклонить можно и просроченное; повторное решение — 409, чужое действие — 404.",
     response_description="Действие после отклонения.",
-    operation_id="rejectPendingAgentAction",
+    operation_id="rejectPendingArisAction",
     responses=DECISION_ERRORS,
 )
 async def reject_pending_action(

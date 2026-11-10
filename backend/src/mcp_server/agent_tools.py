@@ -1,15 +1,15 @@
-"""Арис (проектный менеджер) как субагент внешнего клиента (#40793).
+"""Обращение внешнего клиента к Арису, проектному менеджеру TELOS SPACE.
 
-вызывающий клиент (менеджерский агент внешнего клиента) передаёт сюда всё про задачи сотрудника одной
-фразой, не разбираясь в проектах и инструментах трекера: агент трекера сам
-находит проект, проверяет права сотрудника и делает. Вопрос встаёт в общую
+Клиент передаёт вопрос и дословную реплику пользователя. Арис выбирает
+доступный проект или личную область и проверяет права владельца ключа.
+Вопрос встаёт в общую
 очередь ответов агента (её обрабатывает backend), вызов ждёт готового ответа
 до ``AGENT_ASK_WAIT_SECONDS`` и иначе отдаёт ``request_id`` для
 ``telos_get_aris_result``.
 
 Право ключа — ``agent:ask``. Изменения агент делает только по дословной
-реплике сотрудника ``user_text`` и только в пределах остальных прав ключа.
-REST-двойники — ``POST /api/v1/agent/ask`` и ``GET /api/v1/agent/requests/{id}``.
+реплике пользователя ``user_text`` и только в пределах остальных прав ключа.
+REST — ``POST /api/v1/aris/requests`` и ``GET /api/v1/aris/requests/{id}``.
 """
 
 import logging
@@ -25,7 +25,7 @@ from src.exceptions.auth import AuthServiceError
 from src.mcp_server.context import tool_context
 from src.mcp_server.registry import telos_tool
 from src.mcp_server.write_tools import Actor
-from src.schemas.agent_conversations import TimPageContextSchema
+from src.schemas.agent_conversations import AgentPageContextSchema
 from src.schemas.agent_requests import AgentAskSchema
 from src.services.agent_requests import principal_key_id, principal_key_scopes
 from src.utils.api_scopes import SCOPE_AGENT_ASK
@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 RESULT_HINT = (
     "Ответ: status (completed — готово; queued/processing — ещё готовится, спроси "
     "telos_get_aris_result с request_id позже; failed — ошибка в error), answer — полный "
-    "текст для сотрудника со ссылками на задачи, links — задачи ответа, done — выполненные "
-    "действия, pending — предложенные действия: передай сотруднику confirm_url, он сам "
+    "текст для пользователя со ссылками на задачи, links — задачи ответа, done — выполненные "
+    "действия, pending — предложенные действия: передай пользователю confirm_url, он сам "
     "подтвердит или отклонит. Не утверждай, что pending выполнено."
 )
 
@@ -46,20 +46,20 @@ RESULT_HINT = (
     title="Спросить Ариса — проектного менеджера",
     description=(
         "Передай Арису — проектному менеджеру — любой вопрос или "
-        "поручение сотрудника про его проекты, "
+        "поручение пользователя про его проекты, "
         "задачи, сроки, разовые задачи — одной фразой. Агент сам найдёт проект "
-        "(по ключу задачи вида PROJ-12 или по смыслу), проверит права сотрудника и сделает; "
+        "(по ключу задачи вида PROJ-12 или по смыслу), проверит права пользователя и сделает; "
         "если неясно, о каком проекте речь, — задаст уточняющий вопрос. Менять данные он "
-        "будет только по дословной реплике сотрудника в user_text; без user_text — только "
-        "чтение. Опасные действия (удаление) не выполняются сразу: сотрудник подтверждает их "
-        "сам по ссылке. Держи один conversation_id на одну беседу с сотрудником. Если "
-        "сотрудник смотрит трекер (встройка прислала контекст страницы), передай page_context — "
+        "будет только по дословной реплике пользователя в user_text; без user_text — только "
+        "чтение. Опасные действия (удаление) не выполняются сразу: пользователь подтверждает их "
+        "сам по ссылке. Держи один conversation_id на одну беседу с пользователем. Если "
+        "известен контекст страницы пользователя, передай page_context — "
         "тогда «эта задача» и «этот проект» поймутся без ключа. " + RESULT_HINT
     ),
     scope=SCOPE_AGENT_ASK,
     write=False,
 )
-async def projects_ask(
+async def ask_aris(
     context: Context,
     text: Annotated[
         str,
@@ -76,8 +76,8 @@ async def projects_ask(
         str | None,
         Field(
             description=(
-                "Дословная реплика сотрудника, без пересказа. Только она разрешает агенту "
-                "изменения; не передавай её, если сотрудник ничего не поручал."
+                "Дословная реплика пользователя, без пересказа. Только она разрешает агенту "
+                "изменения; не передавай её, если пользователь ничего не поручал."
             ),
             max_length=8000,
         ),
@@ -93,10 +93,10 @@ async def projects_ask(
         ),
     ] = None,
     page_context: Annotated[
-        TimPageContextSchema | None,
+        AgentPageContextSchema | None,
         Field(
             description=(
-                "Экран трекера, открытый у сотрудника: route, project_key, task_id, board_id "
+                "Экран трекера, открытый у пользователя: route, project_key, task_id, board_id "
                 "из последнего контекст страницы. «Эта задача» — task_id. Прав не даёт: чужое "
                 "молча игнорируется; ключ задачи в тексте главнее."
             ),
@@ -104,7 +104,7 @@ async def projects_ask(
     ] = None,
     actor: Actor = None,
 ) -> dict:
-    """Задаёт вопрос агенту трекера от имени сотрудника."""
+    """Задаёт вопрос агенту трекера от имени пользователя."""
     try:
         data = AgentAskSchema(
             text=text,
@@ -149,13 +149,13 @@ async def projects_ask(
     title="Результат вопроса Арису",
     description=(
         "Результат вопроса, заданного через telos_ask_aris, по его request_id — когда ответ "
-        "не успел за время вызова. Доступен только тому ключу и сотруднику, что задали вопрос. "
+        "не успел за время вызова. Доступен только тому ключу и пользователю, что задали вопрос. "
         + RESULT_HINT
     ),
     scope=SCOPE_AGENT_ASK,
     write=False,
 )
-async def projects_result(
+async def get_aris_result(
     context: Context,
     request_id: Annotated[str, Field(description="request_id из ответа telos_ask_aris.")],
     actor: Actor = None,

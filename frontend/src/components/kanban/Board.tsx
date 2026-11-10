@@ -84,7 +84,7 @@ export function Board({
 
     const moveMutation = useMutation({
         mutationFn: ({ taskId, stageId, position }: MoveVariables) =>
-            api.patch<Task>(endpoints.taskMove(taskId), { stage_id: stageId, position }),
+            api.patch<Task>(endpoints.taskStagePlacement(taskId), { stage_id: stageId, position }),
         onMutate: async (variables) => {
             await queryClient.cancelQueries({ queryKey: tasksKey });
             const previous = queryClient.getQueryData<Task[]>(tasksKey);

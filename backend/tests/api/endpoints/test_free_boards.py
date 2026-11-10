@@ -8,20 +8,20 @@ from httpx import AsyncClient
 from main import app
 from src.dependencies.services import (
     get_board_shapes_service,
-    get_project_boards_service,
-    get_project_stickers_service,
+    get_board_stickers_service,
+    get_boards_service,
 )
-from src.exceptions.project_boards import ProjectBoardNotFoundError
-from src.exceptions.project_stickers import FreeBoardTaskLinksError
-from src.schemas.project_boards import ProjectBoardSchema
+from src.exceptions.board_stickers import FreeBoardTaskLinksError
+from src.exceptions.boards import BoardNotFoundError
+from src.schemas.boards import BoardSchema
 from src.services.board_shapes import BoardShapesService
-from src.services.project_boards import ProjectBoardsService
-from src.services.project_stickers import ProjectStickersService
+from src.services.board_stickers import BoardStickersService
+from src.services.boards import BoardsService
 
 
-def free_board_schema() -> ProjectBoardSchema:
+def free_board_schema() -> BoardSchema:
     now = datetime.now(UTC)
-    return ProjectBoardSchema(
+    return BoardSchema(
         id=7,
         project_id=None,
         title="Набросок",
@@ -34,11 +34,11 @@ def free_board_schema() -> ProjectBoardSchema:
 
 
 async def test_free_board_routes_take_owner_from_session(api_client: AsyncClient) -> None:
-    service = AsyncMock(spec=ProjectBoardsService)
+    service = AsyncMock(spec=BoardsService)
     service.list_free_boards.return_value = [free_board_schema()]
     service.create_free_board.return_value = free_board_schema()
-    service.get_free_content.side_effect = ProjectBoardNotFoundError(7)
-    app.dependency_overrides[get_project_boards_service] = lambda: service
+    service.get_free_content.side_effect = BoardNotFoundError(7)
+    app.dependency_overrides[get_boards_service] = lambda: service
 
     listed = await api_client.get("/api/v1/boards")
     created = await api_client.post("/api/v1/boards", json={"title": "Набросок"})
@@ -60,10 +60,10 @@ async def test_free_board_routes_take_owner_from_session(api_client: AsyncClient
 
 
 async def test_free_board_stickers_and_shapes_pass_no_project(api_client: AsyncClient) -> None:
-    stickers = AsyncMock(spec=ProjectStickersService)
+    stickers = AsyncMock(spec=BoardStickersService)
     stickers.create_sticker.side_effect = FreeBoardTaskLinksError()
     shapes = AsyncMock(spec=BoardShapesService)
-    app.dependency_overrides[get_project_stickers_service] = lambda: stickers
+    app.dependency_overrides[get_board_stickers_service] = lambda: stickers
     app.dependency_overrides[get_board_shapes_service] = lambda: shapes
 
     linked = await api_client.post(

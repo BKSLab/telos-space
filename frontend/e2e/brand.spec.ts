@@ -31,7 +31,7 @@ test("вход и регистрация представляют TELOS SPACE н
 test("логотип доступен в полной, свёрнутой и мобильной навигации", async ({ page }, info) => {
     await installMockApi(page, mockState());
     await page.route("https://fonts.gstatic.com/**", route => route.abort());
-    await page.goto("/projects");
+    await page.goto("/");
     const logo = page.getByRole("img", { name: "TELOS SPACE", exact: true });
     await expect(logo).toBeVisible();
     await expect(logo).toHaveAttribute("src", "/brand/telos-logo.svg");

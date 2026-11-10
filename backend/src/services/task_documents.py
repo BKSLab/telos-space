@@ -5,11 +5,12 @@ import logging
 from pathlib import Path
 
 from src.clients.vision import VisionCapability
+from src.exceptions.ai import AiProviderError
 from src.exceptions.base import ServiceError
 from src.exceptions.clients import ClientError
 from src.exceptions.document_links import DocumentLinksServiceError
 from src.exceptions.documents import DocumentsServiceError
-from src.exceptions.knowledge import KnowledgeIndexJobsRepositoryError, KnowledgeProviderError
+from src.exceptions.knowledge import KnowledgeIndexJobsRepositoryError
 from src.exceptions.storage import StorageError
 from src.exceptions.task_attachments import TaskAttachmentsServiceError
 from src.exceptions.task_documents import (
@@ -105,7 +106,7 @@ class TaskDocumentImportService:
             TaskDocumentUnsupportedFormatError: Если формат не индексируется
                 или в файле не нашлось текста.
             TaskDocumentStepFailedError: Если отказал вложенный шаг импорта.
-            KnowledgeProviderError: Если vision-модель недоступна.
+            AiProviderError: Если vision-модель недоступна.
         """
         # Первая короткая DB-фаза: читаем задачу и закрываем область до
         # распознавания файла, которое может длиться сотни секунд.
@@ -211,7 +212,7 @@ class TaskDocumentImportService:
             ) from error
         except ClientError as error:
             logger.error("❌ Vision недоступен при импорте документа.", exc_info=True)
-            raise KnowledgeProviderError(str(error)) from error
+            raise AiProviderError(str(error)) from error
         if not extracted:
             raise TaskDocumentUnsupportedFormatError(
                 f"В «{safe_name}» не удалось найти текст для документа проекта."

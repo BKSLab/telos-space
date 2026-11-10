@@ -76,13 +76,13 @@ async def test_credentials_reach_the_preflight(
         )
     )
 
-    await api_client.get(CONTENT_PATH, headers={"Authorization": "Bearer tt_secret"})
+    await api_client.get(CONTENT_PATH, headers={"Authorization": "Bearer telos_token_secret"})
 
     assert service.calls, "Сервис подготовки не был вызван."
     call = service.calls[-1]
     assert call["task_id"] == 1
     assert call["attachment_id"] == 4
-    assert call["bearer_secret"] == "tt_secret"
+    assert call["bearer_secret"] == "telos_token_secret"
 
 
 async def test_download_sets_disposition_and_nosniff(api_client: AsyncClient, stored_file: Path) -> None:

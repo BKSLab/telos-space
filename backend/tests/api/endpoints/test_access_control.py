@@ -19,10 +19,10 @@ PROTECTED_REQUESTS = [
     ("post", "/api/v1/projects/1/members"),
     ("delete", "/api/v1/projects/1/members/2"),
     ("get", "/api/v1/projects/1/members/2/avatar"),
-    ("get", "/api/v1/projects/1/board/stickers"),
-    ("post", "/api/v1/projects/1/board/stickers"),
-    ("patch", "/api/v1/projects/1/board/stickers/1"),
-    ("delete", "/api/v1/projects/1/board/stickers/1?revision=1"),
+    ("get", "/api/v1/projects/1/boards/3/stickers"),
+    ("post", "/api/v1/projects/1/boards/3/stickers"),
+    ("patch", "/api/v1/projects/1/boards/3/stickers/1"),
+    ("delete", "/api/v1/projects/1/boards/3/stickers/1?revision=1"),
     ("get", "/api/v1/projects/1/stages"),
     ("get", "/api/v1/projects/1/tasks"),
     ("get", "/api/v1/projects/1/wbs"),
@@ -78,7 +78,7 @@ async def test_invalid_session_cookie_is_rejected(
 ) -> None:
     response = await api_client.get(
         "/api/v1/auth/me",
-        cookies={"tracker_session": "not.a.valid.token"},
+        cookies={"telos_session": "not.a.valid.token"},
     )
 
     assert response.status_code == 401

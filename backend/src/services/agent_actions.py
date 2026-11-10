@@ -26,7 +26,7 @@ from src.exceptions.agent_tools import (
     AgentToolsServiceError,
 )
 from src.exceptions.base import RepositoryError, ServiceError
-from src.exceptions.project_stickers import ProjectStickerNotFoundError
+from src.exceptions.board_stickers import BoardStickerNotFoundError
 from src.schemas.agent_tools import (
     AgentPendingActionSchema,
     AgentPendingProjectSchema,
@@ -88,7 +88,6 @@ class AgentActionsService:
                 describe_validation_error(error, definition.parameters)
             ) from error
         payload = parameters.model_dump(mode="json", exclude_unset=True)
-        request_id = self._request_id(context, name, payload) if definition.mutating else None
         logger.info(
             "🚀 Инструмент %s, проект=%s, участник=%s.", name, context.project_id, context.user_id
         )
@@ -104,6 +103,7 @@ class AgentActionsService:
             if not definition.mutating:
                 return await self._invoke(definition, db, actor, parameters)
             await self._require_execution(db, actor)
+            request_id = await self._request_id(db, actor, name, payload)
             await db.runs.lock_request(actor.project_id, actor.user_id, request_id)
             previous = await db.runs.get_request(actor.project_id, actor.user_id, request_id)
             if previous is not None:
@@ -352,7 +352,7 @@ class AgentActionsService:
         """Показывает предложенное действие его инициатору для страницы подтверждения.
 
         Args:
-            user_id: Сотрудник из входа через локальная сессия.
+            user_id: Пользователь из входа через локальная сессия.
             action_id: ID действия из ссылки ``?confirm=``.
         Returns:
             Что будет сделано, в каком проекте, состояние и срок подтверждения.
@@ -377,7 +377,7 @@ class AgentActionsService:
         Параметры из запроса не принимаются, повтор и просрочка — ошибки.
 
         Args:
-            user_id: Сотрудник из входа через локальная сессия.
+            user_id: Пользователь из входа через локальная сессия.
             action_id: ID действия из ссылки ``?confirm=``.
             decision: approve или reject.
         Returns:
@@ -434,19 +434,38 @@ class AgentActionsService:
         return definition
 
     @staticmethod
-    def _request_id(context: AgentToolContext, name: str, payload: dict) -> UUID:
+    async def _request_id(
+        db: AgentProjectToolScope, context: AgentToolContext, name: str, payload: dict
+    ) -> UUID:
+        """Использует квитанцию операции внутри заблокированного ответа.
+
+        Идентичность действия задают ответ, инструмент и проверенные аргументы.
+        Сохранённый UUID остаётся ключом повторов после перезапуска runtime.
+        """
         if not context.can_write:
             raise AgentToolAccessError("Этому вызову не разрешено изменять проект.")
-        value = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         if context.message_id is not None:
-            return uuid5(NAMESPACE_URL, f"project-agent:{context.message_id}:{name}:{value}")
-        if context.chat_turn_id is not None:
-            return uuid5(NAMESPACE_URL, f"tim-chat:{context.chat_turn_id}:{name}:{value}")
-        if context.request_id is None:
-            raise AgentToolConflictError(
-                "Для изменяющего MCP-вызова необходим стабильный request_id."
-            )
-        return context.request_id
+            receipts = await db.runs.get_for_messages([context.message_id])
+            origin = f"message:{context.message_id}"
+        elif context.chat_turn_id is not None:
+            receipts = await db.runs.get_for_turns([context.chat_turn_id])
+            origin = f"chat:{context.chat_turn_id}"
+        else:
+            if context.request_id is None:
+                raise AgentToolConflictError(
+                    "Для изменяющего MCP-вызова необходим стабильный request_id."
+                )
+            return context.request_id
+        for receipt in receipts:
+            if (
+                receipt.project_id == context.project_id
+                and receipt.user_id == context.user_id
+                and receipt.tool_name == name
+                and receipt.arguments == payload
+            ):
+                return receipt.request_id
+        value = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return uuid5(NAMESPACE_URL, f"agent-action:{origin}:{name}:{value}")
 
     @staticmethod
     async def _authorize(
@@ -540,7 +559,7 @@ class AgentActionsService:
                     sticker_id=sticker_id,
                     board_id=payload.get("board_id"),
                 )
-            except ProjectStickerNotFoundError as error:
+            except BoardStickerNotFoundError as error:
                 raise AgentToolAccessError("Стикер недоступен.") from error
             if sticker.revision != payload["revision"]:
                 raise AgentToolConflictError("Стикер изменился; получите свежую версию.")

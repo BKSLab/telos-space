@@ -107,23 +107,17 @@ export const endpoints = {
         `${V1}/projects/${projectId}/members/${userId}`,
     projectMemberAvatar: (projectId: number, userId: number) =>
         `${V1}/projects/${projectId}/members/${userId}/avatar`,
-    projectStickers: (projectId: number) => `${V1}/projects/${projectId}/board/stickers`,
-    projectSticker: (projectId: number, stickerId: number) =>
-        `${V1}/projects/${projectId}/board/stickers/${stickerId}`,
-    projectStickerPosition: (projectId: number, stickerId: number) =>
-        `${V1}/projects/${projectId}/board/stickers/${stickerId}/position`,
     projectKnowledgeStatus: (projectId: number) =>
         `${V1}/projects/${projectId}/knowledge/status`,
-    projectKnowledgeAsk: (projectId: number) => `${V1}/projects/${projectId}/knowledge/ask`,
-    agentConversations: (projectId: number) => `${V1}/projects/${projectId}/agent/conversations`,
-    agentMessages: (projectId: number, conversationId: number) =>
-        `${V1}/projects/${projectId}/agent/conversations/${conversationId}/messages`,
-    agentActionDecision: (projectId: number, conversationId: number, actionId: string) =>
-        `${V1}/projects/${projectId}/agent/conversations/${conversationId}/actions/${actionId}/decision`,
-    agentFiles: (projectId: number, conversationId: number) =>
-        `${V1}/projects/${projectId}/agent/conversations/${conversationId}/files`,
-    agentMessageRetry: (projectId: number, conversationId: number, messageId: number) =>
-        `${V1}/projects/${projectId}/agent/conversations/${conversationId}/messages/${messageId}/retry`,
+    projectArisConversations: (projectId: number) => `${V1}/projects/${projectId}/aris/conversations`,
+    projectArisMessages: (projectId: number, conversationId: number) =>
+        `${V1}/projects/${projectId}/aris/conversations/${conversationId}/messages`,
+    projectArisActionDecision: (projectId: number, conversationId: number, actionId: string) =>
+        `${V1}/projects/${projectId}/aris/conversations/${conversationId}/actions/${actionId}/decision`,
+    projectArisFiles: (projectId: number, conversationId: number) =>
+        `${V1}/projects/${projectId}/aris/conversations/${conversationId}/files`,
+    projectArisMessageRetry: (projectId: number, conversationId: number, messageId: number) =>
+        `${V1}/projects/${projectId}/aris/conversations/${conversationId}/messages/${messageId}/retry`,
     projectKnowledgeReindex: (projectId: number) =>
         `${V1}/projects/${projectId}/knowledge/reindex`,
     projectStages: (projectId: number) => `${V1}/projects/${projectId}/stages`,
@@ -146,7 +140,7 @@ export const endpoints = {
         `${V1}/projects/${projectId}/task-dependencies/${dependencyId}`,
     task: (taskId: number) => `${V1}/tasks/${taskId}`,
     taskBaseline: (taskId: number) => `${V1}/tasks/${taskId}/baseline`,
-    taskMove: (taskId: number) => `${V1}/tasks/${taskId}/move`,
+    taskStagePlacement: (taskId: number) => `${V1}/tasks/${taskId}/stage-placement`,
     taskComments: (taskId: number) => `${V1}/tasks/${taskId}/comments`,
     taskCommentsWithFiles: (taskId: number) => `${V1}/tasks/${taskId}/comments/with-files`,
     taskActivity: (taskId: number) => `${V1}/tasks/${taskId}/activity`,
@@ -184,7 +178,7 @@ export const endpoints = {
 projectIconImage: (projectId: number, version?: string | null) =>
         `${V1}/projects/${projectId}/icon-image${version ? `?v=${encodeURIComponent(version)}` : ""}`,
 projectBoards: (projectId: number) => `${V1}/projects/${projectId}/boards`,
-projectBoard: (projectId: number | null, boardId: number) => boardBase(projectId, boardId),
+board: (projectId: number | null, boardId: number) => boardBase(projectId, boardId),
 freeBoards: () => `${V1}/boards`,
 boardContent: (projectId: number | null, boardId: number) => `${boardBase(projectId, boardId)}/content`,
 boardStickers: (projectId: number | null, boardId: number) => `${boardBase(projectId, boardId)}/stickers`,
@@ -198,20 +192,20 @@ boardShape: (projectId: number | null, boardId: number, shapeId: number) =>
 boardShapeToSticker: (projectId: number | null, boardId: number, shapeId: number) =>
         `${boardBase(projectId, boardId)}/shapes/${shapeId}/to-sticker`,
 boardBatch: (projectId: number | null, boardId: number) => `${boardBase(projectId, boardId)}/batch`,
-timConversations: () => `${V1}/tim/conversations`,
-timMessages: (conversationId: number) => `${V1}/tim/conversations/${conversationId}/messages`,
-timMessageRetry: (conversationId: number, messageId: number) => `${V1}/tim/conversations/${conversationId}/messages/${messageId}/retry`,
-timFiles: (conversationId: number) => `${V1}/tim/conversations/${conversationId}/files`,
-timActionDecision: (conversationId: number, actionId: string) => `${V1}/tim/conversations/${conversationId}/actions/${actionId}/decision`,
-projectTimActionDecision: (projectId: number, actionId: string) => `${V1}/projects/${projectId}/tim/actions/${actionId}/decision`,
-agentPending: (actionId: string) => `${V1}/agent/pending/${encodeURIComponent(actionId)}`,
-agentPendingDecision: (actionId: string, decision: "confirm" | "reject") =>
-        `${V1}/agent/pending/${encodeURIComponent(actionId)}/${decision}`,
+arisConversations: () => `${V1}/aris/conversations`,
+arisMessages: (conversationId: number) => `${V1}/aris/conversations/${conversationId}/messages`,
+arisMessageRetry: (conversationId: number, messageId: number) => `${V1}/aris/conversations/${conversationId}/messages/${messageId}/retry`,
+arisFiles: (conversationId: number) => `${V1}/aris/conversations/${conversationId}/files`,
+arisActionDecision: (conversationId: number, actionId: string) => `${V1}/aris/conversations/${conversationId}/actions/${actionId}/decision`,
+projectChatArisActionDecision: (projectId: number, actionId: string) => `${V1}/projects/${projectId}/chat/aris/actions/${actionId}/decision`,
+arisPending: (actionId: string) => `${V1}/aris/pending/${encodeURIComponent(actionId)}`,
+arisPendingDecision: (actionId: string, decision: "confirm" | "reject") =>
+        `${V1}/aris/pending/${encodeURIComponent(actionId)}/${decision}`,
 projectCalendarWorkload: (projectId: number) =>
         `${V1}/projects/${projectId}/calendar/workload`,
-myCalendar: () => `${V1}/me/calendar`,
-myCalendarUnscheduled: () => `${V1}/me/calendar/unscheduled`,
-myCalendarIcsToken: () => `${V1}/me/calendar/ics-token`,
+myCalendar: () => `${V1}/users/me/calendar`,
+myCalendarUnscheduled: () => `${V1}/users/me/calendar/unscheduled`,
+myCalendarIcsToken: () => `${V1}/users/me/calendar/ics-token`,
 portfolioCalendar: () => `${V1}/portfolio/calendar`,
 calendarHolidays: (year: number) => `${V1}/calendar/holidays?year=${year}`,
 taskByKey: (taskKey: string) => `${V1}/tasks/by-key/${encodeURIComponent(taskKey)}`,
@@ -221,10 +215,10 @@ users: (query: string, limit = 20) =>
         `${V1}/users?${new URLSearchParams({ query, limit: String(limit) }).toString()}`,
 personalTasks: () => `${V1}/tasks`,
 myTasks: (role: string, includeClosed: boolean, attention?: string) =>
-        `${V1}/my/tasks?${new URLSearchParams({ role, include_closed: String(includeClosed), ...(attention && { attention }) }).toString()}`,
+        `${V1}/users/me/tasks?${new URLSearchParams({ role, include_closed: String(includeClosed), ...(attention && { attention }) }).toString()}`,
 taskStatus: (taskId: number) => `${V1}/tasks/${taskId}/status`,
-taskMoveTo: (taskId: number) => `${V1}/tasks/${taskId}/move-to`,
-taskMovePreview: (taskId: number, query: string) => `${V1}/tasks/${taskId}/move-to/preview?${query}`
+taskTransfer: (taskId: number) => `${V1}/tasks/${taskId}/transfer`,
+taskTransferPreview: (taskId: number, query: string) => `${V1}/tasks/${taskId}/transfer/preview?${query}`
 };
 
 /** Ключи кэша TanStack Query: всё, что относится к проекту, инвалидируется вместе. */
@@ -245,7 +239,6 @@ export const queryKeys = {
     projectRiskSummary: (projectId: number, query = "") => ["projects", projectId, "risks", "summary", query] as const,
     projectRiskTaskCounts: (projectId: number) => ["projects", projectId, "risks", "task-counts"] as const,
     projectMembers: (projectId: number) => ["projects", projectId, "members"] as const,
-    projectStickers: (projectId: number) => ["projects", projectId, "board-stickers"] as const,
     projectKnowledgeStatus: (projectId: number) =>
         ["projects", projectId, "knowledge", "status"] as const,
     stages: (projectId: number) => ["projects", projectId, "stages"] as const,
@@ -274,7 +267,7 @@ export const queryKeys = {
     documentLinks: (documentId: number) => ["documents", documentId, "links"] as const,
     wbs: (projectId: number) => ["projects", projectId, "wbs"] as const,
 runtime: ["runtime"] as const,
-agentPending: (actionId: string) => ["agent", "pending", actionId] as const,
+arisPending: (actionId: string) => ["aris", "pending", actionId] as const,
 dashboardScoped: (scope: "mine" | "all") => ["dashboard", "overview", scope] as const,
 projectBoards: (projectId: number) => ["projects", projectId, "boards"] as const,
 freeBoards: ["boards"] as const,

@@ -83,7 +83,7 @@ async def test_canonical_runtime_write_gate_receipts_and_confirmation_on_postgre
     from pydantic_ai.models.function import FunctionModel
 
     from src.agent.context import AgentContextBudget
-    from src.agent.runtime import TimDeps, TimRuntime, WriteGate
+    from src.agent.runtime import ArisDeps, ArisRuntime, WriteGate
     from src.dependencies.scopes import build_project_knowledge_query_scope
     from src.dependencies.services import build_project_tool_executor
     from src.services.project_query import ProjectQueryService
@@ -121,7 +121,7 @@ async def test_canonical_runtime_write_gate_receipts_and_confirmation_on_postgre
                 parts=[ToolCallPart("telos_submit_answer", {"answer": "Проверено."})]
             )
 
-        deps = TimDeps(
+        deps = ArisDeps(
             execution=replace(env.context, request_id=request_id),
             executor=executor,
             system_prompt="Проверь поручение инструментами.",
@@ -137,7 +137,7 @@ async def test_canonical_runtime_write_gate_receipts_and_confirmation_on_postgre
             on_result=remember,
         )
         try:
-            result = await TimRuntime(model=FunctionModel(respond), executor=executor).run(
+            result = await ArisRuntime(model=FunctionModel(respond), executor=executor).run(
                 deps, metadata={}
             )
             assert result.output.answer == "Проверено."

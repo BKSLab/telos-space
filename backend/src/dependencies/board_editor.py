@@ -6,7 +6,7 @@ from fastapi import Depends
 
 from src.dependencies.db_session import DbSessionDep
 from src.dependencies.repositories import (
-    ProjectBoardsRepositoryDep,
+    BoardsRepositoryDep,
     ProjectDeadlineChangesRepositoryDep,
     ProjectMembersRepositoryDep,
     ProjectsRepositoryDep,
@@ -32,7 +32,7 @@ def get_promotion_projects_service(
     knowledge_events: KnowledgeEventsDep,
     users_repository: UsersRepositoryDep,
     deadline_changes_repository: ProjectDeadlineChangesRepositoryDep,
-    boards_repository: ProjectBoardsRepositoryDep,
+    boards_repository: BoardsRepositoryDep,
 ) -> ProjectsService:
     return get_projects_service(
         projects_repository=projects_repository,

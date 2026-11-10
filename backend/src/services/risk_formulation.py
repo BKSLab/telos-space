@@ -3,9 +3,9 @@
 import json
 
 from src.clients.llm import LlmClient
+from src.exceptions.ai import AiProviderError
 from src.exceptions.api_keys import ApiKeyRouteNotAllowedError
 from src.exceptions.clients import ClientError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.project_risks import ProjectRiskServiceError
 from src.exceptions.projects import ProjectNotFoundError
 from src.prompts.risk_formulation import (
@@ -62,6 +62,6 @@ class RiskFormulationService:
                 result = result.model_copy(update={"field": data.field})
             return result
         except ClientError as error:
-            raise KnowledgeProviderError(str(error)) from error
+            raise AiProviderError(str(error)) from error
         except Exception as error:
             raise ProjectRiskServiceError("Модель вернула некорректную формулировку.") from error

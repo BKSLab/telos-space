@@ -8,7 +8,7 @@ from src.agent.tools import AgentToolContext
 from src.db.models.board_shapes import BoardShapeKind
 from src.exceptions.agent_tools import AgentToolAccessError, AgentToolConflictError
 from src.exceptions.board_shapes import BoardBatchConflictError
-from src.exceptions.project_boards import ProjectBoardNotFoundError
+from src.exceptions.boards import BoardNotFoundError
 from src.schemas.board_diagrams import (
     BoardDiagramInput,
     BoardSceneInput,
@@ -19,7 +19,7 @@ from src.schemas.board_shapes import (
     BoardShapeSchema,
     complete_style,
 )
-from src.schemas.project_boards import ProjectBoardContentSchema, ProjectBoardSchema
+from src.schemas.boards import BoardContentSchema, BoardSchema
 from src.services.access import AccessService
 from src.services.agent_board_actions import (
     draw_board_diagram,
@@ -27,7 +27,7 @@ from src.services.agent_board_actions import (
     update_board_shapes,
 )
 from src.services.board_shapes import BoardShapesService
-from src.services.project_boards import ProjectBoardsService
+from src.services.boards import BoardsService
 
 
 def scene():
@@ -51,7 +51,7 @@ def scene():
         created_at=now,
         updated_at=now,
     )
-    board = ProjectBoardSchema(
+    board = BoardSchema(
         id=4,
         project_id=7,
         title="Board",
@@ -61,12 +61,12 @@ def scene():
         created_at=now,
         updated_at=now,
     )
-    return ProjectBoardContentSchema(board=board, shapes=[shape], stickers=[])
+    return BoardContentSchema(board=board, shapes=[shape], stickers=[])
 
 
 @pytest.fixture
 def db():
-    boards = AsyncMock(spec=ProjectBoardsService)
+    boards = AsyncMock(spec=BoardsService)
     boards.get_content.return_value = scene()
     boards.get_free_content.return_value = scene()
     access = AsyncMock(spec=AccessService)
@@ -111,8 +111,8 @@ async def test_readonly_context_and_anonymous_user_never_write(db, project_id):
 @pytest.mark.asyncio
 async def test_personal_board_checks_owner_and_never_falls_back_to_project(db):
     ctx = AgentToolContext(project_id=None, user_id=1, can_write=True)
-    db.boards.get_free_content.side_effect = ProjectBoardNotFoundError(4)
-    with pytest.raises(ProjectBoardNotFoundError):
+    db.boards.get_free_content.side_effect = BoardNotFoundError(4)
+    with pytest.raises(BoardNotFoundError):
         await draw_board_diagram(db, ctx, diagram())
     db.boards.get_free_content.assert_awaited_once_with(board_id=4, user_id=1)
     db.boards.get_content.assert_not_awaited()

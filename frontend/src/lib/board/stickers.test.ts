@@ -11,10 +11,10 @@ import {
     stickerAuthorLabel,
     stickerHasChanges,
     STICKER_SIZE_PRESETS,
-    type ProjectSticker,
+    type BoardSticker,
 } from "@/lib/board/stickers";
 
-const sticker: ProjectSticker = {
+const sticker: BoardSticker = {
     id: 1,
     project_id: 3,
     body: "Согласовать API",

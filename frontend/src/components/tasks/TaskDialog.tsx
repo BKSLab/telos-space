@@ -38,10 +38,10 @@ import { TaskRiskSection } from "@/components/risks/TaskRiskSection";
 import { TaskChecklistSection } from "@/components/tasks/TaskChecklistSection";
 import { TaskReportSection } from "@/components/tasks/TaskReportSection";
 import { TaskTitleEditor } from "@/components/tasks/TaskTitleEditor";
-import { MoveTaskDialog } from "@/components/tasks/MoveTaskDialog";
+import { TransferTaskDialog } from "@/components/tasks/TransferTaskDialog";
 import { LocalUserSelect } from "@/components/tasks/LocalUserSelect";
 import { isClosedStatus, TASK_STATUS_LABELS, TASK_STATUS_ORDER, taskKind } from "@/lib/tasks";
-import { moveDeniedHint } from "@/lib/taskMove";
+import { transferDeniedHint } from "@/lib/taskTransfer";
 import { useTaskViewed } from "@/lib/useTaskViewed";
 import type { TaskViewToken } from "@/lib/taskAttention";
 import { taskFilesPollInterval } from "@/lib/projectFiles";
@@ -243,7 +243,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
 
     const moveMutation = useMutation({
         mutationFn: (stageId: number) =>
-            api.patch<Task>(endpoints.taskMove(taskId), { stage_id: stageId }),
+            api.patch<Task>(endpoints.taskStagePlacement(taskId), { stage_id: stageId }),
         onSuccess: invalidateTask,
     });
 
@@ -303,8 +303,8 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
             <TaskTitleEditor title={task.title} revision={task.revision} canEdit saving={updateMutation.isPending} error={updateErrorMessage}
                 onEditStart={updateMutation.reset}
                 onSave={async (title, revision) => { try { await updateMutation.mutateAsync({ title, expected_revision: revision }); return true; } catch { return false; } }} />
-            <Button size="sm" variant="ghost" className="self-start" icon={<FolderInput size={13} />} disabled={Boolean(moveDeniedHint(kind, true, participantUserId(task, "REPORTER") === currentUserQuery.data?.id))}
-                title={moveDeniedHint(kind, true, participantUserId(task, "REPORTER") === currentUserQuery.data?.id)} onClick={() => setMoveDialogOpen(true)}>Переместить…</Button>
+            <Button size="sm" variant="ghost" className="self-start" icon={<FolderInput size={13} />} disabled={Boolean(transferDeniedHint(kind, true, participantUserId(task, "REPORTER") === currentUserQuery.data?.id))}
+                title={transferDeniedHint(kind, true, participantUserId(task, "REPORTER") === currentUserQuery.data?.id)} onClick={() => setMoveDialogOpen(true)}>Переместить…</Button>
         </div>
     ) : (
         <Skeleton className="h-9 w-56" />
@@ -509,7 +509,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                             reporterId={participantUserId(task, "REPORTER")}
                                             observerIds={observerUserIds(task)}
                                             canChangeReporter={canChangeReporter}
-                                            legacyExecutorLabel={task.assignee}
+                                            assigneeSnapshot={task.assignee}
                                             disabled={
                                                 membersQuery.isPending || updateMutation.isPending
                                             }
@@ -656,7 +656,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                             </TabPanel>
                         </div>
                     </Tabs>
-                    {moveDialogOpen && <MoveTaskDialog task={task} kind={kind} onClose={() => setMoveDialogOpen(false)} onMoved={() => { invalidateTask(); if (projectId) queryClient.invalidateQueries({ queryKey: queryKeys.wbs(projectId) }); }} />}
+                    {moveDialogOpen && <TransferTaskDialog task={task} kind={kind} onClose={() => setMoveDialogOpen(false)} onMoved={() => { invalidateTask(); if (projectId) queryClient.invalidateQueries({ queryKey: queryKeys.wbs(projectId) }); }} />}
                 </div>
             )}
         </Modal>

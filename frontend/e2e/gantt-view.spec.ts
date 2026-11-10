@@ -58,7 +58,7 @@ test.describe("Гант: вид «Рядом»", () => {
         await page.mouse.up();
         const after = (await gridPane.boundingBox())?.height ?? 0;
         expect(after).toBeLessThan(before - 80);
-        const stored = await page.evaluate(() => Number(window.localStorage.getItem("tt.calendar.project.split")));
+        const stored = await page.evaluate(() => Number(window.localStorage.getItem("telos.calendar.project.split")));
         expect(stored).toBeGreaterThan(0.2);
         expect(stored).toBeLessThan(0.5);
         await expectNoPageScroll(page);
@@ -110,7 +110,7 @@ test.describe("Гант: шкала", () => {
         await page.getByRole("dialog", { name: "Колонки шкалы" }).getByLabel("Срок").check();
         await page.keyboard.press("Escape");
         await expect(page.locator("[data-gantt-cell='due']").first()).toBeVisible();
-        expect(await page.evaluate(() => window.localStorage.getItem("tt.calendar.project.gantt.columns"))).toBe('["due"]');
+        expect(await page.evaluate(() => window.localStorage.getItem("telos.calendar.project.gantt.columns"))).toBe('["due"]');
 
         const handle = page.locator("[data-label-resize]");
         const box = await handle.boundingBox();
@@ -119,7 +119,7 @@ test.describe("Гант: шкала", () => {
         await page.mouse.down();
         await page.mouse.move(box.x + 122, box.y + box.height / 2, { steps: 6 });
         await page.mouse.up();
-        expect(await page.evaluate(() => Number(window.localStorage.getItem("tt.calendar.project.gantt.labelWidth")))).toBe(330);
+        expect(await page.evaluate(() => Number(window.localStorage.getItem("telos.calendar.project.gantt.labelWidth")))).toBe(330);
         await expectNoPageScroll(page);
         expect(state.errors).toEqual([]);
     });
@@ -211,7 +211,7 @@ test.describe("Гант: скриншоты тем", () => {
             await page.goto(`/projects/DEMO/calendar?view=timeline&scale=month&date=${iso(0)}`);
             await page.getByLabel("Цвет карточек по").selectOption("stage");
             await expect(page.locator("[data-bar-color]").first()).toBeVisible();
-            await shot(page, `gantt-timeline-stage-${theme}`);
+            await shot(page, `ganariseline-stage-${theme}`);
             await page.goto(`/projects/DEMO/calendar?view=timeline&scale=month&present=1&date=${iso(0)}`);
             await expect(page.locator("[data-gantt-sheet]")).toBeVisible();
             await shot(page, `gantt-present-${theme}`);

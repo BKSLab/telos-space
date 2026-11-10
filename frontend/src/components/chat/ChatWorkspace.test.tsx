@@ -20,7 +20,7 @@ function setup(path: string, availableProjects = projects) {
     clients.push(client);
     client.setQueryData(queryKeys.projects, availableProjects);
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><ChatWorkspace>
-        <p>Содержимое</p><Link to="/projects/SAMPLE/team">Другой проект</Link><Link to="/projects">Список проектов</Link>
+        <p>Содержимое</p><Link to="/projects/SAMPLE/team">Другой проект</Link><Link to="/?view=projects">Список проектов</Link>
     </ChatWorkspace></MemoryRouter></QueryClientProvider>);
 }
 
@@ -29,9 +29,8 @@ afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear(
 
 it.each([
     ["/projects/DEMO/chat", true, true],
-    ["/projects/DEMO/chat?view=vera", false, true],
-    ["/projects/DEMO/chat?view=personal", false, true],
-    ["/projects/DEMO/chat?view=knowledge", false, true],
+    ["/projects/DEMO/conversations", false, true],
+    ["/projects/DEMO/knowledge", false, true],
     ["/projects/DEMO/team", false, false],
     ["/chat", false, true],
 ] as const)("передаёт полноэкранный режим и видимость общего чата: %s", (path, visible, fullPage) => {
@@ -59,7 +58,7 @@ it("не меняет выбранный проект открытого чат�
 
 it("не переключает открытый личный диалог на общий при переходе в проект", async () => {
     useChatDockStore.setState({ panel: "personal", projects: { 1: 1 }, modes: { 1: "personal" } });
-    setup("/projects");
+    setup("/");
     fireEvent.click(screen.getByRole("link", { name: "Другой проект" }));
     await waitFor(() => expect(screen.getByTestId("dock").dataset.routeProject).toBe("2"));
     expect(screen.getByTestId("dock").dataset.panel).toBe("personal");
@@ -68,7 +67,7 @@ it("не переключает открытый личный диалог на 
 });
 
 it("показывает единый вход в чаты и пользователю без проектов", () => {
-    setup("/projects", []);
+    setup("/", []);
     expect(screen.getByTestId("dock").dataset.project).toBeUndefined();
     expect(screen.getByTestId("dock").dataset.fullPage).toBe("false");
 });

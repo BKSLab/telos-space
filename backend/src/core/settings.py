@@ -55,7 +55,7 @@ class AuthSettings(SettingsBase):
     registration_invite_code: SecretStr
     api_token_default_ttl_days: int = 90
     api_token_max_active: int = 10
-    session_cookie_name: str = "tracker_session"
+    session_cookie_name: str = "telos_session"
     session_cookie_secure: bool = False
     avatars_path: Path = BASE_DIR / "uploads" / "avatars"
 
@@ -75,7 +75,7 @@ class HttpClientSettings(SettingsBase):
 
 
 class LlmSettings(SettingsBase):
-    """Настройки OpenAI-совместимого API для Project Agent.
+    """Настройки OpenAI-совместимого API для Арис.
 
     Для синхронных сценариев LlmClient worst-case одного вызова —
     ``llm_timeout × llm_retries``

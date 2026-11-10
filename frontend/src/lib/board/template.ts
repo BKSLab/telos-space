@@ -1,12 +1,12 @@
 import { MAX_COORDINATE, unionBoxes } from "@/lib/board/geometry";
 import { connectorPoints, nodeLookup, sortedObjects, type Scene } from "@/lib/board/scene";
-import { normalizeStickerColor, type ProjectStickerCreateInput } from "@/lib/board/stickers";
+import { normalizeStickerColor, type BoardStickerCreateInput } from "@/lib/board/stickers";
 import { isConnectorKind, type ShapeData, type ServerRef } from "@/lib/board/types";
 import type { BoardGrouping } from "@/lib/board/group";
 
 export type TemplateItem =
     | { type: "shape"; client_id: string; data: ShapeData & { kind: NonNullable<ShapeData["kind"]> } }
-    | { type: "sticker"; client_id: string; data: ProjectStickerCreateInput };
+    | { type: "sticker"; client_id: string; data: BoardStickerCreateInput };
 export interface BoardTemplate {
     version: 1;
     id: string;
@@ -17,7 +17,7 @@ export interface BoardTemplate {
 }
 export type TemplateCreateOp =
     | { op: "create_shape"; client_id: string; data: ShapeData }
-    | { op: "create_sticker"; client_id: string; data: ProjectStickerCreateInput };
+    | { op: "create_sticker"; client_id: string; data: BoardStickerCreateInput };
 export interface TemplateInsertion {
     operations: TemplateCreateOp[];
     groups: BoardTemplate["groups"];

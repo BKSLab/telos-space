@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { describePageContext, pageContext } from "@/lib/tim";
+import { describePageContext, pageContext } from "@/lib/aris";
 
-describe("Tim's board selection context", () => {
+describe("Aris's board selection context", () => {
     it("passes complete saved refs only for the currently open board", () => {
         const selection = { boardId: 6, objects: [{ type: "sticker" as const, id: 1 }, { type: "shape" as const, id: 1 }] };
         const context = pageContext("/boards", "?board=6", null, selection);

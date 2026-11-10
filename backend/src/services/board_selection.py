@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from src.schemas.agent_conversations import MAX_BOARD_SELECTION, TimBoardSelectionRefSchema
+from src.schemas.agent_conversations import MAX_BOARD_SELECTION, BoardSelectionRefSchema
 
 
 def normalize_board_selection(raw: object) -> list[dict[str, Any]]:
@@ -18,7 +18,7 @@ def normalize_board_selection(raw: object) -> list[dict[str, Any]]:
         if not isinstance(item, dict):
             continue
         try:
-            ref = TimBoardSelectionRefSchema.model_validate(item)
+            ref = BoardSelectionRefSchema.model_validate(item)
         except ValidationError:
             continue
         key = (ref.type, ref.id)

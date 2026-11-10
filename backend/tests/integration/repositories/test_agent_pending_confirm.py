@@ -16,12 +16,12 @@ from src.exceptions.agent_tools import (
     AgentToolExpiredError,
 )
 from src.schemas.knowledge import KnowledgeAnswerSchema
-from tests.integration.repositories.test_agent_project_actions import actions_env as actions_env
-from tests.integration.repositories.test_agent_project_actions import invoke, task
-from tests.integration.repositories.test_tim_widget import (
+from tests.integration.repositories.test_agent_personal_conversations import (
     agent_env as agent_env,
 )
-from tests.integration.repositories.test_tim_widget import read, send, start
+from tests.integration.repositories.test_agent_personal_conversations import read, send, start
+from tests.integration.repositories.test_agent_project_actions import actions_env as actions_env
+from tests.integration.repositories.test_agent_project_actions import invoke, task
 
 
 async def test_external_pending_cannot_be_approved_through_widget_decision(actions_env):

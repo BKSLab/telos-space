@@ -24,7 +24,7 @@ INDEXABLE_EXTENSIONS = (
 )
 MAX_PDF_PAGES = 2000
 MIN_ENCODING_CONFIDENCE = 0.7
-LEGACY_TEXT_ENCODING = "cp1251"
+CYRILLIC_TEXT_ENCODING = "cp1251"
 
 
 async def extract_indexable_text(
@@ -52,7 +52,7 @@ async def extract_indexable_text(
 
     Raises:
         ValueError: Если файл повреждён или превышает ограничения разбора.
-        KnowledgeProviderError: Если vision-модель недоступна.
+        AiProviderError: Если vision-модель недоступна.
     """
     suffix = Path(filename).suffix.lower()
     if suffix not in INDEXABLE_EXTENSIONS:
@@ -87,14 +87,14 @@ def _decode_text(content: bytes) -> str:
     проверяется первым, потому что он самоконтролируем и ошибиться не даёт,
     а chardet путает однобайтовые кириллические кодировки между собой, поэтому
     его догадка принимается только уверенной, и последним словом остаётся
-    cp1251 — доминирующая legacy-кодировка русских выгрузок.
+    cp1251 — поддерживаемая кодировка русскоязычных выгрузок.
     """
     for encoding in _candidate_encodings(content):
         try:
             return content.decode(encoding)
         except (LookupError, UnicodeDecodeError):
             continue
-    return content.decode(LEGACY_TEXT_ENCODING, errors="replace")
+    return content.decode(CYRILLIC_TEXT_ENCODING, errors="replace")
 
 
 def _candidate_encodings(content: bytes) -> list[str]:
@@ -103,8 +103,8 @@ def _candidate_encodings(content: bytes) -> list[str]:
     encoding = detected.get("encoding")
     confidence = detected.get("confidence") or 0.0
     if encoding and confidence >= MIN_ENCODING_CONFIDENCE:
-        return ["utf-8-sig", encoding, LEGACY_TEXT_ENCODING]
-    return ["utf-8-sig", LEGACY_TEXT_ENCODING]
+        return ["utf-8-sig", encoding, CYRILLIC_TEXT_ENCODING]
+    return ["utf-8-sig", CYRILLIC_TEXT_ENCODING]
 
 
 def _extract_pdf(content: bytes) -> str:

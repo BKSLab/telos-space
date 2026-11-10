@@ -92,7 +92,7 @@ export function NewProjectPage() {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-1">
-                    <LinkButton to="/projects">Отмена</LinkButton>
+                    <LinkButton to="/?view=projects">Отмена</LinkButton>
                     <Button
                         variant="primary"
                         disabled={!isProjectFormValid(values) || !values.start_date || !validMembers || !validStageDrafts(stages) || createMutation.isPending || defaults.isPending || defaults.isError}

@@ -7,8 +7,8 @@ import pytest
 
 from main import app
 from src.dependencies.services import get_checklist_suggestion_service, get_tasks_service
+from src.exceptions.ai import AiProviderError
 from src.exceptions.auth import NotAuthenticatedError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.tasks import TaskChecklistConflictError, TaskChecklistGenerationError
 from src.schemas.task_checklists import ChecklistSuggestionSchema, TaskChecklistSchema
 from src.services.task_checklist_suggestions import TaskChecklistSuggestionService
@@ -33,12 +33,12 @@ async def test_suggestion_forwards_draft_and_files_and_does_not_require_write_sc
             "payload": json.dumps({"title": "Задача", "description_md": "Описание", "task_id": 12})
         },
         files={"files": ("draft.txt", b"requirements", "text/plain")},
-        headers={"Authorization": "Bearer tt_read"},
+        headers={"Authorization": "Bearer telos_token_read"},
     )
     assert response.status_code == 200
     assert len(response.json()["checklist"]["items"]) == 3
     call = service.suggest.await_args.kwargs
-    assert call["bearer_secret"] == "tt_read"
+    assert call["bearer_secret"] == "telos_token_read"
     assert call["data"].task_id == 12
     assert call["files"][0].content == b"requirements"
 
@@ -47,7 +47,7 @@ async def test_suggestion_forwards_draft_and_files_and_does_not_require_write_sc
     ("error", "status"),
     [
         (NotAuthenticatedError(), 401),
-        (KnowledgeProviderError("private"), 503),
+        (AiProviderError("private"), 503),
         (TaskChecklistGenerationError("private"), 502),
     ],
 )

@@ -9,12 +9,12 @@ from typing import Any
 
 from src.clients.llm import LlmClient
 from src.db.models.analytics_reports import AnalyticsReport
+from src.db.models.board_stickers import BoardSticker
 from src.db.models.documents import Document
 from src.db.models.project_members import ProjectMember
 from src.db.models.project_milestones import ProjectMilestone, ProjectMilestoneStatus
 from src.db.models.project_risks import ProjectRisk
 from src.db.models.project_stages import ProjectStage
-from src.db.models.project_stickers import ProjectSticker
 from src.db.models.projects import Project, ProjectStatus
 from src.db.models.task_activity import TaskActivity
 from src.db.models.task_attachments import TaskAttachment
@@ -23,20 +23,20 @@ from src.db.models.task_dependencies import TaskDependency
 from src.db.models.task_participants import TaskParticipant
 from src.db.models.tasks import Task
 from src.db.models.wbs_nodes import WbsNode
+from src.exceptions.ai import AiProviderError
 from src.exceptions.analytics import (
     AnalyticsEmptyScopeError,
     AnalyticsGenerationError,
     AnalyticsReportsRepositoryError,
     AnalyticsServiceError,
 )
+from src.exceptions.board_stickers import BoardStickersRepositoryError
 from src.exceptions.clients import ClientError
 from src.exceptions.document_links import DocumentLinksRepositoryError
 from src.exceptions.documents import DocumentsRepositoryError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.milestones import MilestonesRepositoryError
 from src.exceptions.project_risks import ProjectRiskRepositoryError
 from src.exceptions.project_stages import ProjectStagesRepositoryError
-from src.exceptions.project_stickers import ProjectStickersRepositoryError
 from src.exceptions.projects import ProjectNotFoundError, ProjectsRepositoryError
 from src.exceptions.task_activity import TaskActivityRepositoryError
 from src.exceptions.task_attachments import TaskAttachmentsRepositoryError
@@ -92,7 +92,7 @@ RepositoryErrors = (
     DocumentsRepositoryError,
     MilestonesRepositoryError,
     ProjectStagesRepositoryError,
-    ProjectStickersRepositoryError,
+    BoardStickersRepositoryError,
     ProjectRiskRepositoryError,
     ProjectsRepositoryError,
     TaskActivityRepositoryError,
@@ -165,7 +165,7 @@ class _ProjectSlice:
     dependencies: list[TaskDependency]
     nodes: list[WbsNode]
     milestones: list[ProjectMilestone]
-    stickers: list[ProjectSticker]
+    stickers: list[BoardSticker]
     documents: list[Document]
     document_task_ids: dict[int, list[int]] = field(default_factory=dict)
     risks: list[ProjectRisk] = field(default_factory=list)
@@ -178,13 +178,13 @@ class _ProjectSlice:
 
 @dataclass(slots=True)
 class _OutsideTasks:
-    """Открытые задачи пользователя вне проектов: потоки и разовые."""
+    """Открытые разовые задачи пользователя."""
 
     tasks: list[Task] = field(default_factory=list)
     my_roles: dict[int, set[Any]] = field(default_factory=dict)
 
     def key(self, task: Task) -> str:
-        """Отображаемый ключ: по ключу потока или ``T`` у разовой задачи."""
+        """Ключ разовой задачи с префиксом ``T``."""
         return build_task_key(project_key=PERSONAL_TASK_KEY, number=task.number)
 
 
@@ -286,7 +286,7 @@ class AnalyticsService(AnalyticsReportReader):
         Raises:
             ProjectNotFoundError: Если проект недоступен пользователю.
             AnalyticsEmptyScopeError: Если в области нет содержательных данных проекта.
-            KnowledgeProviderError: Если LLM-сервис недоступен.
+            AiProviderError: Если LLM-сервис недоступен.
             AnalyticsGenerationError: Если ответ модели непригоден.
             AnalyticsServiceError: Если собрать данные не удалось.
         """
@@ -345,7 +345,7 @@ class AnalyticsService(AnalyticsReportReader):
             )
         except ClientError as error:
             logger.error("❌ LLM недоступен при сборе аналитического свода.", exc_info=True)
-            raise KnowledgeProviderError(str(error)) from error
+            raise AiProviderError(str(error)) from error
         except Exception as error:
             logger.error("❌ Модель не вернула аналитический свод.", exc_info=True)
             raise AnalyticsGenerationError(str(error)) from error
@@ -1313,7 +1313,7 @@ def _to_report_schema(report: AnalyticsReport, project: Project | None) -> Analy
 
 
 def _render_outside(outside: _OutsideTasks, *, limits: _Limits, today: date) -> dict[str, Any]:
-    """Короткие карточки задач пользователя в потоках и разовых.
+    """Короткие карточки разовых задач пользователя.
 
     Счётчики считаются здесь же: signals среза относятся только к проектам,
     а смешивать с ними задачи без стадий и вех значило бы исказить показатели

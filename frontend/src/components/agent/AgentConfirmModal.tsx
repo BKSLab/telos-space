@@ -53,16 +53,16 @@ function AgentConfirmContent({ actionId, onClose }: { actionId: string; onClose:
     const queryClient = useQueryClient();
     const [decisionError, setDecisionError] = useState<string | null>(null);
     const query = useQuery({
-        queryKey: queryKeys.agentPending(actionId),
-        queryFn: () => api.get<AgentPendingAction>(endpoints.agentPending(actionId)),
+        queryKey: queryKeys.arisPending(actionId),
+        queryFn: () => api.get<AgentPendingAction>(endpoints.arisPending(actionId)),
         retry: false,
     });
     const decide = useMutation({
         mutationFn: (decision: "confirm" | "reject") =>
-            api.post<AgentPendingAction>(endpoints.agentPendingDecision(actionId, decision)),
+            api.post<AgentPendingAction>(endpoints.arisPendingDecision(actionId, decision)),
         onSuccess: (action) => {
             setDecisionError(null);
-            queryClient.setQueryData(queryKeys.agentPending(actionId), action);
+            queryClient.setQueryData(queryKeys.arisPending(actionId), action);
             // Выполненное действие меняет задачи, документы и прочее — пусть экраны перечитают.
             if (action.status === "completed") void queryClient.invalidateQueries();
         },

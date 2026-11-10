@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.agent.worker import AgentWorker
-from src.services.tim_chat import TimChatService
-from src.services.tim_widget import TimWidgetService
+from src.services.agent_conversations import AgentConversationsService
+from src.services.aris_chat import ArisChatService
 
 
 async def test_worker_recovers_after_queue_error_and_limits_parallel_answers():
-    service = AsyncMock(spec=TimWidgetService)
+    service = AsyncMock(spec=AgentConversationsService)
     release, occupied, finished, stop = (asyncio.Event() for _ in range(4))
     calls = active = maximum = processed = claimed = 0
 
@@ -52,7 +52,7 @@ async def test_worker_recovers_after_queue_error_and_limits_parallel_answers():
 
 
 async def test_cancelling_worker_waits_for_all_running_answers_to_stop():
-    service = AsyncMock(spec=TimWidgetService)
+    service = AsyncMock(spec=AgentConversationsService)
     occupied, stop = asyncio.Event(), asyncio.Event()
     active = cancelled = 0
 
@@ -83,7 +83,7 @@ async def test_cancelling_worker_waits_for_all_running_answers_to_stop():
 
 async def test_worker_serves_chat_and_widget_queues_each_round():
     """Занятая очередь чата не душит виджет: каждая очередь получает ход на каждом круге."""
-    chat, widget = AsyncMock(spec=TimChatService), AsyncMock(spec=TimWidgetService)
+    chat, widget = AsyncMock(spec=ArisChatService), AsyncMock(spec=AgentConversationsService)
     stop, served = asyncio.Event(), []
 
     def queue(name, jobs):
@@ -109,7 +109,7 @@ async def test_new_question_wakes_idle_worker_without_waiting_for_the_poll():
     """Вопрос этого процесса будит исполнителя сразу, а не через AGENT_POLL_SECONDS."""
     from src.agent.wakeup import wake_agent_worker
 
-    service = AsyncMock(spec=TimWidgetService)
+    service = AsyncMock(spec=AgentConversationsService)
     stop, idle, served = asyncio.Event(), asyncio.Event(), asyncio.Event()
     jobs: list[int] = []
 

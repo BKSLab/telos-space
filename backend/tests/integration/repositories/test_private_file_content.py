@@ -66,7 +66,7 @@ async def test_private_thumbnail_access_and_released_connection(agent_env, tmp_p
     service.storage = ObservedStorage(tmp_path / "agent")
     app.dependency_overrides[get_agent_file_content_service] = lambda: service
     cookie_name = settings.auth.session_cookie_name
-    original = f"/api/v1/tim/conversations/101/files/{file_id}"
+    original = f"/api/v1/aris/conversations/101/files/{file_id}"
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         client.cookies.set(cookie_name, create_access_token(1))
@@ -81,13 +81,13 @@ async def test_private_thumbnail_access_and_released_connection(agent_env, tmp_p
         assert download.content == content.getvalue()
         assert download.headers["content-disposition"].startswith("attachment;")
         assert (
-            await client.get(f"/api/v1/tim/conversations/101/files/{other_file_id}/preview")
+            await client.get(f"/api/v1/aris/conversations/101/files/{other_file_id}/preview")
         ).status_code == 404
         client.cookies.set(cookie_name, create_access_token(2))
         assert (await client.get(f"{original}/preview")).status_code == 404
         client.cookies.set(cookie_name, create_access_token(1))
         assert (
-            await client.get(f"/api/v1/projects/2/agent/conversations/101/files/{file_id}/preview")
+            await client.get(f"/api/v1/projects/2/aris/conversations/101/files/{file_id}/preview")
         ).status_code == 404
         async with agent_env.factory() as session:
             await session.execute(

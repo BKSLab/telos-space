@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.agent.action_scopes import ACTION_SCOPES, tools_for_scopes
-from src.agent.tim import TimMode
+from src.agent.aris import ArisMode
 from src.agent.tools import (
     AgentTool,
     AgentToolContext,
@@ -94,9 +94,9 @@ def test_mcp_registration_has_read_write_scopes_actor_and_required_retry_id():
 @pytest.mark.parametrize(
     "can_write,allowed,mode",
     [
-        (False, None, TimMode.WIDGET_PERSONAL),
-        (True, frozenset({"telos_create_task"}), TimMode.WIDGET_PERSONAL),
-        (True, None, TimMode.PROJECT_CHAT),
+        (False, None, ArisMode.WIDGET_PERSONAL),
+        (True, frozenset({"telos_create_task"}), ArisMode.WIDGET_PERSONAL),
+        (True, None, ArisMode.PROJECT_CHAT),
     ],
 )
 async def test_personal_drawing_executor_refuses_readonly_missing_scope_and_project_chat(
@@ -109,7 +109,7 @@ async def test_personal_drawing_executor_refuses_readonly_missing_scope_and_proj
         parameters=BoardDiagramInput,
         handler=handler,
         mutating=True,
-        modes=frozenset({TimMode.WIDGET_PERSONAL, TimMode.WIDGET_PROJECT}),
+        modes=frozenset({ArisMode.WIDGET_PERSONAL, ArisMode.WIDGET_PROJECT}),
     )
     executor = AgentToolExecutor([tool])
     result = await executor.execute(
@@ -134,7 +134,7 @@ def test_personal_prompt_includes_board_tools_and_layout_instructions():
     mapping = next(
         statement.value
         for statement in tree.body
-        if isinstance(statement, ast.AnnAssign) and statement.target.id == "TIM_SYSTEM_PROMPTS"
+        if isinstance(statement, ast.AnnAssign) and statement.target.id == "ARIS_SYSTEM_PROMPTS"
     )
     personal = next(
         value

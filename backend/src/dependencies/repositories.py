@@ -8,27 +8,27 @@ from src.repositories.api_key_usage import ApiKeyUsageRepository
 from src.repositories.api_keys import ApiKeysRepository
 from src.repositories.api_tokens import ApiTokensRepository
 from src.repositories.board_shapes import BoardShapesRepository
+from src.repositories.board_stickers import BoardStickersRepository
+from src.repositories.boards import BoardsRepository
 from src.repositories.calendar_feed_tokens import CalendarFeedTokensRepository
 from src.repositories.chat_agent_turns import ChatAgentTurnsRepository
 from src.repositories.document_links import DocumentLinksRepository
 from src.repositories.documents import DocumentsRepository
 from src.repositories.knowledge_index_jobs import KnowledgeIndexJobsRepository
 from src.repositories.milestones import MilestonesRepository
-from src.repositories.project_boards import ProjectBoardsRepository
 from src.repositories.project_deadline_changes import ProjectDeadlineChangesRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_risks import ProjectRiskRepository
 from src.repositories.project_stages import ProjectStagesRepository
-from src.repositories.project_stickers import ProjectStickersRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.task_activity import TaskActivityRepository
 from src.repositories.task_attachments import TaskAttachmentsRepository
 from src.repositories.task_attention import TaskAttentionRepository
 from src.repositories.task_comments import TaskCommentsRepository
 from src.repositories.task_dependencies import TaskDependenciesRepository
-from src.repositories.task_moves import TaskMovesRepository
 from src.repositories.task_participants import TaskParticipantsRepository
 from src.repositories.task_reports import TaskReportsRepository
+from src.repositories.task_transfers import TaskTransfersRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.repositories.users import UsersRepository
@@ -55,9 +55,9 @@ def get_project_members_repository(session: DbSessionDep) -> ProjectMembersRepos
     return ProjectMembersRepository(session)
 
 
-def get_project_stickers_repository(session: DbSessionDep) -> ProjectStickersRepository:
+def get_board_stickers_repository(session: DbSessionDep) -> BoardStickersRepository:
     """Создаёт репозиторий стикеров Project Board в рамках сессии запроса."""
-    return ProjectStickersRepository(session)
+    return BoardStickersRepository(session)
 
 
 def get_projects_repository(session: DbSessionDep) -> ProjectsRepository:
@@ -158,9 +158,9 @@ TaskParticipantsRepositoryDep = Annotated[
     TaskParticipantsRepository,
     Depends(get_task_participants_repository),
 ]
-ProjectStickersRepositoryDep = Annotated[
-    ProjectStickersRepository,
-    Depends(get_project_stickers_repository),
+BoardStickersRepositoryDep = Annotated[
+    BoardStickersRepository,
+    Depends(get_board_stickers_repository),
 ]
 WbsNodesRepositoryDep = Annotated[WbsNodesRepository, Depends(get_wbs_nodes_repository)]
 DocumentsRepositoryDep = Annotated[DocumentsRepository, Depends(get_documents_repository)]
@@ -218,12 +218,12 @@ def get_api_key_usage_repository(session: DbSessionDep) -> ApiKeyUsageRepository
 ApiKeyUsageRepositoryDep = Annotated[ApiKeyUsageRepository, Depends(get_api_key_usage_repository)]
 
 
-def get_project_boards_repository(session: DbSessionDep) -> ProjectBoardsRepository:
-    return ProjectBoardsRepository(session)
+def get_boards_repository(session: DbSessionDep) -> BoardsRepository:
+    return BoardsRepository(session)
 
 
-ProjectBoardsRepositoryDep = Annotated[
-    ProjectBoardsRepository, Depends(get_project_boards_repository)
+BoardsRepositoryDep = Annotated[
+    BoardsRepository, Depends(get_boards_repository)
 ]
 
 
@@ -250,11 +250,11 @@ TaskAttentionRepositoryDep = Annotated[
 ]
 
 
-def get_task_moves_repository(session: DbSessionDep) -> TaskMovesRepository:
-    return TaskMovesRepository(session)
+def get_task_transfers_repository(session: DbSessionDep) -> TaskTransfersRepository:
+    return TaskTransfersRepository(session)
 
 
-TaskMovesRepositoryDep = Annotated[TaskMovesRepository, Depends(get_task_moves_repository)]
+TaskTransfersRepositoryDep = Annotated[TaskTransfersRepository, Depends(get_task_transfers_repository)]
 
 
 def get_chat_agent_turns_repository(session: DbSessionDep) -> ChatAgentTurnsRepository:

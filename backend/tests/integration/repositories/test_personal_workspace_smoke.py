@@ -11,24 +11,24 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from sqlalchemy import func, select, text
 
+from src.agent.aris import ArisMode
 from src.agent.context import AgentContextBudget
-from src.agent.runtime import TimDeps, TimRuntime, WriteGate
-from src.agent.tim import TimMode
+from src.agent.runtime import ArisDeps, ArisRuntime, WriteGate
 from src.agent.tools import AgentToolContext
 from src.core.app_state import RUNTIME_STATE_KEY, SESSION_FACTORY_STATE_KEY, SETTINGS_STATE_KEY
 from src.core.settings import get_settings
 from src.db.models import AgentToolRun, BoardShape, Task, TaskReport
 from src.db.models.api_tokens import ApiTokenScope
 from src.dependencies.scopes import build_agent_project_tool_scope
-from src.dependencies.services import TIM_ACTIONS, build_project_tool_executor
+from src.dependencies.services import ARIS_ACTIONS, build_project_tool_executor
 from src.knowledge.catalog import SourceType
 from src.mcp_server.server import read_project_knowledge
 from src.mcp_server.services import build_moves_service, build_project_query_scope
 from src.repositories.api_tokens import ApiTokensRepository
+from src.schemas.boards import BoardCreateSchema
 from src.schemas.enums import TaskKind
 from src.schemas.knowledge import KnowledgeReadRequest
-from src.schemas.project_boards import ProjectBoardCreateSchema
-from src.schemas.task_moves import TaskMoveTargetSchema
+from src.schemas.task_transfers import TaskTransferTargetSchema
 from src.services.agent_actions import AgentActionsService
 from src.services.project_query import ProjectQueryService
 from src.utils.api_tokens import generate_token_secret, hash_token_secret
@@ -64,7 +64,7 @@ async def run_action(executor, context, name, arguments, *, allow_write=True):
         results.append(response)
 
     gate = WriteGate(permission())
-    deps = TimDeps(
+    deps = ArisDeps(
         execution=replace(context, request_id=uuid4()),
         executor=executor,
         system_prompt="Выполни ровно указанное действие.",
@@ -79,7 +79,7 @@ async def run_action(executor, context, name, arguments, *, allow_write=True):
         write_gate=gate,
     )
     try:
-        completed = await TimRuntime(model=FunctionModel(model), executor=executor).run(
+        completed = await ArisRuntime(model=FunctionModel(model), executor=executor).run(
             deps, metadata={"channel": "cross-domain-smoke"}
         )
         assert completed.output is not None
@@ -100,16 +100,16 @@ async def test_personal_board_to_project_task_moves_and_report_search(agent_env,
     settings.app.uploads_path = tmp_path
     settings.knowledge.knowledge_enabled = False
     scope = build_agent_project_tool_scope(session_factory=env.factory, settings=settings)
-    actions = AgentActionsService(scope=scope, actions=TIM_ACTIONS)
+    actions = AgentActionsService(scope=scope, actions=ARIS_ACTIONS)
     query = ProjectQueryService(scope=build_project_query_scope(env.factory))
     executor = build_project_tool_executor(query, actions)
     personal = AgentToolContext(
-        project_id=None, user_id=1, can_write=True, mode=TimMode.WIDGET_PERSONAL
+        project_id=None, user_id=1, can_write=True, mode=ArisMode.WIDGET_PERSONAL
     )
 
     async with scope() as db:
         board = await db.boards.create_free_board(
-            data=ProjectBoardCreateSchema(title="Сквозная приёмка"), user_id=1
+            data=BoardCreateSchema(title="Сквозная приёмка"), user_id=1
         )
         await db.unit_of_work.commit()
     diagram = {
@@ -144,7 +144,7 @@ async def test_personal_board_to_project_task_moves_and_report_search(agent_env,
             data=promotion(revision=scene.board.revision, key="SMOKE"),
         )
     project_id = promoted.project.id
-    project = replace(personal, project_id=project_id, mode=TimMode.WIDGET_PROJECT)
+    project = replace(personal, project_id=project_id, mode=ArisMode.WIDGET_PROJECT)
     async with scope() as db:
         scene = await db.boards.get_content(project_id=project_id, board_id=board.id)
     assert promoted.board.id == board.id and scene.board.project_id == project_id
@@ -161,13 +161,13 @@ async def test_personal_board_to_project_task_moves_and_report_search(agent_env,
     assert placed["task"]["wbs_node_id"] == node["id"]
     async with env.factory() as session:
         moves = build_moves_service(session, settings)
-        preview = await moves.preview(task_id=task["id"], target=TaskMoveTargetSchema(personal=True), user_id=1)
+        preview = await moves.preview(task_id=task["id"], target=TaskTransferTargetSchema(personal=True), user_id=1)
         assert preview.losses.wbs_placements == 1
-        moved = await moves.move(task_id=task["id"], target=TaskMoveTargetSchema(personal=True), user_id=1)
+        moved = await moves.move(task_id=task["id"], target=TaskTransferTargetSchema(personal=True), user_id=1)
         assert moved.task.id == task["id"] and moved.task.kind is TaskKind.PERSONAL
         row = await session.get(Task, task["id"])
         assert (row.project_id, row.stage_id, row.wbs_node_id, row.wbs_position) == (None, None, None, None)
-        returned = await moves.move(task_id=task["id"], target=TaskMoveTargetSchema(project_id=project_id), user_id=1)
+        returned = await moves.move(task_id=task["id"], target=TaskTransferTargetSchema(project_id=project_id), user_id=1)
         assert returned.task.id == task["id"] and returned.task.project_id == project_id
         assert returned.task.kind is TaskKind.PROJECT and returned.task.wbs_node_id is None
     async with scope() as db:

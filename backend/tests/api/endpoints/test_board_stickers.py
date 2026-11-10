@@ -5,20 +5,20 @@ import pytest
 from httpx import AsyncClient
 
 from main import app
-from src.dependencies.services import get_project_stickers_service
-from src.exceptions.project_boards import ProjectBoardNotFoundError
-from src.exceptions.project_stickers import (
-    ProjectStickerNotFoundError,
-    ProjectStickerRevisionConflictError,
-    ProjectStickerTaskMismatchError,
+from src.dependencies.services import get_board_stickers_service
+from src.exceptions.board_stickers import (
+    BoardStickerNotFoundError,
+    BoardStickerRevisionConflictError,
+    BoardStickerTaskMismatchError,
 )
-from src.schemas.project_stickers import ProjectStickerSchema
-from src.services.project_stickers import ProjectStickersService
+from src.exceptions.boards import BoardNotFoundError
+from src.schemas.board_stickers import BoardStickerSchema
+from src.services.board_stickers import BoardStickersService
 
 
-def sticker_schema(*, revision: int = 1) -> ProjectStickerSchema:
+def sticker_schema(*, revision: int = 1) -> BoardStickerSchema:
     now = datetime.now(UTC)
-    return ProjectStickerSchema(
+    return BoardStickerSchema(
         id=4,
         project_id=1,
         board_id=3,
@@ -38,9 +38,9 @@ def sticker_schema(*, revision: int = 1) -> ProjectStickerSchema:
 
 @pytest.mark.asyncio
 async def test_list_stickers_returns_contract(api_client: AsyncClient) -> None:
-    service = AsyncMock(spec=ProjectStickersService)
+    service = AsyncMock(spec=BoardStickersService)
     service.list_stickers.return_value = [sticker_schema()]
-    app.dependency_overrides[get_project_stickers_service] = lambda: service
+    app.dependency_overrides[get_board_stickers_service] = lambda: service
 
     response = await api_client.get("/api/v1/projects/1/boards/3/stickers")
 
@@ -51,15 +51,15 @@ async def test_list_stickers_returns_contract(api_client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_create_sticker_uses_authenticated_user(api_client: AsyncClient) -> None:
-    service = AsyncMock(spec=ProjectStickersService)
+    service = AsyncMock(spec=BoardStickersService)
     service.create_sticker.return_value = sticker_schema()
-    app.dependency_overrides[get_project_stickers_service] = lambda: service
+    app.dependency_overrides[get_board_stickers_service] = lambda: service
 
     response = await api_client.post(
         "/api/v1/projects/1/boards/3/stickers",
         json={
             "body": "Согласовать API",
-            "color": "yellow",
+            "color": "#fff19a",
             "task_ids": [11],
             "canvas_x": 298.5,
             "canvas_y": 42.0,
@@ -80,10 +80,10 @@ async def test_create_sticker_uses_authenticated_user(api_client: AsyncClient) -
 @pytest.mark.parametrize(
     ("error", "status_code"),
     [
-        (ProjectStickerNotFoundError(4), 404),
-        (ProjectBoardNotFoundError(3), 404),
-        (ProjectStickerRevisionConflictError(4, 2), 409),
-        (ProjectStickerTaskMismatchError({99}), 422),
+        (BoardStickerNotFoundError(4), 404),
+        (BoardNotFoundError(3), 404),
+        (BoardStickerRevisionConflictError(4, 2), 409),
+        (BoardStickerTaskMismatchError({99}), 422),
     ],
 )
 async def test_patch_maps_domain_errors(
@@ -91,9 +91,9 @@ async def test_patch_maps_domain_errors(
     error: Exception,
     status_code: int,
 ) -> None:
-    service = AsyncMock(spec=ProjectStickersService)
+    service = AsyncMock(spec=BoardStickersService)
     service.update_sticker.side_effect = error
-    app.dependency_overrides[get_project_stickers_service] = lambda: service
+    app.dependency_overrides[get_board_stickers_service] = lambda: service
 
     response = await api_client.patch(
         "/api/v1/projects/1/boards/3/stickers/4",
@@ -105,8 +105,8 @@ async def test_patch_maps_domain_errors(
 
 @pytest.mark.asyncio
 async def test_empty_sticker_is_rejected_before_service(api_client: AsyncClient) -> None:
-    service = AsyncMock(spec=ProjectStickersService)
-    app.dependency_overrides[get_project_stickers_service] = lambda: service
+    service = AsyncMock(spec=BoardStickersService)
+    app.dependency_overrides[get_board_stickers_service] = lambda: service
 
     response = await api_client.post(
         "/api/v1/projects/1/boards/3/stickers",
@@ -123,9 +123,9 @@ async def test_sticker_write_endpoints_pass_revision_and_coordinates(
 ) -> None:
     """PATCH и DELETE передают ревизию, перенос передаёт координаты и отклоняет выход за диапазон."""
 
-    service = AsyncMock(spec=ProjectStickersService)
+    service = AsyncMock(spec=BoardStickersService)
     service.update_sticker.return_value = sticker_schema(revision=3)
-    app.dependency_overrides[get_project_stickers_service] = lambda: service
+    app.dependency_overrides[get_board_stickers_service] = lambda: service
 
     response = await api_client.patch(
         "/api/v1/projects/1/boards/3/stickers/4",
@@ -137,8 +137,8 @@ async def test_sticker_write_endpoints_pass_revision_and_coordinates(
     assert call["sticker_id"] == 4
     assert call["data"].revision == 2
 
-    service = AsyncMock(spec=ProjectStickersService)
-    app.dependency_overrides[get_project_stickers_service] = lambda: service
+    service = AsyncMock(spec=BoardStickersService)
+    app.dependency_overrides[get_board_stickers_service] = lambda: service
 
     response = await api_client.delete("/api/v1/projects/1/boards/3/stickers/4?revision=3")
 
@@ -150,9 +150,9 @@ async def test_sticker_write_endpoints_pass_revision_and_coordinates(
         revision=3,
     )
 
-    service = AsyncMock(spec=ProjectStickersService)
+    service = AsyncMock(spec=BoardStickersService)
     service.move_sticker.return_value = sticker_schema()
-    app.dependency_overrides[get_project_stickers_service] = lambda: service
+    app.dependency_overrides[get_board_stickers_service] = lambda: service
 
     response = await api_client.patch(
         "/api/v1/projects/1/boards/3/stickers/4/position",
@@ -166,8 +166,8 @@ async def test_sticker_write_endpoints_pass_revision_and_coordinates(
     assert call["data"].canvas_y == -80.0
     assert call["data"].z_index == 7
 
-    service = AsyncMock(spec=ProjectStickersService)
-    app.dependency_overrides[get_project_stickers_service] = lambda: service
+    service = AsyncMock(spec=BoardStickersService)
+    app.dependency_overrides[get_board_stickers_service] = lambda: service
 
     response = await api_client.patch(
         "/api/v1/projects/1/boards/3/stickers/4/position",

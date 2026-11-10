@@ -6,7 +6,7 @@ import type { Project } from "@/lib/types";
 import { useCurrentUser } from "@/lib/useAuth";
 import { useChatDockStore } from "@/stores/chatDock";
 import { ChatSelector } from "@/components/chat/ChatSelector";
-import { TimPanel } from "@/components/tim/TimPanel";
+import { ArisPanel } from "@/components/aris/ArisPanel";
 import { Popover } from "@/components/ui/Popover";
 
 export default function GlobalChatPage() {
@@ -25,13 +25,13 @@ export default function GlobalChatPage() {
                     {projects.map(project => <section key={project.id} className="rounded-lg border border-line-subtle p-2">
                         <h2 className="mb-1 truncate text-sm font-medium text-primary">{project.key} · {project.name}</h2>
                         <div className="flex flex-wrap gap-2 text-sm text-accent">
-                            <Link aria-label={`${project.key} · Личные диалоги`} to={`/projects/${project.key}/chat?view=personal`} onClick={close} className="flex min-h-11 items-center rounded px-2 py-1 hover:bg-hover">Личные диалоги</Link>
-                            <Link aria-label={`${project.key} · Знания`} to={`/projects/${project.key}/chat?view=knowledge`} onClick={close} className="flex min-h-11 items-center rounded px-2 py-1 hover:bg-hover">Знания</Link>
+                            <Link aria-label={`${project.key} · Личные диалоги`} to={`/projects/${project.key}/conversations`} onClick={close} className="flex min-h-11 items-center rounded px-2 py-1 hover:bg-hover">Личные диалоги</Link>
+                            <Link aria-label={`${project.key} · Знания`} to={`/projects/${project.key}/knowledge`} onClick={close} className="flex min-h-11 items-center rounded px-2 py-1 hover:bg-hover">Знания</Link>
                         </div>
                     </section>)}
                 </div>}
             </Popover>}
         </header>
-        <div className="min-h-0 flex-1"><TimPanel userId={userId} embedded /></div>
+        <div className="min-h-0 flex-1"><ArisPanel userId={userId} embedded /></div>
     </section>;
 }

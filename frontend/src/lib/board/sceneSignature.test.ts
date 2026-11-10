@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { IdRegistry, sceneFromContent } from "@/lib/board/scene";
 import { sceneSignature } from "@/lib/board/sceneSignature";
-import type { ProjectSticker } from "@/lib/board/stickers";
+import type { BoardSticker } from "@/lib/board/stickers";
 
-const sticker: ProjectSticker = {
+const sticker: BoardSticker = {
     id: 7, project_id: 1, board_id: 1, body: "Заметка", color: "#fff19a",
     canvas_x: 0, canvas_y: 0, width: 230, height: 230, z_index: 0, task_ids: [102, 101],
     created_by_user_id: 1, created_by_username_snapshot: "tester",

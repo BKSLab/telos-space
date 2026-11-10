@@ -3,12 +3,9 @@ import {
     buildMcpConfig,
     isTokenActive,
     mcpServerUrl,
-    READ_TOOLS,
     scopeLabel,
     SECRET_PLACEHOLDER,
     tokenState,
-    toolsForScope,
-    WRITE_TOOLS,
 } from "@/lib/mcpConfig";
 import type { ApiToken } from "@/lib/types";
 
@@ -16,7 +13,7 @@ function token(overrides: Partial<ApiToken> = {}): ApiToken {
     return {
         id: 1,
         name: "Ноутбук",
-        prefix: "tt_Ab",
+        prefix: "Abc12345",
         scope: "READ",
         created_at: "2026-09-01T10:00:00Z",
         expires_at: null,
@@ -43,10 +40,10 @@ describe("mcpServerUrl", () => {
 describe("buildMcpConfig", () => {
     it("подставляет секрет сразу после выпуска", () => {
         const config = JSON.parse(
-            buildMcpConfig({ origin: "http://localhost:5173", secret: "tt_secret" }),
+            buildMcpConfig({ origin: "http://localhost:5173", secret: "telos_token_secret" }),
         );
 
-        expect(config.mcpServers["telos-space"].headers.Authorization).toBe("Bearer tt_secret");
+        expect(config.mcpServers["telos-space"].headers.Authorization).toBe("Bearer telos_token_secret");
         expect(config.mcpServers["telos-space"].url).toBe("http://localhost:5173/mcp");
     });
 
@@ -73,24 +70,6 @@ describe("buildMcpConfig", () => {
 
         expect(raw).toContain("\n");
         expect(() => JSON.parse(raw)).not.toThrow();
-    });
-});
-
-describe("toolsForScope", () => {
-    it("токен на чтение не получает изменяющих инструментов", () => {
-        const tools = toolsForScope("READ");
-
-        expect(tools).toEqual([...READ_TOOLS]);
-        for (const writeTool of WRITE_TOOLS) {
-            expect(tools).not.toContain(writeTool);
-        }
-    });
-
-    it("токен на запись получает оба набора", () => {
-        const tools = toolsForScope("WRITE");
-
-        expect(tools).toHaveLength(READ_TOOLS.length + WRITE_TOOLS.length);
-        expect(tools).toContain("delete_task");
     });
 });
 

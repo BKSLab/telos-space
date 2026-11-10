@@ -17,15 +17,15 @@ from pydantic import BaseModel
 from scripts.aris_benchmark import mentions_date
 from scripts.aris_model_profiles import PROFILES, ModelProfile
 from scripts.aris_usage import MeteredAsyncClient, UsageLedger
+from src.agent.aris import ArisMode
 from src.agent.context import AgentContextBudget
-from src.agent.runtime import TimDeps, TimRuntime
-from src.agent.tim import TimMode
+from src.agent.runtime import ArisDeps, ArisRuntime
 from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor
 from src.clients.agent_model import build_agent_model
 from src.clients.llm import LlmClient
 from src.clients.model_options import agent_request_fields
 from src.core.settings import LlmSettings, get_settings
-from src.prompts.project_agent import TIM_BASE_PROMPTS
+from src.prompts.project_agent import ARIS_BASE_PROMPTS
 from src.schemas.project_tool_inputs import TaskInput
 
 
@@ -98,9 +98,9 @@ async def probe(profile: ModelProfile, base: LlmSettings) -> dict:
                         ),
                     ]
                 )
-                mode = TimMode.WIDGET_PROJECT
-                system = TIM_BASE_PROMPTS[mode]
-                deps = TimDeps(
+                mode = ArisMode.WIDGET_PROJECT
+                system = ARIS_BASE_PROMPTS[mode]
+                deps = ArisDeps(
                     execution=AgentToolContext(project_id=1, user_id=1, can_write=False, mode=mode),
                     executor=executor,
                     system_prompt=system,
@@ -115,7 +115,7 @@ async def probe(profile: ModelProfile, base: LlmSettings) -> dict:
                     defer_workflows=True,
                 )
                 ledger.case_id = "native_tools"
-                runtime = TimRuntime(model=build_agent_model(settings, http), executor=executor)
+                runtime = ArisRuntime(model=build_agent_model(settings, http), executor=executor)
                 native = await runtime.run(deps, metadata={})
                 text = native.output.answer if native.output else ""
                 result["tool_reads"] = reads

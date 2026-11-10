@@ -2,7 +2,7 @@ import { useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointer
 import { clampSplitRatio } from "@/lib/ganttView";
 import { readStored, writeStored } from "@/lib/useCalendarView";
 
-const STORAGE_KEY = "tt.calendar.project.split";
+const STORAGE_KEY = "telos.calendar.project.split";
 
 /**
  * «Рядом»: сетка сверху, шкала снизу, между ними — разделитель, который тянут мышью или

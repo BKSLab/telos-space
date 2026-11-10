@@ -2,17 +2,17 @@
 
 import logging
 
-from src.db.models.project_boards import ProjectBoard
+from src.db.models.boards import Board
 from src.exceptions.board_editor import (
     BoardAlreadyPromotedError,
     BoardEditorValidationError,
     BoardObjectLockedError,
 )
-from src.exceptions.project_boards import (
-    ProjectBoardNotFoundError,
-    ProjectBoardRevisionConflictError,
-    ProjectBoardsRepositoryError,
-    ProjectBoardsServiceError,
+from src.exceptions.boards import (
+    BoardNotFoundError,
+    BoardRevisionConflictError,
+    BoardsRepositoryError,
+    BoardsServiceError,
 )
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
 from src.repositories.board_editor import BoardEditorRepository, BoardPromotionUnitOfWork
@@ -24,14 +24,14 @@ from src.schemas.board_editor import (
     BoardPromotionResult,
     BoardPromotionWrite,
 )
-from src.schemas.project_boards import ProjectBoardSchema
+from src.schemas.boards import BoardSchema
 from src.services.access import AccessService
 from src.services.projects import ProjectsService
 
 logger = logging.getLogger(__name__)
 
 
-def require_objects_unlocked(board: ProjectBoard, refs: set[tuple[str, int]]) -> None:
+def require_objects_unlocked(board: Board, refs: set[tuple[str, int]]) -> None:
     """UX-lock, не ACL. Вызывать под row lock перед изменением/удалением объектов."""
     metadata = BoardEditorMetadata.model_validate(board.editor_metadata)
     affected = set(refs)
@@ -89,13 +89,13 @@ class BoardEditorService:
         project_id: int | None,
         user_id: int,
         write: bool,
-    ) -> ProjectBoard:
+    ) -> Board:
         board = await self.repository.get_board(board_id, lock=True)
         if board is None or board.project_id != project_id:
-            raise ProjectBoardNotFoundError(board_id)
+            raise BoardNotFoundError(board_id)
         if project_id is None:
             if board.created_by_user_id != user_id:
-                raise ProjectBoardNotFoundError(board_id)
+                raise BoardNotFoundError(board_id)
         elif write:
             await self.access.ensure_project_access(project_id=project_id, user_id=user_id)
         else:
@@ -103,7 +103,7 @@ class BoardEditorService:
         return board
 
     @staticmethod
-    def _state(board: ProjectBoard) -> BoardEditorState:
+    def _state(board: Board) -> BoardEditorState:
         return BoardEditorState(
             board_id=board.id,
             revision=board.revision,
@@ -111,9 +111,9 @@ class BoardEditorService:
         )
 
     @staticmethod
-    def _revision(board: ProjectBoard, expected: int) -> None:
+    def _revision(board: Board, expected: int) -> None:
         if board.revision != expected:
-            raise ProjectBoardRevisionConflictError(board.id, expected)
+            raise BoardRevisionConflictError(board.id, expected)
 
     async def get_metadata(
         self,
@@ -130,9 +130,9 @@ class BoardEditorService:
                 write=False,
             )
             return self._state(board)
-        except ProjectBoardsRepositoryError as error:
+        except BoardsRepositoryError as error:
             logger.error("❌ Ошибка чтения metadata доски id=%s.", board_id, exc_info=True)
-            raise ProjectBoardsServiceError(str(error)) from error
+            raise BoardsServiceError(str(error)) from error
 
     async def put_metadata(
         self,
@@ -160,10 +160,10 @@ class BoardEditorService:
             result = self._state(board)
             await self.unit_of_work.commit()
             return result
-        except (ProjectBoardsRepositoryError, UnitOfWorkRepositoryError) as error:
+        except (BoardsRepositoryError, UnitOfWorkRepositoryError) as error:
             await self.unit_of_work.rollback()
             logger.error("❌ Ошибка записи metadata доски id=%s.", board_id, exc_info=True)
-            raise ProjectBoardsServiceError(str(error)) from error
+            raise BoardsServiceError(str(error)) from error
         except Exception:
             await self.unit_of_work.rollback()
             raise
@@ -178,7 +178,7 @@ class BoardEditorService:
         try:
             board = await self.repository.get_board(board_id, lock=True)
             if board is None or board.created_by_user_id != user_id:
-                raise ProjectBoardNotFoundError(board_id)
+                raise BoardNotFoundError(board_id)
             if board.project_id is not None:
                 raise BoardAlreadyPromotedError("Повторный перенос доски в проект.")
             self._revision(board, data.expected_revision)
@@ -195,14 +195,14 @@ class BoardEditorService:
             await self.repository.attach_to_new_project(board, project.id)
             result = BoardPromotionResult(
                 project=project,
-                board=ProjectBoardSchema.model_validate(board),
+                board=BoardSchema.model_validate(board),
             )
             await self.unit_of_work.commit()
             return result
-        except (ProjectBoardsRepositoryError, UnitOfWorkRepositoryError) as error:
+        except (BoardsRepositoryError, UnitOfWorkRepositoryError) as error:
             await self.unit_of_work.rollback()
             logger.error("❌ Ошибка создания проекта из доски id=%s.", board_id, exc_info=True)
-            raise ProjectBoardsServiceError(str(error)) from error
+            raise BoardsServiceError(str(error)) from error
         except Exception:
             await self.unit_of_work.rollback()
             raise

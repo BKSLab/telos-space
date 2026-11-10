@@ -8,18 +8,18 @@ from sqlalchemy import func, select
 
 from src.agent.tools import AgentToolContext
 from src.db.models.board_shapes import BoardShape
-from src.db.models.project_boards import ProjectBoard
+from src.db.models.boards import Board
 from src.exceptions.board_shapes import BoardBatchConflictError, BoardShapeInvalidError
-from src.exceptions.project_boards import ProjectBoardNotFoundError
+from src.exceptions.boards import BoardNotFoundError
 from src.repositories.board_shapes import BoardShapesRepository
-from src.repositories.project_boards import ProjectBoardsRepository
-from src.repositories.project_stickers import ProjectStickersRepository
+from src.repositories.board_stickers import BoardStickersRepository
+from src.repositories.boards import BoardsRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.schemas.board_diagrams import BoardDiagramInput, BoardSceneInput
 from src.schemas.board_shapes import BoardBatchSchema
 from src.services.agent_board_actions import draw_board_diagram, get_board_scene
 from src.services.board_shapes import BoardShapesService
-from src.services.project_boards import ProjectBoardsService
+from src.services.boards import BoardsService
 from tests.board_support import local_user
 
 
@@ -27,17 +27,17 @@ async def setup_board(session):
     user = local_user(username="diagram-" + uuid4().hex, display_name="Diagram test")
     session.add(user)
     await session.flush()
-    board = ProjectBoard(
+    board = Board(
         title="Agent test", project_id=None, created_by_user_id=user.id, position=0
     )
     session.add(board)
     await session.commit()
-    boards = ProjectBoardsRepository(session)
+    boards = BoardsRepository(session)
     shapes = BoardShapesRepository(session)
-    stickers = ProjectStickersRepository(session)
+    stickers = BoardStickersRepository(session)
     uow = UnitOfWork(session)
     db = SimpleNamespace(
-        boards=ProjectBoardsService(
+        boards=BoardsService(
             boards_repository=boards,
             shapes_repository=shapes,
             stickers_repository=stickers,
@@ -176,9 +176,9 @@ async def test_another_users_personal_board_is_hidden_for_reads_and_writes(db_se
     db_session.add(other)
     await db_session.commit()
     ctx = AgentToolContext(project_id=None, user_id=other.id, can_write=True)
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await get_board_scene(db, ctx, BoardSceneInput(board_id=board_id))
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await draw_board_diagram(
             db,
             ctx,

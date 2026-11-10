@@ -6,12 +6,12 @@ from httpx import AsyncClient
 
 from main import app
 from src.dependencies.services import get_analytics_service
+from src.exceptions.ai import AiProviderError
 from src.exceptions.analytics import (
     AnalyticsEmptyScopeError,
     AnalyticsGenerationError,
     AnalyticsServiceError,
 )
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.projects import ProjectNotFoundError
 from src.schemas.analytics import (
     AnalyticsContextSchema,
@@ -126,7 +126,7 @@ async def test_analytics_endpoint_maps_every_domain_error(api_client: AsyncClien
     assert response.status_code == 502
 
     service = AsyncMock(spec=AnalyticsService)
-    service.generate.side_effect = KnowledgeProviderError("LLM недоступен")
+    service.generate.side_effect = AiProviderError("LLM недоступен")
     override(service)
 
     response = await api_client.post("/api/v1/dashboard/analytics", json={"project_id": 1})

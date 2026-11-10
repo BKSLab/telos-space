@@ -10,10 +10,10 @@ import { IconButton } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/States";
 import { ChatSelector } from "./ChatSelector";
 import { ProjectChatWorkspace } from "./ProjectChatWorkspace";
-import "@/components/tim/tim.css";
+import "@/components/aris/aris.css";
 import "./chat.css";
 
-const TimPanel = lazy(() => import("@/components/tim/TimPanel").then(module => ({ default: module.TimPanel })));
+const ArisPanel = lazy(() => import("@/components/aris/ArisPanel").then(module => ({ default: module.ArisPanel })));
 
 interface Props { project?: Project; routeProject?: Project; projects: Project[]; userId: number; fullPage: boolean; panel: ChatPanel | null }
 
@@ -64,7 +64,7 @@ export function FloatingChatDock({ project, routeProject, projects, userId, full
                 <IconButton label="Свернуть чат" onClick={close}><X size={17} /></IconButton>
             </header>
             <div className="min-h-0 flex-1">
-                {panel === "personal" ? <Suspense fallback={<div className="p-4"><Skeleton className="h-40 w-full" /></div>}><TimPanel userId={userId} embedded /></Suspense>
+                {panel === "personal" ? <Suspense fallback={<div className="p-4"><Skeleton className="h-40 w-full" /></div>}><ArisPanel userId={userId} embedded /></Suspense>
                     : project ? <ProjectChatWorkspace key={project.id} compact /> : <p className="p-5 text-sm text-muted">Выберите доступный проект или личный диалог.</p>}
             </div>
         </div>}

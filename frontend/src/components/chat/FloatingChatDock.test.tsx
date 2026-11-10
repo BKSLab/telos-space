@@ -9,7 +9,7 @@ import { FloatingChatDock } from "./FloatingChatDock";
 vi.mock("@/lib/useProjectChat", () => ({ useProjectChat: () => ({ info: { unread_count: 2 }, error: null }) }));
 vi.mock("@/lib/useAuth", () => ({ useCurrentUser: () => ({ data: { id: 1 } }) }));
 vi.mock("./ProjectChatWorkspace", () => ({ ProjectChatWorkspace: () => <p>Общий чат</p> }));
-vi.mock("@/components/tim/TimPanel", () => ({ TimPanel: ({ embedded }: { embedded?: boolean }) => <section role={embedded ? undefined : "dialog"} aria-label="Личный виджет Ариса" data-testid="personal" data-embedded={String(embedded)}>Личный диалог Ариса</section> }));
+vi.mock("@/components/aris/ArisPanel", () => ({ ArisPanel: ({ embedded }: { embedded?: boolean }) => <section role={embedded ? undefined : "dialog"} aria-label="Личный виджет Ариса" data-testid="personal" data-embedded={String(embedded)}>Личный диалог Ариса</section> }));
 
 const project = { id: 1, key: "DEMO", name: "Личный проект" } as Project;
 const anotherProject = { id: 2, key: "SAMPLE", name: "Другой проект" } as Project;
@@ -69,7 +69,7 @@ it("разворачивает командный чат, сохраняя query
 });
 
 it("вне проекта начинает с личного чата и затем помнит выбранный общий чат", async () => {
-    setup({ routeProject: null }, "/projects");
+    setup({ routeProject: null }, "/");
     const button = screen.getByRole("button", { name: "Открыть чаты" });
     fireEvent.click(button);
     await screen.findByText("Личный диалог Ариса");
@@ -105,7 +105,7 @@ it("из проекта также раскрывает личный диало�
 
 it("выбирает сохранённый чат текущего пользователя отдельно от другого аккаунта", async () => {
     useChatDockStore.setState({ projects: { 1: 1, 2: 2 }, modes: { 1: "team", 2: "personal" } });
-    setup({ routeProject: null, userId: 2 }, "/projects");
+    setup({ routeProject: null, userId: 2 }, "/");
     fireEvent.click(screen.getByRole("button", { name: "Открыть чаты" }));
     await screen.findByText("Личный диалог Ариса");
     expect((screen.getByRole("combobox", { name: "Выбор чата" }) as HTMLSelectElement).value).toBe("personal");

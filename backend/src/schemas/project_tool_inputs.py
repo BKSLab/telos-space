@@ -7,6 +7,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.schemas.board_stickers import (
+    BoardStickerCreateSchema,
+    BoardStickerPositionUpdateSchema,
+    BoardStickerUpdateSchema,
+)
 from src.schemas.calendar_scenarios import ScenarioApplyChangeSchema, ScenarioChangeInputSchema
 from src.schemas.documents import DocumentCreateSchema, DocumentUpdateSchema
 from src.schemas.enums import TaskStatus
@@ -17,11 +22,6 @@ from src.schemas.project_risks import (
     ProjectRiskUpdateSchema,
 )
 from src.schemas.project_stages import StageCreateSchema, StageUpdateSchema
-from src.schemas.project_stickers import (
-    ProjectStickerCreateSchema,
-    ProjectStickerPositionUpdateSchema,
-    ProjectStickerUpdateSchema,
-)
 from src.schemas.projects import ProjectUpdateSchema
 from src.schemas.task_checklists import TaskChecklistSchema
 from src.schemas.task_dependencies import TaskDependencyCreateSchema
@@ -161,7 +161,7 @@ class TaskUpdateInput(TaskInput):
     )
 
 
-class TaskMoveInput(TaskInput):
+class TaskTransferInput(TaskInput):
     stage_id: int = Field(gt=0, description="Целевая стадия текущего проекта.")
     position: float | None = Field(
         None, description="Позиция внутри стадии; без значения — в конец."
@@ -235,7 +235,7 @@ class StickerListInput(PageInput):
     board_id: int | None = Field(None, gt=0, description=BOARD_ID_DESCRIPTION)
 
 
-class StickerCreateInput(ProjectStickerCreateSchema, ToolInput):
+class StickerCreateInput(BoardStickerCreateSchema, ToolInput):
     """Новый стикер с привязками к задачам и координатами."""
 
     board_id: int | None = Field(None, gt=0, description=BOARD_ID_DESCRIPTION)
@@ -251,13 +251,13 @@ class StickerInput(ToolInput):
 
 
 class StickerUpdateInput(StickerInput):
-    changes: ProjectStickerUpdateSchema = Field(
+    changes: BoardStickerUpdateSchema = Field(
         description="Текст, цвет и задачи вместе с текущей revision."
     )
 
 
 class StickerMoveInput(StickerInput):
-    position: ProjectStickerPositionUpdateSchema = Field(
+    position: BoardStickerPositionUpdateSchema = Field(
         description="Координаты, необязательный размер и слой z_index."
     )
 
@@ -413,7 +413,7 @@ class TaskRefInput(ToolInput):
         None,
         min_length=3,
         max_length=64,
-        description="Ключ задачи: PROJ-142, ключ потока или T-15.",
+        description="Ключ проектной задачи PROJ-142 или разовой задачи T-15.",
     )
 
     @model_validator(mode="after")
@@ -424,7 +424,7 @@ class TaskRefInput(ToolInput):
 
 
 class PersonalTaskCreateInput(PersonalTaskCreateSchema, ToolInput):
-    """Разовая задача вне проектов и потоков; постановщик — пользователь."""
+    """Разовая задача вне проекта; постановщик — пользователь."""
 
 
 
@@ -434,7 +434,7 @@ class PersonalTaskCreateInput(PersonalTaskCreateSchema, ToolInput):
 
 
 class TaskStatusInput(ToolInput):
-    task_id: int = Field(gt=0, description="ID задачи потока или разовой задачи.")
+    task_id: int = Field(gt=0, description="ID разовой задачи.")
     status: TaskStatus = Field(description="Новый статус: NEW, IN_PROGRESS, DONE и др.")
 
 

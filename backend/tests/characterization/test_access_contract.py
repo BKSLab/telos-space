@@ -168,10 +168,10 @@ async def test_unusable_tokens_are_indistinguishable(
     существовал. Все три случая проверяются вместе: расхождение любого из
     них — это и есть утечка.
     """
-    secret = "tt_characterization"
+    secret = "telos_token_characterization"
     past = datetime.now(UTC) - timedelta(days=1)
     stored = {
-        "выдуманный": _token("tt_other"),
+        "выдуманный": _token("telos_token_other"),
         "истёкший": _token(secret, expires_at=past),
         "отозванный": _token(secret, revoked_at=past),
     }
@@ -209,7 +209,7 @@ async def test_token_of_disabled_user_is_rejected(
     bearer_graph: Callable[..., None],
 ) -> None:
     """Отключённый пользователь не проходит даже с действующим токеном."""
-    secret = "tt_characterization"
+    secret = "telos_token_characterization"
     bearer_graph(_token(secret), _user(is_active=False))
 
     response = await raw_client.get(
@@ -225,7 +225,7 @@ async def test_read_token_reaches_read_endpoint(
     bearer_graph: Callable[..., None],
 ) -> None:
     """Действующий READ-токен проходит аутентификацию на чтении."""
-    secret = "tt_characterization"
+    secret = "telos_token_characterization"
     bearer_graph(_token(secret, scope=ApiTokenScope.READ))
 
     response = await raw_client.get(
@@ -241,7 +241,7 @@ async def test_token_cannot_manage_tokens(
     bearer_graph: Callable[..., None],
 ) -> None:
     """Управление токенами закрыто для самих токенов."""
-    secret = "tt_characterization"
+    secret = "telos_token_characterization"
     bearer_graph(_token(secret, scope=ApiTokenScope.WRITE))
 
     response = await raw_client.get(

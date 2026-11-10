@@ -1,8 +1,8 @@
 import type { Page } from "@playwright/test";
-import type { MyTask, Task, TaskComment, TaskMoveLosses, TaskStatus } from "../../src/lib/types";
+import type { MyTask, Task, TaskComment, TaskTransferLosses, TaskStatus } from "../../src/lib/types";
 import { installMockApi as installBaseApi, mockState as baseState, stamp } from "./mockApi";
 
-const zeroLosses: TaskMoveLosses = { dependencies: 0, document_links: 0, risks: 0, board_stickers: 0, wbs_placements: 0 };
+const zeroLosses: TaskTransferLosses = { dependencies: 0, document_links: 0, risks: 0, board_stickers: 0, wbs_placements: 0 };
 interface TaskAttentionItem {
     task_id: number; revision: number; deadline_revision: number; overdue: boolean;
     is_new: boolean; is_overdue: boolean; is_updated: boolean;
@@ -25,7 +25,7 @@ export type MockState = ReturnType<typeof mockState>;
 export async function installMockApi(page: Page, state: MockState) {
     await page.route("https://fonts.googleapis.com/**", (route) => route.abort());
     await installBaseApi(page, state as unknown as ReturnType<typeof baseState>);
-    await page.routeWebSocket("**/api/v1/my/task-attention/ws", (socket) => { socket.onMessage(() => {}); });
+    await page.routeWebSocket("**/api/v1/users/me/task-attention/ws", (socket) => { socket.onMessage(() => {}); });
     await page.route("**/api/v1/**", async (route) => {
         const request = route.request();
         const url = new URL(request.url());
@@ -36,8 +36,8 @@ export async function installMockApi(page: Page, state: MockState) {
         const reply = (json: unknown, status = 200) => route.fulfill({ status, headers, ...(status === 204 ? {} : { json }) });
         const body = () => { try { return request.postDataJSON() ?? {}; } catch { return {}; } };
         const record = () => state.writes.push({ method, path, body: body() });
-        if (path === "/my/tasks") return reply(state.tasks.map((task): MyTask => ({ ...task, context: task.project_id === null ? null : { kind: "PROJECT", id: 1, key: "DEMO", name: state.projects[0].name, color: state.projects[0].color }, state: task.status ?? "IN_PROGRESS", state_label: task.status === "NEW" ? "Новая" : task.status === "DONE" ? "Готово" : "В работе", my_roles: ["REPORTER", "EXECUTOR"] })));
-        if (path === "/my/task-attention") return reply({ new_tasks: state.attentionItems.filter((item) => item.is_new).length, overdue_tasks: state.attentionItems.filter((item) => item.is_overdue).length, updated_tasks: state.attentionItems.filter((item) => item.is_updated).length, total: state.attentionItems.filter((item) => item.is_new || item.is_overdue || item.is_updated).length, items: state.attentionItems });
+        if (path === "/users/me/tasks") return reply(state.tasks.map((task): MyTask => ({ ...task, context: task.project_id === null ? null : { kind: "PROJECT", id: 1, key: "DEMO", name: state.projects[0].name, color: state.projects[0].color }, state: task.status ?? "IN_PROGRESS", state_label: task.status === "NEW" ? "Новая" : task.status === "DONE" ? "Готово" : "В работе", my_roles: ["REPORTER", "EXECUTOR"] })));
+        if (path === "/users/me/task-attention") return reply({ new_tasks: state.attentionItems.filter((item) => item.is_new).length, overdue_tasks: state.attentionItems.filter((item) => item.is_overdue).length, updated_tasks: state.attentionItems.filter((item) => item.is_updated).length, total: state.attentionItems.filter((item) => item.is_new || item.is_overdue || item.is_updated).length, items: state.attentionItems });
         if (path === "/users") return reply([state.me]);
         if (path === "/tasks" && method === "POST") {
             record();
@@ -74,11 +74,11 @@ export async function installMockApi(page: Page, state: MockState) {
             }
             return reply(state.report);
         }
-        if (rest === "/move-to/preview") {
+        if (rest === "/transfer/preview") {
             const personal = url.searchParams.get("personal") === "true";
             return reply({ from_key: task.key, target_kind: personal ? "PERSONAL" : "PROJECT", target_name: personal ? "Разовые задачи" : state.projects[0].name, target_key: personal ? "T" : "DEMO", stage_id: personal ? null : 1, stage_name: personal ? null : "В работе", status: personal ? "NEW" : null, executor: state.me, losses: state.losses, outsiders: state.outsider ? [state.members[1].user] : [], notes: [] });
         }
-        if (rest === "/move-to") {
+        if (rest === "/transfer") {
             record(); const personal = body().personal === true; const from = task.key;
             Object.assign(task, { key: personal ? "T-20" : "DEMO-20", number: 20, project_id: personal ? null : 1, stage_id: personal ? null : 1, status: personal ? "NEW" : null, wbs_node_id: null, wbs_position: null, canvas_x: null, canvas_y: null });
             return reply({ task, from_key: from, to_key: task.key, losses: state.losses, notes: [] });

@@ -39,8 +39,8 @@ class ApiKey(Base, TimestampMixin):
         String(16),
         nullable=False,
         unique=True,
-        doc="Публичный префикс ключа ttk_xxxxxxxx.",
-        comment="Первые символы ключа для узнавания и поиска.",
+        doc="Публичный идентификатор ключа: восемь hex-символов.",
+        comment="Публичный идентификатор для узнавания и поиска ключа, без секрета.",
     )
     owner_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),

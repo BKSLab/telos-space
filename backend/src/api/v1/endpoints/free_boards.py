@@ -19,11 +19,11 @@ from src.api.v1.responses import (
 from src.dependencies.auth import PrincipalDep, require_write_scope
 from src.dependencies.services import (
     BoardShapesServiceDep,
-    ProjectBoardsServiceDep,
-    ProjectStickersServiceDep,
+    BoardsServiceDep,
+    BoardStickersServiceDep,
 )
-from src.exceptions.project_boards import ProjectBoardsServiceError
-from src.exceptions.project_stickers import ProjectStickersServiceError
+from src.exceptions.board_stickers import BoardStickersServiceError
+from src.exceptions.boards import BoardsServiceError
 from src.schemas.board_shapes import (
     BoardBatchResultSchema,
     BoardBatchSchema,
@@ -33,25 +33,25 @@ from src.schemas.board_shapes import (
     BoardShapeToStickerSchema,
     BoardShapeUpdateSchema,
 )
-from src.schemas.project_boards import (
-    ProjectBoardContentSchema,
-    ProjectBoardCreateSchema,
-    ProjectBoardSchema,
-    ProjectBoardUpdateSchema,
+from src.schemas.board_stickers import (
+    BoardStickerCreateSchema,
+    BoardStickerPositionUpdateSchema,
+    BoardStickerSchema,
+    BoardStickerUpdateSchema,
 )
-from src.schemas.project_stickers import (
-    ProjectStickerCreateSchema,
-    ProjectStickerPositionUpdateSchema,
-    ProjectStickerSchema,
-    ProjectStickerUpdateSchema,
+from src.schemas.boards import (
+    BoardContentSchema,
+    BoardCreateSchema,
+    BoardSchema,
+    BoardUpdateSchema,
 )
 
-router = APIRouter(tags=["free-board"])
+router = APIRouter(tags=["boards"])
 logger = logging.getLogger(__name__)
 BoardIdPath = Annotated[int, Path(gt=0, description="Идентификатор доски.")]
 StickerIdPath = Annotated[int, Path(gt=0, description="Идентификатор стикера.")]
 ShapeIdPath = Annotated[int, Path(gt=0, description="Идентификатор фигуры.")]
-BoardErrors = (ProjectBoardsServiceError, ProjectStickersServiceError)
+BoardErrors = (BoardsServiceError, BoardStickersServiceError)
 WRITE_RESPONSES = {
     404: NOT_FOUND_RESPONSE,
     409: CONFLICT_RESPONSE,
@@ -61,7 +61,7 @@ WRITE_RESPONSES = {
 
 
 def _http_error(
-    error: ProjectBoardsServiceError, action: str, board_id: int | None
+    error: BoardsServiceError, action: str, board_id: int | None
 ) -> HTTPException:
     """Логирует отказ по уровню серьёзности и переводит его в HTTP-ответ."""
     if error.status_code >= 500:
@@ -73,39 +73,39 @@ def _http_error(
 
 @router.get(
     "/boards",
-    response_model=list[ProjectBoardSchema],
+    response_model=list[BoardSchema],
     responses={500: SERVER_ERROR_RESPONSE},
     summary="Получить мои свободные доски",
     operation_id="listFreeBoards",
 )
 async def list_free_boards(
-    service: ProjectBoardsServiceDep,
+    service: BoardsServiceDep,
     principal: PrincipalDep,
-) -> list[ProjectBoardSchema]:
+) -> list[BoardSchema]:
     """Возвращает активные личные доски пользователя; пустой список — без страховки."""
     logger.info("🚀 Запрос GET /boards пользователя id=%s.", principal.user_id)
     try:
         result = await service.list_free_boards(user_id=principal.user_id)
         logger.info("✅ Свободных досок пользователя id=%s: %s.", principal.user_id, len(result))
         return result
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "GET списка", None) from error
 
 
 @router.post(
     "/boards",
     dependencies=[Depends(require_write_scope)],
-    response_model=ProjectBoardSchema,
+    response_model=BoardSchema,
     status_code=status.HTTP_201_CREATED,
     responses={422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     summary="Создать свободную доску",
     operation_id="createFreeBoard",
 )
 async def create_free_board(
-    data: ProjectBoardCreateSchema,
-    service: ProjectBoardsServiceDep,
+    data: BoardCreateSchema,
+    service: BoardsServiceDep,
     principal: PrincipalDep,
-) -> ProjectBoardSchema:
+) -> BoardSchema:
     """Создаёт личную доску последней в списке пользователя."""
     logger.info("🚀 Запрос POST /boards пользователя id=%s.", principal.user_id)
     try:
@@ -114,24 +114,24 @@ async def create_free_board(
             "✅ Создана свободная доска id=%s пользователя id=%s.", result.id, principal.user_id
         )
         return result
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "POST", None) from error
 
 
 @router.patch(
     "/boards/{board_id}",
     dependencies=[Depends(require_write_scope)],
-    response_model=ProjectBoardSchema,
+    response_model=BoardSchema,
     responses=WRITE_RESPONSES,
     summary="Переименовать или переставить свободную доску",
     operation_id="updateFreeBoard",
 )
 async def update_free_board(
     board_id: BoardIdPath,
-    data: ProjectBoardUpdateSchema,
-    service: ProjectBoardsServiceDep,
+    data: BoardUpdateSchema,
+    service: BoardsServiceDep,
     principal: PrincipalDep,
-) -> ProjectBoardSchema:
+) -> BoardSchema:
     """Меняет название или позицию личной доски по optimistic revision."""
     logger.info("🚀 Запрос PATCH свободной доски id=%s.", board_id)
     try:
@@ -140,7 +140,7 @@ async def update_free_board(
         )
         logger.info("✅ Изменена свободная доска id=%s, revision=%s.", result.id, result.revision)
         return result
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "PATCH", board_id) from error
 
 
@@ -154,7 +154,7 @@ async def update_free_board(
 )
 async def delete_free_board(
     board_id: BoardIdPath,
-    service: ProjectBoardsServiceDep,
+    service: BoardsServiceDep,
     principal: PrincipalDep,
     revision: Annotated[int, Query(ge=1, description="Ожидаемая ревизия доски.")],
 ) -> None:
@@ -165,22 +165,22 @@ async def delete_free_board(
             board_id=board_id, revision=revision, user_id=principal.user_id
         )
         logger.info("✅ Свободная доска id=%s удалена.", board_id)
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "DELETE", board_id) from error
 
 
 @router.get(
     "/boards/{board_id}/content",
-    response_model=ProjectBoardContentSchema,
+    response_model=BoardContentSchema,
     responses={404: NOT_FOUND_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     summary="Получить содержимое свободной доски",
     operation_id="getFreeBoardContent",
 )
 async def get_free_board_content(
     board_id: BoardIdPath,
-    service: ProjectBoardsServiceDep,
+    service: BoardsServiceDep,
     principal: PrincipalDep,
-) -> ProjectBoardContentSchema:
+) -> BoardContentSchema:
     """Возвращает личную доску, её стикеры и фигуры одним запросом."""
     logger.info("🚀 Запрос GET содержимого свободной доски id=%s.", board_id)
     try:
@@ -192,14 +192,14 @@ async def get_free_board_content(
             len(result.shapes),
         )
         return result
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "GET content", board_id) from error
 
 
 @router.post(
     "/boards/{board_id}/stickers",
     dependencies=[Depends(require_write_scope)],
-    response_model=ProjectStickerSchema,
+    response_model=BoardStickerSchema,
     status_code=status.HTTP_201_CREATED,
     responses=WRITE_RESPONSES,
     summary="Создать стикер свободной доски",
@@ -207,10 +207,10 @@ async def get_free_board_content(
 )
 async def create_free_board_sticker(
     board_id: BoardIdPath,
-    data: ProjectStickerCreateSchema,
-    service: ProjectStickersServiceDep,
+    data: BoardStickerCreateSchema,
+    service: BoardStickersServiceDep,
     principal: PrincipalDep,
-) -> ProjectStickerSchema:
+) -> BoardStickerSchema:
     """Создаёт стикер на личной доске; связи с задачами недоступны (422)."""
     logger.info("🚀 Запрос POST стикера свободной доски id=%s.", board_id)
     try:
@@ -231,7 +231,7 @@ async def create_free_board_sticker(
 @router.patch(
     "/boards/{board_id}/stickers/{sticker_id}",
     dependencies=[Depends(require_write_scope)],
-    response_model=ProjectStickerSchema,
+    response_model=BoardStickerSchema,
     responses=WRITE_RESPONSES,
     summary="Изменить стикер свободной доски",
     operation_id="updateFreeBoardSticker",
@@ -239,10 +239,10 @@ async def create_free_board_sticker(
 async def update_free_board_sticker(
     board_id: BoardIdPath,
     sticker_id: StickerIdPath,
-    data: ProjectStickerUpdateSchema,
-    service: ProjectStickersServiceDep,
+    data: BoardStickerUpdateSchema,
+    service: BoardStickersServiceDep,
     principal: PrincipalDep,
-) -> ProjectStickerSchema:
+) -> BoardStickerSchema:
     """Изменяет стикер личной доски по optimistic revision."""
     logger.info("🚀 Запрос PATCH стикера id=%s свободной доски id=%s.", sticker_id, board_id)
     try:
@@ -262,7 +262,7 @@ async def update_free_board_sticker(
 @router.patch(
     "/boards/{board_id}/stickers/{sticker_id}/position",
     dependencies=[Depends(require_write_scope)],
-    response_model=ProjectStickerSchema,
+    response_model=BoardStickerSchema,
     responses={404: NOT_FOUND_RESPONSE, 422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     summary="Переместить стикер на свободной доске",
     operation_id="moveFreeBoardSticker",
@@ -270,10 +270,10 @@ async def update_free_board_sticker(
 async def move_free_board_sticker(
     board_id: BoardIdPath,
     sticker_id: StickerIdPath,
-    data: ProjectStickerPositionUpdateSchema,
-    service: ProjectStickersServiceDep,
+    data: BoardStickerPositionUpdateSchema,
+    service: BoardStickersServiceDep,
     principal: PrincipalDep,
-) -> ProjectStickerSchema:
+) -> BoardStickerSchema:
     """Сохраняет координаты стикера личной доски."""
     logger.info(
         "🚀 Запрос PATCH позиции стикера id=%s свободной доски id=%s.", sticker_id, board_id
@@ -302,7 +302,7 @@ async def move_free_board_sticker(
 async def delete_free_board_sticker(
     board_id: BoardIdPath,
     sticker_id: StickerIdPath,
-    service: ProjectStickersServiceDep,
+    service: BoardStickersServiceDep,
     principal: PrincipalDep,
     revision: Annotated[int, Query(ge=1, description="Ожидаемая ревизия стикера.")],
 ) -> None:
@@ -342,7 +342,7 @@ async def create_free_board_shape(
         return await service.create_shape(
             project_id=None, board_id=board_id, data=data, author_id=principal.user_id
         )
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "POST фигуры", board_id) from error
 
 
@@ -371,7 +371,7 @@ async def update_free_board_shape(
             data=data,
             user_id=principal.user_id,
         )
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "PATCH фигуры", board_id) from error
 
 
@@ -403,7 +403,7 @@ async def delete_free_board_shape(
             user_id=principal.user_id,
         )
         logger.info("✅ Фигура id=%s удалена.", shape_id)
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "DELETE фигуры", board_id) from error
 
 
@@ -434,7 +434,7 @@ async def apply_free_board_batch(
             author_username=principal.username,
             author_display_name=principal.full_name,
         )
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "пакет", board_id) from error
 
 
@@ -467,5 +467,5 @@ async def convert_free_board_shape_to_sticker(
             author_username=principal.username,
             author_display_name=principal.full_name,
         )
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "замена фигуры", board_id) from error

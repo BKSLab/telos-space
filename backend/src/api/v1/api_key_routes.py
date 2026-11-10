@@ -73,17 +73,17 @@ API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
     ("POST", f"{_P}/tasks/{{task_id}}/attachments"): SCOPE_TASKS_WRITE,
     ("PATCH", f"{_P}/tasks/{{task_id}}/attachments/{{attachment_id}}"): SCOPE_TASKS_WRITE,
     ("POST", f"{_P}/tasks/{{task_id}}/attachments/{{attachment_id}}/retry"): SCOPE_TASKS_WRITE,
-    ("GET", f"{_P}/tasks/{{task_id}}/move-to/preview"): SCOPE_TASKS_READ,
+    ("GET", f"{_P}/tasks/{{task_id}}/transfer/preview"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/task-dependencies"): SCOPE_TASKS_READ,
-    ("GET", f"{_P}/my/tasks"): SCOPE_TASKS_READ,
+    ("GET", f"{_P}/users/me/tasks"): SCOPE_TASKS_READ,
     # ── Задачи: запись ──────────────────────────────────────────────────────
     ("POST", f"{_P}/projects/{{project_id}}/tasks"): SCOPE_TASKS_WRITE,
     ("PATCH", f"{_P}/tasks/{{task_id}}"): SCOPE_TASKS_WRITE,
-    ("PATCH", f"{_P}/tasks/{{task_id}}/move"): SCOPE_TASKS_WRITE,
+    ("PATCH", f"{_P}/tasks/{{task_id}}/stage-placement"): SCOPE_TASKS_WRITE,
     ("PATCH", f"{_P}/tasks/{{task_id}}/status"): SCOPE_TASKS_WRITE,
     ("POST", f"{_P}/tasks/{{task_id}}/report"): SCOPE_TASKS_WRITE,
     ("POST", f"{_P}/tasks/{{task_id}}/report/from-comment"): SCOPE_TASKS_WRITE,
-    ("POST", f"{_P}/tasks/{{task_id}}/move-to"): SCOPE_TASKS_WRITE,
+    ("POST", f"{_P}/tasks/{{task_id}}/transfer"): SCOPE_TASKS_WRITE,
     ("POST", f"{_P}/tasks/{{task_id}}/baseline"): SCOPE_TASKS_WRITE,
     ("POST", f"{_P}/projects/{{project_id}}/baseline"): SCOPE_TASKS_WRITE,
     ("POST", f"{_P}/projects/{{project_id}}/task-dependencies"): SCOPE_TASKS_WRITE,
@@ -104,17 +104,17 @@ API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
     # ── База знаний ─────────────────────────────────────────────────────────
     ("GET", f"{_P}/projects/{{project_id}}/knowledge/status"): SCOPE_KNOWLEDGE_READ,
     # ── Внешний вызов помощника владельца ключа ──────────────────────────
-    ("POST", f"{_P}/agent/ask"): SCOPE_AGENT_ASK,
-    ("GET", f"{_P}/agent/requests/{{request_id}}"): SCOPE_AGENT_ASK,
+    ("POST", f"{_P}/aris/requests"): SCOPE_AGENT_ASK,
+    ("GET", f"{_P}/aris/requests/{{request_id}}"): SCOPE_AGENT_ASK,
 }
 
 API_KEY_ROUTE_SCOPES.update(
     {
         ("POST", f"{_P}/tasks"): SCOPE_TASKS_WRITE,
-        ("GET", f"{_P}/my/task-attention"): SCOPE_TASKS_READ,
+        ("GET", f"{_P}/users/me/task-attention"): SCOPE_TASKS_READ,
         ("GET", f"{_P}/tasks/{{task_id}}/attention"): SCOPE_TASKS_READ,
-        ("GET", f"{_P}/me/calendar"): SCOPE_TASKS_READ,
-        ("GET", f"{_P}/me/calendar/unscheduled"): SCOPE_TASKS_READ,
+        ("GET", f"{_P}/users/me/calendar"): SCOPE_TASKS_READ,
+        ("GET", f"{_P}/users/me/calendar/unscheduled"): SCOPE_TASKS_READ,
         ("GET", f"{_P}/portfolio/calendar"): SCOPE_PROJECTS_READ,
         ("GET", f"{_P}/projects/defaults"): SCOPE_PROJECTS_READ,
         ("POST", f"{_P}/projects"): SCOPE_PROJECTS_WRITE,
@@ -170,17 +170,6 @@ for base in (f"{_P}/boards", f"{_P}/projects/{{project_id}}/boards"):
         ("POST", "/{board_id}/shapes/{shape_id}/to-sticker"),
     ):
         API_KEY_ROUTE_SCOPES[(method, base + suffix)] = SCOPE_BOARDS_WRITE
-
-for method, suffix in (
-    ("GET", ""),
-    ("POST", ""),
-    ("PATCH", "/{sticker_id}"),
-    ("PATCH", "/{sticker_id}/position"),
-    ("DELETE", "/{sticker_id}"),
-):
-    API_KEY_ROUTE_SCOPES[(method, f"{_P}/projects/{{project_id}}/board/stickers{suffix}")] = (
-        SCOPE_BOARDS_READ if method == "GET" else SCOPE_BOARDS_WRITE
-    )
 
 _PROMOTION = ("POST", f"{_P}/boards/{{board_id}}/create-project")
 API_KEY_ROUTE_SCOPES[_PROMOTION] = SCOPE_BOARDS_WRITE

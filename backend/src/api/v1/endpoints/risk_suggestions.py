@@ -9,8 +9,8 @@ from src.api.v1.responses import NOT_FOUND_RESPONSE, SERVER_ERROR_RESPONSE, VALI
 from src.dependencies.auth import AuthorizationHeaderDep, SessionCookieDep
 from src.dependencies.services import RiskSuggestionServiceDep
 from src.exceptions.access import AccessServiceError
+from src.exceptions.ai import AiProviderError
 from src.exceptions.auth import AuthServiceError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.project_risks import ProjectRiskServiceError
 from src.exceptions.projects import ProjectNotFoundError
 from src.schemas.risk_suggestions import RiskSuggestionsSchema
@@ -77,7 +77,7 @@ async def suggest_project_risks(
         AccessServiceError,
         ProjectNotFoundError,
         ProjectRiskServiceError,
-        KnowledgeProviderError,
+        AiProviderError,
     ) as error:
         logger.exception("❌ Ошибка предложения рисков проекта id=%s.", project_id)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error

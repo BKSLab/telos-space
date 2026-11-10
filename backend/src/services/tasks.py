@@ -655,7 +655,7 @@ class TasksService:
             logger.error("❌ Ошибка удаления задачи id=%s.", task_id, exc_info=True)
             raise TasksServiceError(str(error)) from error
 
-    # Блок задач вне проекта: разовые задачи и задачи потоков
+    # Блок задач вне проекта: разовые задачи
 
     async def create_personal_task(
         self, *, data: dict, created_by_user_id: int, commit: bool = True

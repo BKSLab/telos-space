@@ -17,7 +17,7 @@ import { Field, Input } from "@/components/ui/Field";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { ApiKeysPanel } from "@/components/profile/ApiKeysPanel";
-import { LegacyTokensPanel } from "@/components/profile/LegacyTokensPanel";
+import { AccessTokensPanel } from "@/components/profile/AccessTokensPanel";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -74,7 +74,7 @@ function ProfileForm({ user }: { user: User }) {
     const [params] = useSearchParams();
     const requestedTab = params.get("tab");
     const tab = requestedTab === "security" || requestedTab === "keys" ? requestedTab : "details";
-    const [legacyOpen, setLegacyOpen] = useState(false);
+    const [tokensOpen, setTokensOpen] = useState(false);
     useEffect(() => {
         if (location.hash !== "#install" || tab !== "details") return;
         const frame = requestAnimationFrame(() => document.getElementById("install")?.scrollIntoView({ block: "start" }));
@@ -385,9 +385,9 @@ function ProfileForm({ user }: { user: User }) {
             </div>}
             {tab === "keys" && <div className="flex min-w-0 flex-col gap-6">
                 <div className="surface-card min-w-0 rounded-[var(--radius-card)] border border-line p-4 sm:p-5"><ApiKeysPanel /></div>
-                <details className="group rounded-[var(--radius-card)] border border-line-subtle bg-surface/35" open={legacyOpen} onToggle={event => setLegacyOpen(event.currentTarget.open)}>
-                    <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-4 py-3 text-[13px] font-medium text-secondary focus-visible:outline-2 focus-visible:outline-accent">Прежние токены<ChevronDown size={16} aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-180" /></summary>
-                    {legacyOpen && <div className="border-t border-line-subtle p-4 sm:p-5"><LegacyTokensPanel /></div>}
+                <details className="group rounded-[var(--radius-card)] border border-line-subtle bg-surface/35" open={tokensOpen} onToggle={event => setTokensOpen(event.currentTarget.open)}>
+                    <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-md px-4 py-3 text-[13px] font-medium text-secondary focus-visible:outline-2 focus-visible:outline-accent">READ/WRITE-токены<ChevronDown size={16} aria-hidden="true" className="shrink-0 transition-transform group-open:rotate-180" /></summary>
+                    {tokensOpen && <div className="border-t border-line-subtle p-4 sm:p-5"><AccessTokensPanel /></div>}
                 </details>
                 <p className="text-[12px] leading-6 text-muted">Подключение клиентов: <Link to="/help/api" className="text-accent hover:text-accent-hover">справка по API</Link> · <Link to="/help/mcp" className="text-accent hover:text-accent-hover">справка по MCP</Link></p>
             </div>}

@@ -24,6 +24,9 @@ MilestoneErrors = (MilestonesServiceError, ProjectsServiceError, WbsNodesService
     response_model=list[MilestoneSchema],
     responses={404: NOT_FOUND_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     summary="Получить вехи проекта",
+    description="Возвращает пользовательские вехи доступного проекта.",
+    operation_id="listProjectMilestones",
+    response_description="Вехи проекта.",
 )
 async def list_milestones(
     project_id: Annotated[int, Path(gt=0)],
@@ -43,6 +46,9 @@ async def list_milestones(
     status_code=status.HTTP_201_CREATED,
     responses={404: NOT_FOUND_RESPONSE, 422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     summary="Создать веху проекта",
+    description="Создаёт пользовательскую веху в доступном проекте.",
+    operation_id="createProjectMilestone",
+    response_description="Созданная веха.",
 )
 async def create_milestone(
     project_id: Annotated[int, Path(gt=0)],
@@ -63,6 +69,9 @@ async def create_milestone(
     response_model=MilestoneSchema,
     responses={404: NOT_FOUND_RESPONSE, 422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     summary="Изменить веху проекта",
+    description="Изменяет переданные поля пользовательской вехи доступного проекта.",
+    operation_id="updateProjectMilestone",
+    response_description="Обновлённая веха.",
 )
 async def update_milestone(
     project_id: Annotated[int, Path(gt=0)],
@@ -87,6 +96,9 @@ async def update_milestone(
     status_code=status.HTTP_204_NO_CONTENT,
     responses={404: NOT_FOUND_RESPONSE, 500: SERVER_ERROR_RESPONSE},
     summary="Удалить веху проекта",
+    description="Удаляет пользовательскую веху доступного проекта.",
+    operation_id="deleteProjectMilestone",
+    response_description="Веха удалена.",
 )
 async def delete_milestone(
     project_id: Annotated[int, Path(gt=0)],

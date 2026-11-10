@@ -18,6 +18,7 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.server.lowlevel import Server
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import ListToolsResult, Tool, ToolListChangedNotification
+from sse_starlette import sse
 
 from src.mcp_server.catalog import CATALOG_META_KEY, CatalogDiagnostics, catalog_hash
 from src.mcp_server.catalog_probe import remote_snapshot
@@ -26,6 +27,7 @@ from src.mcp_server.catalog_probe import remote_snapshot
 @asynccontextmanager
 async def serve(mcp: MCPServer | Server, *, port: int = 0, json_response: bool = False):
     """Запускает SDK ASGI на loopback TCP с отдельным lifespan и сессиями."""
+    sse.AppStatus.should_exit = False
     sock = socket.socket()
     sock.bind(("127.0.0.1", port))
     sock.listen(128)
@@ -41,8 +43,22 @@ async def serve(mcp: MCPServer | Server, *, port: int = 0, json_response: bool =
         yield f"http://127.0.0.1:{sock.getsockname()[1]}/"
     finally:
         server.should_exit = True
-        await asyncio.wait_for(task, timeout=10)
-        sock.close()
+        sse.AppStatus.should_exit = True
+        try:
+            await asyncio.wait_for(task, timeout=10)
+        finally:
+            # SSE 3.4.8 оставляет watcher после закрытия ответов. Его нужно
+            # завершить до сброса process-global флага: иначе он увидит остановленный
+            # uvicorn и закроет SSE следующего сервера в этом же event loop.
+            watchers = [
+                pending for pending in asyncio.all_tasks()
+                if getattr(pending.get_coro(), "cr_code", None) is sse._shutdown_watcher.__code__
+            ]
+            for watcher in watchers:
+                watcher.cancel()
+            await asyncio.gather(*watchers, return_exceptions=True)
+            sock.close()
+            sse.AppStatus.should_exit = False
 
 
 def isolated_server(version: str = "test-v1") -> MCPServer:

@@ -63,8 +63,8 @@ import { snapMove, snapPoint, snapResize, resizeBox, RESIZE_HANDLES, SNAP_SCREEN
 import {
     STICKER_NODE_HEIGHT,
     STICKER_NODE_WIDTH,
-    type ProjectSticker,
-    type ProjectStickerInput,
+    type BoardSticker,
+    type BoardStickerInput,
 } from "@/lib/board/stickers";
 import {
     defaultStyle,
@@ -73,7 +73,7 @@ import {
     type BatchResponse,
     type BoardContent,
     type Point,
-    type ProjectBoard,
+    type Board,
     type ShapeKind,
     type ShapeStyle,
 } from "@/lib/board/types";
@@ -88,7 +88,7 @@ import { ConnectorView, ShapeView, StickerView } from "@/components/board/BoardO
 import { BoardPropsPanel } from "@/components/board/BoardPropsPanel";
 import { BoardToolbar } from "@/components/board/BoardToolbar";
 import { TOOLS, type BoardTool } from "@/components/board/boardTools";
-import { ProjectStickerDialog } from "@/components/board/ProjectStickerDialog";
+import { BoardStickerDialog } from "@/components/board/BoardStickerDialog";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ErrorMessage } from "@/components/ui/States";
@@ -140,7 +140,7 @@ type Gesture =
     | { type: "endpoint"; pointerId: number; key: string; end: "start" | "end"; ref: LocalRef | null; point: Point; moved: boolean }
     | { type: "bend"; pointerId: number; key: string; index: number; insert: boolean; origin: Point; point: Point; moved: boolean };
 
-type StickerEditor = { mode: "create"; position: { canvas_x: number; canvas_y: number } } | { mode: "edit"; sticker: ProjectSticker; key: string } | null;
+type StickerEditor = { mode: "create"; position: { canvas_x: number; canvas_y: number } } | { mode: "edit"; sticker: BoardSticker; key: string } | null;
 
 interface Editing {
     key: string;
@@ -150,7 +150,7 @@ interface Editing {
 export interface BoardEditorProps {
     /** null — свободная (личная) доска: без задач и участников проекта. */
     project: Project | null;
-    board: ProjectBoard;
+    board: Board;
     content: BoardContent;
     members: ProjectMember[];
     tasks: Task[];
@@ -321,7 +321,7 @@ export function BoardEditor({
     }
     function updateBoardRevision(revision: number) {
         const key = projectId === null ? queryKeys.freeBoards : queryKeys.projectBoards(projectId);
-        queryClient.setQueryData<ProjectBoard[]>(key, current => current?.map(item => item.id === board.id ? {...item, revision} : item));
+        queryClient.setQueryData<Board[]>(key, current => current?.map(item => item.id === board.id ? {...item, revision} : item));
     }
     async function readConsistentBoard() {
         for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1627,7 +1627,7 @@ export function BoardEditor({
         } finally { setBusy(false); }
     }
 
-    function newSticker(input: ProjectStickerInput, position: { canvas_x: number; canvas_y: number }): SceneObject {
+    function newSticker(input: BoardStickerInput, position: { canvas_x: number; canvas_y: number }): SceneObject {
         return stickerObject({
             ...input, ...position, id: 0, project_id: projectId ?? 0, board_id: board.id,
             width: input.width ?? 230, height: input.height ?? 230,
@@ -1672,7 +1672,7 @@ export function BoardEditor({
 
     // ─── Стикеры через диалог ───────────────────────────────────────────────
 
-    async function saveSticker(input: ProjectStickerInput) {
+    async function saveSticker(input: BoardStickerInput) {
         if (!stickerEditor || (stickerEditor.mode === "edit" && !ensureEditable([stickerEditor.key]))) return;
         setStickerSaving(true);
         setStickerError(null);
@@ -1705,13 +1705,13 @@ export function BoardEditor({
         }
     }
 
-    const openStickerEditor = (sticker: ProjectSticker, key: string) => {
+    const openStickerEditor = (sticker: BoardSticker, key: string) => {
         if (!ensureEditable([key])) return;
         setStickerError(null);
         setStickerEditor({ mode: "edit", sticker, key });
     };
 
-    const requestStickerDelete = (_sticker: ProjectSticker, key: string) => {
+    const requestStickerDelete = (_sticker: BoardSticker, key: string) => {
         if (!ensureEditable([key])) return;
         setDeleteError(null);
         setDeleteRequest({ shapeKeys: [], stickerKeys: [key] });
@@ -2162,7 +2162,7 @@ export function BoardEditor({
 
 
             {stickerEditor && (
-                <ProjectStickerDialog
+                <BoardStickerDialog
                     key={stickerEditor.mode === "edit" ? `${stickerEditor.sticker.id}:${stickerEditor.sticker.revision}` : "new"}
                     projectId={projectId}
                     sticker={stickerEditor.mode === "edit" ? stickerEditor.sticker : null}

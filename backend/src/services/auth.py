@@ -30,9 +30,9 @@ from src.repositories.api_keys import ApiKeysRepository
 from src.repositories.api_tokens import ApiTokensRepository
 from src.repositories.users import UsersRepository
 from src.schemas.users import UserSchema, UserSummarySchema
-from src.utils.api_keys import is_service_key, key_prefix_of, verify_api_key
+from src.utils.api_keys import is_api_key, key_prefix_of, verify_api_key
 from src.utils.api_scopes import API_SCOPES, WRITE_SCOPES
-from src.utils.api_tokens import hash_token_secret
+from src.utils.api_tokens import TOKEN_PREFIX, hash_token_secret
 from src.utils.request_actor import RequestActor
 from src.utils.security import hash_password, secrets_match, verify_password
 from src.utils.tokens import create_access_token, decode_access_token
@@ -176,9 +176,11 @@ class AuthService:
             AuthServiceError: Если проверить учётные данные не удалось.
         """
         if bearer_secret is not None:
-            if is_service_key(bearer_secret):
+            if is_api_key(bearer_secret):
                 return await self._principal_from_api_key(secret=bearer_secret)
-            return await self._principal_from_token(secret=bearer_secret)
+            if bearer_secret.startswith(TOKEN_PREFIX):
+                return await self._principal_from_token(secret=bearer_secret)
+            raise NotAuthenticatedError()
         if not session_token:
             raise NotAuthenticatedError()
         user_id = decode_access_token(session_token)

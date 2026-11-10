@@ -13,6 +13,7 @@ import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
 from src.db.models.project_milestones import ProjectMilestoneStatus
+from src.exceptions.project_stages import ProjectStageNameNotFoundError
 from src.exceptions.projects import ProjectNotFoundError, ProjectsServiceError
 from src.mcp_server import server as srv
 from src.schemas.calendar import (
@@ -36,7 +37,6 @@ from src.services.project_query import (
     TaskDetailsDto,
     TaskPageDto,
     TaskSummaryDto,
-    UnknownStageError,
 )
 from src.utils.task_filters import TaskFilters
 from tests.unit.mcp_server.conftest import PROJECT_ID, FakeContext
@@ -209,7 +209,7 @@ async def test_list_tasks_applies_filters_and_reports_unknown_stage(tools) -> No
     )
     # Неизвестная стадия отвечает списком доступных. Без него вызывающему пришлось бы угадывать написание.
     services = tools()
-    services.query.list_tasks.side_effect = UnknownStageError(
+    services.query.list_tasks.side_effect = ProjectStageNameNotFoundError(
         stage_name="Ревью",
         known=["В работе", "Готово"],
     )

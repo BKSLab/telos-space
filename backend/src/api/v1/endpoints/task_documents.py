@@ -7,7 +7,7 @@ from src.api.v1.responses import NOT_FOUND_RESPONSE, SERVER_ERROR_RESPONSE, VALI
 from src.dependencies.access import require_task_access
 from src.dependencies.auth import PrincipalDep, require_write_scope
 from src.dependencies.services import TaskDocumentImportServiceDep
-from src.exceptions.knowledge import KnowledgeProviderError
+from src.exceptions.ai import AiProviderError
 from src.exceptions.task_documents import TaskDocumentImportServiceError
 from src.schemas.task_documents import TaskDocumentImportSchema
 
@@ -46,7 +46,7 @@ async def import_task_document(
             content=content,
             caption=caption,
         )
-    except (TaskDocumentImportServiceError, KnowledgeProviderError) as error:
+    except (TaskDocumentImportServiceError, AiProviderError) as error:
         logger.exception("❌ Ошибка импорта документа в задачу id=%s.", task_id)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
     finally:

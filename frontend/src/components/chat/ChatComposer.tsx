@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { chatAuthorName, chatKeys, chatPath, type ChatAttachment, type ChatEntity, type ChatMessage, type ChatMessageBody, type ChatUser } from "@/lib/projectChat";
 import { ChatAttachment as ChatFileCard } from "./ChatAttachment";
 import { useProjectChat } from "@/lib/useProjectChat";
-import { isForTim, TIM_CHAT_HINT } from "@/lib/tim";
+import { isForAris, ARIS_CHAT_HINT } from "@/lib/aris";
 import { emptyChatDraft, useChatUiStore, type ChatDraft } from "@/stores/chat";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
@@ -142,7 +142,7 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
             </button>)}
             {!choices.length && <p className="px-2 py-3 text-xs text-muted">{entities.isFetching && picker.kind === "#" ? "Поиск…" : "Ничего не найдено"}</p>}
         </div>}
-        <div className={cn("surface-card overflow-hidden rounded-xl border border-line shadow-card transition-colors", isForTim(draft.content) ? "focus-within:border-ai-blue/60" : "focus-within:border-accent/60")}>
+        <div className={cn("surface-card overflow-hidden rounded-xl border border-line shadow-card transition-colors", isForAris(draft.content) ? "focus-within:border-ai-blue/60" : "focus-within:border-accent/60")}>
             {(draft.reply || editing) && <div className="chat-reply-bar flex items-center gap-2 border-b border-line bg-surface px-4 py-2.5 text-xs text-secondary">
                 <CornerUpLeft size={14} className="shrink-0 text-accent" />
                 <span className="min-w-0 flex-1 truncate">{editing ? "Редактирование сообщения" : `Ответ ${draft.reply?.author_type === "AGENT" ? "Арису" : draft.reply ? chatAuthorName(draft.reply, "участнику") : "участнику"}: ${draft.reply?.content || "Вложение"}`}</span>
@@ -154,7 +154,7 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
                 {draft.attachments.map(file => <ChatFileCard key={file.id} file={file} projectId={chat.projectId} onRemove={!editing ? () => void removeFile(file) : undefined} removeDisabled={disabled || uploading} />)}
             </div>}
             <textarea ref={input} id="project-chat-composer" aria-label={editing ? "Редактирование сообщения" : "Сообщение проекту"} aria-controls={picker ? "chat-picker" : undefined} aria-expanded={Boolean(picker)} aria-activedescendant={picker && choices.length ? `chat-choice-${selection}` : undefined} aria-autocomplete="list" role="combobox" aria-describedby={!editing && chat.canWrite ? "chat-composer-hint chat-composer-agent-hint" : "chat-composer-hint"} rows={2} maxLength={8000} value={draft.content} disabled={disabled} onChange={(event) => changeText(event.target.value, event.target.selectionStart)} onKeyDown={keyDown} onPaste={(event) => { if (event.clipboardData.files.length && !editing) { event.preventDefault(); void upload(event.clipboardData.files); } }} placeholder={chat.canWrite ? "Сообщение команде…  @ участник, # объект, Арис, …" : "Этот токен разрешает только чтение"} className="chat-input block min-h-24 w-full resize-none bg-transparent px-4 pt-4 pb-2 text-[14px] leading-relaxed text-primary outline-none placeholder:text-muted disabled:opacity-50" />
-            {!editing && chat.canWrite && <p id="chat-composer-agent-hint" className={cn("chat-composer-hint px-4 pb-3 text-[11px] leading-relaxed", isForTim(draft.content) ? "text-ai-blue" : "text-muted")}>{isForTim(draft.content) ? "Арис — проектный менеджер — ответит здесь, в чате проекта" : TIM_CHAT_HINT}</p>}
+            {!editing && chat.canWrite && <p id="chat-composer-agent-hint" className={cn("chat-composer-hint px-4 pb-3 text-[11px] leading-relaxed", isForAris(draft.content) ? "text-ai-blue" : "text-muted")}>{isForAris(draft.content) ? "Арис — проектный менеджер — ответит здесь, в чате проекта" : ARIS_CHAT_HINT}</p>}
             {draft.content.length > 7000 && <p className="px-3 pb-1 text-right font-mono text-[10px] text-muted sm:hidden">{draft.content.length}/8000</p>}
             <div className="chat-composer-toolbar flex items-center gap-0.5 border-t border-line-subtle bg-surface px-2 py-2 sm:px-3">
                 {!editing && <><input ref={fileInput} type="file" multiple className="sr-only" tabIndex={-1} aria-label="Файлы сообщения" onChange={(event) => { if (event.target.files) void upload(event.target.files); event.target.value = ""; }} /><IconButton label="Прикрепить файлы" disabled={disabled || uploading || draft.attachments.length >= 5} onClick={() => fileInput.current?.click()}>{uploading ? <Loader2 size={15} className="animate-spin motion-reduce:animate-none" /> : <Paperclip size={15} />}</IconButton></>}

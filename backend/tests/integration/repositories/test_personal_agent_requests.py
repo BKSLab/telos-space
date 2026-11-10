@@ -13,12 +13,12 @@ from src.exceptions.agent_conversations import AgentMessageConflictError, AgentR
 from src.schemas.agent_requests import AgentAskSchema
 from src.schemas.knowledge import KnowledgeAnswerSchema
 from src.services.agent_requests import AgentRequestsService, RequestLinks
-from src.services.tracker_agent import TrackerAgentService, TrackerAnswer
-from tests.integration.repositories.test_tim_widget import agent_env as agent_env
+from src.services.agent_routing import AgentRoutingAnswer, AgentRoutingService
+from tests.integration.repositories.test_agent_personal_conversations import agent_env as agent_env
 
 
 def requests(env):
-    return AgentRequestsService(scope=env.service.scope, links=RequestLinks("http://tracker.test"))
+    return AgentRequestsService(scope=env.service.scope, links=RequestLinks("http://routing.test"))
 
 
 async def test_parallel_retries_share_one_external_request(agent_env):
@@ -48,19 +48,19 @@ async def test_same_uuid_in_another_owner_scope_never_hides_or_reveals_a_result(
         await service.get_external_result(user_id=2, api_key_id=None, request_id=data.request_id)
     await service.ask_external(user_id=2, api_key_id=None,
         data=data.model_copy(update={"text": "Мои сроки"}), key_scopes=[])
-    tracker = AsyncMock(spec=TrackerAgentService)
-    tracker.ask.return_value = TrackerAnswer(
+    routing = AsyncMock(spec=AgentRoutingService)
+    routing.ask.return_value = AgentRoutingAnswer(
         answer=KnowledgeAnswerSchema(answer="Проверено.", sources=[]),
         project_id=None, project_key=None, mode="overview",
     )
-    env.service.tracker = tracker
+    env.service.routing = routing
     assert await env.service.process_next()
     assert await env.service.process_next()
     for user_id in (1, 2):
         result = await service.get_external_result(user_id=user_id, api_key_id=None, request_id=data.request_id)
         assert result.status == "completed" and result.answer == "Проверено."
-    assert [call.kwargs["user_id"] for call in tracker.ask.await_args_list] == [1, 2]
-    assert tracker.ask.await_args_list[1].kwargs["execution"].allowed_tools == frozenset()
+    assert [call.kwargs["user_id"] for call in routing.ask.await_args_list] == [1, 2]
+    assert routing.ask.await_args_list[1].kwargs["execution"].allowed_tools == frozenset()
 
 
 async def test_key_revoked_before_queue_claim_does_not_run_the_model(agent_env):
@@ -78,9 +78,9 @@ async def test_key_revoked_before_queue_claim_does_not_run_the_model(agent_env):
         key = await session.get(ApiKey, key_id)
         key.is_active = False
         await session.commit()
-    tracker = AsyncMock(spec=TrackerAgentService)
-    env.service.tracker = tracker
+    routing = AsyncMock(spec=AgentRoutingService)
+    env.service.routing = routing
     assert await env.service.process_next()
-    tracker.ask.assert_not_awaited()
+    routing.ask.assert_not_awaited()
     result = await service.get_external_result(user_id=1, api_key_id=key_id, request_id=request_id)
     assert result.status == "failed"

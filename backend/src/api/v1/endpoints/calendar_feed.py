@@ -54,6 +54,6 @@ async def get_ics_feed(
         media_type=ICS_MEDIA_TYPE,
         headers={
             "Cache-Control": "private, max-age=300",
-            "Content-Disposition": 'inline; filename="tracker.ics"',
+            "Content-Disposition": 'inline; filename="telos-space.ics"',
         },
     )

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import type { AgentToolRun, AgentFile, KnowledgeSource, TimPageContext } from "../src/lib/types";
+import type { AgentToolRun, AgentFile, KnowledgeSource, AgentPageContext } from "../src/lib/types";
 
 async function expectAgentCardAccent(page: Page, card: Locator) {
     const stripe = await card.evaluate(element => {
@@ -39,7 +39,7 @@ async function openProjectPersonal(page: Page, key = "DEMO") {
     await page.goto("/chat");
     await page.getByRole("button", { name: "Проектные диалоги и знания", exact: true }).click();
     await page.getByRole("link", { name: `${key} · Личные диалоги`, exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/projects/${key}/chat\\?view=personal(?:&conversation=\\d+)?$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${key}/conversations(?:\\?conversation=\\d+)?$`));
     await expect(page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true })).toBeEnabled();
 }
 
@@ -125,7 +125,7 @@ test("проектный личный диалог выбирается явно
     await input.fill("Черновик второго проекта");
     await openProjectPersonal(page);
     await expect(input).toHaveValue("Черновик первого проекта");
-    await expect(page).toHaveURL(/\/projects\/DEMO\/chat\?view=personal$/);
+    await expect(page).toHaveURL(/\/projects\/DEMO\/conversations$/);
     await expect(page.getByRole("button", { name: "Открыть чаты", exact: true })).toHaveCount(0);
     await page.reload();
     await expect(input).toHaveValue("Черновик первого проекта");
@@ -135,10 +135,10 @@ async function installProjectApi(page: Page) {
     const stamp = "2026-09-21T10:00:00Z";
     const user = { id: 1, username: "anna", first_name: "Анна", last_name: "Иванова", middle_name: null, is_active: true, has_avatar: false };
     const project = { id: 1, owner_id: 1, key: "DEMO", name: "Знания проекта", description_md: "Паспорт", description_sections: null, due_date_has_been_set: false, status: "ACTIVE", color: "#7299cc", icon: null, start_date: null, due_date: null, order_index: 0, created_at: stamp, updated_at: stamp };
-    type Message = { id: number; conversation_id: number; request_id: string; role: string; content: string; sources: object[]; status: string; error: string | null; created_at: string; actions?: AgentToolRun[]; files?: AgentFile[]; page_context?: TimPageContext };
+    type Message = { id: number; conversation_id: number; request_id: string; role: string; content: string; sources: object[]; status: string; error: string | null; created_at: string; actions?: AgentToolRun[]; files?: AgentFile[]; page_context?: AgentPageContext };
     const conversations: { id: number; project_id: number | null; title: string; created_at: string; updated_at: string }[] = [];
     const messages = new Map<number, Message[]>();
-    const control = { projects: [project], answer: "Руководитель проекта — Анна Иванова.", sources: null as KnowledgeSource[] | null, pending: false, fail: false, submissions: [] as Record<string, unknown>[], action: null as AgentToolRun | null, decisions: [] as Record<string, unknown>[] };
+    const control = { projects: [project], answer: "Руководитель проекта — Анна Иванова.", sources: null as KnowledgeSource[] | null, pending: false, fail: false, submissions: [] as Record<string, unknown>[], attempts: [] as { path: string; body: Record<string, unknown> }[], dropResponses: 0, action: null as AgentToolRun | null, decisions: [] as Record<string, unknown>[] };
     const uploaded: AgentFile = { id: "f918d205-2ced-48eb-85f4-19b8e55ef361", original_name: "acceptance.md", content_type: "text/markdown", size: 12, created_at: stamp };
     let messageId = 0;
     await page.route("https://fonts.googleapis.com/**", route => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
@@ -158,17 +158,17 @@ async function installProjectApi(page: Page) {
         if (path.endsWith("/knowledge/status")) return reply({ enabled: true, ready: false, points_count: 5, pending_jobs: 0, processing_jobs: 0, failed_jobs: 1, last_error: null, obsolete_points: 0,
             coverage: [{ entity_type: "project", total: 1, indexed: 1, missing: 0, stale: 0 }, { entity_type: "sticker", total: 2, indexed: 1, missing: 1, stale: 0 }, { entity_type: "member", total: 1, indexed: 1, missing: 0, stale: 0 }],
             file_issues: [{ source_id: "attachment:4", title: "scan.pdf", status: "empty", detail: "В файле нет текстового слоя." }] });
-        if (path.endsWith("/agent/conversations") || path === "/api/v1/tim/conversations") {
-            const projectId = path.startsWith("/api/v1/tim/") ? null : Number(path.match(/projects\/(\d+)/)![1]);
+        if (path.endsWith("/aris/conversations") || path === "/api/v1/aris/conversations") {
+            const projectId = path.startsWith("/api/v1/aris/") ? null : Number(path.match(/projects\/(\d+)/)![1]);
             if (method === "GET") return reply({ items: conversations.filter((item) => item.project_id === projectId).slice().reverse(), next_offset: null });
             const conversation = { id: conversations.length + 1, project_id: projectId, title: "Новый диалог", created_at: stamp, updated_at: stamp };
             conversations.push(conversation);
             messages.set(conversation.id, []);
             return reply(conversation, 201);
         }
-        if (/\/(?:agent|tim)\/conversations\/\d+\/files$/.test(path)) return reply(uploaded, 201);
-        if (/\/(?:agent|tim)\/conversations\/\d+\/files\//.test(path) && method === "DELETE") return route.fulfill({ status: 204, headers });
-        const decisionPath = path.match(/\/(?:agent|tim)\/conversations\/(\d+)\/actions\/([^/]+)\/decision$/);
+        if (/\/aris\/conversations\/\d+\/files$/.test(path)) return reply(uploaded, 201);
+        if (/\/aris\/conversations\/\d+\/files\//.test(path) && method === "DELETE") return route.fulfill({ status: 204, headers });
+        const decisionPath = path.match(/\/aris\/conversations\/(\d+)\/actions\/([^/]+)\/decision$/);
         if (decisionPath) {
             const body = route.request().postDataJSON();
             control.decisions.push(body);
@@ -179,7 +179,7 @@ async function installProjectApi(page: Page) {
             assistant.status = "queued";
             return reply(action);
         }
-        const match = path.match(/\/(?:agent|tim)\/conversations\/(\d+)\/messages(?:\/(\d+)\/retry)?$/);
+        const match = path.match(/\/aris\/conversations\/(\d+)\/messages(?:\/(\d+)\/retry)?$/);
         if (match) {
             const id = Number(match[1]);
             const rows = messages.get(id)!;
@@ -200,12 +200,19 @@ async function installProjectApi(page: Page) {
                 return reply({ items: rows, next_before_id: null });
             }
             const data = route.request().postDataJSON();
+            control.attempts.push({ path, body: data });
+            const previous = rows.find(message => message.role === "user" && message.request_id === data.request_id);
+            if (previous) {
+                if (control.dropResponses > 0) { control.dropResponses -= 1; return route.abort("failed"); }
+                return reply({ user_message: previous, assistant_message: rows.find(message => message.role === "assistant" && message.request_id === data.request_id) }, 202);
+            }
             control.submissions.push(data);
             const common = { conversation_id: id, request_id: data.request_id, sources: [], error: null, created_at: stamp };
             const question: Message = { ...common, id: ++messageId, role: "user", content: data.content, status: "completed", files: data.file_ids?.length ? [uploaded] : [], ...(data.page_context ? { page_context: data.page_context } : {}) };
             const assistant: Message = { ...common, id: ++messageId, role: "assistant", content: "", status: "queued" };
             rows.push(question, assistant);
             conversations.find((item) => item.id === id)!.title = data.content;
+            if (control.dropResponses > 0) { control.dropResponses -= 1; return route.abort("failed"); }
             return reply({ user_message: question, assistant_message: assistant }, 202);
         }
         return reply([]);
@@ -219,7 +226,7 @@ test("чат восстанавливает ожидающий ответ пос
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/projects/DEMO/knowledge");
-    await expect(page).toHaveURL(/\/projects\/DEMO\/chat\?view=knowledge$/);
+    await expect(page).toHaveURL(/\/projects\/DEMO\/knowledge$/);
     await expect(page.getByText("1 / 2", { exact: true })).toBeVisible();
     await expect(page.getByText("В файле нет текстового слоя.", { exact: false })).toBeVisible();
     await openProjectPersonal(page);
@@ -236,7 +243,7 @@ test("чат восстанавливает ожидающий ответ пос
     await expect(page.getByText("Руководитель проекта — Анна Иванова.", { exact: true })).toBeVisible();
     const sourceCard = page.getByRole("button", { name: "Участник: Анна Иванова", exact: true });
     await expectAgentCardAccent(page, sourceCard);
-    await page.screenshot({ path: info.outputPath("legacy-agent-source.png"), animations: "disabled" });
+    await page.screenshot({ path: info.outputPath("project-conversation-source.png"), animations: "disabled" });
     await sourceCard.press("Enter");
     await expect(page).toHaveURL(/\/projects\/DEMO\/team$/);
     expect(control.submissions).toHaveLength(1);
@@ -246,8 +253,8 @@ test("чат восстанавливает ожидающий ответ пос
 
 test("новый диалог имеет отдельную историю, прежний разговор можно продолжить", async ({ page }) => {
     const control = await installProjectApi(page);
-    await page.goto("/projects/DEMO/agent");
-    await expect(page).toHaveURL(/\/projects\/DEMO\/chat\?view=personal$/);
+    await page.goto("/projects/DEMO/conversations");
+    await expect(page).toHaveURL(/\/projects\/DEMO\/conversations$/);
     const input = page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true });
     await input.fill("Обсудим тестирование окна заказа");
     await input.press("Enter");
@@ -270,7 +277,7 @@ test("новый диалог имеет отдельную историю, пр
 test("ошибка ответа сохраняется и повтор не дублирует вопрос", async ({ page }) => {
     const control = await installProjectApi(page);
     control.fail = true;
-    await page.goto("/projects/DEMO/chat?view=personal");
+    await page.goto("/projects/DEMO/conversations");
     await page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true }).fill("Расскажи о проекте");
     await page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true }).press("Enter");
     await expect(page.getByRole("button", { name: "Повторить ответ" })).toBeVisible();
@@ -288,7 +295,7 @@ for (const decision of ["approve", "reject"] as const) {
         control.action = { id: "5eea642e-3196-45c0-ac85-1286b0d3a81c", tool_name: "telos_delete_task", title: "Удалить задачу",
             arguments: { task_id: 42, expected_updated_at: "2026-09-21T10:00:00Z" }, status: "pending",
             result: { preview: { task: { key: "DEMO-42", title: "Проверка окна заказа" } } }, created_at: "2026-09-21T10:00:00Z" };
-        await page.goto("/projects/DEMO/chat?view=personal");
+        await page.goto("/projects/DEMO/conversations");
         const input = page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true });
         await input.fill("Удали задачу DEMO-42");
         await input.press("Enter");
@@ -306,7 +313,7 @@ for (const decision of ["approve", "reject"] as const) {
 
 test("файл загружается в личный диалог и сохраняется вместе с вопросом", async ({ page }) => {
     const control = await installProjectApi(page);
-    await page.goto("/projects/DEMO/chat?view=personal");
+    await page.goto("/projects/DEMO/conversations");
     await expect(page.getByRole("button", { name: "Добавить файл до 10 МБ", exact: true })).toBeEnabled();
     await page.getByLabel("Файлы для Ариса", { exact: true }).setInputFiles({ name: "acceptance.md", mimeType: "text/markdown", buffer: Buffer.from("Проверка окна") });
     await expect(page.getByRole("button", { name: "Убрать acceptance.md" })).toBeVisible();
@@ -317,3 +324,37 @@ test("файл загружается в личный диалог и сохра
     await expect(page.getByRole("link", { name: "Скачать файл acceptance.md" })).toBeVisible();
     expect(control.submissions[0].file_ids).toEqual(["f918d205-2ced-48eb-85f4-19b8e55ef361"]);
 });
+
+for (const scope of [
+    { name: "личный", route: "/chat", input: "Вопрос Арису", error: "Арис сейчас недоступен", prefix: "/api/v1/aris/conversations/" },
+    { name: "проектный", route: "/projects/DEMO/conversations?task=42#retry", input: "Вопрос Арису по проекту", error: "Не удалось обновить диалог", prefix: "/api/v1/projects/1/aris/conversations/" },
+]) {
+    test(`${scope.name} запрос сохраняет UUID после потери ответа и перезагрузки`, async ({ page }) => {
+        const control = await installProjectApi(page);
+        control.dropResponses = 2;
+        await page.goto(scope.route);
+        const input = page.getByRole("textbox", { name: scope.input, exact: true });
+        await input.fill("Проверь план после потери ответа");
+        await input.press("Enter");
+        await expect(page.getByText(scope.error, { exact: true })).toBeVisible();
+        expect(control.attempts).toHaveLength(2);
+        const requestId = control.attempts[0].body.request_id;
+        expect(requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+        expect(control.attempts[1].body).toEqual(control.attempts[0].body);
+        await page.reload();
+        await expect(input).toHaveValue("Проверь план после потери ответа");
+        await expect(input).toBeEnabled();
+        await input.press("Enter");
+        await expect(input).toHaveValue("");
+        expect(control.attempts).toHaveLength(3);
+        expect(control.attempts.every(attempt => attempt.path.startsWith(scope.prefix) && attempt.body.request_id === requestId)).toBe(true);
+        expect(control.submissions).toHaveLength(1);
+        await expect(page.locator("p", { hasText: "Проверь план после потери ответа" }).filter({ visible: true })).toHaveCount(1);
+        if (scope.name === "проектный") {
+            const url = new URL(page.url());
+            expect(url.pathname).toBe("/projects/DEMO/conversations");
+            expect(url.searchParams.get("task")).toBe("42");
+            expect(url.hash).toBe("#retry");
+        }
+    });
+}

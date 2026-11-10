@@ -19,6 +19,7 @@ from src.agent.tools import AgentToolContext
 from src.db.models.project_milestones import ProjectMilestoneStatus
 from src.exceptions.access import AccessServiceError, ResourceWriteRequiredError
 from src.exceptions.base import ApplicationError
+from src.exceptions.project_stages import ProjectStageNameNotFoundError
 from src.exceptions.projects import ProjectMemberUserNotFoundError
 from src.mcp_server.context import (
     PROJECT_NOT_AVAILABLE,
@@ -31,8 +32,8 @@ from src.mcp_server.context import (
 from src.mcp_server.registry import telos_tool
 from src.mcp_server.server import TaskKey, domain_message, links_of, parse_date, with_task_url
 from src.schemas.enums import TaskPriority
-from src.schemas.task_moves import TaskMoveTargetSchema
-from src.services.project_query import StageRefDto, UnknownStageError
+from src.schemas.task_transfers import TaskTransferTargetSchema
+from src.services.project_query import StageRefDto
 from src.utils.api_scopes import SCOPE_COMMENTS_WRITE, SCOPE_TASKS_DELETE, SCOPE_TASKS_WRITE
 
 logger = logging.getLogger(__name__)
@@ -291,12 +292,12 @@ async def transfer_task(
     dry_run: Annotated[bool, Field(description="Только показать, что изменится.")] = False,
     actor: Actor = None,
 ) -> dict:
-    """Переносит задачу между проектами тем же сервисом, что REST move-to."""
+    """Переносит задачу между контекстами тем же сервисом, что REST transfer."""
     async with tool_context(context, require_write=True) as tools:
         resolved = await resolve_task(tools, task_key)
         target_id = await resolve_project(tools, target_project_key)
         stage_id = (await resolve_stage(tools, target_id, stage)).stage_id if stage else None
-        target = TaskMoveTargetSchema(
+        target = TaskTransferTargetSchema(
             project_id=target_id, stage_id=stage_id, remove_outsiders=remove_outsiders
         )
         try:
@@ -633,7 +634,7 @@ async def resolve_stage(tools: ToolContext, project_id: int, stage: str) -> Stag
     """Находит стадию сервисом и переводит его ошибку в ToolError."""
     try:
         return await tools.services.query.resolve_stage(project_id=project_id, stage_name=stage)
-    except UnknownStageError as error:
+    except ProjectStageNameNotFoundError as error:
         raise ToolError(error.detail) from error
     except ApplicationError as error:
         raise ToolError("Не удалось получить стадии проекта.") from error

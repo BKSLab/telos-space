@@ -11,7 +11,7 @@ from src.schemas.knowledge import KnowledgeSourceSchema
 MAX_BOARD_SELECTION = 200
 
 
-class TimBoardSelectionRefSchema(BaseModel):
+class BoardSelectionRefSchema(BaseModel):
     """Ссылка выделения: пространство имён типа и положительный ID."""
 
     model_config = ConfigDict(extra="forbid")
@@ -20,7 +20,7 @@ class TimBoardSelectionRefSchema(BaseModel):
     id: int = Field(gt=0, strict=True)
 
 
-class TimPageContextSchema(BaseModel):
+class AgentPageContextSchema(BaseModel):
     """Страница, с которой пользователь пишет Арису в виджете.
 
     Контекст — подсказка для «этот проект», «эта задача»: права на объект
@@ -42,7 +42,7 @@ class TimPageContextSchema(BaseModel):
         description="ID открытой личной или проектной доски; права проверяются сервером.",
     )
 
-    board_selection: list[TimBoardSelectionRefSchema] | None = Field(
+    board_selection: list[BoardSelectionRefSchema] | None = Field(
         None,
         max_length=MAX_BOARD_SELECTION,
         description="Выделенные фигуры и стикеры; сервер проверяет тип, доску и доступ.",
@@ -103,7 +103,7 @@ class AgentMessageCreateSchema(BaseModel):
         max_length=5,
         description="До пяти собственных загрузок этого диалога.",
     )
-    page_context: TimPageContextSchema | None = Field(
+    page_context: AgentPageContextSchema | None = Field(
         None, description="Страница, с которой отправлено сообщение; Арис учитывает её."
     )
 
@@ -135,7 +135,7 @@ class AgentMessageSchema(BaseModel):
     files: list[AgentFileSchema] = Field(
         default_factory=list, description="Файлы, выбранные участником для этой реплики."
     )
-    page_context: TimPageContextSchema | None = Field(
+    page_context: AgentPageContextSchema | None = Field(
         None, description="Контекст страницы у вопроса пользователя; у ответа null."
     )
     status: Literal["queued", "processing", "completed", "failed"] = Field(

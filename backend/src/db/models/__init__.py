@@ -13,6 +13,8 @@ from .api_keys import ApiKey
 from .api_tokens import ApiToken, ApiTokenScope
 from .base import Base
 from .board_shapes import BoardShape, BoardShapeKind
+from .board_stickers import BoardSticker, BoardStickerTaskLink
+from .boards import Board
 from .calendar_feed_tokens import CalendarFeedToken
 from .chat_agent_turns import ChatAgentTurn
 from .chat_attachments import ChatAttachment
@@ -36,7 +38,6 @@ from .knowledge_index_jobs import (
 )
 from .knowledge_project_file_texts import KnowledgeProjectFileText
 from .knowledge_source_summaries import KnowledgeSourceSummary
-from .project_boards import ProjectBoard
 from .project_chats import ProjectChat
 from .project_deadline_changes import ProjectDeadlineChange
 from .project_files import ProjectFile
@@ -44,7 +45,6 @@ from .project_members import ProjectMember, ProjectRole
 from .project_milestones import ProjectMilestone, ProjectMilestoneStatus
 from .project_risks import ProjectRisk
 from .project_stages import ProjectStage
-from .project_stickers import ProjectSticker, ProjectStickerColor, ProjectStickerTaskLink
 from .projects import Project, ProjectStatus
 from .task_activity import TaskActivity, TaskActivityEventType
 from .task_attachments import TaskAttachment
@@ -63,7 +63,7 @@ __all__ = [
     "KnowledgeProjectFileText",
     "ApiKey",
     "ApiKeyUsage",
-    "ProjectBoard",
+    "Board",
     "BoardShape",
     "BoardShapeKind",
     "TaskReport",
@@ -105,9 +105,8 @@ __all__ = [
     "ProjectRole",
     "ProjectRisk",
     "ProjectStage",
-    "ProjectSticker",
-    "ProjectStickerColor",
-    "ProjectStickerTaskLink",
+    "BoardSticker",
+    "BoardStickerTaskLink",
     "ProjectStatus",
     "Task",
     "TaskActivity",

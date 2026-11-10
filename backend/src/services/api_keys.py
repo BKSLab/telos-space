@@ -123,11 +123,7 @@ class ApiKeysService:
     async def list_personal_keys(self, owner_user_id: int) -> list[ApiKeySchema]:
         """Возвращает личные ключи пользователя без секретов, новые сверху."""
         keys = await self.keys_repository.get_list_by_owner(owner_user_id)
-        return [
-            ApiKeySchema.model_validate(item)
-            for item in keys
-            if item.kind in {"personal", "service"}
-        ]
+        return [ApiKeySchema.model_validate(item) for item in keys]
 
     async def create_personal_key(
         self,
@@ -164,7 +160,7 @@ class ApiKeysService:
                     part for part in (owner.last_name, owner.first_name, owner.middle_name) if part
                 )
                 or owner.username,
-                "kind": data.kind,
+                "kind": "personal",
                 "scopes": list(data.scopes),
                 "expires_at": data.expires_at,
                 "is_active": True,
@@ -197,7 +193,6 @@ class ApiKeysService:
         api_key = await self.keys_repository.get_by_id(key_id)
         if (
             api_key is None
-            or api_key.kind not in {"personal", "service"}
             or api_key.owner_user_id != owner_user_id
         ):
             raise ApiKeyNotFoundError(key_id)

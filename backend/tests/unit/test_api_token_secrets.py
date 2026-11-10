@@ -36,4 +36,5 @@ def test_secret_is_unique_hashed_and_never_stored_in_clear() -> None:
     prefix = build_display_prefix(secret)
 
     assert len(prefix) == DISPLAY_PREFIX_LENGTH
-    assert secret.startswith(prefix)
+    assert secret[len(TOKEN_PREFIX):].startswith(prefix)
+    assert not prefix.startswith("telos_")

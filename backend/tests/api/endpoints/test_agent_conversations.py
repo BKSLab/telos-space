@@ -41,7 +41,7 @@ async def test_action_decision_uses_server_actor_and_does_not_accept_changed_arg
         created_at=datetime.now(UTC),
     )
     app.dependency_overrides[get_agent_actions_service] = lambda: actions
-    path = f"/api/v1/projects/1/agent/conversations/7/actions/{action_id}/decision"
+    path = f"/api/v1/projects/1/aris/conversations/7/actions/{action_id}/decision"
     assert (
         await api_client.post(path, json={"decision": "approve", "arguments": {"task_id": 8}})
     ).status_code == 422
@@ -65,7 +65,7 @@ async def test_file_upload_uses_multipart_and_server_owned_conversation(api_clie
         created_at=datetime.now(UTC),
     )
     app.dependency_overrides[get_agent_files_service] = lambda: files
-    path = "/api/v1/projects/1/agent/conversations/7/files"
+    path = "/api/v1/projects/1/aris/conversations/7/files"
     response = await api_client.post(path, files={"file": ("plan.md", b"plan", "text/markdown")})
     assert response.status_code == 201 and response.json()["id"] == str(file_id)
     assert "storage_key" not in response.json()
@@ -107,7 +107,7 @@ async def test_dialogue_api_uses_server_actor_and_accepts_only_a_new_message(api
     )
     service.retry_message.return_value = assistant
     app.dependency_overrides[get_agent_conversations_service] = lambda: service
-    base = "/api/v1/projects/1/agent/conversations"
+    base = "/api/v1/projects/1/aris/conversations"
 
     response = await api_client.post(base)
     assert response.status_code == 201 and response.json()["id"] == 7
@@ -136,7 +136,7 @@ async def test_dialogue_api_uses_server_actor_and_accepts_only_a_new_message(api
 async def test_dialogue_errors_have_domain_statuses_without_internal_details(api_client):
     service = AsyncMock(spec=AgentConversationsService)
     app.dependency_overrides[get_agent_conversations_service] = lambda: service
-    path = "/api/v1/projects/1/agent/conversations/7/messages"
+    path = "/api/v1/projects/1/aris/conversations/7/messages"
     for error, expected in (
         (AgentConversationNotFoundError, 404),
         (AgentConversationBusyError, 409),

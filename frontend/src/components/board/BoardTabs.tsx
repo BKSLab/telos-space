@@ -1,20 +1,20 @@
 import { useState } from "react";
 import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { ProjectBoard } from "@/lib/board/types";
+import type { Board } from "@/lib/board/types";
 import { Popover } from "@/components/ui/Popover";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 
 interface BoardTabsProps {
-    boards: ProjectBoard[];
+    boards: Board[];
     activeId: number;
     readOnly: boolean;
     creating: boolean;
-    onSelect: (board: ProjectBoard) => void;
+    onSelect: (board: Board) => void;
     onCreate: () => void;
-    onRename: (board: ProjectBoard, title: string) => Promise<unknown>;
-    onDelete: (board: ProjectBoard) => Promise<unknown>;
+    onRename: (board: Board, title: string) => Promise<unknown>;
+    onDelete: (board: Board) => Promise<unknown>;
     /** Личные доски без проекта: последнюю удалить можно, подписи — про «мои доски». */
     free?: boolean;
 }
@@ -28,18 +28,18 @@ const LAST_BOARD_HINT = "Последнюю доску проекта удали
 export function BoardTabs({ boards, activeId, readOnly, creating, onSelect, onCreate, onRename, onDelete, free = false }: BoardTabsProps) {
     const [renamingId, setRenamingId] = useState<number | null>(null);
     const [draft, setDraft] = useState("");
-    const [deleteTarget, setDeleteTarget] = useState<ProjectBoard | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<Board | null>(null);
     const [deleting, setDeleting] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
     const lastBoard = !free && boards.length <= 1;
 
-    function startRename(board: ProjectBoard) {
+    function startRename(board: Board) {
         if (readOnly) return;
         setDraft(board.title);
         setRenamingId(board.id);
     }
 
-    function commitRename(board: ProjectBoard) {
+    function commitRename(board: Board) {
         const title = draft.trim().slice(0, 120);
         setRenamingId(null);
         if (!title || title === board.title) return;

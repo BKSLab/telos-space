@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from datetime import date
 
 from src.clients.llm import LlmClient
+from src.exceptions.ai import AiProviderError
 from src.exceptions.api_keys import ApiKeyRouteNotAllowedError
 from src.exceptions.base import RepositoryError
 from src.exceptions.clients import ClientError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.project_risks import ProjectRiskServiceError
 from src.exceptions.projects import ProjectNotFoundError
 from src.prompts.risk_suggestions import RISK_SUGGESTIONS_SYSTEM_PROMPT
@@ -91,7 +91,7 @@ class RiskSuggestionService:
             AccessServiceError: Проект недоступен.
             ProjectNotFoundError: Проект отсутствует.
             ProjectRiskServiceError: Ошибка подготовки или нормализации черновика.
-            KnowledgeProviderError: Модель недоступна.
+            AiProviderError: Модель недоступна.
         """
         logger.info("🚀 Подготовка AI-предложений рисков проекта id=%s.", project_id)
         try:
@@ -200,7 +200,7 @@ class RiskSuggestionService:
                 )
         except ClientError as error:
             logger.exception("❌ Модель недоступна для предложения рисков.")
-            raise KnowledgeProviderError(str(error)) from error
+            raise AiProviderError(str(error)) from error
         except Exception as error:
             logger.exception("❌ Непригодное AI-предложение рисков.")
             raise ProjectRiskServiceError(str(error)) from error

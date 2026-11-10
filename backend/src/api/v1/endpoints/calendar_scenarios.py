@@ -39,6 +39,9 @@ ScenarioErrors = (CalendarServiceError, ProjectNotFoundError, TasksServiceError)
         500: SERVER_ERROR_RESPONSE,
     },
     summary="Рассчитать календарный сценарий",
+    description="Рассчитывает новое состояние календаря и конфликты без изменения задач.",
+    operation_id="previewProjectCalendarScenario",
+    response_description="Предложенное состояние календаря.",
 )
 async def preview_calendar_scenario(
     project_id: Annotated[int, Path(gt=0)],
@@ -67,6 +70,9 @@ async def preview_calendar_scenario(
         500: SERVER_ERROR_RESPONSE,
     },
     summary="Применить календарный сценарий",
+    description="Атомарно применяет подтверждённые изменения календаря доступного проекта.",
+    operation_id="applyProjectCalendarScenario",
+    response_description="Результат применения календарного сценария.",
 )
 async def apply_calendar_scenario(
     project_id: Annotated[int, Path(gt=0)],

@@ -6,7 +6,7 @@ import {
     MIN_STICKER_SIZE,
     STICKER_NODE_HEIGHT,
     STICKER_NODE_WIDTH,
-    type ProjectSticker,
+    type BoardSticker,
 } from "@/lib/board/stickers";
 import {
     isConnectorKind,
@@ -46,7 +46,7 @@ interface ObjectBase {
 export interface StickerObject extends ObjectBase {
     type: "sticker";
     id: number;
-    sticker: ProjectSticker;
+    sticker: BoardSticker;
 }
 
 export interface ShapeObject extends ObjectBase {
@@ -126,7 +126,7 @@ export class IdRegistry {
     }
 }
 
-export function stickerObject(sticker: ProjectSticker, key = stickerKey(sticker.id)): StickerObject {
+export function stickerObject(sticker: BoardSticker, key = stickerKey(sticker.id)): StickerObject {
     return {
         type: "sticker",
         key,

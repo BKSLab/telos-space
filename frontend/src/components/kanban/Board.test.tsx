@@ -16,7 +16,7 @@ const stages: ProjectStage[] = [
     { id: 2, project_id: 1, name: "В работе", color: "#fff", order_index: 1, is_done_stage: false },
 ];
 function task(id: number, stageId: number, position: number): Task {
-    return { id, project_id: 1, stage_id: stageId, position, key: `DEMO-${id}`, number: id, title: `Задача ${id}`,
+    return { revision: 1, id, project_id: 1, stage_id: stageId, position, key: `DEMO-${id}`, number: id, title: `Задача ${id}`,
         description_md: null, priority: "MEDIUM", role: null, assignee: null, participants: [], start_date: null, due_date: null,
         baseline_start_date: null, baseline_due_date: null, completed_at: null, created_at: "2026-01-01", updated_at: "2026-01-01",
         comments_count: 0, last_comment: null, search_match_source: null, search_title: null, search_excerpt: null, wbs_node_id: null };
@@ -35,7 +35,7 @@ describe("kanban stage picker", () => {
         const patch = vi.spyOn(api, "patch").mockResolvedValue(task(10, 2, 6000));
         const { client, onOpen } = setup();
         fireEvent.change(screen.getByLabelText("Стадия задачи DEMO-10"), { target: { value: "2" } });
-        await waitFor(() => expect(patch).toHaveBeenCalledWith(endpoints.taskMove(10), { stage_id: 2, position: 6000 }));
+        await waitFor(() => expect(patch).toHaveBeenCalledWith(endpoints.taskStagePlacement(10), { stage_id: 2, position: 6000 }));
         expect(client.getQueryData<Task[]>(queryKeys.tasks(1, ""))?.find(item => item.id === 10)).toMatchObject({ stage_id: 2, position: 6000 });
         expect(onOpen).not.toHaveBeenCalled();
     });

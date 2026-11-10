@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from src.api.v1.responses import SERVER_ERROR_RESPONSE
 from src.dependencies.auth import PrincipalDep, require_write_scope
 from src.dependencies.services import AnalyticsServiceDep
+from src.exceptions.ai import AiProviderError
 from src.exceptions.analytics import AnalyticsServiceError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.projects import ProjectNotFoundError
 from src.schemas.analytics import AnalyticsGenerateRequest, AnalyticsReportSchema
 
@@ -112,6 +112,6 @@ async def create_analytics_report(
             len(result.recommendations),
         )
         return result
-    except (ProjectNotFoundError, KnowledgeProviderError, AnalyticsServiceError) as error:
+    except (ProjectNotFoundError, AiProviderError, AnalyticsServiceError) as error:
         logger.exception("❌ Ошибка POST /dashboard/analytics. Детали: %s", error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error

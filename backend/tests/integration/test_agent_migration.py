@@ -50,6 +50,8 @@ async def test_agent_migration_upgrade_and_downgrade_preserve_project(postgres_c
                 "agent_messages",
                 "agent_tool_runs",
                 "agent_files",
+                "api_keys",
+                "api_tokens",
             }
 
         context = MigrationContext.configure(

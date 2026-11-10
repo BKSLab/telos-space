@@ -12,7 +12,7 @@ from .base import Base, TimestampMixin
 class AgentToolRun(TimestampMixin, Base):
     """Один вызов изменяющего инструмента от имени пользователя.
 
-    Проектное действие несёт ``project_id``; личное действие Тима в виджете
+    Проектное действие несёт ``project_id``; личное действие Ариса в виджете
     (разовая задача) — ``project_id IS NULL``. Ответ, в котором
     действие предложено: ``message_id`` (виджет) либо ``chat_turn_id`` (чат
     проекта); у MCP-вызова обе ссылки пусты.
@@ -51,13 +51,13 @@ class AgentToolRun(TimestampMixin, Base):
     )
     message_id: Mapped[int | None] = mapped_column(
         ForeignKey("agent_messages.id", ondelete="CASCADE"),
-        doc="Ответ Тима в виджете; null для чата проекта и MCP.",
-        comment="Ответ Тима в виджете; null для чата проекта и MCP.",
+        doc="Ответ Ариса в виджете; null для чата проекта и MCP.",
+        comment="Ответ Ариса в виджете; null для чата проекта и MCP.",
     )
     chat_turn_id: Mapped[int | None] = mapped_column(
         ForeignKey("chat_agent_turns.id", ondelete="CASCADE"),
-        doc="Ответ Тима в чате проекта; null для виджета и MCP.",
-        comment="Ответ Тима в чате проекта; null для виджета и MCP.",
+        doc="Ответ Ариса в чате проекта; null для виджета и MCP.",
+        comment="Ответ Ариса в чате проекта; null для виджета и MCP.",
     )
     request_id: Mapped[UUID] = mapped_column(
         doc="Ключ идемпотентного вызова.", comment="Ключ идемпотентного вызова."

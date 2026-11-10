@@ -28,7 +28,7 @@ import { Field, Input } from "@/components/ui/Field";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/wbs/ContextMenu";
-import { MoveNodeDialog, MoveTaskDialog } from "@/components/wbs/MoveDialogs";
+import { MoveNodeDialog, TransferTaskDialog } from "@/components/wbs/MoveDialogs";
 import {
     StructureCanvas,
     type CanvasHandlers,
@@ -573,7 +573,7 @@ export function StructurePage() {
             )}
 
             {moveTask && (
-                <MoveTaskDialog
+                <TransferTaskDialog
                     taskKey={moveTask.key}
                     roots={tree.roots}
                     currentNodeId={moveTask.wbs_node_id}

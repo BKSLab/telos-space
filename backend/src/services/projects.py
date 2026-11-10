@@ -5,8 +5,8 @@ from src.db.models.knowledge_index_jobs import KnowledgeEntityType
 from src.db.models.project_members import ProjectRole
 from src.db.models.project_stages import ProjectStage
 from src.db.models.tasks import Task
+from src.exceptions.boards import BoardsRepositoryError
 from src.exceptions.knowledge import KnowledgeEventsServiceError
-from src.exceptions.project_boards import ProjectBoardsRepositoryError
 from src.exceptions.project_stages import ProjectStagesRepositoryError
 from src.exceptions.projects import (
     ProjectDeadlineConflictError,
@@ -22,7 +22,7 @@ from src.exceptions.storage import TaskAttachmentStorageError
 from src.exceptions.tasks import TasksRepositoryError
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
 from src.exceptions.users import UsersRepositoryError
-from src.repositories.project_boards import ProjectBoardsRepository
+from src.repositories.boards import BoardsRepository
 from src.repositories.project_deadline_changes import ProjectDeadlineChangesRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_stages import ProjectStagesRepository
@@ -59,7 +59,7 @@ RepositoryErrors = (
     UsersRepositoryError,
     ProjectsRepositoryError,
     ProjectStagesRepositoryError,
-    ProjectBoardsRepositoryError,
+    BoardsRepositoryError,
     TasksRepositoryError,
     KnowledgeEventsServiceError,
     UnitOfWorkRepositoryError,
@@ -80,7 +80,7 @@ class ProjectsService:
         knowledge_events: KnowledgeEvents,
         users_repository: UsersRepository,
         deadline_changes_repository: ProjectDeadlineChangesRepository,
-        boards_repository: ProjectBoardsRepository | None = None,
+        boards_repository: BoardsRepository | None = None,
     ):
         self.projects_repository = projects_repository
         self.members_repository = members_repository

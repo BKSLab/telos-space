@@ -183,7 +183,7 @@ export type SearchMatchSource =
     | null;
 
 export interface Task {
-    revision?: number;
+    revision: number;
     checklist?: TaskChecklist | null;
     checklist_revision?: number;
     id: number;
@@ -751,7 +751,7 @@ export interface AgentMessage {
     role: "user" | "assistant";
     content: string;
     sources: KnowledgeSource[];
-    page_context?: TimPageContext | null;
+    page_context?: AgentPageContext | null;
     status: "queued" | "processing" | "completed" | "failed";
     error: string | null;
     progress?: string | null;
@@ -1166,7 +1166,7 @@ export interface BoardObjectSelectionRef {
     id: number
 }
 
-export interface TimPageContext {
+export interface AgentPageContext {
     board_selection?: BoardObjectSelectionRef[];
     board_id?: number | null;
     route: string;
@@ -1189,11 +1189,11 @@ export interface AgentPendingAction {
 
 export type DashboardScope = "mine" | "all";
 
-export type TaskMoveTarget =
+export type TaskTransferTarget =
     | { project_id: number; stage_id?: number | null; remove_outsiders?: boolean }
     | { personal: true };
 
-export interface TaskMoveLosses {
+export interface TaskTransferLosses {
     wbs_placements: number;
     dependencies: number;
     document_links: number;
@@ -1201,7 +1201,7 @@ export interface TaskMoveLosses {
     board_stickers: number;
 }
 
-export interface TaskMovePreview {
+export interface TaskTransferPreview {
     from_key: string;
     target_kind: TaskKind;
     target_name: string;
@@ -1210,15 +1210,15 @@ export interface TaskMovePreview {
     stage_name: string | null;
     status: TaskStatus | null;
     executor: UserSummary | null;
-    losses: TaskMoveLosses;
+    losses: TaskTransferLosses;
     outsiders: UserSummary[];
     notes: string[];
 }
 
-export interface TaskMoveResult {
+export interface TaskTransferResult {
     task: Task;
     from_key: string;
     to_key: string;
-    losses: TaskMoveLosses;
+    losses: TaskTransferLosses;
     notes: string[];
 }

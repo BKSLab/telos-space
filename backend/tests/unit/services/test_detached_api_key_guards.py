@@ -30,7 +30,7 @@ def key_principal(scopes=()):
         api_key=ApiKeyGrant(
             key_id=uuid4(),
             label="Integration",
-            key_prefix="ttk_test",
+            key_prefix="telos_key_test",
             scopes=frozenset(scopes),
             owner_user_id=1,
         ),
@@ -52,7 +52,7 @@ async def test_scoped_keys_cannot_enter_unlisted_detached_routes(scenario):
         yield db
 
     llm = AsyncMock()
-    credentials = dict(project_id=1, session_token=None, bearer_secret="ttk_test")
+    credentials = dict(project_id=1, session_token=None, bearer_secret="telos_key_test")
     if scenario == "formulation":
         call = RiskFormulationService(scope=scope, llm_client=llm).suggest(
             **credentials, data=SimpleNamespace()
@@ -103,7 +103,7 @@ async def test_attachment_download_requires_task_read_before_loading_file(
         yield unit
 
     call = AttachmentDownloadService(scope=scope).prepare(
-        task_id=1, attachment_id=2, session_token=None, bearer_secret="ttk_test"
+        task_id=1, attachment_id=2, session_token=None, bearer_secret="telos_key_test"
     )
     if allowed:
         download = await call

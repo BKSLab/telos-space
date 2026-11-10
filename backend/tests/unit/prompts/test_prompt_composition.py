@@ -6,8 +6,8 @@ from src.prompts.analytics import (
 from src.prompts.base import (
     LANGUAGE_RULE,
     PM_ROLE,
-    TRACKER_CONTEXT,
     UNTRUSTED_DATA_RULE,
+    WORKSPACE_CONTEXT,
     build_system_prompt,
 )
 from src.prompts.project_agent import (
@@ -55,12 +55,12 @@ def test_reasoning_prompts_open_with_the_shared_role_and_context() -> None:
     problems = [
         name
         for name, text in ROLE_PROMPTS.items()
-        if not text.startswith(PM_ROLE) or TRACKER_CONTEXT not in text
+        if not text.startswith(PM_ROLE) or WORKSPACE_CONTEXT not in text
     ]
     assert not problems, f"Роль или контекст трекера потеряны: {problems}"
 
     assert PM_ROLE not in PROJECT_AGENT_TOOL_SELECTION_PROMPT
-    assert TRACKER_CONTEXT not in PROJECT_AGENT_TOOL_SELECTION_PROMPT
+    assert WORKSPACE_CONTEXT not in PROJECT_AGENT_TOOL_SELECTION_PROMPT
     assert LANGUAGE_RULE not in PROJECT_AGENT_TOOL_SELECTION_PROMPT
 
 
@@ -82,8 +82,8 @@ def test_task_description_keeps_the_ban_on_inventing_facts_under_the_pm_role() -
 def test_build_system_prompt_keeps_declared_order_of_blocks() -> None:
     prompt = build_system_prompt("Инструкция операции.")
 
-    assert prompt.index(PM_ROLE) < prompt.index(TRACKER_CONTEXT)
-    assert prompt.index(TRACKER_CONTEXT) < prompt.index(UNTRUSTED_DATA_RULE)
+    assert prompt.index(PM_ROLE) < prompt.index(WORKSPACE_CONTEXT)
+    assert prompt.index(WORKSPACE_CONTEXT) < prompt.index(UNTRUSTED_DATA_RULE)
     assert prompt.index(UNTRUSTED_DATA_RULE) < prompt.index(LANGUAGE_RULE)
     assert prompt.endswith("Инструкция операции.")
 

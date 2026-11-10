@@ -7,7 +7,7 @@ from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
-from src.agent.tim import TimMode
+from src.agent.aris import ArisMode
 from src.agent.tools import AgentToolContext
 from src.exceptions.agent_tools import AgentToolsServiceError
 from src.mcp_server.context import resolve_project, tool_context
@@ -40,7 +40,7 @@ async def _execute(
             user_id=tools.principal.user_id,
             can_write=tools.principal.can_write,
             request_id=request_id,
-            mode=TimMode.WIDGET_PROJECT if project_id is not None else TimMode.WIDGET_PERSONAL,
+            mode=ArisMode.WIDGET_PROJECT if project_id is not None else ArisMode.WIDGET_PERSONAL,
             allowed_tools=frozenset({selected}),
         )
         actions = tools.services.actions

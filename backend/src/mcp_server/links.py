@@ -20,14 +20,14 @@ logger = logging.getLogger(__name__)
 
 #: Приписка про ссылки — часть описания инструментов для агента.
 LINKS_HINT = (
-    "Поле url — ссылка на задачу или проект в интерфейсе трекера: давай её человеку "
+    "Поле url — ссылка на задачу или проект в TELOS SPACE: давай её человеку "
     "целиком и как есть, не сокращай и не собирай адрес сам. Нет поля — нет ссылки."
 )
 
 
 @dataclass(frozen=True, slots=True)
-class TrackerLinks:
-    """Сборщик ссылок на интерфейс трекера.
+class ResourceLinks:
+    """Сборщик ссылок на интерфейс TELOS SPACE.
 
     Attributes:
         base_url: Публичный адрес без хвостового слеша; пусто — ссылок нет.
@@ -46,9 +46,9 @@ class TrackerLinks:
         return f"{self.base_url}/projects/{quote(project_key.strip().upper(), safe='')}"
 
 
-def build_links(public_url: str) -> TrackerLinks:
+def build_links(public_url: str) -> ResourceLinks:
     """Собирает сборщик ссылок из ``APP_PUBLIC_URL``."""
-    return TrackerLinks((public_url or "").rstrip("/"))
+    return ResourceLinks((public_url or "").rstrip("/"))
 
 
 def put_url(target: dict[str, Any], url: str | None, key: str = "url") -> dict[str, Any]:

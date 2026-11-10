@@ -3,7 +3,7 @@ import type { Project, ProjectCreate } from "@/lib/types";
 import { IdRegistry, type Scene } from "@/lib/board/scene";
 import type { BoardGrouping } from "@/lib/board/group";
 import { validateTemplate, type BoardTemplate, type TemplateInsertion, type TemplateItem } from "@/lib/board/template";
-import { defaultStyle, type ProjectBoard, type ServerRef, type ShapeStyle } from "@/lib/board/types";
+import { defaultStyle, type Board, type ServerRef, type ShapeStyle } from "@/lib/board/types";
 
 export interface BoardObjectId { type: "shape" | "sticker"; id: number }
 type WireShapeData = Omit<Extract<TemplateItem, { type: "shape" }>["data"], "start_ref" | "end_ref" | "style"> & {
@@ -99,7 +99,7 @@ export function templateBatchRequest(insertion: TemplateInsertion, expectedRevis
 }
 
 export const editorMetadataEndpoint = (projectId: number | null, boardId: number) =>
-    `${endpoints.projectBoard(projectId, boardId)}/editor-metadata`;
+    `${endpoints.board(projectId, boardId)}/editor-metadata`;
 export const editorMetadataKey = (projectId: number | null, boardId: number) =>
     ["board-editor-metadata", projectId, boardId] as const;
 
@@ -113,6 +113,6 @@ export function saveEditorMetadata(
 }
 export function createProjectFromBoard(
     boardId: number, expectedRevision: number, project: ProjectCreate,
-): Promise<{ project: Project; board: ProjectBoard }> {
-    return api.post(`${endpoints.projectBoard(null, boardId)}/create-project`, { expected_revision: expectedRevision, project });
+): Promise<{ project: Project; board: Board }> {
+    return api.post(`${endpoints.board(null, boardId)}/create-project`, { expected_revision: expectedRevision, project });
 }

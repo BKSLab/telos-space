@@ -1,6 +1,6 @@
 """Личные API-ключи пользователя: выпуск и управление своими ключами.
 
-Личный и сервисный ключи принадлежат выпустившему их пользователю
+API-ключи принадлежат выпустившему их пользователю
 и действуют в пределах его доступа и явно выбранных прав. Управление — только из интерфейса (cookie-сессия): по токену или ключу
 управлять ключами нельзя, иначе утёкший секрет выпустил бы себе замену.
 """
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/users/me/api-keys",
-    tags=["personal api keys"],
+    tags=["api-keys"],
 )
 
 FORBIDDEN_RESPONSE = {
@@ -104,7 +104,7 @@ async def create_personal_key(
     principal: SessionPrincipalDep,
     service: ApiKeysServiceDep,
 ) -> ApiKeyCreatedSchema:
-    """Выпускает личный ключ текущему пользовательу."""
+    """Выпускает личный ключ текущему пользователю."""
     try:
         return await service.create_personal_key(data, owner_user_id=principal.user_id)
     except ApiKeysServiceError as error:
@@ -117,7 +117,7 @@ async def create_personal_key(
     summary="Изменить или отозвать личный ключ",
     description=(
         "Меняет имя, права и срок своего ключа. `is_active=false` отзывает ключ: "
-        "он перестаёт приниматься сразу. Поддерживаются свои личные и сервисные ключи; "
+        "он перестаёт приниматься сразу. Изменить можно только свой ключ; "
         "чужой ключ отвечает 404."
     ),
     operation_id="updatePersonalApiKey",

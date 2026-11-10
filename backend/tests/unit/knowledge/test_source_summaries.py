@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.clients.llm import LlmClient
+from src.exceptions.ai import AiProviderError
 from src.exceptions.clients import LlmClientError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.knowledge.catalog import build_catalog
 from src.knowledge.context import read_catalog, retrieve, source_brief
 from src.schemas.knowledge import KnowledgeReadRequest
@@ -73,7 +73,7 @@ async def test_failed_summary_keeps_original_index_and_successful_other_summarie
     service = build_service(tmp_path, rows=rows)
     service.summarizer.llm_client.get_structured_response.side_effect = LlmClientError("offline")
     try:
-        with pytest.raises(KnowledgeProviderError, match="Описание document:10"):
+        with pytest.raises(AiProviderError, match="Описание document:10"):
             await sync(service, rows)
         assert service.summaries_repository.save.await_args.args[0]["source_id"] == "document:9"
         manifest = await service.qdrant_client.manifest(1)

@@ -10,18 +10,18 @@ import pytest_asyncio
 
 from src.clients.llm import LlmClient
 from src.db.models.board_shapes import BoardShape, BoardShapeKind
-from src.db.models.project_boards import ProjectBoard
-from src.db.models.project_stickers import ProjectSticker
+from src.db.models.board_stickers import BoardSticker
+from src.db.models.boards import Board
 from src.db.models.projects import Project
 from src.repositories.board_shapes import BoardShapesRepository
-from src.repositories.project_boards import ProjectBoardsRepository
-from src.repositories.project_stickers import ProjectStickersRepository
+from src.repositories.board_stickers import BoardStickersRepository
+from src.repositories.boards import BoardsRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.schemas.board_shapes import default_style
+from src.services.agent_conversations import AgentConversationsService
+from src.services.agent_routing import AgentRoutingService, _Overview
+from src.services.boards import BoardsService
 from src.services.project_agent import ProjectAgentService
-from src.services.project_boards import ProjectBoardsService
-from src.services.tim_widget import TimWidgetService
-from src.services.tracker_agent import TrackerAgentService, _Overview
 from tests.board_support import local_user
 
 
@@ -40,13 +40,13 @@ async def selection_db(db_session):
     await db_session.flush()
     db_session.add_all(
         [
-            ProjectBoard(id=100, title="Own", created_by_user_id=100),
-            ProjectBoard(id=101, title="Another own", created_by_user_id=100),
-            ProjectBoard(id=102, title="Foreign", created_by_user_id=101),
-            ProjectBoard(
+            Board(id=100, title="Own", created_by_user_id=100),
+            Board(id=101, title="Another own", created_by_user_id=100),
+            Board(id=102, title="Foreign", created_by_user_id=101),
+            Board(
                 id=103, title="Archived", created_by_user_id=100, archived_at=datetime.now(UTC)
             ),
-            ProjectBoard(id=104, title="Project", created_by_user_id=101, project_id=100),
+            Board(id=104, title="Project", created_by_user_id=101, project_id=100),
         ]
     )
     await db_session.flush()
@@ -65,7 +65,7 @@ async def selection_db(db_session):
             )
         )
         db_session.add(
-            ProjectSticker(
+            BoardSticker(
                 id=object_id,
                 board_id=board_id,
                 project_id=100 if board_id == 104 else None,
@@ -92,11 +92,11 @@ async def selection_db(db_session):
 
 
 def db_consumers(session):
-    boards = ProjectBoardsRepository(session)
+    boards = BoardsRepository(session)
     shapes = BoardShapesRepository(session)
-    stickers = ProjectStickersRepository(session)
+    stickers = BoardStickersRepository(session)
     widget_db = SimpleNamespace(boards=boards, board_shapes=shapes, board_stickers=stickers)
-    service = ProjectBoardsService(
+    service = BoardsService(
         boards_repository=boards,
         shapes_repository=shapes,
         stickers_repository=stickers,
@@ -107,7 +107,7 @@ def db_consumers(session):
     async def scope():
         yield SimpleNamespace(boards=service)
 
-    tracker = TrackerAgentService(
+    tracker = AgentRoutingService(
         scope=scope, agent=AsyncMock(spec=ProjectAgentService), llm_client=AsyncMock(spec=LlmClient)
     )
     return widget_db, tracker
@@ -131,7 +131,7 @@ async def test_checked_selection_uses_real_board_and_ref_namespace(selection_db,
     }
 
     if consumer == "widget":
-        await TimWidgetService._check_board_page(widget_db, 100, raw, None)
+        await AgentConversationsService._check_board_page(widget_db, 100, raw, None)
         checked = raw
     else:
         page = await tracker._check_page(100, raw, _Overview([], [], False))
@@ -155,7 +155,7 @@ async def test_unavailable_board_discards_entire_selection(selection_db, consume
     }
 
     if consumer == "widget":
-        await TimWidgetService._check_board_page(widget_db, 100, raw, None)
+        await AgentConversationsService._check_board_page(widget_db, 100, raw, None)
         checked = raw
     else:
         page = await tracker._check_page(100, raw, _Overview([], [], False))

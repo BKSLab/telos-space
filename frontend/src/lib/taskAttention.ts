@@ -4,7 +4,7 @@ export interface TaskViewToken { revision: number; deadline_revision: number; ov
 export interface TaskAttentionItem extends TaskViewToken { task_id: number; is_new: boolean; is_overdue: boolean; is_updated: boolean }
 export interface TaskAttentionSnapshot { new_tasks: number; overdue_tasks: number; updated_tasks: number; total: number; items: TaskAttentionItem[] }
 export type AttentionStatus = "connecting" | "connected" | "disconnected" | "forbidden";
-export const attentionEndpoint = "/api/v1/my/task-attention";
+export const attentionEndpoint = "/api/v1/users/me/task-attention";
 export const attentionKey = (userId: number) => ["task-attention", userId] as const;
 
 export function attentionTitle(data: TaskAttentionSnapshot): string {

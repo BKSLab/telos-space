@@ -34,17 +34,17 @@ SESSION_ONLY_ROUTES = {
     ("DELETE", "/api/v1/users/me/tokens/{token_id}"),
     ("POST", "/api/v1/users/me/api-keys"),
     ("PATCH", "/api/v1/users/me/api-keys/{key_id}"),
-    ("POST", "/api/v1/me/calendar/ics-token"),
-    ("DELETE", "/api/v1/me/calendar/ics-token"),
+    ("POST", "/api/v1/users/me/calendar/ics-token"),
+    ("DELETE", "/api/v1/users/me/calendar/ics-token"),
     ("POST", "/api/v1/tasks/{task_id}/view"),
-    ("POST", "/api/v1/agent/pending/{action_id}/confirm"),
-    ("POST", "/api/v1/agent/pending/{action_id}/reject"),
+    ("POST", "/api/v1/aris/pending/{action_id}/confirm"),
+    ("POST", "/api/v1/aris/pending/{action_id}/reject"),
 }
 
 # POST, которые ничего не меняют: расчёт, предпросмотр и поиск.
 READ_ONLY_POST_ROUTES = {
     # Вопрос ставит ответ в очередь. Запись в домен защищена WriteGate и подтверждением.
-    ("POST", "/api/v1/agent/ask"),
+    ("POST", "/api/v1/aris/requests"),
     ("POST", "/api/v1/projects/{project_id}/chat/entities/resolve"),
     ("POST", "/api/v1/projects/{project_id}/risks/field-suggestion"),
     ("POST", "/api/v1/projects/{project_id}/tasks/checklist-suggestion"),
@@ -65,10 +65,10 @@ STREAMING_ROUTES = {
     ("GET", "/api/v1/projects/{project_id}/files/{file_id}/preview"),
     ("GET", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/preview"),
     ("GET", "/api/v1/projects/{project_id}/chat/attachments/{file_id}/preview"),
-    ("GET", "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/content"),
-    ("GET", "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/preview"),
-    ("GET", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/content"),
-    ("GET", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/preview"),
+    ("GET", "/api/v1/aris/conversations/{conversation_id}/files/{file_id}/content"),
+    ("GET", "/api/v1/aris/conversations/{conversation_id}/files/{file_id}/preview"),
+    ("GET", "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/files/{file_id}/content"),
+    ("GET", "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/files/{file_id}/preview"),
 }
 
 # Авторизация мутаций выполняется перед IO и повторно перед атомарной записью.
@@ -89,8 +89,8 @@ DETACHED_AUTH_ROUTES = STREAMING_ROUTES | DETACHED_WRITE_SERVICES.keys() | {
     ("POST", "/api/v1/projects/{project_id}/risks/suggestions"),
 }
 
-EXPECTED_NON_GET_TOTAL = 134
-EXPECTED_MUTATION_TOTAL = 113
+EXPECTED_NON_GET_TOTAL = 130
+EXPECTED_MUTATION_TOTAL = 109
 
 
 def route_dependencies(route: APIRoute) -> set[str]:
@@ -268,7 +268,7 @@ def test_route_inventory_is_classified_and_counted() -> None:
     sockets = [route for route in app.routes if isinstance(route, APIWebSocketRoute)]
     runtime_by_path = {
         "/api/v1/projects/{project_id}/chat/ws": "get_chat_runtime",
-        "/api/v1/my/task-attention/ws": "get_task_attention_runtime",
+        "/api/v1/users/me/task-attention/ws": "get_task_attention_runtime",
     }
     assert {route.path for route in sockets} == runtime_by_path.keys()
     # Auth/membership и READ/WRITE проверяются короткими фазами ChatService;

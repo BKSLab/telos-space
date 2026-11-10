@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api, endpoints, queryKeys } from "@/lib/api";
 import { pendingBoardSaves } from "@/lib/board/saveQueue";
-import type { BoardContent, ProjectBoard } from "@/lib/board/types";
+import type { BoardContent, Board } from "@/lib/board/types";
 import { useToast } from "@/lib/toast";
 import type { ProjectMember, Task } from "@/lib/types";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
@@ -22,7 +22,7 @@ function BoardSkeleton() {
     );
 }
 
-function nextBoardTitle(boards: ProjectBoard[]): string {
+function nextBoardTitle(boards: Board[]): string {
     const taken = new Set(boards.map((board) => board.title));
     for (let index = boards.length + 1; ; index += 1) {
         const title = `Доска ${index}`;
@@ -44,7 +44,7 @@ export function ProjectBoardPage() {
 
     const boardsQuery = useQuery({
         queryKey: boardsKey,
-        queryFn: () => api.get<ProjectBoard[]>(endpoints.projectBoards(project.id)),
+        queryFn: () => api.get<Board[]>(endpoints.projectBoards(project.id)),
         retry: 1,
     });
     const boards = boardsQuery.data ?? [];
@@ -87,7 +87,7 @@ export function ProjectBoardPage() {
         retry: 1,
     });
 
-    function selectBoard(board: ProjectBoard) {
+    function selectBoard(board: Board) {
         setSearchParams((current) => {
             const next = new URLSearchParams(current);
             next.set("board", String(board.id));
@@ -104,28 +104,28 @@ export function ProjectBoardPage() {
     }
 
     const createMutation = useMutation({
-        mutationFn: () => api.post<ProjectBoard>(endpoints.projectBoards(project.id), { title: nextBoardTitle(boards) }),
+        mutationFn: () => api.post<Board>(endpoints.projectBoards(project.id), { title: nextBoardTitle(boards) }),
         onSuccess: (created) => {
-            queryClient.setQueryData<ProjectBoard[]>(boardsKey, (current = []) => [...current, created]);
+            queryClient.setQueryData<Board[]>(boardsKey, (current = []) => [...current, created]);
             selectBoard(created);
         },
         onError: (error) => toast.error(`Доска не создана: ${conflictMessage(error, "ошибка сервера")}`),
     });
 
     const renameMutation = useMutation({
-        mutationFn: ({ board, title }: { board: ProjectBoard; title: string }) =>
-            api.patch<ProjectBoard>(endpoints.projectBoard(project.id, board.id), { title, revision: board.revision }),
+        mutationFn: ({ board, title }: { board: Board; title: string }) =>
+            api.patch<Board>(endpoints.board(project.id, board.id), { title, revision: board.revision }),
         onSuccess: (updated) => {
-            queryClient.setQueryData<ProjectBoard[]>(boardsKey, (current = []) => current.map((board) => (board.id === updated.id ? updated : board)));
+            queryClient.setQueryData<Board[]>(boardsKey, (current = []) => current.map((board) => (board.id === updated.id ? updated : board)));
         },
         onError: (error) => toast.error(`Доска не переименована: ${conflictMessage(error, "её уже изменил другой участник, список обновлён")}`),
     });
 
     const deleteMutation = useMutation({
-        mutationFn: (board: ProjectBoard) => api.delete<void>(`${endpoints.projectBoard(project.id, board.id)}?revision=${board.revision}`),
+        mutationFn: (board: Board) => api.delete<void>(`${endpoints.board(project.id, board.id)}?revision=${board.revision}`),
         onSuccess: (_, deleted) => {
             const rest = boards.filter((board) => board.id !== deleted.id);
-            queryClient.setQueryData<ProjectBoard[]>(boardsKey, rest);
+            queryClient.setQueryData<Board[]>(boardsKey, rest);
             if (activeBoard?.id === deleted.id && rest[0]) selectBoard(rest[0]);
         },
     });

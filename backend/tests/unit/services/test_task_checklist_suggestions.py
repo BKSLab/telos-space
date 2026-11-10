@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.exceptions.access import ResourceNotAvailableError
+from src.exceptions.ai import AiProviderError
 from src.exceptions.auth import NotAuthenticatedError
 from src.exceptions.clients import ClientError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.tasks import (
     TaskChecklistGenerationError,
     TaskContextDocumentError,
@@ -188,7 +188,7 @@ async def test_provider_failure_and_unreadable_file_limits_are_explicit(tmp_path
     assert "Missing.pdf" in result.warnings[0]
     assert "source_warnings" in json.loads(llm.get_structured_response.await_args.kwargs["content"])
     llm.get_structured_response.side_effect = ClientError("private provider details")
-    with pytest.raises(KnowledgeProviderError):
+    with pytest.raises(AiProviderError):
         await suggest(service)
 
 

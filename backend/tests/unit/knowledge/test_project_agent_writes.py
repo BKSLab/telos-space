@@ -12,8 +12,13 @@ from src.agent.runtime import WRITE_NOT_REQUESTED
 from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor, AgentToolRequest
 from src.schemas.knowledge import KnowledgeChatMessageSchema
 from src.schemas.project_tool_inputs import ProjectActionInput, TaskCreateInput, TaskInput
+from src.services.agent_routing import (
+    AgentRoutingDecision,
+    AgentRoutingService,
+    _Overview,
+    _PageContext,
+)
 from src.services.project_agent import WriteIntent
-from src.services.tracker_agent import TrackerAgentService, TrackerRoute, _Overview, _PageContext
 from tests.unit.knowledge.agent_models import LegacyOutput as AgentOutput
 from tests.unit.knowledge.test_project_agent import build_service
 
@@ -29,12 +34,12 @@ async def test_old_long_user_message_does_not_block_current_intent_or_routing():
         payloads.append(json.loads(content))
         if schema is WriteIntent:
             return WriteIntent(write_intent=True)
-        return TrackerRoute(mode="clarify", answer="В каком проекте?")
+        return AgentRoutingDecision(mode="clarify", answer="В каком проекте?")
 
     runtime.llm_client.get_structured_response.side_effect = respond
     assert await service._classify_write_intent(question=question, history=history)
-    tracker = TrackerAgentService(scope=service.scope, agent=service, llm_client=runtime.llm_client)
-    route = await tracker._route(
+    routing = AgentRoutingService(scope=service.scope, agent=service, llm_client=runtime.llm_client)
+    route = await routing._route(
         question=question,
         verbatim=question,
         history=history,
@@ -195,8 +200,8 @@ async def test_read_answer_does_not_wait_for_the_write_check_and_write_does():
 
 async def test_project_action_by_key_does_not_bypass_the_write_check():
     """telos_run_project_action с изменяющим действием без поручения не пишет, чтение — проходит."""
-    from src.agent.runtime import PROJECT_ACTION_TOOL, TimDeps, WriteGate, invoke
-    from src.agent.tim import TimMode
+    from src.agent.aris import ArisMode
+    from src.agent.runtime import PROJECT_ACTION_TOOL, ArisDeps, WriteGate, invoke
 
     seen = []
 
@@ -211,7 +216,7 @@ async def test_project_action_by_key_does_not_bypass_the_write_check():
                 "Проектное действие",
                 ProjectActionInput,
                 project_action,
-                modes=frozenset({TimMode.WIDGET_PERSONAL}),
+                modes=frozenset({ArisMode.WIDGET_PERSONAL}),
             ),
             AgentTool("telos_create_task", "Создать", TaskCreateInput, AsyncMock(), mutating=True),
             AgentTool("telos_get_task", "Прочитать", TaskInput, AsyncMock()),
@@ -221,9 +226,9 @@ async def test_project_action_by_key_does_not_bypass_the_write_check():
     async def no() -> bool:
         return False
 
-    deps = TimDeps(
+    deps = ArisDeps(
         execution=AgentToolContext(
-            project_id=None, user_id=1, can_write=True, mode=TimMode.WIDGET_PERSONAL
+            project_id=None, user_id=1, can_write=True, mode=ArisMode.WIDGET_PERSONAL
         ),
         executor=executor,
         system_prompt="",

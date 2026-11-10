@@ -18,7 +18,7 @@ from src.db.models import ApiToken, ProjectMember
 from src.db.models.api_tokens import ApiTokenScope
 from src.dependencies.chat import get_chat_runtime
 from src.services.chat_commands import ChatCommandsService
-from src.utils.api_tokens import hash_token_secret
+from src.utils.api_tokens import build_display_prefix, generate_token_secret, hash_token_secret
 from src.utils.tokens import create_access_token
 
 
@@ -61,14 +61,14 @@ async def test_http_auth_permissions_validation_and_concurrent_requests(chat_htt
     path = "/api/v1/projects/1/chat"
     assert (await chat_http.get(path)).status_code == 401
     assert (await chat_http.get(path, headers=credentials(3))).status_code == 404
-    secret = "test-chat-read-only-token"
+    secret = generate_token_secret()
     async with chat_env.factory() as db:
         db.add(
             ApiToken(
                 user_id=1,
                 name="Чтение",
                 token_hash=hash_token_secret(secret),
-                prefix=secret[:8],
+                prefix=build_display_prefix(secret),
                 scope=ApiTokenScope.READ,
             )
         )

@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.projects import Project
 from src.db.models.users import User
-from src.exceptions.project_boards import ProjectBoardNotFoundError
-from src.exceptions.project_stickers import FreeBoardTaskLinksError, ProjectStickerNotFoundError
-from src.repositories.project_stickers import ProjectStickersRepository
+from src.exceptions.board_stickers import BoardStickerNotFoundError, FreeBoardTaskLinksError
+from src.exceptions.boards import BoardNotFoundError
+from src.repositories.board_stickers import BoardStickersRepository
 from src.repositories.users import UsersRepository
 from src.schemas.board_shapes import (
     BoardBatchSchema,
@@ -21,13 +21,13 @@ from src.schemas.board_shapes import (
     BoardShapeToStickerSchema,
     BoardShapeUpdateSchema,
 )
-from src.schemas.project_boards import ProjectBoardCreateSchema, ProjectBoardUpdateSchema
-from src.schemas.project_stickers import (
-    ProjectStickerCreateSchema,
-    ProjectStickerPositionUpdateSchema,
-    ProjectStickerUpdateSchema,
+from src.schemas.board_stickers import (
+    BoardStickerCreateSchema,
+    BoardStickerPositionUpdateSchema,
+    BoardStickerUpdateSchema,
 )
-from tests.integration.repositories.test_project_boards_service import RECT, services
+from src.schemas.boards import BoardCreateSchema, BoardUpdateSchema
+from tests.integration.repositories.test_boards_service import RECT, services
 
 
 async def stranger(session: AsyncSession) -> int:
@@ -47,7 +47,7 @@ async def free_sticker(svc, board_id: int, user_id: int, **fields):
     return await svc.stickers.create_sticker(
         project_id=None,
         board_id=board_id,
-        data=ProjectStickerCreateSchema(body=fields.pop("body", "Идея"), **fields),
+        data=BoardStickerCreateSchema(body=fields.pop("body", "Идея"), **fields),
         author_id=user_id,
         author_username="owner",
         author_display_name="Владельцев Виктор",
@@ -61,16 +61,16 @@ async def test_free_board_lifecycle_belongs_to_owner(db_session: AsyncSession, u
     # Свободных досок нет — «Основная» не заводится (страховка только у проектов).
     assert await svc.boards.list_free_boards(user_id=user_id) == []
     first = await svc.boards.create_free_board(
-        data=ProjectBoardCreateSchema(title="Схема"), user_id=user_id
+        data=BoardCreateSchema(title="Схема"), user_id=user_id
     )
     second = await svc.boards.create_free_board(
-        data=ProjectBoardCreateSchema(title="Черновик"), user_id=user_id
+        data=BoardCreateSchema(title="Черновик"), user_id=user_id
     )
     assert (first.project_id, first.position, second.position) == (None, 0, 1)
 
     renamed = await svc.boards.update_free_board(
         board_id=first.id,
-        data=ProjectBoardUpdateSchema(revision=1, title="Процесс"),
+        data=BoardUpdateSchema(revision=1, title="Процесс"),
         user_id=user_id,
     )
     assert (renamed.title, renamed.revision) == ("Процесс", 2)
@@ -86,7 +86,7 @@ async def test_stranger_cannot_touch_free_board(db_session: AsyncSession, user: 
     other_id = await stranger(db_session)
     svc = services(db_session)
     board = await svc.boards.create_free_board(
-        data=ProjectBoardCreateSchema(title="Личное"), user_id=owner_id
+        data=BoardCreateSchema(title="Личное"), user_id=owner_id
     )
     sticker = await free_sticker(svc, board.id, owner_id)
     shape = await svc.shapes.create_shape(
@@ -102,7 +102,7 @@ async def test_stranger_cannot_touch_free_board(db_session: AsyncSession, user: 
         svc.boards.get_free_content(board_id=board.id, user_id=other_id),
         svc.boards.update_free_board(
             board_id=board.id,
-            data=ProjectBoardUpdateSchema(revision=1, title="Моё"),
+            data=BoardUpdateSchema(revision=1, title="Моё"),
             user_id=other_id,
         ),
         svc.boards.delete_free_board(board_id=board.id, revision=1, user_id=other_id),
@@ -111,14 +111,14 @@ async def test_stranger_cannot_touch_free_board(db_session: AsyncSession, user: 
             project_id=None,
             board_id=board.id,
             sticker_id=sticker.id,
-            data=ProjectStickerUpdateSchema(revision=sticker.revision, body="Взлом"),
+            data=BoardStickerUpdateSchema(revision=sticker.revision, body="Взлом"),
             user_id=other_id,
         ),
         svc.stickers.move_sticker(
             project_id=None,
             board_id=board.id,
             sticker_id=sticker.id,
-            data=ProjectStickerPositionUpdateSchema(canvas_x=1, canvas_y=1),
+            data=BoardStickerPositionUpdateSchema(canvas_x=1, canvas_y=1),
             user_id=other_id,
         ),
         svc.stickers.delete_sticker(
@@ -161,7 +161,7 @@ async def test_stranger_cannot_touch_free_board(db_session: AsyncSession, user: 
         ),
     ]
     for attempt in attempts:
-        with pytest.raises(ProjectBoardNotFoundError):
+        with pytest.raises(BoardNotFoundError):
             await attempt
 
     # Владелец по-прежнему видит всё нетронутым.
@@ -177,7 +177,7 @@ async def test_free_board_content_works_and_rejects_task_links(
     user_id = user.id
     svc = services(db_session)
     board = await svc.boards.create_free_board(
-        data=ProjectBoardCreateSchema(title="Схема"), user_id=user_id
+        data=BoardCreateSchema(title="Схема"), user_id=user_id
     )
 
     with pytest.raises(FreeBoardTaskLinksError):
@@ -190,14 +190,14 @@ async def test_free_board_content_works_and_rejects_task_links(
             project_id=None,
             board_id=board.id,
             sticker_id=sticker.id,
-            data=ProjectStickerUpdateSchema(revision=sticker.revision, task_ids=[1]),
+            data=BoardStickerUpdateSchema(revision=sticker.revision, task_ids=[1]),
             user_id=user_id,
         )
     moved = await svc.stickers.move_sticker(
         project_id=None,
         board_id=board.id,
         sticker_id=sticker.id,
-        data=ProjectStickerPositionUpdateSchema(canvas_x=40, canvas_y=50),
+        data=BoardStickerPositionUpdateSchema(canvas_x=40, canvas_y=50),
         user_id=user_id,
     )
     assert (moved.canvas_x, moved.canvas_y) == (40, 50)
@@ -226,7 +226,7 @@ async def test_free_board_content_works_and_rejects_task_links(
         revision=moved.revision,
         user_id=user_id,
     )
-    with pytest.raises(ProjectStickerNotFoundError):
+    with pytest.raises(BoardStickerNotFoundError):
         await svc.stickers.delete_sticker(
             project_id=None,
             board_id=board.id,
@@ -245,38 +245,38 @@ async def test_project_scope_never_sees_free_boards(
     project_id, user_id = project.id, user.id
     svc = services(db_session)
     free = await svc.boards.create_free_board(
-        data=ProjectBoardCreateSchema(title="Личное"), user_id=user_id
+        data=BoardCreateSchema(title="Личное"), user_id=user_id
     )
     free_item = await free_sticker(svc, free.id, user_id, body="Личный")
     project_boards = await svc.boards.list_boards(project_id, user_id=user_id)
     project_item = await svc.stickers.create_sticker(
         project_id=project_id,
         board_id=project_boards[0].id,
-        data=ProjectStickerCreateSchema(body="Проектный"),
+        data=BoardStickerCreateSchema(body="Проектный"),
         author_id=user_id,
         author_username="owner",
         author_display_name="Владельцев Виктор",
     )
 
     assert free.id not in {item.id for item in project_boards}
-    project_stickers = await ProjectStickersRepository(db_session).list_by_project_id(project_id)
+    project_stickers = await BoardStickersRepository(db_session).list_by_project_id(project_id)
     assert [item.id for item in project_stickers] == [project_item.id]
     # Свободная доска не открывается через маршруты проекта.
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await svc.boards.get_content(project_id=project_id, board_id=free.id)
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await svc.stickers.create_sticker(
             project_id=project_id,
             board_id=free.id,
-            data=ProjectStickerCreateSchema(body="Подлог"),
+            data=BoardStickerCreateSchema(body="Подлог"),
             author_id=user_id,
             author_username="owner",
             author_display_name="Владельцев Виктор",
         )
     # Проектная доска не открывается как свободная.
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await svc.boards.get_free_content(board_id=project_boards[0].id, user_id=user_id)
-    with pytest.raises(ProjectStickerNotFoundError):
+    with pytest.raises(BoardStickerNotFoundError):
         await svc.stickers.delete_sticker(
             project_id=None,
             board_id=free.id,

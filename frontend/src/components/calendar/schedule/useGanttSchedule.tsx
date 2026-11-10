@@ -46,7 +46,7 @@ export function useGanttSchedule({
 }: UseGanttScheduleOptions) {
     const queryClient = useQueryClient();
     const toast = useToast();
-    const [criticalMode, setCriticalMode] = useStoredFlag("tt.calendar.project.critical", false);
+    const [criticalMode, setCriticalMode] = useStoredFlag("telos.calendar.project.critical", false);
     const [pendingShift, setPendingShift] = useState<PendingShift | null>(null);
 
     const tasksById = useMemo(() => {

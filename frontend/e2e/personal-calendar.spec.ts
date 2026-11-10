@@ -24,6 +24,6 @@ test("личный календарь, портфель и выпуск с от�
     await page.getByRole("tab", { name: "Проекты", exact: true }).click();
     await expect(page).toHaveURL(/tab=portfolio/);
     await expect(page.getByRole("button", { name: /Запуск портала заказов: выполнено 25%/ })).toBeVisible();
-    expect(state.writes.filter((write) => write.path === "/me/calendar/ics-token").map((write) => write.method)).toEqual(["POST", "DELETE"]);
+    expect(state.writes.filter((write) => write.path === "/users/me/calendar/ics-token").map((write) => write.method)).toEqual(["POST", "DELETE"]);
     expect(state.errors).toEqual([]);
 });

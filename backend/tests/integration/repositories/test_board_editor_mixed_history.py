@@ -3,14 +3,14 @@
 import pytest
 
 from src.exceptions.board_shapes import BoardBatchConflictError, BoardShapeInvalidError
-from src.exceptions.project_stickers import ProjectStickerLockedError
+from src.exceptions.board_stickers import BoardStickerLockedError
 from src.schemas.board_shapes import BoardBatchSchema, BoardShapeUpdateSchema
-from src.schemas.project_stickers import (
-    ProjectStickerPositionUpdateSchema,
-    ProjectStickerUpdateSchema,
+from src.schemas.board_stickers import (
+    BoardStickerPositionUpdateSchema,
+    BoardStickerUpdateSchema,
 )
 from tests.integration.repositories.test_board_mixed_batch import copy_ops
-from tests.integration.repositories.test_project_boards_service import services
+from tests.integration.repositories.test_boards_service import services
 
 
 def metadata(groups=None, locked=None):
@@ -152,14 +152,14 @@ async def test_locks_protect_direct_and_indirect_mutations_but_allow_node_text(
         project_id=pid,
         board_id=bid,
         sticker_id=note.id,
-        data=ProjectStickerUpdateSchema(revision=1, body="Текст меняется без перемещения"),
+        data=BoardStickerUpdateSchema(revision=1, body="Текст меняется без перемещения"),
     )
-    with pytest.raises(ProjectStickerLockedError):
+    with pytest.raises(BoardStickerLockedError):
         await svc.stickers.move_sticker(
             project_id=pid,
             board_id=bid,
             sticker_id=note.id,
-            data=ProjectStickerPositionUpdateSchema(canvas_x=300, canvas_y=40),
+            data=BoardStickerPositionUpdateSchema(canvas_x=300, canvas_y=40),
         )
     with pytest.raises(BoardShapeInvalidError):
         await svc.shapes.update_shape(
@@ -215,7 +215,7 @@ async def test_individual_sticker_delete_honors_direct_and_indirect_locks(
                 },
             ),
         )
-        with pytest.raises(ProjectStickerLockedError):
+        with pytest.raises(BoardStickerLockedError):
             await svc.stickers.delete_sticker(
                 project_id=pid, board_id=bid, sticker_id=note.id, revision=1
             )
@@ -242,7 +242,7 @@ async def test_agent_adds_diagram_to_board_with_real_sticker(db_session, project
 
     from src.agent.tools import AgentToolContext
     from src.schemas.board_diagrams import BoardDiagramInput
-    from src.schemas.project_stickers import ProjectStickerCreateSchema
+    from src.schemas.board_stickers import BoardStickerCreateSchema
     from src.services.agent_board_actions import draw_board_diagram
 
     svc = services(db_session)
@@ -253,7 +253,7 @@ async def test_agent_adds_diagram_to_board_with_real_sticker(db_session, project
         author_id=uid,
         author_username="owner",
         author_display_name="Owner",
-        data=ProjectStickerCreateSchema(body="Существующий стикер", canvas_x=80, canvas_y=120),
+        data=BoardStickerCreateSchema(body="Существующий стикер", canvas_x=80, canvas_y=120),
     )
     db = SimpleNamespace(
         boards=svc.boards,

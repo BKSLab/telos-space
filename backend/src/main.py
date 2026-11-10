@@ -18,9 +18,13 @@ from src.api.v1.endpoints.agent_pending import router as agent_pending_router
 from src.api.v1.endpoints.agent_requests import router as agent_requests_router
 from src.api.v1.endpoints.analytics import router as analytics_router
 from src.api.v1.endpoints.api_tokens import router as api_tokens_router
+from src.api.v1.endpoints.aris import chat_router as aris_chat_router
+from src.api.v1.endpoints.aris import router as aris_router
 from src.api.v1.endpoints.auth import router as auth_router
 from src.api.v1.endpoints.board_editor import router as board_editor_router
 from src.api.v1.endpoints.board_shapes import router as board_shapes_router
+from src.api.v1.endpoints.board_stickers import router as project_stickers_router
+from src.api.v1.endpoints.boards import router as project_boards_router
 from src.api.v1.endpoints.calendar import router as calendar_router
 from src.api.v1.endpoints.calendar_feed import router as calendar_feed_router
 from src.api.v1.endpoints.calendar_scenarios import router as calendar_scenarios_router
@@ -34,7 +38,6 @@ from src.api.v1.endpoints.knowledge import router as knowledge_router
 from src.api.v1.endpoints.milestones import router as milestones_router
 from src.api.v1.endpoints.my_calendar import router as my_calendar_router
 from src.api.v1.endpoints.personal_api_keys import router as personal_api_keys_router
-from src.api.v1.endpoints.project_boards import router as project_boards_router
 from src.api.v1.endpoints.project_chat_ws import router as project_chat_ws_router
 from src.api.v1.endpoints.project_chats import download_router as chat_download_router
 from src.api.v1.endpoints.project_chats import router as project_chats_router
@@ -43,7 +46,6 @@ from src.api.v1.endpoints.project_icons import router as project_icons_router
 from src.api.v1.endpoints.project_members import router as project_members_router
 from src.api.v1.endpoints.project_risks import router as project_risks_router
 from src.api.v1.endpoints.project_stages import router as project_stages_router
-from src.api.v1.endpoints.project_stickers import router as project_stickers_router
 from src.api.v1.endpoints.projects import router as projects_router
 from src.api.v1.endpoints.risk_formulation import router as risk_formulation_router
 from src.api.v1.endpoints.risk_suggestions import router as risk_suggestions_router
@@ -56,11 +58,9 @@ from src.api.v1.endpoints.task_comments import router as task_comments_router
 from src.api.v1.endpoints.task_dependencies import router as task_dependencies_router
 from src.api.v1.endpoints.task_documents import router as task_documents_router
 from src.api.v1.endpoints.task_file_comments import router as task_file_comments_router
-from src.api.v1.endpoints.task_moves import router as task_moves_router
 from src.api.v1.endpoints.task_reports import router as task_reports_router
+from src.api.v1.endpoints.task_transfers import router as task_transfers_router
 from src.api.v1.endpoints.tasks import router as tasks_router
-from src.api.v1.endpoints.tim import chat_router as tim_chat_router
-from src.api.v1.endpoints.tim import router as tim_router
 from src.api.v1.endpoints.users import router as users_router
 from src.api.v1.endpoints.wbs_nodes import router as wbs_nodes_router
 from src.core.app_state import (
@@ -252,15 +252,15 @@ for api_router in (
     board_shapes_router,
     board_editor_router,
     task_reports_router,
-    task_moves_router,
+    task_transfers_router,
     task_attention_router,
     task_attention_ws_router,
     project_icons_router,
     personal_api_keys_router,
     agent_requests_router,
     agent_pending_router,
-    tim_router,
-    tim_chat_router,
+    aris_router,
+    aris_chat_router,
     project_risks_router,
     risk_suggestions_router,
     risk_formulation_router,
@@ -308,12 +308,12 @@ mcp_app = build_mcp_app(settings=settings)
 app.mount(settings.app.mcp_path, mcp_app)
 
 
-@app.get("/health/live", include_in_schema=False)
+@app.get("/health/live", include_in_schema=False, operation_id="getLiveness")
 async def health_live() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/health/ready", include_in_schema=False)
+@app.get("/health/ready", include_in_schema=False, operation_id="getReadiness")
 async def health_ready() -> JSONResponse:
     from sqlalchemy import text
 

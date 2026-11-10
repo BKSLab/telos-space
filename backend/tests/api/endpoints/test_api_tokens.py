@@ -30,7 +30,7 @@ class FakeTokensService:
             ApiTokenSchema(
                 id=1,
                 name="Ноутбук",
-                prefix="tt_Ab",
+                prefix="Ab123456",
                 scope="READ",
                 created_at=datetime.now(UTC),
                 expires_at=None,
@@ -47,14 +47,14 @@ class FakeTokensService:
             token=ApiTokenSchema(
                 id=2,
                 name=data.name,
-                prefix="tt_Cd",
+                prefix="Cd123456",
                 scope=data.scope,
                 created_at=datetime.now(UTC),
                 expires_at=None,
                 revoked_at=None,
                 last_used_at=None,
             ),
-            secret="tt_secret-value",
+            secret="telos_token_secret-value",
         )
 
     async def revoke_token(self, *, token_id: int, user_id: int) -> None:
@@ -83,7 +83,7 @@ async def test_list_tokens_never_returns_secret(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload[0]["prefix"] == "tt_Ab"
+    assert payload[0]["prefix"] == "Ab123456"
     assert "secret" not in payload[0]
     assert "token_hash" not in payload[0]
 
@@ -99,7 +99,7 @@ async def test_create_token_returns_secret_once(
     )
 
     assert response.status_code == 201
-    assert response.json()["secret"] == "tt_secret-value"
+    assert response.json()["secret"] == "telos_token_secret-value"
     assert session_user.issued["scope"] == "WRITE"
 
 
@@ -140,7 +140,7 @@ def test_api_token_model_never_serialises_hash() -> None:
         user_id=1,
         name="Ноутбук",
         token_hash="секрет",
-        prefix="tt_Ab",
+        prefix="Ab123456",
         scope=ApiTokenScope.READ,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),

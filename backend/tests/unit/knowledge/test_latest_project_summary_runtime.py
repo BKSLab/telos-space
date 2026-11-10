@@ -6,17 +6,17 @@ import pytest
 from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from src.agent.runtime import TimRuntime
-from src.agent.tim import TimMode
+from src.agent.aris import ArisMode
+from src.agent.runtime import ArisRuntime
 from src.agent.tools import AgentTool, AgentToolExecutor
-from src.prompts.project_agent import TIM_BASE_PROMPTS, TIM_WORKFLOW_INSTRUCTIONS
+from src.prompts.project_agent import ARIS_BASE_PROMPTS, ARIS_WORKFLOW_INSTRUCTIONS
 from src.schemas.project_tool_inputs import EmptyInput
 from tests.unit.knowledge.agent_models import final
-from tests.unit.knowledge.test_tim_runtime import deps_for
+from tests.unit.knowledge.test_aris_runtime import deps_for
 
 
 @pytest.mark.parametrize("found", [True, False])
-@pytest.mark.parametrize("mode", [TimMode.PROJECT_CHAT, TimMode.WIDGET_PROJECT])
+@pytest.mark.parametrize("mode", [ArisMode.PROJECT_CHAT, ArisMode.WIDGET_PROJECT])
 async def test_saved_summary_is_discovered_in_reports_and_returned_to_model(found, mode):
     report = {
         "found": found,
@@ -40,7 +40,7 @@ async def test_saved_summary_is_discovered_in_reports_and_returned_to_model(foun
     )
     deps = deps_for(executor, can_write=False, mode=mode)
     deps.defer_workflows = True
-    deps.system_prompt = TIM_BASE_PROMPTS[mode]
+    deps.system_prompt = ARIS_BASE_PROMPTS[mode]
     deps.content["question"] = "Тебе доступен последний разбор проекта?"
     deps.load_context = AsyncMock()
     deps.write_gate_factory = Mock(
@@ -58,8 +58,8 @@ async def test_saved_summary_is_discovered_in_reports_and_returned_to_model(foun
             return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "reports"})])
         if step == 2:
             assert visible == {"telos_load_capability", "telos_get_latest_project_summary"}
-            assert "found=false" in TIM_WORKFLOW_INSTRUCTIONS["reports"]
-            assert "created_at" in TIM_WORKFLOW_INSTRUCTIONS["reports"]
+            assert "found=false" in ARIS_WORKFLOW_INSTRUCTIONS["reports"]
+            assert "created_at" in ARIS_WORKFLOW_INSTRUCTIONS["reports"]
             return ModelResponse(parts=[ToolCallPart("telos_get_latest_project_summary", {})])
         returned = [
             part.content
@@ -71,7 +71,7 @@ async def test_saved_summary_is_discovered_in_reports_and_returned_to_model(foun
         assert returned[-1]["report"] == report["report"]
         return final("Обзор прочитан." if found else "Сохранённого обзора пока нет.")
 
-    await TimRuntime(model=FunctionModel(respond), executor=executor).run(deps, metadata={})
+    await ArisRuntime(model=FunctionModel(respond), executor=executor).run(deps, metadata={})
     reader.assert_awaited_once()
     deps.load_context.assert_awaited_once_with("reports")
     deps.write_gate_factory.assert_not_called()

@@ -1,6 +1,6 @@
 /** Общий контракт HTTP/WS. Серверный seq задаёт порядок внутри проекта. */
 import type { AgentToolRun, KnowledgeSource } from "@/lib/types";
-import { TIM_NAME } from "@/lib/tim";
+import { ARIS_NAME } from "@/lib/aris";
 
 export type ChatEntityType = "TASK" | "DOCUMENT" | "RISK" | "MILESTONE" | "WBS_NODE";
 /** Человек в чате — та же ссылка на пользователя, что и во всём API. */
@@ -13,7 +13,7 @@ export interface ChatAttachment {
     id: string; original_name: string; content_type: string; size_bytes: number;
     message_id: number | null; created_at: string;
 }
-/** USER — участник, AGENT — Арис (у него author = null), docs/tim-agent.md. */
+/** USER — участник, AGENT — Арис (у него author = null), docs/agent.md. */
 export type ChatAuthorType = "USER" | "AGENT";
 export interface ChatReply { id: number; seq: number; author_type?: ChatAuthorType; author: ChatUser | null; content: string; deleted: boolean }
 /** Состояние ответа Ариса: queued/processing — «Арис думает», completed — ответ, failed — ошибка (текст уже в content). */
@@ -129,6 +129,6 @@ export const isAgentThinking = (message: ChatMessage): boolean =>
     isAgentMessage(message) && (message.agent?.status === "queued" || message.agent?.status === "processing") && !message.content;
 /** Имя автора для подписи, уведомления и цитаты. */
 export function chatAuthorName(message: { author_type?: ChatAuthorType; author: ChatUser | null }, fallback = "Участник"): string {
-    if (message.author_type === "AGENT") return TIM_NAME;
+    if (message.author_type === "AGENT") return ARIS_NAME;
     return message.author?.display_name.trim() || message.author?.username || fallback;
 }

@@ -2,17 +2,17 @@ import type { ProjectMember, Task, UserSummary } from "@/lib/types";
 import { fullName, initials } from "@/lib/types";
 
 /** Цвет стикера — свободный hex `#rrggbb` (сервер хранит в нижнем регистре). */
-export type ProjectStickerColor = string;
-export type ProjectStickerSize = "small" | "medium" | "large";
+export type BoardStickerColor = string;
+export type BoardStickerSize = "small" | "medium" | "large";
 
-export interface ProjectSticker {
+export interface BoardSticker {
     id: number;
     project_id: number | null;
     board_id?: number;
     /** Слой на доске — общая шкала с фигурами (docs/boards-contract.md). */
     z_index?: number;
     body: string;
-    color: ProjectStickerColor;
+    color: BoardStickerColor;
     canvas_x: number;
     canvas_y: number;
     width?: number;
@@ -26,36 +26,36 @@ export interface ProjectSticker {
     updated_at: string;
 }
 
-export interface ProjectStickerInput {
+export interface BoardStickerInput {
     body: string;
-    color: ProjectStickerColor;
+    color: BoardStickerColor;
     task_ids: number[];
     width?: number;
     height?: number;
 }
 
-export interface ProjectStickerPositionInput {
+export interface BoardStickerPositionInput {
     canvas_x: number;
     canvas_y: number;
     width?: number;
     height?: number;
 }
 
-export type ProjectStickerCreateInput = ProjectStickerInput & ProjectStickerPositionInput & { z_index?: number };
+export type BoardStickerCreateInput = BoardStickerInput & BoardStickerPositionInput & { z_index?: number };
 
-export interface ProjectStickerUpdateInput extends ProjectStickerInput {
+export interface BoardStickerUpdateInput extends BoardStickerInput {
     revision: number;
 }
 
 export interface StickerColorOption {
-    value: ProjectStickerColor;
+    value: BoardStickerColor;
     label: string;
 }
 
 /** Бумажный жёлтый — цвет нового стикера (как DEFAULT_STICKER_COLOR на сервере). */
 export const DEFAULT_STICKER_COLOR = "#fff19a";
 
-/** Быстрые пресеты — прежние шесть бумажных цветов; любой другой выбирается палитрой. */
+/** Быстрые пресеты — шесть бумажных цветов; любой другой выбирается палитрой. */
 export const STICKER_COLOR_PRESETS: StickerColorOption[] = [
     { value: "#f3efe4", label: "Нейтральный" },
     { value: DEFAULT_STICKER_COLOR, label: "Жёлтый" },
@@ -65,25 +65,11 @@ export const STICKER_COLOR_PRESETS: StickerColorOption[] = [
     { value: "#e4d2ff", label: "Фиолетовый" },
 ];
 
-export const STICKER_COLOR_OPTIONS = STICKER_COLOR_PRESETS;
-
-const LEGACY_STICKER_COLORS: Record<string, string> = {
-    neutral: "#f3efe4",
-    yellow: DEFAULT_STICKER_COLOR,
-    blue: "#c9edff",
-    green: "#d8f5b5",
-    red: "#ffbbb5",
-    violet: "#e4d2ff",
-};
-
-/**
- * Приводит цвет к `#rrggbb` в нижнем регистре. Имя прежней палитры («yellow») — из кэша
- * старой версии — переводится в hex; нераспознанное значение — жёлтый по умолчанию.
- */
+/** Цвет #rrggbb в нижнем регистре; ошибочный ввод получает цвет по умолчанию. */
 export function normalizeStickerColor(color: string | null | undefined): string {
     const value = (color ?? "").trim().toLowerCase();
     if (/^#[0-9a-f]{6}$/.test(value)) return value;
-    return LEGACY_STICKER_COLORS[value] ?? DEFAULT_STICKER_COLOR;
+    return DEFAULT_STICKER_COLOR;
 }
 
 /**
@@ -106,7 +92,7 @@ export function stickerColorLabel(color: string): string {
 export const STICKER_TASK_RESULTS_LIMIT = 5;
 export const STICKER_NODE_WIDTH = 230;
 export const STICKER_NODE_HEIGHT = 230;
-export const STICKER_SIZE_PRESETS: Record<ProjectStickerSize, { width: number; height: number; label: string }> = {
+export const STICKER_SIZE_PRESETS: Record<BoardStickerSize, { width: number; height: number; label: string }> = {
     small: { width: 180, height: 180, label: "Маленький" },
     medium: { width: 230, height: 230, label: "Средний" },
     large: { width: 340, height: 280, label: "Большой" },
@@ -134,7 +120,7 @@ function snapshotInitials(displayName: string, username: string): string {
 
 /** Актуальная команда — основной источник профиля; snapshot остаётся fallback. */
 export function resolveStickerAuthor(
-    sticker: ProjectSticker,
+    sticker: BoardSticker,
     members: ProjectMember[],
 ): ResolvedStickerAuthor {
     const member = sticker.created_by_user_id === null
@@ -235,7 +221,7 @@ export function normalizeStickerPosition(position: {
     y: number;
     width?: number;
     height?: number;
-}): ProjectStickerPositionInput {
+}): BoardStickerPositionInput {
     return {
         canvas_x: clampStickerCoordinate(position.x),
         canvas_y: clampStickerCoordinate(position.y),
@@ -245,8 +231,8 @@ export function normalizeStickerPosition(position: {
 }
 
 function positionsOverlap(
-    candidate: ProjectStickerPositionInput,
-    sticker: ProjectSticker,
+    candidate: BoardStickerPositionInput,
+    sticker: BoardSticker,
 ): boolean {
     const width = candidate.width ?? STICKER_NODE_WIDTH;
     const height = candidate.height ?? STICKER_NODE_HEIGHT;
@@ -260,10 +246,10 @@ function positionsOverlap(
 
 /** Находит рядом с центром viewport свободное место для нового стикера. */
 export function findAvailableStickerPosition(
-    stickers: ProjectSticker[],
+    stickers: BoardSticker[],
     origin: { x: number; y: number },
     dimensions: { width?: number; height?: number } = {},
-): ProjectStickerPositionInput {
+): BoardStickerPositionInput {
     const width = dimensions.width ?? STICKER_NODE_WIDTH;
     const height = dimensions.height ?? STICKER_NODE_HEIGHT;
     const stepX = width + STICKER_NODE_GAP;
@@ -293,7 +279,7 @@ export function findAvailableStickerPosition(
     });
 }
 
-export function normalizeStickerInput(input: ProjectStickerInput): ProjectStickerInput {
+export function normalizeStickerInput(input: BoardStickerInput): BoardStickerInput {
     return {
         body: input.body.trim(),
         color: normalizeStickerColor(input.color),
@@ -304,8 +290,8 @@ export function normalizeStickerInput(input: ProjectStickerInput): ProjectSticke
 }
 
 export function stickerHasChanges(
-    sticker: ProjectSticker,
-    input: ProjectStickerInput,
+    sticker: BoardSticker,
+    input: BoardStickerInput,
 ): boolean {
     const normalized = normalizeStickerInput(input);
     const previousTasks = [...sticker.task_ids].sort((left, right) => left - right);

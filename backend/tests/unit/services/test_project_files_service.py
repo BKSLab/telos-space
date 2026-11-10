@@ -222,7 +222,7 @@ async def test_download_checks_api_key_read_scope_and_current_access(
     grant = ApiKeyGrant(
         key_id=UUID(int=1),
         label="file-reader",
-        key_prefix="ttk_reader",
+        key_prefix="telos_key_reader",
         scopes=frozenset({SCOPE_PROJECTS_READ}),
         owner_user_id=current_principal.user_id,
     )
@@ -235,13 +235,13 @@ async def test_download_checks_api_key_read_scope_and_current_access(
         service.storage.resolve.return_value = Path("/original.txt")
         if allowed:
             await service.prepare_download(
-                project_id=2, file_id=7, session_token=None, bearer_secret="ttk_reader"
+                project_id=2, file_id=7, session_token=None, bearer_secret="telos_key_reader"
             )
             db.access.ensure_project_access.assert_awaited_once_with(project_id=2, user_id=1)
         else:
             with pytest.raises(ApiKeyScopeError) as caught:
                 await service.prepare_download(
-                    project_id=2, file_id=7, session_token=None, bearer_secret="ttk_reader"
+                    project_id=2, file_id=7, session_token=None, bearer_secret="telos_key_reader"
                 )
             assert caught.value.status_code == 403
             db.access.ensure_project_access.assert_not_awaited()

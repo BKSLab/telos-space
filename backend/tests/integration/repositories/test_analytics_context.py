@@ -8,12 +8,12 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.clients.llm import LlmClient
+from src.db.models.board_stickers import BoardSticker, BoardStickerTaskLink
 from src.db.models.document_links import DocumentLink
 from src.db.models.documents import Document
 from src.db.models.project_members import ProjectMember, ProjectRole
 from src.db.models.project_milestones import ProjectMilestone
 from src.db.models.project_risks import ProjectRisk
-from src.db.models.project_stickers import ProjectSticker, ProjectStickerTaskLink
 from src.db.models.projects import ProjectStatus
 from src.db.models.task_activity import TaskActivity, TaskActivityEventType
 from src.db.models.task_attachments import TaskAttachment
@@ -44,7 +44,7 @@ async def test_complete_snapshot_survives_closed_database_scope(
     document = Document(
         project_id=project.id, slug="brief", title="Документ", content_md="Условия."
     )
-    sticker = ProjectSticker(
+    sticker = BoardSticker(
         project_id=project.id,
         board_id=board.id,
         body="Заметка.",
@@ -93,7 +93,7 @@ async def test_complete_snapshot_survives_closed_database_scope(
             ),
             TaskComment(task_id=tasks[0].id, body_md="Уточнение.", author_name="Автор"),
             DocumentLink(document_id=document.id, task_id=tasks[0].id),
-            ProjectStickerTaskLink(sticker_id=sticker.id, task_id=tasks[0].id),
+            BoardStickerTaskLink(sticker_id=sticker.id, task_id=tasks[0].id),
             TaskDependency(
                 project_id=project.id,
                 predecessor_task_id=tasks[0].id,

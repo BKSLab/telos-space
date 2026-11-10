@@ -34,7 +34,7 @@ TASK_NUMBER_CONSTRAINTS = frozenset({"uq_tasks_project_number", "uq_tasks_person
 
 @dataclass(frozen=True, slots=True)
 class ProjectTaskStatistics:
-    """Ограниченный набор агрегатов задач для Project Agent."""
+    """Ограниченный набор агрегатов задач для Арис."""
 
     total: int
     overdue: int

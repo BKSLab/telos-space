@@ -35,7 +35,7 @@ BATCH_METHODS = {
 # неделимой операцией и покрыт integration-тестом.
 MULTI_STATEMENT_ALLOWLIST = {
     ("knowledge_index_jobs.py", "claim_next_batch"),
-    ("project_stickers.py", "replace_task_links"),
+    ("board_stickers.py", "replace_task_links"),
 }
 
 QUERY_CALLS = {"execute", "scalar", "scalars", "get", "flush"}

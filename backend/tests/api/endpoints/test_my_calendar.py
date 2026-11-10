@@ -24,7 +24,7 @@ from src.services.calendar_feed import CalendarFeedService, IssuedFeedToken
 from src.services.personal_calendar import PersonalCalendarService
 
 TODAY = date(2026, 9, 28)
-TOKEN_URL = "/api/v1/me/calendar/ics-token"
+TOKEN_URL = "/api/v1/users/me/calendar/ics-token"
 
 
 def feed_service() -> AsyncMock:
@@ -52,7 +52,7 @@ async def test_my_calendar_forwards_filters_and_maps_range_error(api_client: Asy
     params = {"date_from": "2026-09-01", "date_to": "2026-09-30", "today": TODAY.isoformat()}
 
     response = await api_client.get(
-        "/api/v1/me/calendar",
+        "/api/v1/users/me/calendar",
         params={**params, "status": "DONE", "priority": "HIGH", "project_id": 3},
     )
 
@@ -67,9 +67,9 @@ async def test_my_calendar_forwards_filters_and_maps_range_error(api_client: Asy
     assert kwargs["project_id"] == 3
 
     service.get_my_range.side_effect = CalendarRangeError("Слишком длинный диапазон.")
-    assert (await api_client.get("/api/v1/me/calendar", params=params)).status_code == 422
+    assert (await api_client.get("/api/v1/users/me/calendar", params=params)).status_code == 422
     missing_today = {key: value for key, value in params.items() if key != "today"}
-    assert (await api_client.get("/api/v1/me/calendar", params=missing_today)).status_code == 422
+    assert (await api_client.get("/api/v1/users/me/calendar", params=missing_today)).status_code == 422
 
 
 @pytest.mark.asyncio

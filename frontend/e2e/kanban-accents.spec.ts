@@ -16,7 +16,7 @@ async function openKanban(page: Page) {
     ];
     await installMockApi(page, state);
     await page.route("https://fonts.gstatic.com/**", route => route.abort());
-    await page.route("**/api/v1/tasks/*/move", async route => {
+    await page.route("**/api/v1/tasks/*/stage-placement", async route => {
         const request = route.request();
         const headers = {
             "access-control-allow-origin": request.headers()["origin"] ?? "http://127.0.0.1:4179",
@@ -100,7 +100,7 @@ test("drag показывает вставку в конец, а drop сохра
 
     await page.mouse.up();
     await expect.poll(() => state.writes).toEqual([
-        { method: "PATCH", path: "/tasks/100/move", body: { stage_id: 2, position: 6000 } },
+        { method: "PATCH", path: "/tasks/100/stage-placement", body: { stage_id: 2, position: 6000 } },
     ]);
     await expect(targetColumn.getByRole("heading", { level: 3 })).toHaveText([
         "Первая задача целевой колонки", "Последняя задача целевой колонки", state.tasks[0].title,
@@ -154,7 +154,7 @@ test("перенос с клавиатуры показывает ту же по
     expect(state.writes).toEqual([]);
     await page.keyboard.press("Space");
     await expect.poll(() => state.writes).toEqual([
-        { method: "PATCH", path: "/tasks/100/move", body: { stage_id: 2, position: 6000 } },
+        { method: "PATCH", path: "/tasks/100/stage-placement", body: { stage_id: 2, position: 6000 } },
     ]);
     await expect(targetColumn.getByRole("heading", { level: 3 }).last()).toHaveText(state.tasks[0].title);
     await expect(page.getByText("В конец колонки", { exact: true })).toHaveCount(0);

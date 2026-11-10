@@ -83,7 +83,7 @@ async function expectFullPage(page: Page, personal: boolean) {
 
 test("одна компактная кнопка открывает личный чат и помнит выбор после перезагрузки", async ({ page }, info) => {
     const server = await setup(page);
-    await page.goto("/projects");
+    await page.goto("/");
     await expect(page.getByRole("button", { name: "Спросить Ариса", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Открыть чат команды", exact: true })).toHaveCount(0);
     await expect(page.getByRole("combobox", { name: "Выбор чата", exact: true })).toHaveCount(0);
@@ -146,7 +146,7 @@ test("личный и общий черновики переживают пер�
     await expect.poll(() => server.active.size).toBe(1);
     expect([...server.active.values()]).toEqual([1]);
     expect(server.control.connections).toBe(connections + 1);
-    expect(server.state.tim.submissions).toHaveLength(0);
+    expect(server.state.aris.submissions).toHaveLength(0);
     expect(server.commands.filter((command) => command.type === "message.send")).toHaveLength(0);
     expect(server.state.errors).toEqual([]);
 });
@@ -176,18 +176,18 @@ test("открытый чат закреплён за выбранным про�
 
 test("личные вопросы отправляются в личный API и не появляются в общей переписке", async ({ page }) => {
     const server = await setup(page);
-    await page.goto("/projects");
+    await page.goto("/");
     const panel = await openChats(page);
     const selector = panel.getByRole("combobox", { name: "Выбор чата", exact: true });
     await panel.getByRole("textbox", { name: "Вопрос Арису" }).fill("Личное поручение Арису");
     await panel.getByRole("button", { name: "Отправить Арису (Enter)" }).click();
-    await expect(panel.getByText(server.state.tim.answer, { exact: true })).toBeVisible();
-    expect(server.state.tim.submissions.map((submission) => submission.content)).toEqual(["Личное поручение Арису"]);
+    await expect(panel.getByText(server.state.aris.answer, { exact: true })).toBeVisible();
+    expect(server.state.aris.submissions.map((submission) => submission.content)).toEqual(["Личное поручение Арису"]);
     expect(server.commands.filter((command) => command.type === "message.send")).toHaveLength(0);
     await selector.selectOption("project:1");
     await expect(panel.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
     await expect(panel.getByText("Личное поручение Арису", { exact: true })).toHaveCount(0);
-    await expect(panel.getByText(server.state.tim.answer, { exact: true })).toHaveCount(0);
+    await expect(panel.getByText(server.state.aris.answer, { exact: true })).toHaveCount(0);
     await panel.getByRole("combobox", { name: "Сообщение проекту" }).fill("Общее сообщение команды");
     await panel.getByRole("button", { name: "Отправить", exact: true }).click();
     await expect(panel.getByRole("article").filter({ hasText: "Общее сообщение команды" })).toBeVisible();
@@ -207,19 +207,15 @@ test("личные вопросы отправляются в личный API �
     expect(server.state.errors).toEqual([]);
 });
 
-test("прежний view=vera открывает /chat, сохраняя query и hash", async ({ page }) => {
-    const server = await setup(page);
-    await page.goto("/projects/DEMO/chat?view=vera&tag=a&tag=b#private-context");
-    await expect(page).toHaveURL(/\/chat\?tag=a&tag=b#private-context$/);
-    const url = new URL(page.url());
-    expect(url.searchParams.has("view")).toBe(false);
-    expect(url.searchParams.getAll("tag")).toEqual(["a", "b"]);
-    expect(url.hash).toBe("#private-context");
-    await expectFullPage(page, true);
-    await expect(page.getByRole("textbox", { name: "Вопрос Арису" })).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toHaveCount(0);
-    expect(server.state.errors).toEqual([]);
-});
+for (const path of ["/my/tasks", "/my-api-keys", "/mcp", "/projects", "/projects/DEMO/agent"]) {
+    test(`удалённый адрес ${path} показывает отсутствие страницы`, async ({ page }) => {
+        const server = await setup(page);
+        await page.goto(path);
+        await expect(page.getByText("Страница не найдена", { exact: true })).toBeVisible();
+        expect(new URL(page.url()).pathname).toBe(path);
+        expect(server.state.errors).toEqual([]);
+    });
+}
 
 test("полный личный чат доступен на телефоне без единого проекта", async ({ page }, info) => {
     const server = await setup(page, (state) => { state.projects = []; });
@@ -232,9 +228,9 @@ test("полный личный чат доступен на телефоне б
     await page.getByRole("textbox", { name: "Вопрос Арису" }).fill("Что мне сделать первым?");
     await expect(page.getByRole("button", { name: "Отправить Арису (Enter)" })).toBeInViewport();
     await page.getByRole("button", { name: "Отправить Арису (Enter)" }).click();
-    await expect(page.getByText(server.state.tim.answer, { exact: true })).toBeVisible();
+    await expect(page.getByText(server.state.aris.answer, { exact: true })).toBeVisible();
     await page.screenshot({ path: info.outputPath("unified-mobile.png") });
-    expect(server.state.tim.submissions).toHaveLength(1);
+    expect(server.state.aris.submissions).toHaveLength(1);
     expect(server.control.connections).toBe(0);
     expect(server.state.errors).toEqual([]);
 });

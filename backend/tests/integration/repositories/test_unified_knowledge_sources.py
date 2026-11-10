@@ -6,6 +6,8 @@ from sqlalchemy import text
 
 from src.db.models import (
     AnalyticsReport,
+    BoardSticker,
+    BoardStickerTaskLink,
     Document,
     DocumentLink,
     ProjectDeadlineChange,
@@ -14,8 +16,6 @@ from src.db.models import (
     ProjectMilestone,
     ProjectRisk,
     ProjectStage,
-    ProjectSticker,
-    ProjectStickerTaskLink,
     Task,
     TaskActivity,
     TaskAttachment,
@@ -68,7 +68,7 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
         content_type="text/plain",
         size=12,
     )
-    sticker = ProjectSticker(
+    sticker = BoardSticker(
         project_id=project.id,
         board_id=board.id,
         body="Стикер: согласовали кварцопоставку",
@@ -122,7 +122,7 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
                 author_name="Виктор",
             ),
             DocumentLink(document_id=document.id, task_id=task.id),
-            ProjectStickerTaskLink(sticker_id=sticker.id, task_id=task.id),
+            BoardStickerTaskLink(sticker_id=sticker.id, task_id=task.id),
             TaskParticipant(task_id=task.id, project_member_id=member.id, role="OBSERVER"),
             TaskDependency(
                 project_id=project.id,

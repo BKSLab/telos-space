@@ -12,8 +12,8 @@ from typing import Any
 from pydantic import ValidationError
 
 from src.db.models.board_shapes import LINEAR_KINDS, BoardShape
-from src.db.models.project_boards import ProjectBoard
-from src.db.models.project_stickers import DEFAULT_STICKER_COLOR
+from src.db.models.board_stickers import DEFAULT_STICKER_COLOR
+from src.db.models.boards import Board
 from src.exceptions.board_shapes import (
     BoardBatchConflictError,
     BoardShapeInvalidError,
@@ -22,18 +22,18 @@ from src.exceptions.board_shapes import (
     BoardShapesRepositoryError,
     BoardShapesServiceError,
 )
-from src.exceptions.project_boards import (
-    ProjectBoardNotFoundError,
-    ProjectBoardsRepositoryError,
-    ProjectBoardsServiceError,
+from src.exceptions.board_stickers import BoardStickersRepositoryError
+from src.exceptions.boards import (
+    BoardNotFoundError,
+    BoardsRepositoryError,
+    BoardsServiceError,
 )
-from src.exceptions.project_stickers import ProjectStickersRepositoryError
 from src.exceptions.tasks import TasksRepositoryError
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
 from src.repositories.board_editor import BoardEditorRepository
 from src.repositories.board_shapes import BoardShapesRepository
-from src.repositories.project_boards import ProjectBoardsRepository
-from src.repositories.project_stickers import ProjectStickersRepository
+from src.repositories.board_stickers import BoardStickersRepository
+from src.repositories.boards import BoardsRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.schemas.board_editor import BoardEditorMetadata, BoardObjectRef
@@ -58,20 +58,20 @@ from src.schemas.board_shapes import (
     UpdateStickerOperation,
     complete_style,
 )
-from src.schemas.project_stickers import MAX_STICKER_SIZE, MIN_STICKER_SIZE
+from src.schemas.board_stickers import MAX_STICKER_SIZE, MIN_STICKER_SIZE
 from src.services.board_editor_batch import metadata_with_inserted_objects
 from src.services.board_mutations import (
     locked_object_refs,
     mutation_is_locked,
     rewrite_metadata_refs,
 )
-from src.services.project_stickers import to_sticker_schema
+from src.services.board_stickers import to_sticker_schema
 
 logger = logging.getLogger(__name__)
 RepositoryErrors = (
     BoardShapesRepositoryError,
-    ProjectBoardsRepositoryError,
-    ProjectStickersRepositoryError,
+    BoardsRepositoryError,
+    BoardStickersRepositoryError,
     UnitOfWorkRepositoryError,
     TasksRepositoryError,
 )
@@ -120,9 +120,9 @@ class BoardShapesService:
     def __init__(
         self,
         *,
-        boards_repository: ProjectBoardsRepository,
+        boards_repository: BoardsRepository,
         shapes_repository: BoardShapesRepository,
-        stickers_repository: ProjectStickersRepository,
+        stickers_repository: BoardStickersRepository,
         unit_of_work: UnitOfWork,
         tasks_repository: TasksRepository | None = None,
         editor_repository: BoardEditorRepository | None = None,
@@ -510,7 +510,7 @@ class BoardShapesService:
 
     async def _require_board(
         self, project_id: int | None, board_id: int, *, user_id: int | None = None
-    ) -> ProjectBoard:
+    ) -> Board:
         """Доска проекта; ``project_id=None`` — свободная доска, только её владельцу."""
         if self.editor_repository is not None:
             board = await self.editor_repository.get_board(board_id, lock=True)
@@ -519,11 +519,11 @@ class BoardShapesService:
                 or board.project_id != project_id
                 or (project_id is None and board.created_by_user_id != user_id)
             ):
-                raise ProjectBoardNotFoundError(board_id)
+                raise BoardNotFoundError(board_id)
             return board
         if project_id is None:
             if user_id is None:
-                raise ProjectBoardNotFoundError(board_id)
+                raise BoardNotFoundError(board_id)
             board = await self.boards_repository.get_active_free(
                 board_id=board_id, owner_user_id=user_id
             )
@@ -532,7 +532,7 @@ class BoardShapesService:
                 project_id=project_id, board_id=board_id
             )
         if board is None:
-            raise ProjectBoardNotFoundError(board_id)
+            raise BoardNotFoundError(board_id)
         return board
 
     async def _advance_board_revision(self, board):
@@ -735,7 +735,7 @@ class BoardShapesService:
 
     async def _insert(
         self,
-        board: ProjectBoard,
+        board: Board,
         data: BoardShapeCreateSchema,
         *,
         author_id: int,
@@ -764,7 +764,7 @@ class BoardShapesService:
 
     async def _update(
         self,
-        board: ProjectBoard,
+        board: Board,
         current: BoardShape,
         data: BoardShapeChangesSchema,
         *,
@@ -883,6 +883,6 @@ class _RollbackOnError:
         return None
 
     async def __aexit__(self, exc_type, exc, traceback) -> bool:
-        if exc is not None and isinstance(exc, ProjectBoardsServiceError):
+        if exc is not None and isinstance(exc, BoardsServiceError):
             await self.unit_of_work.rollback()
         return False

@@ -24,7 +24,7 @@ export function mockState() {
         {id:3,key:"DRAFT",name:"Черновик",owner_id:1,description_md:null,status:"PLANNING",color:"#a371f7",icon:null,start_date:null,due_date:null,order_index:2,created_at:stamp,updated_at:stamp},
     ];
     const stages = [{id:1,project_id:1,name:"В работе",color:"#58a6ff",order_index:0,is_done_stage:false}];
-    const tasks = Array.from({length:12}, (_, index)=>({id:100+index,project_id:1,stage_id:1,number:index+1,key:`DEMO-${index+1}`,title:index===0?"Согласовать макеты личного кабинета":`Задача ${index+1}`,description_md:null,priority:"MEDIUM",role:null,assignee:null,start_date:null,due_date:null,baseline_start_date:null,baseline_due_date:null,completed_at:null,position:index*1000,created_at:stamp,updated_at:stamp,comments_count:0,last_comment:null,checklist:null,checklist_revision:0,participants:[]}));
+    const tasks = Array.from({length:12}, (_, index)=>({revision:1,id:100+index,project_id:1,stage_id:1,number:index+1,key:`DEMO-${index+1}`,title:index===0?"Согласовать макеты личного кабинета":`Задача ${index+1}`,description_md:null,priority:"MEDIUM",role:null,assignee:null,start_date:null,due_date:null,baseline_start_date:null,baseline_due_date:null,completed_at:null,position:index*1000,created_at:stamp,updated_at:stamp,comments_count:0,last_comment:null,checklist:null,checklist_revision:0,participants:[]}));
     const members = people.map((user,index)=>({id:index+1,project_id:1,role:index===0?"OWNER":"MEMBER",user,created_at:stamp}));
     const boards: MockBoard[] = [
         { id: 1, project_id: 1, title: "Основная", position: 0, revision: 1, created_by_user_id: 1, created_at: stamp, updated_at: stamp },
@@ -38,7 +38,7 @@ export function mockState() {
     ];
     const shapes: Json[] = [];
 
-    return {me,projects,stages,tasks,members,boards,stickers,shapes,tim:timState(),nextIds:{board:10,sticker:10,shape:100},writes:[] as {method:string;path:string;body:unknown}[],errors:[] as string[]};
+    return {me,projects,stages,tasks,members,boards,stickers,shapes,aris:arisState(),nextIds:{board:10,sticker:10,shape:100},writes:[] as {method:string;path:string;body:unknown}[],errors:[] as string[]};
 }
 export type MockState = ReturnType<typeof mockState>;
 export async function installMockApi(page: Page, state: MockState) {
@@ -51,7 +51,7 @@ export async function installMockApi(page: Page, state: MockState) {
         const body=()=>{try{return request.postDataJSON();}catch{return {};}};
         if(method!=="GET")state.writes.push({method,path,body:body()});
         if(path==="/auth/me")return reply(state.me);
-        if(path.startsWith("/tim/conversations")){const result=handleTim(state,path,method,body);return reply(result.json,result.status??200);}
+        if(path.startsWith("/aris/conversations")){const result=handleAris(state,path,method,body);return reply(result.json,result.status??200);}
         const taskMatch=/^\/tasks\/(\d+)(\/.*)?$/.exec(path);
         if(taskMatch){
             const id=Number(taskMatch[1]);const rest=taskMatch[2]??"";
@@ -62,8 +62,8 @@ export async function installMockApi(page: Page, state: MockState) {
             if(rest==="/risks")return reply({items:[],total:0,offset:0,limit:50});
             return reply([]);
         }
-        if(path==="/my/tasks")return reply([]);
-        if(path==="/my/task-attention")return reply({new_tasks:0,overdue_tasks:0,updated_tasks:0,total:0,items:[]});
+        if(path==="/users/me/tasks")return reply([]);
+        if(path==="/users/me/task-attention")return reply({new_tasks:0,overdue_tasks:0,updated_tasks:0,total:0,items:[]});
         if(path==="/dashboard/analytics")return reply(null);
         if(path==="/boards"||path.startsWith("/boards/")){const result=handleBoards(state,null,path,method,url,body);return reply(result.json,result.status??200);}
         if(path==="/projects/defaults")return reply({stages:state.stages});
@@ -73,7 +73,7 @@ export async function installMockApi(page: Page, state: MockState) {
             const id=Number(projectMatch[1]);const rest=projectMatch[2]??"";
             if(rest==="/boards"||rest.startsWith("/boards/")){const result=handleBoards(state,id,rest,method,url,body);return reply(result.json,result.status??200);}
             if(rest==="")return reply(state.projects.find(project=>project.id===id));
-            if(rest.startsWith("/agent/conversations")){const result=handleTim(state,rest.replace("/agent", "/tim"),method,body);return reply(result.json,result.status??200);}
+            if(rest.startsWith("/aris/conversations")){const result=handleAris(state,rest,method,body);return reply(result.json,result.status??200);}
             if(rest==="/members")return reply(state.members);
             if(rest==="/tasks")return reply(state.tasks);
             if(rest==="/stages")return reply(state.stages);
@@ -396,7 +396,7 @@ export function handleBoards(state: MockState, projectId: number | null, rest: s
 
 
 
-type TimMessage = {
+type ArisMessage = {
     id: number; conversation_id: number; request_id: string; role: "user" | "assistant"; content: string;
     sources: Json[]; actions?: Json[]; files?: Json[]; page_context: Json | null;
     status: "queued" | "processing" | "completed" | "failed"; error: string | null; created_at: string;
@@ -404,10 +404,10 @@ type TimMessage = {
 };
 
 /** Состояние мока личного диалога с Арисом: диалоги, реплики и рычаги для тестов. */
-function timState() {
+function arisState() {
     return {
         conversations: [] as { id: number; title: string; created_at: string; updated_at: string }[],
-        messages: new Map<number, TimMessage[]>(),
+        messages: new Map<number, ArisMessage[]>(),
         /** Ответ Ариса; pending — ответ ещё готовится, fail — попытка упадёт. */
         answer: "По задачам всё в порядке: просрочек нет.",
         sources: [] as Json[],
@@ -422,35 +422,35 @@ function timState() {
     };
 }
 
-const TIM_FILE = { id: "f918d205-2ced-48eb-85f4-19b8e55ef361", original_name: "acceptance.md", content_type: "text/markdown", size: 12, created_at: stamp };
+const ARIS_FILE = { id: "f918d205-2ced-48eb-85f4-19b8e55ef361", original_name: "acceptance.md", content_type: "text/markdown", size: 12, created_at: stamp };
 
-/** Эндпоинты /tim/conversations* описаны в docs/agent.md. */
-function handleTim(state: MockState, path: string, method: string, body: () => unknown): { json: unknown; status?: number } {
-    const tim = state.tim;
-    if (path === "/tim/conversations") {
-        if (method === "GET") return { json: { items: tim.conversations.slice().reverse(), next_offset: null } };
-        const conversation = { id: tim.conversations.length + 1, title: "Новый диалог", created_at: stamp, updated_at: stamp };
-        tim.conversations.push(conversation);
-        tim.messages.set(conversation.id, []);
+/** Эндпоинты /aris/conversations* описаны в docs/agent.md. */
+function handleAris(state: MockState, path: string, method: string, body: () => unknown): { json: unknown; status?: number } {
+    const aris = state.aris;
+    if (path === "/aris/conversations") {
+        if (method === "GET") return { json: { items: aris.conversations.slice().reverse(), next_offset: null } };
+        const conversation = { id: aris.conversations.length + 1, title: "Новый диалог", created_at: stamp, updated_at: stamp };
+        aris.conversations.push(conversation);
+        aris.messages.set(conversation.id, []);
         return { json: conversation, status: 201 };
     }
-    const files = /^\/tim\/conversations\/(\d+)\/files(\/[^/]+)?$/.exec(path);
-    if (files) return files[2] ? { json: null, status: 204 } : { json: TIM_FILE, status: 201 };
-    const decision = /^\/tim\/conversations\/(\d+)\/actions\/([^/]+)\/decision$/.exec(path);
+    const files = /^\/aris\/conversations\/(\d+)\/files(\/[^/]+)?$/.exec(path);
+    if (files) return files[2] ? { json: null, status: 204 } : { json: ARIS_FILE, status: 201 };
+    const decision = /^\/aris\/conversations\/(\d+)\/actions\/([^/]+)\/decision$/.exec(path);
     if (decision) {
         const data = body() as { decision: "approve" | "reject" };
-        tim.decisions.push(data);
-        const assistant = tim.messages.get(Number(decision[1]))!.at(-1)!;
+        aris.decisions.push(data);
+        const assistant = aris.messages.get(Number(decision[1]))!.at(-1)!;
         const action = assistant.actions!.find((item) => item.id === decision[2])!;
         action.status = data.decision === "approve" ? "completed" : "rejected";
         action.result = { message: action.status === "completed" ? "Задача удалена" : "Действие отклонено" };
         assistant.status = "queued";
         return { json: action };
     }
-    const match = /^\/tim\/conversations\/(\d+)\/messages(?:\/(\d+)\/retry)?$/.exec(path);
+    const match = /^\/aris\/conversations\/(\d+)\/messages(?:\/(\d+)\/retry)?$/.exec(path);
     if (!match) return { json: { detail: "Не найдено" }, status: 404 };
     const id = Number(match[1]);
-    const rows = tim.messages.get(id);
+    const rows = aris.messages.get(id);
     if (!rows) return { json: { detail: "Диалог не найден" }, status: 404 };
     if (match[2]) {
         const message = rows.find((item) => item.id === Number(match[2]))!;
@@ -459,23 +459,23 @@ function handleTim(state: MockState, path: string, method: string, body: () => u
     }
     if (method === "GET") {
         const assistant = rows.at(-1);
-        if (assistant && (assistant.status === "queued" || assistant.status === "processing") && tim.pending && tim.progress) {
-            Object.assign(assistant, { status: "processing", progress: tim.progress });
+        if (assistant && (assistant.status === "queued" || assistant.status === "processing") && aris.pending && aris.progress) {
+            Object.assign(assistant, { status: "processing", progress: aris.progress });
         }
-        if (assistant && (assistant.status === "queued" || assistant.status === "processing") && !tim.pending) {
-            Object.assign(assistant, tim.fail
+        if (assistant && (assistant.status === "queued" || assistant.status === "processing") && !aris.pending) {
+            Object.assign(assistant, aris.fail
                 ? { status: "failed", error: "Не удалось подготовить ответ. Можно повторить запрос.", progress: null }
-                : { status: "completed", content: tim.answer, sources: tim.sources, progress: null });
-            if (tim.action && !assistant.actions) assistant.actions = [structuredClone(tim.action)];
+                : { status: "completed", content: aris.answer, sources: aris.sources, progress: null });
+            if (aris.action && !assistant.actions) assistant.actions = [structuredClone(aris.action)];
         }
         return { json: { items: rows, next_before_id: null } };
     }
     const data = body() as { request_id: string; content: string; file_ids?: string[]; page_context?: Json | null };
-    tim.submissions.push(data as unknown as Json);
+    aris.submissions.push(data as unknown as Json);
     const common = { conversation_id: id, request_id: data.request_id, sources: [], error: null, created_at: stamp };
-    const question: TimMessage = { ...common, id: ++tim.nextId, role: "user", content: data.content, status: "completed", page_context: data.page_context ?? null, files: data.file_ids?.length ? [TIM_FILE] : [] };
-    const assistant: TimMessage = { ...common, id: ++tim.nextId, role: "assistant", content: "", status: "queued", page_context: null };
+    const question: ArisMessage = { ...common, id: ++aris.nextId, role: "user", content: data.content, status: "completed", page_context: data.page_context ?? null, files: data.file_ids?.length ? [ARIS_FILE] : [] };
+    const assistant: ArisMessage = { ...common, id: ++aris.nextId, role: "assistant", content: "", status: "queued", page_context: null };
     rows.push(question, assistant);
-    tim.conversations.find((item) => item.id === id)!.title = data.content;
+    aris.conversations.find((item) => item.id === id)!.title = data.content;
     return { json: { user_message: question, assistant_message: assistant }, status: 202 };
 }

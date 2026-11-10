@@ -12,10 +12,12 @@ from src.api.v1.responses import (
 from src.dependencies.access import require_project_access
 from src.dependencies.auth import require_write_scope
 from src.dependencies.services import WbsNodesServiceDep, WbsSuggestionServiceDep
+from src.exceptions.ai import AiProviderError
 from src.exceptions.knowledge import KnowledgeServiceError
 from src.exceptions.projects import ProjectsServiceError
 from src.exceptions.tasks import TasksServiceError
 from src.exceptions.wbs_nodes import WbsNodesServiceError
+from src.schemas.http_errors import HttpErrorResponseSchema
 from src.schemas.tasks import TaskCompactSchema
 from src.schemas.wbs_nodes import (
     WbsNodeCreateSchema,
@@ -38,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 WbsErrors = (WbsNodesServiceError, ProjectsServiceError, TasksServiceError)
 # Предложение ИСР дополнительно зависит от доступности AI-контура.
-SuggestionErrors = (*WbsErrors, KnowledgeServiceError)
+SuggestionErrors = (*WbsErrors, KnowledgeServiceError, AiProviderError)
 
 ProjectIdPath = Annotated[int, Path(gt=0, description="Идентификатор проекта.")]
 NodeIdPath = Annotated[int, Path(gt=0, description="Идентификатор раздела ИСР.")]
@@ -389,6 +391,11 @@ async def assign_task(
         409: CONFLICT_RESPONSE,
         422: VALIDATION_RESPONSE,
         500: SERVER_ERROR_RESPONSE,
+        503: {
+            "model": HttpErrorResponseSchema,
+            "description": "AI-провайдер временно недоступен.",
+            "content": {"application/json": {"example": {"detail": AiProviderError.detail}}},
+        },
     },
     response_model=WbsSuggestionSchema,
 )

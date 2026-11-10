@@ -6,9 +6,9 @@ from pathlib import Path
 
 from src.clients.llm import LlmClient
 from src.clients.vision import VisionCapability
+from src.exceptions.ai import AiProviderError
 from src.exceptions.clients import ClientError
 from src.exceptions.documents import DocumentsRepositoryError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.projects import ProjectNotFoundError, ProjectsRepositoryError
 from src.exceptions.tasks import (
     TaskContextDocumentError,
@@ -87,7 +87,7 @@ class TaskDescriptionService:
             TaskContextDocumentError: Если выбранный документ недоступен.
             TaskContextFileError: Если файл контекста не разобран.
             TaskDescriptionRewriteError: Если модель вернула непригодный текст.
-            KnowledgeProviderError: Если LLM-сервис недоступен.
+            AiProviderError: Если LLM-сервис недоступен.
             TasksServiceError: Если собрать контекст задачи не удалось.
         """
         project, current_task, selected_documents, related_tasks = await self._load_context(
@@ -150,7 +150,7 @@ class TaskDescriptionService:
             )
         except ClientError as error:
             logger.error("❌ LLM недоступен при переформулировании задачи.", exc_info=True)
-            raise KnowledgeProviderError(str(error)) from error
+            raise AiProviderError(str(error)) from error
 
         description = result.description_md.strip()
         if not description or len(description) > _maximum_result_length(data.description_md):
@@ -237,7 +237,7 @@ class TaskDescriptionService:
                 raise TaskContextFileError(file_name=file.name) from error
             except ClientError as error:
                 logger.error("❌ Vision недоступен при разборе файла контекста.", exc_info=True)
-                raise KnowledgeProviderError(str(error)) from error
+                raise AiProviderError(str(error)) from error
             if not extracted:
                 raise TaskContextFileError(file_name=file.name)
             result.append({"name": file.name, "content": extracted})

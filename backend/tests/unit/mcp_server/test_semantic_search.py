@@ -67,7 +67,7 @@ class SearchContext:
     """Контекст вызова со state приложения и включённой базой знаний."""
 
     def __init__(self, runtime: object, tracker: ScopeTracker) -> None:
-        self.headers = {"Authorization": "Bearer tt_test"}
+        self.headers = {"Authorization": "Bearer telos_token_test"}
         state = SimpleNamespace(
             **{
                 RUNTIME_STATE_KEY: runtime,

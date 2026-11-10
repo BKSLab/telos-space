@@ -21,7 +21,7 @@ import {
 } from "@tanstack/react-query";
 import { AlertTriangle, Beaker, CalendarClock, Diamond, Filter, GitMerge, Inbox, Maximize2, PanelRightClose, PanelRightOpen, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { CalendarPulseChips, type PulseChip } from "@/components/calendar/CalendarPulseChips";
+import { CalendarSummaryChips, type CalendarSummaryChip } from "@/components/calendar/CalendarSummaryChips";
 import { CalendarRecentChanges } from "@/components/calendar/CalendarRecentChanges";
 import { CalendarSidePanel } from "@/components/calendar/CalendarSidePanel";
 import { CalendarTask } from "@/components/calendar/CalendarTask";
@@ -128,8 +128,8 @@ type PanelTab = "milestones" | "dependencies" | "changes" | "unscheduled";
 /** «Рядом» (сетка + шкала) показывается только на экране от 1280 px. */
 const WIDE_QUERY = "(min-width: 1280px)";
 const SPLIT_GRID_SCALES = GRID_SCALES.filter((item) => item.value === "week" || item.value === "month");
-const LABEL_WIDTH_KEY = "tt.calendar.project.gantt.labelWidth";
-const COLUMNS_KEY = "tt.calendar.project.gantt.columns";
+const LABEL_WIDTH_KEY = "telos.calendar.project.gantt.labelWidth";
+const COLUMNS_KEY = "telos.calendar.project.gantt.columns";
 
 /** Сетка — точное попадание указателя в день; шкала — прежнее пересечение полосы с колонкой. */
 const gridCollision: CollisionDetection = (args) => {
@@ -174,7 +174,7 @@ export function ProjectCalendarPage() {
     const isWide = useMediaQuery(WIDE_QUERY);
     const isPresent = searchParams.get("present") === "1";
     const viewState = useCalendarViewState(
-        isPhone ? "tt.calendar.project.view.phone" : "tt.calendar.project.view",
+        isPhone ? "telos.calendar.project.view.phone" : "telos.calendar.project.view",
         { view: "grid", gridScale: isPhone ? "week" : "month", timelineScale: "month" },
         today,
     );
@@ -190,10 +190,10 @@ export function ProjectCalendarPage() {
     const [isExporting, setExporting] = useState(false);
     const exportSheetRef = useRef<HTMLDivElement>(null);
     const timelineAreaRef = useRef<HTMLDivElement>(null);
-    const [colorMode, setColorMode] = useStoredChoice<ColorMode>("tt.calendar.project.color", COLOR_MODES, "status");
+    const [colorMode, setColorMode] = useStoredChoice<ColorMode>("telos.calendar.project.color", COLOR_MODES, "status");
     // Группировка шкалы: ?group=assignee из ссылки главнее сохранённого выбора.
-    const [storedGroupBy, setStoredGroupBy] = useStoredChoice<TimelineGroupBy>("tt.calendar.project.group", TIMELINE_GROUP_BY, "wbs");
-    const [isPanelOpen, setPanelOpen] = useStoredFlag("tt.calendar.project.panel", false);
+    const [storedGroupBy, setStoredGroupBy] = useStoredChoice<TimelineGroupBy>("telos.calendar.project.group", TIMELINE_GROUP_BY, "wbs");
+    const [isPanelOpen, setPanelOpen] = useStoredFlag("telos.calendar.project.panel", false);
     const [panelTab, setPanelTab] = useState<PanelTab>("milestones");
     const [createDate, setCreateDate] = useState<string | null>(null);
     const [activeTask, setActiveTask] = useState<CalendarGridTask | null>(null);
@@ -830,7 +830,7 @@ export function ProjectCalendarPage() {
         (task) => task.due_date !== null && task.due_date >= range.dateFrom && task.due_date <= range.dateTo,
     ).length;
 
-    const chips: PulseChip[] = [
+    const chips: CalendarSummaryChip[] = [
         {
             id: "period",
             label: `${dueInPeriod} ${plural(dueInPeriod, "срок", "срока", "сроков")} в периоде`,
@@ -1144,7 +1144,7 @@ export function ProjectCalendarPage() {
                         {showPanel ? <PanelRightClose size={14} aria-hidden="true" /> : <PanelRightOpen size={14} aria-hidden="true" />}
                     </IconButton>
                 </CalendarToolbar>
-                <CalendarPulseChips chips={chips} />
+                <CalendarSummaryChips chips={chips} />
             </div>
 
             <DndContext

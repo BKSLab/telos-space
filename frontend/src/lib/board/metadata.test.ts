@@ -74,7 +74,7 @@ describe("board metadata adapter", () => {
         expect(put).toHaveBeenCalledWith(editorMetadataEndpoint(3, 7), { expected_revision: 1, metadata });
         const post = vi.spyOn(api, "post").mockResolvedValue({});
         await createProjectFromBoard(7, 2, { key: "TEST", name: "Проект" });
-        expect(post).toHaveBeenCalledWith(`${endpoints.projectBoard(null, 7)}/create-project`,
+        expect(post).toHaveBeenCalledWith(`${endpoints.board(null, 7)}/create-project`,
             { expected_revision: 2, project: { key: "TEST", name: "Проект" } });
     });
 });

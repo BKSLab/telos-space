@@ -4,7 +4,7 @@ import { escapeXML, exportPNG, exportSVG, LIGHT_EXPORT_PALETTE, PNG_LIMITS, pngD
 import { boundsOfPoints } from "@/lib/board/geometry";
 import { arrowHeadPolygon } from "@/lib/board/routing";
 import { connectorPoints, nodeLookup, stickerObject, type Scene, type SceneObject, type ShapeObject } from "@/lib/board/scene";
-import type { ProjectSticker } from "@/lib/board/stickers";
+import type { BoardSticker } from "@/lib/board/stickers";
 import { defaultStyle, type ShapeKind } from "@/lib/board/types";
 
 function shape(key: string, kind: ShapeKind = "rect", patch: Partial<ShapeObject> = {}): ShapeObject {
@@ -16,7 +16,7 @@ function parse(svg: string): Document {
     expect(xml.querySelector("parsererror")).toBeNull();
     return xml;
 }
-function note(patch: Partial<ProjectSticker> = {}): ProjectSticker {
+function note(patch: Partial<BoardSticker> = {}): BoardSticker {
     return {
         id: 7, project_id: 1, body: "Тело", color: "#fff19a", canvas_x: 0, canvas_y: 0,
         created_by_user_id: null, created_by_username_snapshot: "", created_by_display_name_snapshot: "",

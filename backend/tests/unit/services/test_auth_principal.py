@@ -24,7 +24,7 @@ from src.services.auth import AuthService, Principal
 from src.utils.api_tokens import hash_token_secret
 from src.utils.tokens import create_access_token
 
-SECRET = "tt_valid"
+SECRET = "telos_token_valid"
 INVITE = "код-приглашения"
 
 
@@ -127,7 +127,7 @@ async def test_unusable_token_or_user_is_rejected_indistinguishably() -> None:
     """
     service, _, _ = build_service(user=make_user(), token=None)
     with pytest.raises(NotAuthenticatedError):
-        await service.resolve_principal(session_token=None, bearer_secret="tt_unknown")
+        await service.resolve_principal(session_token=None, bearer_secret="telos_token_unknown")
 
     service, _, _ = build_service(user=None, token=make_token())
     with pytest.raises(NotAuthenticatedError):

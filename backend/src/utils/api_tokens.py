@@ -3,7 +3,7 @@
 import hashlib
 import secrets
 
-TOKEN_PREFIX = "tt_"
+TOKEN_PREFIX = "telos_token_"
 TOKEN_ENTROPY_BYTES = 32
 DISPLAY_PREFIX_LENGTH = 8
 BEARER_SCHEME = "bearer"
@@ -13,7 +13,7 @@ def generate_token_secret() -> str:
     """Выпускает новый секрет токена.
 
     Returns:
-        Секрет вида ``tt_<случайная часть>``, показываемый пользователю один раз.
+        Секрет вида ``telos_token_<случайная часть>``; показывается один раз.
     """
     return f"{TOKEN_PREFIX}{secrets.token_urlsafe(TOKEN_ENTROPY_BYTES)}"
 
@@ -42,7 +42,9 @@ def build_display_prefix(secret: str) -> str:
     Returns:
         Первые символы секрета без случайной части.
     """
-    return secret[:DISPLAY_PREFIX_LENGTH]
+    if not secret.startswith(TOKEN_PREFIX):
+        raise ValueError("Неверный формат токена TELOS SPACE.")
+    return secret[len(TOKEN_PREFIX):][:DISPLAY_PREFIX_LENGTH]
 
 
 def extract_bearer_secret(authorization: str | None) -> str | None:

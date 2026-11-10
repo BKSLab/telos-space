@@ -68,7 +68,7 @@ for (const width of [320, 390, 768]) {
     test(`личный и общий ввод, файлы и черновики на touch ${width}px`, async ({ page }, info) => {
         const server = await setup(page);
         await page.setViewportSize({ width, height: 844 });
-        await page.goto("/projects");
+        await page.goto("/");
         await touchTarget(page.getByRole("button", { name: "Открыть чаты", exact: true }));
         await page.getByRole("button", { name: "Открыть чаты", exact: true }).tap();
         const panel = page.getByRole("dialog", { name: "Чаты", exact: true });
@@ -78,7 +78,7 @@ for (const width of [320, 390, 768]) {
         await question.fill("Личный вопрос");
         await question.press("Enter");
         await expect(question).toHaveValue("Личный вопрос\n");
-        expect(server.state.tim.submissions).toHaveLength(0);
+        expect(server.state.aris.submissions).toHaveLength(0);
         await panel.locator('input[type="file"]').setInputFiles({ name: "acceptance.md", mimeType: "text/markdown", buffer: Buffer.from("мобильный файл") });
         await expect(panel.getByRole("button", { name: "Убрать acceptance.md" })).toBeVisible();
         await touchTarget(panel.getByRole("button", { name: "Свернуть чат", exact: true }));
@@ -93,9 +93,9 @@ for (const width of [320, 390, 768]) {
         await touchTarget(personalSend);
         if (width === 320) await page.screenshot({ path: info.outputPath("personal-chat-320.png"), animations: "disabled" });
         await personalSend.tap();
-        await expect(page.getByText(server.state.tim.answer, { exact: true })).toBeVisible();
-        expect(server.state.tim.submissions[0].content).toBe("Личный вопрос");
-        expect(server.state.tim.submissions[0].file_ids).toHaveLength(1);
+        await expect(page.getByText(server.state.aris.answer, { exact: true })).toBeVisible();
+        expect(server.state.aris.submissions[0].content).toBe("Личный вопрос");
+        expect(server.state.aris.submissions[0].file_ids).toHaveLength(1);
         await page.getByRole("combobox", { name: "Выбор чата", exact: true }).selectOption("project:1");
         const common = page.getByRole("combobox", { name: "Сообщение проекту", exact: true });
         await common.fill("Командное сообщение");
@@ -166,9 +166,9 @@ test("поиск, ответ, реакции и длинные вложения 
 test("личная история остаётся на читаемом месте, когда Арис завершает ответ", async ({ page }) => {
     const server = await setup(page);
     const conversation = { id: 1, title: "Планирование", created_at: stamp, updated_at: stamp };
-    server.state.tim.conversations.push(conversation);
-    server.state.tim.pending = true;
-    server.state.tim.messages.set(1, Array.from({ length: 35 }, (_, index) => ({
+    server.state.aris.conversations.push(conversation);
+    server.state.aris.pending = true;
+    server.state.aris.messages.set(1, Array.from({ length: 35 }, (_, index) => ({
         id: index + 1, conversation_id: 1, request_id: `request-${index}`, role: "assistant", content: `Ответ ${index + 1}. ${"Договорённости по проекту. ".repeat(8)}`,
         sources: [], actions: [], files: [], page_context: null, status: index === 34 ? "processing" : "completed", error: null, created_at: stamp,
     })));
@@ -178,11 +178,11 @@ test("личная история остаётся на читаемом мес�
     await history.evaluate(element => { element.scrollTop = 140; element.dispatchEvent(new Event("scroll")); });
     await expect(page.getByRole("button", { name: "К последним сообщениям" })).toBeVisible();
     const before = await history.evaluate(element => element.scrollTop);
-    server.state.tim.pending = false;
-    await expect(history.getByText(server.state.tim.answer, { exact: true })).toHaveCount(1);
+    server.state.aris.pending = false;
+    await expect(history.getByText(server.state.aris.answer, { exact: true })).toHaveCount(1);
     expect(await history.evaluate(element => element.scrollTop)).toBeCloseTo(before, 0);
     await page.getByRole("button", { name: "К последним сообщениям" }).tap();
-    await expect(history.getByText(server.state.tim.answer, { exact: true })).toBeInViewport();
+    await expect(history.getByText(server.state.aris.answer, { exact: true })).toBeInViewport();
     await expect(page.getByRole("button", { name: "К последним сообщениям" })).toHaveCount(0);
     expect(server.state.errors).toEqual([]);
 });

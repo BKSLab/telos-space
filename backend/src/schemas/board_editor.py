@@ -5,8 +5,8 @@ from typing import Annotated, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.schemas.board_shapes import BoardShapeCreateSchema, ShapeAnchor
-from src.schemas.project_boards import ProjectBoardSchema
-from src.schemas.project_stickers import ProjectStickerCreateSchema
+from src.schemas.board_stickers import BoardStickerCreateSchema
+from src.schemas.boards import BoardSchema
 from src.schemas.projects import ProjectCreateSchema, ProjectSchema
 
 MAX_METADATA_BYTES = 512_000
@@ -63,7 +63,7 @@ class TemplateShapeData(BoardShapeCreateSchema):
     end_ref: TemplateObjectRef | None = None
 
 
-class TemplateStickerData(ProjectStickerCreateSchema):
+class TemplateStickerData(BoardStickerCreateSchema):
     task_ids: list[int] = Field(default_factory=list, max_length=0)
 
     @model_validator(mode="after")
@@ -185,4 +185,4 @@ class BoardPromotionWrite(EditorModel):
 
 class BoardPromotionResult(EditorModel):
     project: ProjectSchema
-    board: ProjectBoardSchema
+    board: BoardSchema

@@ -10,8 +10,8 @@ from src.clients.embedding import EmbeddingClient
 from src.clients.qdrant import ProjectQdrantClient
 from src.clients.vision import VisionCapability
 from src.db.models.knowledge_index_jobs import KnowledgeIndexJob
+from src.exceptions.ai import AiProviderError
 from src.exceptions.clients import ClientError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.storage import TaskAttachmentStorageError
 from src.knowledge.catalog import ProjectCatalog, SourceType, build_catalog, digest
 from src.knowledge.documents import KnowledgeDocument
@@ -251,7 +251,7 @@ class KnowledgeIndexService:
         await self.qdrant_client.delete_points(action.project_id, sorted(set(existing) - expected))
         action.index_completed = True
         if action.extraction_errors:
-            raise KnowledgeProviderError("; ".join(action.extraction_errors))
+            raise AiProviderError("; ".join(action.extraction_errors))
         return len(documents)
 
     async def persist_project_file_states(self, action: PreparedIndexAction) -> None:

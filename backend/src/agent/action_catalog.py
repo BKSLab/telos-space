@@ -1,7 +1,7 @@
 """Полный перечень проектных инструментов и их правил исполнения."""
 
 from src.agent.actions import ProjectAction
-from src.agent.tim import WIDGET_MODES, TimMode
+from src.agent.aris import WIDGET_MODES, ArisMode
 from src.schemas import board_diagrams as diagrams
 from src.schemas import project_tool_inputs as p
 from src.services import agent_board_actions as boards
@@ -72,7 +72,7 @@ PROJECT_ACTIONS = (
         p.UploadedAttachmentInput,
         documents.attach_uploaded_file,
         # Файлы приходят только в личном виджете; в общем чате загрузок Арису нет.
-        modes=frozenset({TimMode.WIDGET_PROJECT}),
+        modes=frozenset({ArisMode.WIDGET_PROJECT}),
     ),
     ProjectAction(
         "telos_get_project",
@@ -157,7 +157,7 @@ PROJECT_ACTIONS = (
         "telos_move_task",
         "Переместить задачу",
         "Стадия и положение задачи в канбане.",
-        p.TaskMoveInput,
+        p.TaskTransferInput,
         tasks.move_task,
     ),
     ProjectAction(
@@ -619,7 +619,7 @@ PERSONAL_ACTIONS = (
     ProjectAction(
         "telos_list_my_tasks",
         "Мои задачи",
-        "Все задачи на пользователе — проектные, из потоков и разовые — с ролью, состоянием и контекстом.",
+        "Все задачи пользователя — проектные и разовые — с ролью, состоянием и контекстом.",
         p.MyTasksInput,
         personal.list_my_tasks,
         mutating=False,
@@ -649,7 +649,7 @@ PERSONAL_ACTIONS = (
     ProjectAction(
         "telos_get_any_task",
         "Прочитать задачу",
-        "Задача любого вида по task_id или ключу (PROJ-142, ключ потока, T-15), если она доступна.",
+        "Проектная или разовая задача по task_id или ключу (PROJ-142, T-15), если она доступна.",
         p.TaskRefInput,
         personal.get_any_task,
         mutating=False,
@@ -659,7 +659,7 @@ PERSONAL_ACTIONS = (
     ProjectAction(
         "telos_create_personal_task",
         "Создать разовую задачу",
-        "Разовая задача вне проектов и потоков; постановщик — сам пользователь.",
+        "Разовая задача вне проектов; постановщик — сам пользователь.",
         p.PersonalTaskCreateInput,
         personal.create_personal_task,
         needs_project=False,

@@ -28,6 +28,8 @@ from src.repositories.agent_tool_runs import AgentToolRunsRepository
 from src.repositories.analytics_reports import AnalyticsReportsRepository
 from src.repositories.api_keys import ApiKeysRepository
 from src.repositories.board_shapes import BoardShapesRepository
+from src.repositories.board_stickers import BoardStickersRepository
+from src.repositories.boards import BoardsRepository
 from src.repositories.chat_agent_turns import ChatAgentTurnsRepository
 from src.repositories.chat_events import ChatEventsRepository
 from src.repositories.chat_messages import ChatMessagesRepository
@@ -37,12 +39,10 @@ from src.repositories.documents import DocumentsRepository
 from src.repositories.knowledge_index_jobs import KnowledgeIndexJobsRepository
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
 from src.repositories.milestones import MilestonesRepository
-from src.repositories.project_boards import ProjectBoardsRepository
 from src.repositories.project_chats import ProjectChatsRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_risks import ProjectRiskRepository
 from src.repositories.project_stages import ProjectStagesRepository
-from src.repositories.project_stickers import ProjectStickersRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.task_activity import TaskActivityRepository
 from src.repositories.task_attachments import TaskAttachmentsRepository
@@ -105,7 +105,7 @@ class AnalyticsDbScope:
     dependencies: TaskDependenciesRepository
     wbs_nodes: WbsNodesRepository
     milestones: MilestonesRepository
-    stickers: ProjectStickersRepository
+    stickers: BoardStickersRepository
     documents: DocumentsRepository
     document_links: DocumentLinksRepository
     unit_of_work: UnitOfWork
@@ -113,7 +113,7 @@ class AnalyticsDbScope:
 
 @dataclass(frozen=True, slots=True)
 class ProjectAgentScope:
-    """Одна короткая область сценария Project Agent."""
+    """Одна короткая область сценария Арис."""
 
     sources: KnowledgeSourcesRepository
     projects: ProjectsRepository
@@ -206,16 +206,16 @@ class AgentConversationScope:
     unit_of_work: UnitOfWork
     projects: ProjectsRepository | None = None
     api_keys: ApiKeysRepository | None = None
-    boards: ProjectBoardsRepository | None = None
+    boards: BoardsRepository | None = None
     board_shapes: BoardShapesRepository | None = None
-    board_stickers: ProjectStickersRepository | None = None
+    board_stickers: BoardStickersRepository | None = None
 
 
 AgentConversationScopeFactory = Callable[[], AbstractAsyncContextManager[AgentConversationScope]]
 
 
 @dataclass(frozen=True, slots=True)
-class TimChatScope:
+class ArisChatScope:
     """Короткая транзакция очереди ответов Ариса в общем проектном чате."""
 
     chats: ProjectChatsRepository
@@ -229,4 +229,4 @@ class TimChatScope:
     unit_of_work: UnitOfWork
 
 
-TimChatScopeFactory = Callable[[], AbstractAsyncContextManager[TimChatScope]]
+ArisChatScopeFactory = Callable[[], AbstractAsyncContextManager[ArisChatScope]]

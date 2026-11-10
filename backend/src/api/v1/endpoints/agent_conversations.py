@@ -34,8 +34,8 @@ from src.schemas.agent_tools import AgentToolDecisionSchema, AgentToolRunSchema
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
-    prefix="/projects/{project_id}/agent/conversations",
-    tags=["project agent"],
+    prefix="/projects/{project_id}/aris/conversations",
+    tags=["project-aris"],
     dependencies=[Depends(require_project_access)],
 )
 
@@ -47,7 +47,7 @@ router = APIRouter(
     summary="Принять решение по действию агента",
     description="Выполняет либо отклоняет сохранённое действие текущего участника. Параметры нельзя подменить при подтверждении; после решения чат продолжает ответ.",
     response_description="Сохранённый результат решения.",
-    operation_id="decideAgentAction",
+    operation_id="decideProjectArisAction",
     responses={
         401: {"description": "Требуется вход."},
         403: {"description": "Токен разрешает только чтение."},
@@ -121,7 +121,7 @@ WRITE_ERRORS = {
     status_code=status.HTTP_201_CREATED,
     summary="Загрузить файл для сообщения агенту",
     description="Принимает до 10 МБ в личный диалог; до 20 загрузок на диалог. Файл ещё не прикреплён к задаче и не индексируется в общие знания проекта.",
-    operation_id="uploadAgentFile",
+    operation_id="uploadProjectArisFile",
     response_description="Приватная ссылка для последующей отправки сообщения.",
     responses=WRITE_ERRORS,
 )
@@ -170,7 +170,7 @@ async def upload_agent_file(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Удалить неотправленный файл",
     description="Удаляет загрузку из черновика. Файлы отправленных сообщений сохраняются вместе с историей.",
-    operation_id="deleteAgentFileDraft",
+    operation_id="deleteProjectArisFileDraft",
     response_description="Черновик файла удалён.",
     responses=WRITE_ERRORS,
 )
@@ -210,7 +210,7 @@ async def delete_agent_file_draft(
     summary="Мои диалоги проекта",
     description="Перечисляет личные диалоги текущего участника только в выбранном проекте.",
     response_description="Страница диалогов от недавних к ранним.",
-    operation_id="listAgentConversations",
+    operation_id="listProjectArisConversations",
     responses=ERRORS,
 )
 async def list_agent_conversations(
@@ -251,7 +251,7 @@ async def list_agent_conversations(
     summary="Начать диалог с агентом",
     description="Создаёт личный разговор участника в контексте текущего проекта.",
     response_description="Сохранённый пустой диалог.",
-    operation_id="createAgentConversation",
+    operation_id="createProjectArisConversation",
     responses=WRITE_ERRORS,
 )
 async def create_agent_conversation(
@@ -282,7 +282,7 @@ async def create_agent_conversation(
     summary="Прочитать переписку",
     description="Возвращает реплики, источники и состояние ожидаемого ответа. История доступна только владельцу диалога с действующим участием в проекте.",
     response_description="Страница реплик в хронологическом порядке.",
-    operation_id="getAgentMessages",
+    operation_id="getProjectArisMessages",
     responses=ERRORS,
 )
 async def get_agent_messages(
@@ -331,7 +331,7 @@ async def get_agent_messages(
     summary="Отправить вопрос агенту",
     description="Сохраняет вопрос и ставит ответ в постоянную очередь. Повтор request_id с тем же текстом возвращает прежние сообщения. Клиент не передаёт историю или автора.",
     response_description="Вопрос и ожидающий ответ; результат доступен при чтении переписки.",
-    operation_id="sendAgentMessage",
+    operation_id="sendProjectArisMessage",
     responses=WRITE_ERRORS,
 )
 async def send_agent_message(
@@ -379,7 +379,7 @@ async def send_agent_message(
     summary="Повторить подготовку ответа",
     description="Повторяет последний неудачный ответ без создания нового вопроса. Начатый повтор возвращается идемпотентно.",
     response_description="Состояние ответа после повторной постановки в очередь.",
-    operation_id="retryAgentMessage",
+    operation_id="retryProjectArisMessage",
     responses=WRITE_ERRORS,
 )
 async def retry_agent_message(

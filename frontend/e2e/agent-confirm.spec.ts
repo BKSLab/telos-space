@@ -30,7 +30,7 @@ const ACTION: AgentPendingAction = {
 async function installPending(page: Page, initial: AgentPendingAction | null = ACTION) {
     const log: { method: string; path: string; body: string | null }[] = [];
     let current = initial;
-    await page.route("**/api/v1/agent/pending/**", async (route: Route) => {
+    await page.route("**/api/v1/aris/pending/**", async (route: Route) => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
         const headers = { "access-control-allow-origin": request.headers()["origin"] ?? "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, OPTIONS" };
@@ -75,7 +75,7 @@ for (const theme of ["light", "dark"] as const) {
         await expect(dialog.getByText("Выполнено", { exact: true })).toBeVisible();
         await expect(dialog.getByRole("button", { name: "Подтвердить" })).toHaveCount(0);
         const decision = log.find((entry) => entry.method === "POST");
-        expect(decision).toEqual({ method: "POST", path: `/api/v1/agent/pending/${ID}/confirm`, body: null });
+        expect(decision).toEqual({ method: "POST", path: `/api/v1/aris/pending/${ID}/confirm`, body: null });
         if (SHOTS) await page.screenshot({ path: `${SHOTS}/confirm-done-${theme}.png` });
 
         await dialog.getByRole("button", { name: "Закрыть" }).last().click();
@@ -93,7 +93,7 @@ test("отклонение ничего не меняет, чужая ссылк
     await dialog.getByRole("button", { name: "Отклонить" }).click();
     await expect(dialog.getByText("Отклонено — ничего не изменилось")).toBeVisible();
     await expect(dialog.getByText("Участник отклонил действие. Изменения не применены.")).toBeVisible();
-    expect(log.filter((entry) => entry.method === "POST").map((entry) => entry.path)).toEqual([`/api/v1/agent/pending/${ID}/reject`]);
+    expect(log.filter((entry) => entry.method === "POST").map((entry) => entry.path)).toEqual([`/api/v1/aris/pending/${ID}/reject`]);
 
     const other = await page.context().newPage();
     await installMockApi(other, mockState());

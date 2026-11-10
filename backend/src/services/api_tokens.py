@@ -15,6 +15,7 @@ from src.schemas.api_tokens import (
     ApiTokenSchema,
 )
 from src.utils.api_tokens import (
+    TOKEN_PREFIX,
     build_display_prefix,
     generate_token_secret,
     hash_token_secret,
@@ -137,6 +138,8 @@ class ApiTokensService:
         Raises:
             ApiTokensServiceError: Если репозиторий вернул ошибку.
         """
+        if not secret.startswith(TOKEN_PREFIX):
+            return None
         try:
             return await self.tokens_repository.get_active_by_hash(hash_token_secret(secret))
         except ApiTokensRepositoryError as error:

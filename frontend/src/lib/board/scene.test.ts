@@ -14,14 +14,14 @@ import {
     type SceneObject,
     type ShapeObject,
 } from "@/lib/board/scene";
-import type { ProjectSticker } from "@/lib/board/stickers";
+import type { BoardSticker } from "@/lib/board/stickers";
 import { defaultStyle, type BatchOp, type BoardShape } from "@/lib/board/types";
 
 const stamp = "2026-09-28T10:00:00Z";
 
-function sticker(id: number, x: number, y: number, z = 0): ProjectSticker {
+function sticker(id: number, x: number, y: number, z = 0): BoardSticker {
     return {
-        id, project_id: 1, board_id: 1, body: `Стикер ${id}`, color: "yellow", canvas_x: x, canvas_y: y, width: 200, height: 200, z_index: z,
+        id, project_id: 1, board_id: 1, body: `Стикер ${id}`, color: "#ffed8a", canvas_x: x, canvas_y: y, width: 200, height: 200, z_index: z,
         created_by_user_id: 1, created_by_username_snapshot: "k", created_by_display_name_snapshot: "К", task_ids: [], revision: 1, created_at: stamp, updated_at: stamp,
     };
 }
@@ -157,7 +157,7 @@ describe("очередь сохранения", () => {
     }
 
     it("flush досылает тот же стикер, изменённый во время запроса, с новой ревизией", async () => {
-        let firstReply!: (response: { shapes: []; stickers: ProjectSticker[]; deleted_shape_ids: []; id_map: Record<string, number> }) => void;
+        let firstReply!: (response: { shapes: []; stickers: BoardSticker[]; deleted_shape_ids: []; id_map: Record<string, number> }) => void;
         const send = vi.fn((ops: BatchOp[]) => {
             if (send.mock.calls.length === 1) return new Promise(resolve => { firstReply = resolve; });
             return Promise.resolve({ shapes: [], stickers: [{ ...sticker(7, 80, 0), revision: 3 }], deleted_shape_ids: [], id_map: {}, ops });

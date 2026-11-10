@@ -34,9 +34,9 @@ from src.repositories.task_activity import TaskActivityRepository
 from src.repositories.task_attachments import TaskAttachmentsRepository
 from src.repositories.task_comments import TaskCommentsRepository
 from src.repositories.task_dependencies import TaskDependenciesRepository
-from src.repositories.task_moves import TaskMovesRepository
 from src.repositories.task_participants import TaskParticipantsRepository
 from src.repositories.task_reports import TaskReportsRepository
+from src.repositories.task_transfers import TaskTransfersRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.repositories.users import UsersRepository
@@ -59,7 +59,7 @@ from src.services.task_activity import TaskActivityService
 from src.services.task_attachments import TaskAttachmentsService
 from src.services.task_comments import TaskCommentsService
 from src.services.task_dependencies import TaskDependenciesService
-from src.services.task_moves import TaskMovesService
+from src.services.task_transfers import TaskTransfersService
 from src.services.tasks import TasksService
 from src.services.users import UsersService
 from src.storage.task_attachments import TaskAttachmentStorage
@@ -89,7 +89,7 @@ class ToolServices:
     activity: TaskActivityService | None = None
     attachments: TaskAttachmentsService | None = None
     dependencies: TaskDependenciesService | None = None
-    moves: TaskMovesService | None = None
+    moves: TaskTransfersService | None = None
     requests: AgentRequestsService | None = None
     project_creation: ProjectCreationService | None = None
 
@@ -264,11 +264,11 @@ def build_dependencies_service(session: AsyncSession) -> TaskDependenciesService
     )
 
 
-def build_moves_service(session: AsyncSession, settings: Settings) -> TaskMovesService:
+def build_moves_service(session: AsyncSession, settings: Settings) -> TaskTransfersService:
     """Создаёт сервис переноса задачи в другой проект — тот же, что у REST."""
-    return TaskMovesService(
+    return TaskTransfersService(
         tasks_repository=TasksRepository(session),
-        task_moves_repository=TaskMovesRepository(session),
+        task_transfers_repository=TaskTransfersRepository(session),
         participants_repository=TaskParticipantsRepository(session),
         members_repository=ProjectMembersRepository(session),
         projects_repository=ProjectsRepository(session),

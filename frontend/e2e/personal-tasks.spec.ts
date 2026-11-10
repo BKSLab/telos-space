@@ -47,7 +47,7 @@ test("перенос разовой задачи показывает предп
     await dialog.getByLabel("Убрать их из задачи при переносе").check();
     await dialog.getByRole("button", { name: "Перенести", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Задача DEMO-20", exact: true })).toBeVisible();
-    expect(state.writes.find((item) => item.path === "/tasks/200/move-to")?.body).toEqual({ project_id: 1, remove_outsiders: true });
+    expect(state.writes.find((item) => item.path === "/tasks/200/transfer")?.body).toEqual({ project_id: 1, remove_outsiders: true });
     await page.getByRole("dialog", { name: "Задача DEMO-20", exact: true }).getByRole("tab", { name: "Отчёт", exact: true }).click();
     await expect(page.getByText("Сохранённый итог", { exact: true })).toBeVisible();
     expect(state.errors).toEqual([]);
@@ -64,7 +64,7 @@ test("проектная задача: предупреждение о снят�
     await expect(dialog.getByRole("note")).toContainText("1 размещение в ИСР");
     await expect(dialog.getByRole("note")).toContainText("2 зависимости");
     await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
-    expect(state.writes.filter((item) => item.path.endsWith("/move-to"))).toHaveLength(0);
+    expect(state.writes.filter((item) => item.path.endsWith("/transfer"))).toHaveLength(0);
     await card.getByRole("button", { name: "Переместить…" }).click();
     dialog = page.getByRole("dialog", { name: "Переместить задачу", exact: true });
     await dialog.getByRole("button", { name: "Перенести", exact: true }).click();
@@ -72,6 +72,6 @@ test("проектная задача: предупреждение о снят�
     const personalCard = page.getByRole("dialog", { name: "Задача T-20", exact: true });
     await expect(personalCard.getByRole("tab", { name: "Связи", exact: true })).toHaveCount(0);
     await expect(personalCard.getByRole("tab", { name: "Основное", exact: true })).toHaveAttribute("aria-selected", "true");
-    expect(state.writes.find((item) => item.path === "/tasks/100/move-to")?.body).toEqual({ personal: true });
+    expect(state.writes.find((item) => item.path === "/tasks/100/transfer")?.body).toEqual({ personal: true });
     expect(state.errors).toEqual([]);
 });

@@ -11,7 +11,7 @@ from src.utils.api_tokens import extract_bearer_secret
 
 logger = logging.getLogger(__name__)
 PUBLIC_PATHS = frozenset({"/health", "/health/live", "/health/ready"})
-CredentialsCheck = Callable[[str | None, str | None], Awaitable[bool]]
+CredentialsCheck = Callable[[str], Awaitable[bool]]
 
 
 class CredentialsMiddleware:
@@ -24,16 +24,15 @@ class CredentialsMiddleware:
             return
         request = Request(scope)
         bearer = extract_bearer_secret(request.headers.get("authorization"))
-        key = (request.headers.get("x-api-key") or "").strip() or None
         try:
-            allowed = bool(bearer or key) and await self.check(bearer, key)
+            allowed = bool(bearer) and await self.check(bearer)
         except Exception:
             logger.exception("MCP: проверка доступа временно недоступна.")
             await JSONResponse({"detail": "Сбой проверки доступа."}, status_code=503)(scope, receive, send)
             return
         if not allowed:
             await JSONResponse(
-                {"detail": "Требуется действующий API-ключ или токен трекера."},
+                {"detail": "Требуется действующий API-ключ или токен TELOS SPACE."},
                 status_code=401,
                 headers={"WWW-Authenticate": 'Bearer realm="telos-space-mcp"'},
             )(scope, receive, send)

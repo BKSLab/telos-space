@@ -53,10 +53,10 @@ afterEach(() => {
 describe("окно подтверждения действия агента по ссылке", () => {
     it("при закрытии сохраняет режим личного чата, задачу, диалог и hash", async () => {
         vi.spyOn(globalThis, "fetch").mockResolvedValue(json(200, action({ status: "completed" })));
-        renderAt(`/projects/DEMO/chat?view=personal&conversation=17&task=42&confirm=${ID}#message-5`);
+        renderAt(`/projects/DEMO/conversations?conversation=17&task=42&confirm=${ID}#message-5`);
         await screen.findByRole("dialog");
         fireEvent.click(screen.getAllByRole("button", { name: "Закрыть" })[0]);
-        await waitFor(() => expect(screen.getByTestId("search").textContent).toBe("?view=personal&conversation=17&task=42"));
+        await waitFor(() => expect(screen.getByTestId("search").textContent).toBe("?conversation=17&task=42"));
         expect(screen.getByTestId("hash").textContent).toBe("#message-5");
     });
     it("без ?confirm= ничего не показывает и не ходит в API", () => {
@@ -82,7 +82,7 @@ describe("окно подтверждения действия агента по
         fireEvent.click(confirm);
         expect(await screen.findByText("Выполнено")).toBeTruthy();
         const [url, init] = fetch.mock.calls[1];
-        expect(String(url)).toMatch(new RegExp(`/api/v1/agent/pending/${ID}/confirm$`));
+        expect(String(url)).toMatch(new RegExp(`/api/v1/aris/pending/${ID}/confirm$`));
         expect(init?.method).toBe("POST");
         expect(init?.body).toBeUndefined();
         expect(screen.queryByRole("button", { name: "Подтвердить" })).toBeNull();
@@ -121,6 +121,6 @@ describe("окно подтверждения действия агента по
         expect(screen.queryByRole("button", { name: "Подтвердить" })).toBeNull();
         fireEvent.click(screen.getByRole("button", { name: "Отклонить" }));
         expect(await screen.findByText("Отклонено — ничего не изменилось")).toBeTruthy();
-        expect(String(fetch.mock.calls[1][0])).toMatch(new RegExp(`/api/v1/agent/pending/${ID}/reject$`));
+        expect(String(fetch.mock.calls[1][0])).toMatch(new RegExp(`/api/v1/aris/pending/${ID}/reject$`));
     });
 });

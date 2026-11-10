@@ -211,9 +211,9 @@ describe("состояние вида в адресе", () => {
         expect(readCalendarViewState(new URLSearchParams(), null, DEFAULTS, "2026-09-28").view).toBe("grid");
     });
 
-    it("старая ссылка ?anchor= открывает шкалу на этой дате", () => {
+    it("неизвестный параметр не меняет вид и дату календаря", () => {
         const state = readCalendarViewState(new URLSearchParams("anchor=2026-10-14&milestone=1"), { view: "grid" }, DEFAULTS, "2026-09-28");
-        expect(state).toMatchObject({ view: "timeline", date: "2026-10-14" });
+        expect(state).toMatchObject({ view: "grid", date: "2026-09-28" });
     });
 
     it("масштаб, которого нет у вида, заменяется ближайшим", () => {
@@ -233,8 +233,8 @@ describe("состояние вида в адресе", () => {
         expect(grid.toString()).toBe("view=grid&scale=month&date=2026-09-28");
     });
 
-    it("запись вида сохраняет фильтры и убирает старый anchor", () => {
-        const next = writeCalendarViewParams(new URLSearchParams("priority=HIGH&anchor=2026-01-01"), { view: "grid", scale: "week", date: "2026-09-28" });
+    it("запись вида сохраняет фильтры", () => {
+        const next = writeCalendarViewParams(new URLSearchParams("priority=HIGH"), { view: "grid", scale: "week", date: "2026-09-28" });
         expect(next.toString()).toBe("priority=HIGH&view=grid&scale=week&date=2026-09-28");
     });
 });

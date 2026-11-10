@@ -14,7 +14,7 @@ class ApiTokenSchema(BaseModel):
     prefix: str = Field(
         ...,
         description="Первые символы секрета для узнавания токена.",
-        examples=["tt_Ab"],
+        examples=["Ab123456"],
     )
     scope: Literal["READ", "WRITE"] = Field(
         ...,
@@ -70,5 +70,5 @@ class ApiTokenCreatedSchema(BaseModel):
     secret: str = Field(
         ...,
         description="Секрет токена. Показывается один раз и больше не восстанавливается.",
-        examples=["tt_AbCdEf..."],
+        examples=["telos_token_AbCdEf..."],
     )

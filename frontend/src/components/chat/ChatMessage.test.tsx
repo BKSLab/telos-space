@@ -8,7 +8,7 @@ import { ChatMessage } from "./ChatMessage";
 vi.mock("@/lib/useProjectChat", () => ({
     useProjectChat: () => ({ projectId: 1, userId: 1, canWrite: false, state: "connected" }),
 }));
-vi.mock("./TimChatReply", () => ({ TimChatReply: ({ message }: { message: Message }) => <p>{message.content}</p> }));
+vi.mock("./ArisChatReply", () => ({ ArisChatReply: ({ message }: { message: Message }) => <p>{message.content}</p> }));
 
 const message: Message = {
     id: 1, chat_id: 1, project_id: 1, seq: 1, author_type: "USER", author: { id: 1, username: "anna", display_name: "Анна Иванова" },

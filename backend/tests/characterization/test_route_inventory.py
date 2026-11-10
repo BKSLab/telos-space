@@ -1,12 +1,6 @@
-"""Инвентарь публичных маршрутов: URL и HTTP-методы заморожены.
+"""Канонический инвентарь публичных URL, методов и их классов доступа."""
 
-Рефакторинг не имеет права добавить, удалить или переименовать маршрут.
-Этот тест — единственная защита от такого изменения «по дороге»: он падает
-и на исчезнувшем адресе, и на внезапно появившемся.
-
-Классификация non-GET маршрутов используется дальше на этапе 2, где к
-каждой доменной мутации подключается проверка scope записи.
-"""
+import re
 
 from fastapi.routing import APIRoute
 
@@ -18,10 +12,16 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/projects/{project_id}/files/{file_id}/preview"),
     ("GET", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/preview"),
     ("GET", "/api/v1/projects/{project_id}/chat/attachments/{file_id}/preview"),
-    ("GET", "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/content"),
-    ("GET", "/api/v1/tim/conversations/{conversation_id}/files/{file_id}/preview"),
-    ("GET", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/content"),
-    ("GET", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}/preview"),
+    ("GET", "/api/v1/aris/conversations/{conversation_id}/files/{file_id}/content"),
+    ("GET", "/api/v1/aris/conversations/{conversation_id}/files/{file_id}/preview"),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/files/{file_id}/content",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/files/{file_id}/preview",
+    ),
     ("PATCH", "/api/v1/projects/{project_id}/files/{file_id}"),
     ("PATCH", "/api/v1/tasks/{task_id}/attachments/{attachment_id}"),
     ("POST", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/retry"),
@@ -38,13 +38,12 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("DELETE", "/api/v1/comments/{comment_id}"),
     ("DELETE", "/api/v1/document-links/{link_id}"),
     ("DELETE", "/api/v1/documents/{document_id}"),
-    ("DELETE", "/api/v1/me/calendar/ics-token"),
+    ("DELETE", "/api/v1/users/me/calendar/ics-token"),
     ("DELETE", "/api/v1/projects/{project_id}"),
     (
         "DELETE",
-        "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files/{file_id}",
+        "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/files/{file_id}",
     ),
-    ("DELETE", "/api/v1/projects/{project_id}/board/stickers/{sticker_id}"),
     ("DELETE", "/api/v1/projects/{project_id}/boards/{board_id}"),
     ("DELETE", "/api/v1/projects/{project_id}/boards/{board_id}/shapes/{shape_id}"),
     ("DELETE", "/api/v1/projects/{project_id}/boards/{board_id}/stickers/{sticker_id}"),
@@ -60,11 +59,11 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("DELETE", "/api/v1/stages/{stage_id}"),
     ("DELETE", "/api/v1/tasks/{task_id}"),
     ("DELETE", "/api/v1/tasks/{task_id}/attachments/{attachment_id}"),
-    ("DELETE", "/api/v1/tim/conversations/{conversation_id}/files/{file_id}"),
+    ("DELETE", "/api/v1/aris/conversations/{conversation_id}/files/{file_id}"),
     ("DELETE", "/api/v1/users/me/avatar"),
     ("DELETE", "/api/v1/users/me/tokens/{token_id}"),
-    ("GET", "/api/v1/agent/pending/{action_id}"),
-    ("GET", "/api/v1/agent/requests/{request_id}"),
+    ("GET", "/api/v1/aris/pending/{action_id}"),
+    ("GET", "/api/v1/aris/requests/{request_id}"),
     ("GET", "/api/v1/auth/me"),
     ("GET", "/api/v1/boards"),
     ("GET", "/api/v1/boards/{board_id}/content"),
@@ -75,18 +74,17 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/documents/{document_id}"),
     ("GET", "/api/v1/documents/{document_id}/links"),
     ("GET", "/api/v1/ics/{token}.ics"),
-    ("GET", "/api/v1/me/calendar"),
-    ("GET", "/api/v1/me/calendar/ics-token"),
-    ("GET", "/api/v1/me/calendar/unscheduled"),
-    ("GET", "/api/v1/my/task-attention"),
-    ("GET", "/api/v1/my/tasks"),
+    ("GET", "/api/v1/users/me/calendar"),
+    ("GET", "/api/v1/users/me/calendar/ics-token"),
+    ("GET", "/api/v1/users/me/calendar/unscheduled"),
+    ("GET", "/api/v1/users/me/task-attention"),
+    ("GET", "/api/v1/users/me/tasks"),
     ("GET", "/api/v1/portfolio/calendar"),
     ("GET", "/api/v1/projects"),
     ("GET", "/api/v1/projects/defaults"),
     ("GET", "/api/v1/projects/{project_id}"),
-    ("GET", "/api/v1/projects/{project_id}/agent/conversations"),
-    ("GET", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/messages"),
-    ("GET", "/api/v1/projects/{project_id}/board/stickers"),
+    ("GET", "/api/v1/projects/{project_id}/aris/conversations"),
+    ("GET", "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/messages"),
     ("GET", "/api/v1/projects/{project_id}/boards"),
     ("GET", "/api/v1/projects/{project_id}/boards/{board_id}/content"),
     ("GET", "/api/v1/projects/{project_id}/boards/{board_id}/editor-metadata"),
@@ -125,11 +123,11 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/tasks/{task_id}/attention"),
     ("GET", "/api/v1/tasks/{task_id}/comments"),
     ("GET", "/api/v1/tasks/{task_id}/links"),
-    ("GET", "/api/v1/tasks/{task_id}/move-to/preview"),
+    ("GET", "/api/v1/tasks/{task_id}/transfer/preview"),
     ("GET", "/api/v1/tasks/{task_id}/report"),
     ("GET", "/api/v1/tasks/{task_id}/report/history"),
-    ("GET", "/api/v1/tim/conversations"),
-    ("GET", "/api/v1/tim/conversations/{conversation_id}/messages"),
+    ("GET", "/api/v1/aris/conversations"),
+    ("GET", "/api/v1/aris/conversations/{conversation_id}/messages"),
     ("GET", "/api/v1/users"),
     ("GET", "/api/v1/users/me/api-keys"),
     ("GET", "/api/v1/users/me/api-keys/scopes"),
@@ -144,8 +142,6 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("PATCH", "/api/v1/comments/{comment_id}"),
     ("PATCH", "/api/v1/documents/{document_id}"),
     ("PATCH", "/api/v1/projects/{project_id}"),
-    ("PATCH", "/api/v1/projects/{project_id}/board/stickers/{sticker_id}"),
-    ("PATCH", "/api/v1/projects/{project_id}/board/stickers/{sticker_id}/position"),
     ("PATCH", "/api/v1/projects/{project_id}/boards/{board_id}"),
     ("PATCH", "/api/v1/projects/{project_id}/boards/{board_id}/shapes/{shape_id}"),
     ("PATCH", "/api/v1/projects/{project_id}/boards/{board_id}/stickers/{sticker_id}"),
@@ -156,13 +152,13 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("PATCH", "/api/v1/projects/{project_id}/wbs/nodes/{node_id}"),
     ("PATCH", "/api/v1/stages/{stage_id}"),
     ("PATCH", "/api/v1/tasks/{task_id}"),
-    ("PATCH", "/api/v1/tasks/{task_id}/move"),
+    ("PATCH", "/api/v1/tasks/{task_id}/stage-placement"),
     ("PATCH", "/api/v1/tasks/{task_id}/status"),
     ("PATCH", "/api/v1/users/me"),
     ("PATCH", "/api/v1/users/me/api-keys/{key_id}"),
-    ("POST", "/api/v1/agent/ask"),
-    ("POST", "/api/v1/agent/pending/{action_id}/confirm"),
-    ("POST", "/api/v1/agent/pending/{action_id}/reject"),
+    ("POST", "/api/v1/aris/requests"),
+    ("POST", "/api/v1/aris/pending/{action_id}/confirm"),
+    ("POST", "/api/v1/aris/pending/{action_id}/reject"),
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/logout"),
     ("POST", "/api/v1/auth/register"),
@@ -174,21 +170,20 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/boards/{board_id}/stickers"),
     ("POST", "/api/v1/dashboard/analytics"),
     ("POST", "/api/v1/document-links"),
-    ("POST", "/api/v1/me/calendar/ics-token"),
+    ("POST", "/api/v1/users/me/calendar/ics-token"),
     ("POST", "/api/v1/projects"),
-    ("POST", "/api/v1/projects/{project_id}/agent/conversations"),
+    ("POST", "/api/v1/projects/{project_id}/aris/conversations"),
     (
         "POST",
-        "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/actions/{action_id}/decision",
+        "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/actions/{action_id}/decision",
     ),
-    ("POST", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/files"),
-    ("POST", "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/messages"),
+    ("POST", "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/files"),
+    ("POST", "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/messages"),
     (
         "POST",
-        "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/messages/{message_id}/retry",
+        "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/messages/{message_id}/retry",
     ),
     ("POST", "/api/v1/projects/{project_id}/baseline"),
-    ("POST", "/api/v1/projects/{project_id}/board/stickers"),
     ("POST", "/api/v1/projects/{project_id}/boards"),
     ("POST", "/api/v1/projects/{project_id}/boards/{board_id}/batch"),
     ("POST", "/api/v1/projects/{project_id}/boards/{board_id}/shapes"),
@@ -213,7 +208,7 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/projects/{project_id}/tasks"),
     ("POST", "/api/v1/projects/{project_id}/tasks/checklist-suggestion"),
     ("POST", "/api/v1/projects/{project_id}/tasks/rephrase"),
-    ("POST", "/api/v1/projects/{project_id}/tim/actions/{action_id}/decision"),
+    ("POST", "/api/v1/projects/{project_id}/chat/aris/actions/{action_id}/decision"),
     ("POST", "/api/v1/projects/{project_id}/wbs/nodes"),
     ("POST", "/api/v1/projects/{project_id}/wbs/nodes/{node_id}/move"),
     ("POST", "/api/v1/projects/{project_id}/wbs/suggestion"),
@@ -225,15 +220,15 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/tasks/{task_id}/baseline"),
     ("POST", "/api/v1/tasks/{task_id}/comments"),
     ("POST", "/api/v1/tasks/{task_id}/documents/import"),
-    ("POST", "/api/v1/tasks/{task_id}/move-to"),
+    ("POST", "/api/v1/tasks/{task_id}/transfer"),
     ("POST", "/api/v1/tasks/{task_id}/report"),
     ("POST", "/api/v1/tasks/{task_id}/report/from-comment"),
     ("POST", "/api/v1/tasks/{task_id}/view"),
-    ("POST", "/api/v1/tim/conversations"),
-    ("POST", "/api/v1/tim/conversations/{conversation_id}/actions/{action_id}/decision"),
-    ("POST", "/api/v1/tim/conversations/{conversation_id}/files"),
-    ("POST", "/api/v1/tim/conversations/{conversation_id}/messages"),
-    ("POST", "/api/v1/tim/conversations/{conversation_id}/messages/{message_id}/retry"),
+    ("POST", "/api/v1/aris/conversations"),
+    ("POST", "/api/v1/aris/conversations/{conversation_id}/actions/{action_id}/decision"),
+    ("POST", "/api/v1/aris/conversations/{conversation_id}/files"),
+    ("POST", "/api/v1/aris/conversations/{conversation_id}/messages"),
+    ("POST", "/api/v1/aris/conversations/{conversation_id}/messages/{message_id}/retry"),
     ("POST", "/api/v1/users/me/api-keys"),
     ("POST", "/api/v1/users/me/avatar"),
     ("POST", "/api/v1/users/me/password"),
@@ -255,18 +250,18 @@ PUBLIC_ROUTES: set[tuple[str, str]] = {
 SESSION_ONLY_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/users/me/api-keys"),
     ("PATCH", "/api/v1/users/me/api-keys/{key_id}"),
-    ("POST", "/api/v1/me/calendar/ics-token"),
-    ("DELETE", "/api/v1/me/calendar/ics-token"),
+    ("POST", "/api/v1/users/me/calendar/ics-token"),
+    ("DELETE", "/api/v1/users/me/calendar/ics-token"),
     ("POST", "/api/v1/tasks/{task_id}/view"),
-    ("POST", "/api/v1/agent/pending/{action_id}/confirm"),
-    ("POST", "/api/v1/agent/pending/{action_id}/reject"),
+    ("POST", "/api/v1/aris/pending/{action_id}/confirm"),
+    ("POST", "/api/v1/aris/pending/{action_id}/reject"),
     ("POST", "/api/v1/users/me/tokens"),
     ("DELETE", "/api/v1/users/me/tokens/{token_id}"),
 }
 
 # POST, которые ничего не меняют: расчёт, предпросмотр и поиск.
 READ_ONLY_POST_ROUTES: set[tuple[str, str]] = {
-    ("POST", "/api/v1/agent/ask"),
+    ("POST", "/api/v1/aris/requests"),
     ("POST", "/api/v1/projects/{project_id}/chat/entities/resolve"),
     ("POST", "/api/v1/projects/{project_id}/risks/field-suggestion"),
     ("POST", "/api/v1/projects/{project_id}/tasks/checklist-suggestion"),
@@ -323,8 +318,8 @@ def test_non_get_routes_are_fully_classified() -> None:
     )
 
     mutations = non_get - explicit
-    assert len(non_get) == 134, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
-    assert len(mutations) == 113, f"Изменилось число доменных мутаций: {len(mutations)}"
+    assert len(non_get) == 130, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
+    assert len(mutations) == 109, f"Изменилось число доменных мутаций: {len(mutations)}"
 
 
 def test_every_route_has_unique_method_and_path() -> None:
@@ -338,3 +333,27 @@ def test_every_route_has_unique_method_and_path() -> None:
 
     duplicates = {pair for pair in seen if seen.count(pair) > 1}
     assert not duplicates, f"Дублирующиеся маршруты: {sorted(duplicates)}"
+
+
+def test_openapi_operation_ids_and_tags_are_canonical() -> None:
+    """ID заданы явно, уникальны и стабильны; группы используют kebab-case."""
+    routes = [route for route in app.routes if isinstance(route, APIRoute)]
+    ids = [route.operation_id for route in routes]
+    invalid = [
+        route.path
+        for route in routes
+        if not route.operation_id
+        or not re.fullmatch(r"[a-z][a-zA-Z0-9]*", route.operation_id)
+        or re.search(r"tim|tracker", route.operation_id, re.IGNORECASE)
+    ]
+    assert not invalid, f"Неканонические operation_id: {invalid}"
+    duplicates = {name for name in ids if ids.count(name) > 1}
+    assert not duplicates, f"Повторяющиеся operation_id: {duplicates}"
+    invalid_tags = {
+        tag
+        for route in routes
+        for tag in route.tags
+        if not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", tag)
+        or tag in {"tim", "project-agent", "agent-files", "project-board", "free-board"}
+    }
+    assert not invalid_tags, f"Неканонические группы OpenAPI: {invalid_tags}"

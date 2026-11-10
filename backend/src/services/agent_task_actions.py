@@ -161,7 +161,7 @@ async def update_task(
 
 
 async def move_task(
-    db: AgentProjectToolScope, ctx: AgentToolContext, args: inputs.TaskMoveInput
+    db: AgentProjectToolScope, ctx: AgentToolContext, args: inputs.TaskTransferInput
 ) -> dict:
     """Меняет стадию и положение задачи с обычной историей переходов."""
     await checked_task(db, ctx, args.task_id)

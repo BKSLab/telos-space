@@ -60,7 +60,7 @@ class TransportContext:
     """
 
     def __init__(self, *, state: dict | None = None, headers: dict[str, str] | None = None):
-        self.headers = {"Authorization": "Bearer tt_test"} if headers is None else headers
+        self.headers = {"Authorization": "Bearer telos_token_test"} if headers is None else headers
         request = SimpleNamespace(state=SimpleNamespace(**(state or {})))
         self.request_context = SimpleNamespace(request=request)
 
@@ -100,9 +100,9 @@ def make_tools(scope: ApiTokenScope = ApiTokenScope.READ) -> ToolContext:
 @pytest.mark.parametrize(
     ("headers", "expected"),
     [
-        ({"Authorization": "Bearer tt_x"}, "Bearer tt_x"),
-        ({"authorization": "Bearer tt_x"}, "Bearer tt_x"),
-        ({"AUTHORIZATION": "Bearer tt_x"}, "Bearer tt_x"),
+        ({"Authorization": "Bearer telos_token_x"}, "Bearer telos_token_x"),
+        ({"authorization": "Bearer telos_token_x"}, "Bearer telos_token_x"),
+        ({"AUTHORIZATION": "Bearer telos_token_x"}, "Bearer telos_token_x"),
         ({"X-Other": "нет"}, None),
         ({}, None),
         (None, None),
@@ -244,7 +244,7 @@ async def test_tool_context_authenticates_and_guards_write_scope(monkeypatch: py
 
     services.auth.resolve_principal.assert_awaited_once_with(
         session_token=None,
-        bearer_secret="tt_test",
+        bearer_secret="telos_token_test",
     )
     # Отозванный, истёкший и выдуманный токен неотличимы для клиента.
     services = make_services()

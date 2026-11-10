@@ -5,7 +5,7 @@ from httpx import AsyncClient
 
 from main import app
 from src.dependencies.services import get_project_agent_service
-from src.exceptions.knowledge import KnowledgeProviderError
+from src.exceptions.ai import AgentAnswerError, AiProviderError
 from src.schemas.knowledge import (
     KnowledgeAnswerSchema,
     KnowledgeSourceSchema,
@@ -57,16 +57,23 @@ async def test_knowledge_endpoints_validate_input_and_hide_internals(api_client:
     service.ask.assert_not_called()
 
     service = AsyncMock(spec=ProjectAgentService)
-    service.ask.side_effect = KnowledgeProviderError("provider offline")
     app.dependency_overrides[get_project_agent_service] = lambda: service
 
-    response = await api_client.post(
-        "/api/v1/projects/1/knowledge/ask",
-        json={"question": "Что в работе?"},
-    )
+    for error, expected_status in (
+        (AiProviderError("provider offline"), 503),
+        (AgentAnswerError("private model response"), 502),
+    ):
+        service.ask.side_effect = error
+        response = await api_client.post(
+            "/api/v1/projects/1/knowledge/ask",
+            json={"question": "Что в работе?"},
+        )
+        assert response.status_code == expected_status
+        assert "private model response" not in response.json()["detail"]
 
-    assert response.status_code == 503
-    assert "временно недоступен" in response.json()["detail"]
+    service.get_status.side_effect = AiProviderError("private provider details")
+    response = await api_client.get("/api/v1/projects/1/knowledge/status")
+    assert response.status_code == 503 and "private provider details" not in response.json()["detail"]
 
     service = AsyncMock(spec=ProjectAgentService)
     service.get_status.return_value = KnowledgeStatusSchema(

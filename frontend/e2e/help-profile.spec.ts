@@ -15,8 +15,8 @@ const scopeCatalog = [
     { code: "agent:ask", description: "Обращаться к Арису" },
 ];
 const browserErrors = new WeakMap<Page, string[]>();
-const syntheticApiKey = "SYNTHETIC_API_KEY_ONCE";
-const syntheticLegacyToken = "SYNTHETIC_LEGACY_TOKEN_ONCE";
+const syntheticApiKey = "telos_key_de000003_00000000000000000000000000000000";
+const syntheticAccessToken = "telos_token_synthetic_random_test_token_value_only";
 
 test.afterEach(async ({ page }, info) => {
     const errors = browserErrors.get(page);
@@ -41,11 +41,11 @@ async function installAccountApi(page: Page) {
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", entry => { if (entry.type() === "error") errors.push(entry.text()); });
     await page.route("https://fonts.googleapis.com/**", route => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
-    await page.routeWebSocket("**/api/v1/my/task-attention/ws", socket => socket.send(JSON.stringify({ type: "task-attention", data: { new_tasks: state.attentionItems.length, overdue_tasks: 0, updated_tasks: 0, total: state.attentionItems.length, items: state.attentionItems } })));
+    await page.routeWebSocket("**/api/v1/users/me/task-attention/ws", socket => socket.send(JSON.stringify({ type: "task-attention", data: { new_tasks: state.attentionItems.length, overdue_tasks: 0, updated_tasks: 0, total: state.attentionItems.length, items: state.attentionItems } })));
     const user = { ...state.me, email: null, phone: null, telegram: null, created_at: "2026-11-04T06:00:00Z" };
-    const key = { id: "k-1", label: "Клиент на ноутбуке", key_prefix: "ttk_demo", owner_user_id: 1, owner_name: "Тестов Тест", kind: "personal", scopes: ["projects:read", "tasks:read"], expires_at: null, is_active: true, revoked_at: null, revoked_by_name: null, created_by_name: "Тестов Тест", created_at: user.created_at, updated_at: user.created_at, last_used_at: null };
-    const keys = [key, { ...key, id: "k-old-service", label: "Сверка на сервере", key_prefix: "ttk_old_demo", kind: "service", scopes: ["projects:read"] }];
-    const tokens: ApiToken[] = [{ id: 1, name: "Прежний клиент", prefix: "tt_demo", scope: "READ", created_at: user.created_at, expires_at: null, revoked_at: null, last_used_at: null }];
+    const key = { id: "k-1", label: "Клиент на ноутбуке", key_prefix: "de000001", owner_user_id: 1, owner_name: "Тестов Тест", scopes: ["projects:read", "tasks:read"], expires_at: null, is_active: true, revoked_at: null, revoked_by_name: null, created_by_name: "Тестов Тест", created_at: user.created_at, updated_at: user.created_at, last_used_at: null };
+    const keys = [key, { ...key, id: "k-second", label: "Сверка на сервере", key_prefix: "de000002", scopes: ["projects:read"] }];
+    const tokens: ApiToken[] = [{ id: 1, name: "Клиент токена", prefix: "token001", scope: "READ", created_at: user.created_at, expires_at: null, revoked_at: null, last_used_at: null }];
     const writes: { path: string; method: string; body: Record<string, unknown> }[] = [];
     await page.route("**/api/v1/**", async route => {
         const request = route.request();
@@ -62,7 +62,7 @@ async function installAccountApi(page: Page) {
         const body = request.postData() ? request.postDataJSON() : {};
         if (path === "/api/v1/users/me/api-keys" && method === "POST") {
             writes.push({ path, method, body });
-            const created = { ...key, ...body, id: "k-2", key_prefix: "ttk_new" };
+            const created = { ...key, ...body, id: "k-2", key_prefix: "de000003" };
             keys.push(created);
             return reply({ ...created, raw_key: syntheticApiKey }, 201);
         }
@@ -74,9 +74,9 @@ async function installAccountApi(page: Page) {
         }
         if (path === "/api/v1/users/me/tokens" && method === "POST") {
             writes.push({ path, method, body });
-            const token = { ...tokens[0], ...body, id: 2, prefix: "tt_new" };
+            const token = { ...tokens[0], ...body, id: 2, prefix: "token002" };
             tokens.push(token);
-            return reply({ token, secret: syntheticLegacyToken }, 201);
+            return reply({ token, secret: syntheticAccessToken }, 201);
         }
         if (path.startsWith("/api/v1/users/me/tokens/") && method === "DELETE") {
             writes.push({ path, method, body });
@@ -133,19 +133,19 @@ for (const width of [1440, 1024, 768, 390, 320]) {
     });
 }
 
-test("ключи выпускаются в профиле с прежними правами и секретом на один показ", async ({ page }) => {
+test("ключи выпускаются в профиле с выбранными правами и секретом на один показ", async ({ page }) => {
     const server = await installAccountApi(page);
-    await page.goto("/my-api-keys");
+    await page.goto("/profile?tab=keys");
     await expect(page).toHaveURL(/\/profile\?tab=keys$/);
     await page.getByRole("button", { name: "Выпустить ключ", exact: true }).click();
     let dialog = page.getByRole("dialog");
     await dialog.getByLabel("Название", { exact: true }).fill("Новая интеграция");
     await expect(dialog.getByRole("checkbox", { name: /tasks:write/ })).not.toBeChecked();
     await dialog.getByRole("button", { name: "Выпустить", exact: true }).click();
-    await expect(page.getByText("SYNTHETIC_API_KEY_ONCE", { exact: true })).toBeVisible();
+    await expect(page.getByText("telos_key_de000003_00000000000000000000000000000000", { exact: true })).toBeVisible();
     expect(server.writes[0].body).toEqual({ label: "Новая интеграция", scopes: ["projects:read", "tasks:read"], expires_at: null });
     await page.getByRole("button", { name: "Я сохранил ключ", exact: true }).click();
-    await expect(page.getByText("SYNTHETIC_API_KEY_ONCE", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("telos_key_de000003_00000000000000000000000000000000", { exact: true })).toHaveCount(0);
     const row = page.getByTestId("api-key-k-2");
     await row.getByRole("button", { name: "Отозвать", exact: true }).click();
     dialog = page.getByRole("dialog");
@@ -159,7 +159,7 @@ test("ключи выпускаются в профиле с прежними п
 });
 
 for (const width of [1440, 320]) {
-    test(`единые API-ключи: три состояния выбора прав и редактирование прежнего service-ключа на ${width}px`, async ({ page }, info) => {
+    test(`единые API-ключи: три состояния выбора прав и редактирование ключа на ${width}px`, async ({ page }, info) => {
         const server = await installAccountApi(page);
         const expectedScopes = server.scopeCatalog.map(scope => scope.code);
         await page.setViewportSize({ width, height: 900 });
@@ -211,14 +211,14 @@ for (const width of [1440, 320]) {
         } finally {
             release();
         }
-        await expect(page.getByText("SYNTHETIC_API_KEY_ONCE", { exact: true })).toBeVisible();
+        await expect(page.getByText("telos_key_de000003_00000000000000000000000000000000", { exact: true })).toBeVisible();
         expect(server.writes).toHaveLength(1);
         expect(server.writes[0]).toEqual({ path: "/api/v1/users/me/api-keys", method: "POST", body: { label: "Клиент со всеми правами", scopes: expectedScopes, expires_at: null } });
         await page.getByRole("button", { name: "Я сохранил ключ", exact: true }).click();
-        await expect(page.getByText("SYNTHETIC_API_KEY_ONCE", { exact: true })).toHaveCount(0);
+        await expect(page.getByText("telos_key_de000003_00000000000000000000000000000000", { exact: true })).toHaveCount(0);
 
-        const serviceRow = page.getByTestId("api-key-k-old-service");
-        await serviceRow.getByRole("button", { name: "Изменить", exact: true }).click();
+        const secondRow = page.getByTestId("api-key-k-second");
+        await secondRow.getByRole("button", { name: "Изменить", exact: true }).click();
         const editDialog = page.getByRole("dialog", { name: "Изменить API-ключ", exact: true });
         await expect(editDialog.getByRole("combobox", { name: "Тип ключа", exact: true })).toHaveCount(0);
         const editAll = editDialog.getByRole("checkbox", { name: "Выбрать все", exact: true });
@@ -235,9 +235,8 @@ for (const width of [1440, 320]) {
         await editDialog.getByRole("button", { name: "Сохранить", exact: true }).click();
         await expect(editDialog).not.toBeVisible();
         expect(server.writes).toHaveLength(2);
-        expect(server.writes[1]).toEqual({ path: "/api/v1/users/me/api-keys/k-old-service", method: "PATCH", body: { label: "Сверка обновлена", scopes: expectedScopes, expires_at: null } });
-        expect(server.keys.find(key => key.id === "k-old-service")!.kind).toBe("service");
-        await expect(serviceRow.getByText("Сверка обновлена", { exact: true })).toBeVisible();
+        expect(server.writes[1]).toEqual({ path: "/api/v1/users/me/api-keys/k-second", method: "PATCH", body: { label: "Сверка обновлена", scopes: expectedScopes, expires_at: null } });
+        await expect(secondRow.getByText("Сверка обновлена", { exact: true })).toBeVisible();
         await expect(table.getByText("Личный", { exact: true })).toHaveCount(0);
         await expect(table.getByText("Сервисный", { exact: true })).toHaveCount(0);
         await page.goto("/help/api#api-auth");
@@ -251,22 +250,22 @@ for (const width of [1440, 320]) {
     });
 }
 
-test("прежние READ/WRITE-токены доступны в профиле и отзываются с подтверждением", async ({ page }) => {
+test("READ/WRITE-токены доступны в профиле и отзываются с подтверждением", async ({ page }) => {
     const server = await installAccountApi(page);
     await page.goto("/profile?tab=keys");
-    await page.getByText("Прежние токены", { exact: true }).click();
-    await page.getByLabel("Название токена", { exact: true }).fill("Прежняя интеграция");
+    await page.getByText("READ/WRITE-токены", { exact: true }).click();
+    await page.getByLabel("Название токена", { exact: true }).fill("Интеграция с токеном");
     await page.getByRole("button", { name: "Выпустить токен", exact: true }).click();
-    await expect(page.getByText("SYNTHETIC_LEGACY_TOKEN_ONCE", { exact: true })).toBeVisible();
-    expect(server.writes[0].body).toEqual({ name: "Прежняя интеграция", scope: "READ", ttl_days: 90 });
+    await expect(page.getByText("telos_token_synthetic_random_test_token_value_only", { exact: true })).toBeVisible();
+    expect(server.writes[0].body).toEqual({ name: "Интеграция с токеном", scope: "READ", ttl_days: 90 });
     await page.getByRole("button", { name: "Я сохранил токен", exact: true }).click();
-    await expect(page.getByText("SYNTHETIC_LEGACY_TOKEN_ONCE", { exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "Отозвать токен Прежний клиент", exact: true }).click();
+    await expect(page.getByText("telos_token_synthetic_random_test_token_value_only", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Отозвать токен Клиент токена", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Отмена", exact: true }).click();
     expect(server.writes).toHaveLength(1);
-    await page.getByRole("button", { name: "Отозвать токен Прежний клиент", exact: true }).click();
+    await page.getByRole("button", { name: "Отозвать токен Клиент токена", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Отозвать", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Отозвать токен Прежний клиент", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Отозвать токен Клиент токена", exact: true })).toHaveCount(0);
     expect(server.writes[1].method).toBe("DELETE");
     expect(server.state.errors).toEqual([]);
 });
@@ -374,12 +373,12 @@ test.describe("буфер HTTP", () => {
         });
     }
 
-    test("нативный copy прежнего токена, примеров MCP/API и ICS", async ({ page, baseURL }) => {
+    test("нативный copy READ/WRITE-токена, примеров MCP/API и ICS", async ({ page, baseURL }) => {
         const server = await installHttpClipboardApi(page, baseURL);
         await page.goto(new URL("/profile?tab=keys", server.origin).href);
         await expectNativeHttpClipboard(page);
-        await page.getByText("Прежние токены", { exact: true }).click();
-        await page.getByLabel("Название токена", { exact: true }).fill("HTTP legacy fixture");
+        await page.getByText("READ/WRITE-токены", { exact: true }).click();
+        await page.getByLabel("Название токена", { exact: true }).fill("HTTP token fixture");
         await page.getByRole("button", { name: "Выпустить токен", exact: true }).click();
         const tokenDialog = page.getByRole("dialog", { name: "Токен выпущен", exact: true });
         const tokenCopy = tokenDialog.getByRole("button", { name: "Копировать токен", exact: true });
@@ -387,7 +386,7 @@ test.describe("буфер HTTP", () => {
         await expect(page.getByText("Токен скопирован", { exact: true })).toBeVisible();
         await expect(tokenCopy).toBeFocused();
         await expect(page.locator("textarea")).toHaveCount(0);
-        await expectNativePaste(page, tokenDialog, tokenCopy, syntheticLegacyToken);
+        await expectNativePaste(page, tokenDialog, tokenCopy, syntheticAccessToken);
         await tokenDialog.getByRole("button", { name: "Я сохранил токен", exact: true }).click();
 
         for (const example of [
@@ -429,7 +428,7 @@ test.describe("буфер HTTP", () => {
         await expectNativePaste(page, icsDialog, icsCopy, "http://tracker.test/api/v1/ics/cal_demo.ics");
         await expectNativeHttpClipboard(page);
         expect(calendar.errors).toEqual([]);
-        expect(calendar.writes.map(write => ({ method: write.method, path: write.path }))).toEqual([{ method: "POST", path: "/me/calendar/ics-token" }]);
+        expect(calendar.writes.map(write => ({ method: write.method, path: write.path }))).toEqual([{ method: "POST", path: "/users/me/calendar/ics-token" }]);
     });
 
     test("отказ modern writeText использует нативный fallback внутри модального окна", async ({ page, baseURL }) => {

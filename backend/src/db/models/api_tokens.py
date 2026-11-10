@@ -60,8 +60,8 @@ class ApiToken(Base, TimestampMixin):
     prefix: Mapped[str] = mapped_column(
         String(length=8),
         nullable=False,
-        doc="Первые символы секрета для отображения в списке.",
-        comment="Префикс секрета для узнавания токена человеком.",
+        doc="Первые восемь случайных символов после маркера токена.",
+        comment="Публичная часть для узнавания токена; маркер формата не включён.",
     )
     scope: Mapped[ApiTokenScope] = mapped_column(
         Enum(ApiTokenScope, name="api_token_scope", native_enum=True),

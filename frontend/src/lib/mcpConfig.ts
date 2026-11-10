@@ -3,27 +3,6 @@ import type { ApiToken, ApiTokenScope } from "@/lib/types";
 /** Плейсхолдер вместо секрета: показать токен повторно невозможно. */
 export const SECRET_PLACEHOLDER = "ВСТАВЬТЕ_СЮДА_ТОКЕН";
 
-/** Инструменты, доступные токену с правом только на чтение. */
-export const READ_TOOLS = [
-    "list_projects",
-    "get_project",
-    "list_tasks",
-    "get_task",
-    "list_comments",
-    "search_tasks",
-    "search_project_knowledge",
-    "read_project_knowledge",
-] as const;
-
-/** Инструменты, доступные дополнительно токену с правом записи. */
-export const WRITE_TOOLS = [
-    "create_task",
-    "update_task",
-    "move_task",
-    "delete_task",
-    "add_comment",
-] as const;
-
 /**
  * Возвращает адрес MCP-сервера для текущего размещения трекера.
  *
@@ -63,10 +42,7 @@ export function buildMcpConfig(options: {
     );
 }
 
-/** Возвращает список инструментов, разрешённых токену с такими правами. */
-export function toolsForScope(scope: ApiTokenScope): string[] {
-    return scope === "WRITE" ? [...READ_TOOLS, ...WRITE_TOOLS] : [...READ_TOOLS];
-}
+
 
 /** Человекочитаемое описание прав токена. */
 export function scopeLabel(scope: ApiTokenScope): string {

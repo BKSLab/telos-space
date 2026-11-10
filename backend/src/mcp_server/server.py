@@ -24,6 +24,7 @@ from starlette.applications import Starlette
 
 from src.core.settings import Settings
 from src.exceptions.base import ApplicationError
+from src.exceptions.project_stages import ProjectStageNameNotFoundError
 from src.knowledge.catalog import SourceType
 from src.mcp_server.catalog import CatalogDiagnostics, build_version
 from src.mcp_server.context import ToolContext, resolve_project, resolve_task, tool_context
@@ -39,7 +40,6 @@ from src.mcp_server.presenters import (
 from src.mcp_server.registry import telos_tool
 from src.mcp_server.services import build_knowledge_search
 from src.schemas.knowledge import KnowledgeReadRequest
-from src.services.project_query import UnknownStageError
 from src.services.tasks import user_display_name
 from src.utils.api_scopes import SCOPE_KNOWLEDGE_READ, SCOPE_PROJECTS_READ, SCOPE_TASKS_READ
 from src.utils.task_filters import TaskFilters
@@ -264,7 +264,7 @@ async def list_tasks(
                 query=text,
                 filters=filters,
             )
-        except UnknownStageError as error:
+        except ProjectStageNameNotFoundError as error:
             raise ToolError(error.detail) from error
         except ApplicationError as error:
             raise ToolError("Не удалось получить задачи проекта.") from error

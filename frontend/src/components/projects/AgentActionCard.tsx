@@ -52,16 +52,14 @@ export interface ActionDecisionRules {
 
 const DEFAULT_DISABLED_HINT = "Решить можно только по последнему ответу Ариса. Попросите его предложить действие ещё раз";
 
-export function AgentActionCard({ action, project, sources, pending, onDecision, rules, enabled: legacyEnabled }: {
+export function AgentActionCard({ action, project, sources, pending, onDecision, rules: decisionRules }: {
     action: AgentToolRun;
     project: Pick<Project, "id" | "key"> | null;
     sources: KnowledgeSource[];
     pending: boolean;
     onDecision: (decision: "approve" | "reject") => void;
-    rules?: ActionDecisionRules;
-    enabled?: boolean;
+    rules: ActionDecisionRules;
 }) {
-    const decisionRules = rules ?? { enabled: legacyEnabled ?? false };
     const { enabled, canApprove = true, canReject = true } = decisionRules;
     const disabledHint = decisionRules.disabledHint ?? DEFAULT_DISABLED_HINT;
     const status = { pending: "Ожидает решения", completed: "Выполнено", rejected: "Отклонено", failed: "Не выполнено" }[action.status];

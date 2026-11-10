@@ -17,7 +17,7 @@ from fastapi import Depends
 from pydantic import BaseModel
 
 from src.agent.action_catalog import PERSONAL_ACTIONS, PROJECT_ACTIONS
-from src.agent.tim import PROJECT_MODES, WIDGET_MODES
+from src.agent.aris import PROJECT_MODES, WIDGET_MODES
 from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor, AgentToolHandler
 from src.agent.worker import AgentWorker
 from src.clients.agent_model import build_agent_model
@@ -34,27 +34,27 @@ from src.dependencies.repositories import (
     ApiKeyUsageRepositoryDep,
     ApiTokensRepositoryDep,
     BoardShapesRepositoryDep,
+    BoardsRepositoryDep,
+    BoardStickersRepositoryDep,
     CalendarFeedTokensRepositoryDep,
     DocumentLinksRepositoryDep,
     DocumentsRepositoryDep,
     KnowledgeIndexJobsRepositoryDep,
     MilestonesRepositoryDep,
-    ProjectBoardsRepositoryDep,
     ProjectDeadlineChangesRepositoryDep,
     ProjectMembersRepositoryDep,
     ProjectRiskRepositoryDep,
     ProjectsRepositoryDep,
     ProjectStagesRepositoryDep,
-    ProjectStickersRepositoryDep,
     TaskActivityRepositoryDep,
     TaskAttachmentsRepositoryDep,
     TaskAttentionRepositoryDep,
     TaskCommentsRepositoryDep,
     TaskDependenciesRepositoryDep,
-    TaskMovesRepositoryDep,
     TaskParticipantsRepositoryDep,
     TaskReportsRepositoryDep,
     TasksRepositoryDep,
+    TaskTransfersRepositoryDep,
     UnitOfWorkDep,
     UsersRepositoryDep,
     WbsNodesRepositoryDep,
@@ -73,9 +73,9 @@ from src.dependencies.scopes import (
     WbsSuggestionScopeDep,
     build_agent_conversation_scope,
     build_agent_project_tool_scope,
+    build_aris_chat_scope,
     build_project_agent_scope,
     build_project_knowledge_query_scope,
-    build_tim_chat_scope,
 )
 from src.dependencies.settings import SettingsDep
 from src.dependencies.storage import AvatarStorageDep, TaskAttachmentStorageDep
@@ -89,12 +89,16 @@ from src.services.agent_actions import AgentActionsService
 from src.services.agent_conversations import AgentConversationConfig, AgentConversationsService
 from src.services.agent_files import AgentFilesService
 from src.services.agent_requests import AgentRequestsService, RequestLinks
+from src.services.agent_routing import AgentRoutingService
 from src.services.analytics import AnalyticsService
 from src.services.api_key_usage import ApiKeyUsageService
 from src.services.api_keys import ApiKeysService
 from src.services.api_tokens import ApiTokensService
+from src.services.aris_chat import ArisChatConfig, ArisChatService
 from src.services.auth import AuthService
 from src.services.board_shapes import BoardShapesService
+from src.services.board_stickers import BoardStickersService
+from src.services.boards import BoardsService
 from src.services.calendar import CalendarService
 from src.services.calendar_feed import CalendarFeedService
 from src.services.calendar_scenarios import CalendarScenarioService
@@ -106,13 +110,11 @@ from src.services.knowledge_events import KnowledgeEvents
 from src.services.milestones import MilestonesService
 from src.services.personal_calendar import PersonalCalendarService
 from src.services.project_agent import ProjectAgentConfig, ProjectAgentService
-from src.services.project_boards import ProjectBoardsService
 from src.services.project_icons import ProjectIconsService
 from src.services.project_members import ProjectMembersService
 from src.services.project_query import ProjectQueryService
 from src.services.project_risks import ProjectRiskService
 from src.services.project_stages import ProjectStagesService
-from src.services.project_stickers import ProjectStickersService
 from src.services.projects import ProjectsService
 from src.services.risk_formulation import RiskFormulationService
 from src.services.risk_suggestions import RiskSuggestionService
@@ -124,11 +126,9 @@ from src.services.task_comments import TaskCommentsService
 from src.services.task_dependencies import TaskDependenciesService
 from src.services.task_descriptions import TaskDescriptionService
 from src.services.task_documents import TaskDocumentImportService
-from src.services.task_moves import TaskMovesService
 from src.services.task_reports import TaskReportsService
+from src.services.task_transfers import TaskTransfersService
 from src.services.tasks import TasksService
-from src.services.tim_chat import TimChatConfig, TimChatService
-from src.services.tracker_agent import TrackerAgentService
 from src.services.users import UsersService
 from src.services.wbs_nodes import WbsNodesService
 from src.services.wbs_suggestion import WbsSuggestionService
@@ -265,7 +265,7 @@ UsersServiceDep = Annotated[UsersService, Depends(get_users_service)]
 
 
 def get_projects_service(
-    boards_repository: ProjectBoardsRepositoryDep,
+    boards_repository: BoardsRepositoryDep,
     projects_repository: ProjectsRepositoryDep,
     members_repository: ProjectMembersRepositoryDep,
     stages_repository: ProjectStagesRepositoryDep,
@@ -323,15 +323,15 @@ ProjectMembersServiceDep = Annotated[
 ]
 
 
-def get_project_stickers_service(
-    stickers_repository: ProjectStickersRepositoryDep,
+def get_board_stickers_service(
+    stickers_repository: BoardStickersRepositoryDep,
     tasks_repository: TasksRepositoryDep,
-    boards_repository: ProjectBoardsRepositoryDep,
+    boards_repository: BoardsRepositoryDep,
     shapes_repository: BoardShapesRepositoryDep,
     unit_of_work: UnitOfWorkDep,
     session: DbSessionDep,
-) -> ProjectStickersService:
-    return ProjectStickersService(
+) -> BoardStickersService:
+    return BoardStickersService(
         stickers_repository=stickers_repository,
         tasks_repository=tasks_repository,
         boards_repository=boards_repository,
@@ -341,9 +341,9 @@ def get_project_stickers_service(
     )
 
 
-ProjectStickersServiceDep = Annotated[
-    ProjectStickersService,
-    Depends(get_project_stickers_service),
+BoardStickersServiceDep = Annotated[
+    BoardStickersService,
+    Depends(get_board_stickers_service),
 ]
 
 
@@ -589,7 +589,7 @@ DocumentsServiceDep = Annotated[DocumentsService, Depends(get_documents_service)
 
 
 def build_project_agent_config(settings: Settings) -> ProjectAgentConfig:
-    """Собирает неизменяемую конфигурацию Project Agent из настроек."""
+    """Собирает неизменяемую конфигурацию Арис из настроек."""
     return ProjectAgentConfig(
         knowledge_enabled=settings.knowledge.knowledge_enabled,
         semantic_limit=settings.knowledge.knowledge_agent_semantic_limit,
@@ -604,7 +604,7 @@ def build_project_agent_config(settings: Settings) -> ProjectAgentConfig:
     )
 
 
-TIM_ACTIONS = PROJECT_ACTIONS + PERSONAL_ACTIONS
+ARIS_ACTIONS = PROJECT_ACTIONS + PERSONAL_ACTIONS
 
 
 def build_knowledge_tool_executor(query: ProjectQueryService) -> AgentToolExecutor:
@@ -637,7 +637,7 @@ def get_agent_actions_service(
     """Собирает общий сценарий проектных инструментов для чата и MCP."""
     return AgentActionsService(
         scope=scope,
-        actions=TIM_ACTIONS,
+        actions=ARIS_ACTIONS,
         confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
     )
 
@@ -770,7 +770,7 @@ def get_project_agent_service(
     settings: SettingsDep,
     tools: AgentToolExecutorDep,
 ) -> ProjectAgentService:
-    """Создаёт Project Agent.
+    """Создаёт Арис.
 
     Сервис получает фабрику короткой области: между сбором данных и
     ответом модели соединение с базой удерживаться не должно.
@@ -798,13 +798,13 @@ def build_agent_conversation_config(settings: Settings) -> AgentConversationConf
     )
 
 
-def get_tracker_agent_service(
+def get_agent_routing_service(
     scope: AgentProjectToolScopeDep,
     agent: ProjectAgentServiceDep,
     llm_client: LlmClientDep,
     settings: SettingsDep,
-) -> TrackerAgentService:
-    return TrackerAgentService(
+) -> AgentRoutingService:
+    return AgentRoutingService(
         scope=scope,
         agent=agent,
         llm_client=llm_client,
@@ -813,11 +813,11 @@ def get_tracker_agent_service(
     )
 
 
-TrackerAgentServiceDep = Annotated[TrackerAgentService, Depends(get_tracker_agent_service)]
+AgentRoutingServiceDep = Annotated[AgentRoutingService, Depends(get_agent_routing_service)]
 
 
 def get_agent_conversations_service(
-    tracker: TrackerAgentServiceDep,
+    routing: AgentRoutingServiceDep,
     scope: AgentConversationScopeDep,
     agent: ProjectAgentServiceDep,
     llm_client: LlmClientDep,
@@ -826,7 +826,7 @@ def get_agent_conversations_service(
     """Собирает сценарии постоянных диалогов из явных зависимостей."""
     return AgentConversationsService(
         scope=scope,
-        tracker=tracker,
+        routing=routing,
         agent=agent,
         llm_client=llm_client,
         config=build_agent_conversation_config(settings),
@@ -850,7 +850,7 @@ def build_agent_worker(
             scope=build_agent_project_tool_scope(
                 session_factory=session_factory, settings=settings
             ),
-            actions=TIM_ACTIONS,
+            actions=ARIS_ACTIONS,
             confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
         ),
     )
@@ -869,18 +869,18 @@ def build_agent_worker(
         llm_client=runtime.llm_client,
         config=build_agent_conversation_config(settings),
     )
-    tracker = TrackerAgentService(
+    routing = AgentRoutingService(
         scope=build_agent_project_tool_scope(session_factory=session_factory, settings=settings),
         agent=agent,
         llm_client=runtime.llm_client,
         context_tokens=settings.agent.agent_context_tokens,
         history_tokens=settings.agent.agent_history_tokens,
     )
-    service.tracker = tracker
-    chat = TimChatService(
-        scope=build_tim_chat_scope(session_factory=session_factory),
+    service.routing = routing
+    chat = ArisChatService(
+        scope=build_aris_chat_scope(session_factory=session_factory),
         agent=agent,
-        config=TimChatConfig(turn_timeout_seconds=settings.agent.agent_turn_timeout_seconds),
+        config=ArisChatConfig(turn_timeout_seconds=settings.agent.agent_turn_timeout_seconds),
     )
     return AgentWorker(
         services=[service, chat],
@@ -1055,13 +1055,13 @@ TaskDocumentImportServiceDep = Annotated[
 ]
 
 
-def get_project_boards_service(
-    boards_repository: ProjectBoardsRepositoryDep,
-    stickers_repository: ProjectStickersRepositoryDep,
+def get_boards_service(
+    boards_repository: BoardsRepositoryDep,
+    stickers_repository: BoardStickersRepositoryDep,
     shapes_repository: BoardShapesRepositoryDep,
     unit_of_work: UnitOfWorkDep,
-) -> ProjectBoardsService:
-    return ProjectBoardsService(
+) -> BoardsService:
+    return BoardsService(
         boards_repository=boards_repository,
         stickers_repository=stickers_repository,
         shapes_repository=shapes_repository,
@@ -1069,13 +1069,13 @@ def get_project_boards_service(
     )
 
 
-ProjectBoardsServiceDep = Annotated[ProjectBoardsService, Depends(get_project_boards_service)]
+BoardsServiceDep = Annotated[BoardsService, Depends(get_boards_service)]
 
 
 def get_board_shapes_service(
-    boards_repository: ProjectBoardsRepositoryDep,
+    boards_repository: BoardsRepositoryDep,
     shapes_repository: BoardShapesRepositoryDep,
-    stickers_repository: ProjectStickersRepositoryDep,
+    stickers_repository: BoardStickersRepositoryDep,
     tasks_repository: TasksRepositoryDep,
     unit_of_work: UnitOfWorkDep,
     session: DbSessionDep,
@@ -1123,9 +1123,9 @@ def get_task_attention_service(
 TaskAttentionServiceDep = Annotated[TaskAttentionService, Depends(get_task_attention_service)]
 
 
-def get_task_moves_service(
+def get_task_transfers_service(
     tasks_repository: TasksRepositoryDep,
-    task_moves_repository: TaskMovesRepositoryDep,
+    task_transfers_repository: TaskTransfersRepositoryDep,
     participants_repository: TaskParticipantsRepositoryDep,
     members_repository: ProjectMembersRepositoryDep,
     projects_repository: ProjectsRepositoryDep,
@@ -1135,10 +1135,10 @@ def get_task_moves_service(
     knowledge_events: KnowledgeEventsDep,
     access_service: AccessServiceDep,
     unit_of_work: UnitOfWorkDep,
-) -> TaskMovesService:
-    return TaskMovesService(
+) -> TaskTransfersService:
+    return TaskTransfersService(
         tasks_repository=tasks_repository,
-        task_moves_repository=task_moves_repository,
+        task_transfers_repository=task_transfers_repository,
         participants_repository=participants_repository,
         members_repository=members_repository,
         projects_repository=projects_repository,
@@ -1151,7 +1151,7 @@ def get_task_moves_service(
     )
 
 
-TaskMovesServiceDep = Annotated[TaskMovesService, Depends(get_task_moves_service)]
+TaskTransfersServiceDep = Annotated[TaskTransfersService, Depends(get_task_transfers_service)]
 
 
 def get_project_icons_service(
@@ -1240,7 +1240,6 @@ def get_calendar_feed_service(
 CalendarFeedServiceDep = Annotated[CalendarFeedService, Depends(get_calendar_feed_service)]
 
 
-TimWidgetServiceDep = AgentConversationsServiceDep
 
 
 def get_agent_requests_service(

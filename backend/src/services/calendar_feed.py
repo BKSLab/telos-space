@@ -155,7 +155,7 @@ class CalendarFeedService:
         # должны обновлять прежние события, а не создавать их дубликаты.
         events = [
             IcsEvent(
-                uid=f"task-{task.id}@vera-task-tracker",
+                uid=f"task-{task.id}@telos-space",
                 summary=f"{DONE_MARK if task.is_done else ''}{task.key} {task.title}",
                 date_from=min(task.start_date or task.due_date, task.due_date),
                 date_to=task.due_date,
@@ -169,9 +169,9 @@ class CalendarFeedService:
         events += [
             IcsEvent(
                 uid=(
-                    f"milestone-{milestone.id}@vera-task-tracker"
+                    f"milestone-{milestone.id}@telos-space"
                     if milestone.id is not None
-                    else f"project-deadline-{milestone.project.id}@vera-task-tracker"
+                    else f"project-deadline-{milestone.project.id}@telos-space"
                 ),
                 summary=f"{MILESTONE_MARK}{milestone.project.key}: {milestone.title}",
                 date_from=milestone.due_date,

@@ -8,8 +8,9 @@ from src.db.models.projects import Project
 from src.db.models.task_activity import TaskActivityEventType
 from src.db.models.tasks import Task
 from src.db.models.wbs_nodes import WbsNode
+from src.exceptions.ai import AiProviderError
 from src.exceptions.clients import ClientError
-from src.exceptions.knowledge import KnowledgeEventsServiceError, KnowledgeProviderError
+from src.exceptions.knowledge import KnowledgeEventsServiceError
 from src.exceptions.project_stages import ProjectStagesRepositoryError
 from src.exceptions.projects import ProjectNotFoundError, ProjectsRepositoryError
 from src.exceptions.task_activity import TaskActivityRepositoryError
@@ -135,7 +136,7 @@ class WbsSuggestionService:
             )
         except ClientError as error:
             logger.error("❌ LLM недоступен при подготовке предложения ИСР.", exc_info=True)
-            raise KnowledgeProviderError(str(error)) from error
+            raise AiProviderError(str(error)) from error
         except Exception as error:
             logger.error("❌ Модель не вернула предложение ИСР.", exc_info=True)
             raise WbsSuggestionError(str(error)) from error

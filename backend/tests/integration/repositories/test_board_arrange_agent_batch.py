@@ -9,9 +9,9 @@ from sqlalchemy import update
 
 from src.agent.tools import AgentToolContext
 from src.db.models.board_shapes import BoardShape, BoardShapeKind
-from src.db.models.project_boards import ProjectBoard
+from src.db.models.board_stickers import BoardSticker, BoardStickerTaskLink
+from src.db.models.boards import Board
 from src.db.models.project_members import ProjectMember, ProjectRole
-from src.db.models.project_stickers import ProjectSticker, ProjectStickerTaskLink
 from src.db.models.tasks import Task
 from src.exceptions.agent_tools import (
     AgentToolAccessError,
@@ -19,12 +19,12 @@ from src.exceptions.agent_tools import (
     AgentToolConflictError,
 )
 from src.exceptions.board_shapes import BoardBatchConflictError, BoardShapeInvalidError
-from src.exceptions.project_boards import ProjectBoardNotFoundError
+from src.exceptions.boards import BoardNotFoundError
 from src.repositories.board_editor import BoardEditorRepository
 from src.repositories.board_shapes import BoardShapesRepository
-from src.repositories.project_boards import ProjectBoardsRepository
+from src.repositories.board_stickers import BoardStickersRepository
+from src.repositories.boards import BoardsRepository
 from src.repositories.project_members import ProjectMembersRepository
-from src.repositories.project_stickers import ProjectStickersRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.schemas.board_diagrams import BoardArrangeInput, BoardSceneInput
 from src.schemas.board_editor import BoardEditorMetadata
@@ -32,7 +32,7 @@ from src.schemas.board_shapes import BoardBatchSchema, default_style
 from src.services.agent_board_actions import _objects, arrange_board_objects, get_board_scene
 from src.services.board_arrange import compile_arrangement
 from src.services.board_shapes import BoardShapesService
-from src.services.project_boards import ProjectBoardsService
+from src.services.boards import BoardsService
 from tests.board_support import local_user, user_display_name
 
 
@@ -43,7 +43,7 @@ async def seed(session, *, owner=None, board=None):
         session.add(owner)
         await session.flush()
     if board is None:
-        board = ProjectBoard(title="Arrange", created_by_user_id=owner.id, position=4)
+        board = Board(title="Arrange", created_by_user_id=owner.id, position=4)
         session.add(board)
         await session.flush()
     shape = BoardShape(
@@ -59,7 +59,7 @@ async def seed(session, *, owner=None, board=None):
         created_by_user_id=owner.id,
         revision=3,
     )
-    sticker = ProjectSticker(
+    sticker = BoardSticker(
         board_id=board.id,
         project_id=board.project_id,
         body="Keep sticker body",
@@ -175,12 +175,12 @@ async def seed(session, *, owner=None, board=None):
 
 
 def services(session):
-    boards = ProjectBoardsRepository(session)
+    boards = BoardsRepository(session)
     shapes = BoardShapesRepository(session)
-    stickers = ProjectStickersRepository(session)
+    stickers = BoardStickersRepository(session)
     uow = UnitOfWork(session)
     return SimpleNamespace(
-        boards=ProjectBoardsService(
+        boards=BoardsService(
             boards_repository=boards,
             shapes_repository=shapes,
             stickers_repository=stickers,
@@ -431,7 +431,7 @@ async def test_batch_rechecks_object_revision_after_compilation_without_partial_
     env = await seed(db_session)
     db = services(db_session)
     _, batch = await arrangement(db, env)
-    model = ProjectSticker if kind == "sticker" else BoardShape
+    model = BoardSticker if kind == "sticker" else BoardShape
     object_id = {"shape": env.shape_id, "sticker": env.sticker_id, "arrow": env.internal_id}[kind]
     await db_session.execute(
         update(model).where(model.id == object_id).values(revision=model.revision + 1)
@@ -564,13 +564,13 @@ async def test_another_owner_cannot_read_arrange_or_directly_apply_to_personal_b
     await db_session.commit()
     before = await snapshot(db_session, db, env)
 
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await get_board_scene(
             db, context(env, user_id=other_id), BoardSceneInput(board_id=env.board_id)
         )
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await arrange_board_objects(db, context(env, user_id=other_id), args)
-    with pytest.raises(ProjectBoardNotFoundError):
+    with pytest.raises(BoardNotFoundError):
         await apply(db, env, batch, author_id=other_id)
 
     assert await snapshot(db_session, db, env) == before
@@ -607,7 +607,7 @@ async def test_arrange_preserves_existing_project_sticker_task_links(
     db_session.add(task)
     await db_session.flush()
     task_id = task.id
-    db_session.add(ProjectStickerTaskLink(sticker_id=env.sticker_id, task_id=task_id))
+    db_session.add(BoardStickerTaskLink(sticker_id=env.sticker_id, task_id=task_id))
     await db_session.commit()
     db = services(db_session)
     db.access = editor_service(db_session).access

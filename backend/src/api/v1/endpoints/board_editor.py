@@ -8,7 +8,7 @@ from src.dependencies.access import ProjectIdPath, require_project_access
 from src.dependencies.auth import PrincipalDep, require_write_scope
 from src.dependencies.board_editor import BoardEditorServiceDep
 from src.exceptions.access import AccessServiceError
-from src.exceptions.project_boards import ProjectBoardsServiceError
+from src.exceptions.boards import BoardsServiceError
 from src.exceptions.projects import ProjectsServiceError
 from src.schemas.board_editor import (
     BoardEditorState,
@@ -17,9 +17,9 @@ from src.schemas.board_editor import (
     BoardPromotionWrite,
 )
 
-router = APIRouter(tags=["board-editor"])
+router = APIRouter(tags=["boards"])
 BoardIdPath = Annotated[int, Path(gt=0)]
-EditorErrors = (ProjectBoardsServiceError, ProjectsServiceError, AccessServiceError)
+EditorErrors = (BoardsServiceError, ProjectsServiceError, AccessServiceError)
 
 
 @router.get(

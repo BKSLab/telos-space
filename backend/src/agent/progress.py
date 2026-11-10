@@ -134,7 +134,7 @@ PHRASES: dict[str, str] = {
     "telos_create_risk": "Добавляю риск…",
     "telos_update_risk": "Правлю риск…",
     "telos_delete_risk": "Готовлю удаление риска — спрошу подтверждение…",
-    # Личное: мои задачи, проекты, потоки.
+    # Личное: мои задачи и проекты.
     "telos_list_my_tasks": "Смотрю ваши задачи…",
     "telos_list_my_projects": "Смотрю ваши проекты…",
     "telos_search_tasks": "Ищу задачи…",
@@ -212,7 +212,7 @@ class ProgressReporter:
             return
         self._latest = _limit(text)
         if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._drain(), name="tim-progress")
+            self._task = asyncio.create_task(self._drain(), name="aris-progress")
 
     async def _drain(self) -> None:
         sink = self._sink

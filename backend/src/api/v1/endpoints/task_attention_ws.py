@@ -13,7 +13,7 @@ from src.exceptions.task_attention import TaskAttentionServiceError
 router = APIRouter()
 
 
-@router.websocket("/my/task-attention/ws", name="taskAttentionWebSocket")
+@router.websocket("/users/me/task-attention/ws", name="taskAttentionWebSocket")
 async def task_attention_socket(
     websocket: WebSocket, runtime: TaskAttentionRuntimeDep, settings: SettingsDep
 ):

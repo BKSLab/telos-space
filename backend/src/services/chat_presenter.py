@@ -3,7 +3,7 @@
 from collections import defaultdict
 from urllib.parse import quote
 
-from src.agent.tim import TIM_NAME
+from src.agent.aris import ARIS_NAME
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.project_chats import (
     ChatAgentView,
@@ -190,7 +190,7 @@ class ChatPresenter:
         if turn is None:
             return None
         return ChatAgentView(
-            name=TIM_NAME,
+            name=ARIS_NAME,
             status=turn.status,
             error=turn.error,
             progress=turn.progress if turn.status in {"queued", "processing"} else None,

@@ -12,7 +12,7 @@ from src.api.v1.responses import (
 from src.dependencies.access import ProjectIdPath, require_project_access
 from src.dependencies.auth import PrincipalDep, require_write_scope
 from src.dependencies.services import BoardShapesServiceDep
-from src.exceptions.project_boards import ProjectBoardsServiceError
+from src.exceptions.boards import BoardsServiceError
 from src.schemas.board_shapes import (
     BoardBatchResultSchema,
     BoardBatchSchema,
@@ -23,7 +23,7 @@ from src.schemas.board_shapes import (
     BoardShapeUpdateSchema,
 )
 
-router = APIRouter(tags=["project-board"])
+router = APIRouter(tags=["boards"])
 logger = logging.getLogger(__name__)
 BoardIdPath = Annotated[int, Path(gt=0, description="Идентификатор доски.")]
 ShapeIdPath = Annotated[int, Path(gt=0, description="Идентификатор фигуры.")]
@@ -35,7 +35,7 @@ WRITE_RESPONSES = {
 }
 
 
-def _http_error(error: ProjectBoardsServiceError, action: str, board_id: int) -> HTTPException:
+def _http_error(error: BoardsServiceError, action: str, board_id: int) -> HTTPException:
     """Логирует отказ по уровню серьёзности и переводит его в HTTP-ответ."""
     if error.status_code >= 500:
         logger.exception("❌ Ошибка %s на доске id=%s.", action, board_id)
@@ -66,7 +66,7 @@ async def create_board_shape(
         return await service.create_shape(
             project_id=project_id, board_id=board_id, data=data, author_id=principal.user_id
         )
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "POST фигуры", board_id) from error
 
 
@@ -91,7 +91,7 @@ async def update_board_shape(
         return await service.update_shape(
             project_id=project_id, board_id=board_id, shape_id=shape_id, data=data
         )
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "PATCH фигуры", board_id) from error
 
 
@@ -119,7 +119,7 @@ async def delete_board_shape(
             project_id=project_id, board_id=board_id, shape_id=shape_id, revision=revision
         )
         logger.info("✅ Фигура id=%s удалена.", shape_id)
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "DELETE фигуры", board_id) from error
 
 
@@ -149,7 +149,7 @@ async def apply_board_batch(
             author_username=principal.username,
             author_display_name=principal.full_name,
         )
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "пакет", board_id) from error
 
 
@@ -181,5 +181,5 @@ async def convert_board_shape_to_sticker(
             author_username=principal.username,
             author_display_name=principal.full_name,
         )
-    except ProjectBoardsServiceError as error:
+    except BoardsServiceError as error:
         raise _http_error(error, "замена фигуры", board_id) from error

@@ -14,6 +14,7 @@ const stamp = "2026-11-06T10:00:00Z";
 const clients: QueryClient[] = [];
 const stage: ProjectStage = { id: 2, project_id: 1, name: "Согласование", color: "#58a6ff", order_index: 0, is_done_stage: false };
 const task: Task = {
+    revision: 1,
     id: 5, project_id: 1, stage_id: 2, key: "DEMO-5", number: 5, title: "Текущее название задачи",
     description_md: "**Важное описание** <script>alert('unsafe')</script> [опасная ссылка](javascript:alert%281%29)",
     priority: "HIGH", role: null, assignee: "Прежний исполнитель",

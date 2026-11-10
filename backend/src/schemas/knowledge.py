@@ -22,7 +22,7 @@ class KnowledgeChatMessageSchema(BaseModel):
 
 
 class KnowledgeAskSchema(BaseModel):
-    """Вопрос Project Agent с короткой историей текущего диалога."""
+    """Вопрос Арис с короткой историей текущего диалога."""
 
     question: str = Field(min_length=2, max_length=2000)
     history: list[KnowledgeChatMessageSchema] = Field(default_factory=list, max_length=10)

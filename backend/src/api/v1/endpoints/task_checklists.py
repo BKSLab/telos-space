@@ -11,8 +11,8 @@ from src.api.v1.uploads import close_uploads, read_uploads
 from src.dependencies.auth import AuthorizationHeaderDep, SessionCookieDep
 from src.dependencies.services import ChecklistSuggestionServiceDep
 from src.exceptions.access import AccessServiceError
+from src.exceptions.ai import AiProviderError
 from src.exceptions.auth import AuthServiceError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.exceptions.projects import ProjectNotFoundError
 from src.exceptions.tasks import TasksServiceError
 from src.schemas.task_checklists import ChecklistSuggestionRequestSchema, ChecklistSuggestionSchema
@@ -92,7 +92,7 @@ async def suggest_task_checklist(
         AccessServiceError,
         ProjectNotFoundError,
         TasksServiceError,
-        KnowledgeProviderError,
+        AiProviderError,
     ) as error:
         logger.exception("❌ Не удалось предложить чек-лист в проекте id=%s.", project_id)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error

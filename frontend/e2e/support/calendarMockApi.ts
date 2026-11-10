@@ -55,7 +55,7 @@ export async function installMockApi(page: Page, state: MockState) {
         const reply = (json: unknown, status = 200) => route.fulfill({ status, headers, json });
         const body = () => { try { return request.postDataJSON() ?? {}; } catch { return {}; } };
         if (path === "/calendar/holidays") return reply({ year: Number(url.searchParams.get("year")), days: [] });
-        if (path === "/me/calendar/ics-token") {
+        if (path === "/users/me/calendar/ics-token") {
             if (method !== "GET") {
                 state.writes.push({ method, path, body: body() });
                 state.icsIssued = method === "POST";
@@ -63,8 +63,8 @@ export async function installMockApi(page: Page, state: MockState) {
             if (method === "DELETE") return route.fulfill({ status: 204, headers });
             return reply({ exists: state.icsIssued, created_at: state.icsIssued ? stamp : null, ...(method === "POST" && { url: "http://tracker.test/api/v1/ics/cal_demo.ics" }) });
         }
-        if (path === "/me/calendar/unscheduled") return reply({ items: [], next_cursor: null });
-        if (path === "/me/calendar") return reply({ tasks: [
+        if (path === "/users/me/calendar/unscheduled") return reply({ items: [], next_cursor: null });
+        if (path === "/users/me/calendar") return reply({ tasks: [
             { ...calendarTask(state.tasks[0]), source: { kind: "PROJECT", id: 1, key: "DEMO", name: state.projects[0].name, color: state.projects[0].color }, state: "IN_PROGRESS", state_label: "В работе" },
             { ...calendarTask(state.tasks[1]), id: 200, key: "T-1", title: "Личная подготовка к поездке", wbs_node_id: null, stage_id: null, start_date: iso(0), due_date: iso(1), source: { kind: "PERSONAL", id: null, key: null, name: null, color: null }, state: "NEW", state_label: "Новая" },
         ], milestones: [], summary: { overdue: 1, due_soon: 1, unscheduled: 0 }, truncated: false });

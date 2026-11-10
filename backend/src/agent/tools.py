@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from src.agent.tim import ALL_MODES, TimMode
+from src.agent.aris import ALL_MODES, ArisMode
 from src.exceptions.base import ServiceError
 from src.utils.tool_names import require_canonical_tool_name
 
@@ -37,7 +37,7 @@ class AgentToolContext:
     username: str = ""
     display_name: str = ""
     chat_turn_id: int | None = None
-    mode: TimMode = TimMode.WIDGET_PROJECT
+    mode: ArisMode = ArisMode.WIDGET_PROJECT
     # Изменяющие инструменты, открытые правами сервисного ключа; None — без
     # ограничения ключом (вопрос из интерфейса трекера).
     allowed_tools: frozenset[str] | None = None
@@ -72,7 +72,7 @@ class AgentTool:
     handler: AgentToolHandler
     mutating: bool = False
     requires_confirmation: bool = False
-    modes: frozenset[TimMode] = ALL_MODES
+    modes: frozenset[ArisMode] = ALL_MODES
 
     def __post_init__(self) -> None:
         require_canonical_tool_name(self.name)
@@ -87,7 +87,7 @@ class AgentToolExecutor:
             raise ValueError("Имена инструментов агента должны быть уникальны.")
 
     def describe(
-        self, *, include_parameters: bool = True, mode: TimMode | None = None
+        self, *, include_parameters: bool = True, mode: ArisMode | None = None
     ) -> list[dict[str, Any]]:
         """Возвращает модели доступные возможности и схемы аргументов.
 

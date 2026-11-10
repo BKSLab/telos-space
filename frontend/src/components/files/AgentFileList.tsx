@@ -10,7 +10,7 @@ export function AgentFileList({ files, conversationId, projectId, onRemove, remo
     onRemove?: (id: string) => void;
     removeDisabled?: boolean;
 }) {
-    const base = projectId !== undefined ? endpoints.agentConversations(projectId) : endpoints.timConversations();
+    const base = projectId !== undefined ? endpoints.projectArisConversations(projectId) : endpoints.arisConversations();
     return <FileList files={files.map(file => ({
         key: file.id, name: file.original_name, size: file.size, mime: file.content_type,
         url: apiUrl(`${base}/${conversationId}/files/${file.id}/content`),

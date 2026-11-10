@@ -31,7 +31,7 @@ from src.repositories.users import UsersRepository
 from src.repositories.wbs_nodes import WbsNodesRepository
 from src.schemas.enums import TaskStatus
 from src.schemas.task_attention import TaskViewSchema
-from src.schemas.task_moves import TaskMoveTargetSchema
+from src.schemas.task_transfers import TaskTransferTargetSchema
 from src.services.knowledge_events import KnowledgeEvents
 from src.services.project_members import ProjectMembersService
 from src.services.task_attention import TaskAttentionService
@@ -225,11 +225,11 @@ async def test_stage_status_transfer_and_bulk_writers_raise_the_revision(db_sess
     assert moved.revision == created.revision + 1
     fixed = await service.fix_baseline(task_id)
     assert fixed.revision == moved.revision + 1
-    transferred = await moves.move(task_id=task_id, target=TaskMoveTargetSchema(personal=True), user_id=user.id)
+    transferred = await moves.move(task_id=task_id, target=TaskTransferTargetSchema(personal=True), user_id=user.id)
     assert transferred.task.revision == fixed.revision + 1
     changed_status = await service.change_status(task_id=task_id, status=TaskStatus.NEW)
     assert changed_status.revision == transferred.task.revision + 1
-    returned = await moves.move(task_id=task_id, target=TaskMoveTargetSchema(project_id=project.id), user_id=user.id)
+    returned = await moves.move(task_id=task_id, target=TaskTransferTargetSchema(project_id=project.id), user_id=user.id)
     assert returned.task.revision == changed_status.revision + 1
 
     node = await WbsNodesRepository(db_session).save(data={"project_id": project.id, "title": "Раздел", "position": 1000})

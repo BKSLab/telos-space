@@ -13,7 +13,7 @@ interface TaskPeopleFieldsProps {
     onReporterChange: (userId: number | null) => void;
     onObserversChange: (userIds: number[]) => void;
     disabled?: boolean;
-    legacyExecutorLabel?: string | null;
+    assigneeSnapshot?: string | null;
     canChangeReporter?: boolean;
 }
 
@@ -30,7 +30,7 @@ export function TaskPeopleFields({
     onReporterChange,
     onObserversChange,
     disabled = false,
-    legacyExecutorLabel,
+    assigneeSnapshot,
     canChangeReporter = true,
 }: TaskPeopleFieldsProps) {
     const selectedObservers = new Set(observerIds);
@@ -40,8 +40,8 @@ export function TaskPeopleFields({
             <Field
                 label="Исполнитель"
                 hint={
-                    executorId === null && legacyExecutorLabel
-                        ? `Ранее указано: ${legacyExecutorLabel}`
+                    executorId === null && assigneeSnapshot
+                        ? `Ранее указано: ${assigneeSnapshot}`
                         : undefined
                 }
             >

@@ -106,7 +106,7 @@ def adjust_connector_points(
         return points
     axes = [_axis(a, b) for a, b in zip(stored, stored[1:], strict=False)]
     if "diagonal" in axes:
-        # Preserve legacy diagonal manual paths rather than silently rerouting them.
+        # Preserve user-defined diagonal paths rather than silently rerouting them.
         return points
     meaningful = set(axes) - {"zero"}
     if not meaningful and (_same(start[0], end[0]) or _same(start[1], end[1])):

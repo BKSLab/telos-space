@@ -28,11 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 def build_credentials_check(session_factory, settings: Settings):
-    async def check(bearer: str | None, api_key: str | None) -> bool:
+    async def check(bearer: str) -> bool:
         async with session_factory() as session:
             try:
                 await build_auth_service(session, settings).resolve_principal(
-                    session_token=None, bearer_secret=api_key or bearer,
+                    session_token=None, bearer_secret=bearer,
                 )
             except AuthServiceError as error:
                 if error.status_code >= 500:

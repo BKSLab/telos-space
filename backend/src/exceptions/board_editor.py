@@ -1,18 +1,18 @@
 """Доменные ошибки редактора досок."""
 
-from src.exceptions.project_boards import ProjectBoardsServiceError
+from src.exceptions.boards import BoardsServiceError
 
 
-class BoardEditorValidationError(ProjectBoardsServiceError):
+class BoardEditorValidationError(BoardsServiceError):
     status_code = 422
     detail = "Объекты metadata должны принадлежать этой доске."
 
 
-class BoardAlreadyPromotedError(ProjectBoardsServiceError):
+class BoardAlreadyPromotedError(BoardsServiceError):
     status_code = 409
     detail = "Доска уже привязана к проекту."
 
 
-class BoardObjectLockedError(ProjectBoardsServiceError):
+class BoardObjectLockedError(BoardsServiceError):
     status_code = 409
     detail = "Объект заблокирован в редакторе. Сначала снимите блокировку."

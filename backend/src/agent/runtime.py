@@ -62,10 +62,10 @@ from pydantic_ai.toolsets.abstract import ToolsetTool
 from pydantic_ai.toolsets.renamed import RenamedToolset
 from pydantic_ai.usage import RunUsage
 
+from src.agent.aris import ArisMode
 from src.agent.capabilities import WORKFLOWS, Workflow, workflow_for_tool
 from src.agent.context import AgentContextBudget, compact_action, encode, estimate_tokens
 from src.agent.progress import CHECK_WRITE, THINKING, ProgressReporter, describe_call
-from src.agent.tim import TimMode
 from src.agent.tools import (
     AgentTool,
     AgentToolContext,
@@ -75,9 +75,9 @@ from src.agent.tools import (
 )
 from src.clients.agent_model import record_requests
 from src.prompts.project_agent import (
-    TIM_PERSONAL_WORKFLOW_RULES,
-    TIM_WORKFLOW_COMMON,
-    TIM_WORKFLOW_INSTRUCTIONS,
+    ARIS_PERSONAL_WORKFLOW_RULES,
+    ARIS_WORKFLOW_COMMON,
+    ARIS_WORKFLOW_INSTRUCTIONS,
 )
 
 #: Сколько вызовов инструментов модель может сделать за один шаг.
@@ -102,7 +102,7 @@ MAX_WORKFLOW_LOAD_ROUNDS = 2
 LOAD_CAPABILITY_TOOL = "telos_load_capability"
 
 
-class TimAnswer(BaseModel):
+class ArisAnswer(BaseModel):
     """Окончательный ответ Ариса: текст и подтверждающие его источники."""
 
     answer: str = Field(
@@ -160,7 +160,7 @@ class WriteGate:
 
 
 @dataclass(slots=True)
-class TimDeps:
+class ArisDeps:
     """Всё, что знает о текущем вопросе цикл Ариса; задаёт только сервер.
 
     Attributes:
@@ -236,10 +236,10 @@ class TimDeps:
 
 
 @dataclass(frozen=True, slots=True)
-class TimRunResult:
+class ArisRunResult:
     """Итог цикла: ответ модели (или None, если лимит шагов исчерпан) и метрики."""
 
-    output: TimAnswer | None
+    output: ArisAnswer | None
     requests: int
     tool_calls: list[dict[str, Any]]
     input_tokens: int
@@ -248,13 +248,13 @@ class TimRunResult:
     model_requests: list[dict[str, Any]] = field(default_factory=list)
 
 
-class _PrepareTimTools(PrepareTools[TimDeps]):
+class _PrepareArisTools(PrepareTools[ArisDeps]):
     """Применяет тот же фильтр снаружи нативного loader, включая последний шаг."""
 
     def get_ordering(self) -> CapabilityOrdering:
         return CapabilityOrdering(position="outermost")
 
-    def get_wrapper_toolset(self, toolset: AbstractToolset[TimDeps]) -> AbstractToolset[TimDeps]:
+    def get_wrapper_toolset(self, toolset: AbstractToolset[ArisDeps]) -> AbstractToolset[ArisDeps]:
         # The framework owns the native loader implementation. Its one public
         # registration uses our name; the original name is never in get_tools().
         return PreparedToolset(
@@ -263,7 +263,7 @@ class _PrepareTimTools(PrepareTools[TimDeps]):
         )
 
     async def before_model_request(
-        self, ctx: RunContext[TimDeps], request_context: ModelRequestContext
+        self, ctx: RunContext[ArisDeps], request_context: ModelRequestContext
     ) -> ModelRequestContext:
         parameters = request_context.model_request_parameters
         if not parameters.instruction_parts:
@@ -285,13 +285,13 @@ def _loader_instructions(text: str) -> str:
     return text.replace("`load_capability`", f"`{LOAD_CAPABILITY_TOOL}`")
 
 
-class _CanonicalLoaderToolset(RenamedToolset[TimDeps]):
+class _CanonicalLoaderToolset(RenamedToolset[ArisDeps]):
     async def call_tool(
         self,
         name: str,
         tool_args: dict[str, Any],
-        ctx: RunContext[TimDeps],
-        tool: ToolsetTool[TimDeps],
+        ctx: RunContext[ArisDeps],
+        tool: ToolsetTool[ArisDeps],
     ) -> Any:
         try:
             return await super().call_tool(name, tool_args, ctx, tool)
@@ -301,7 +301,7 @@ class _CanonicalLoaderToolset(RenamedToolset[TimDeps]):
             raise ModelRetry(_loader_instructions(error.message)) from error
 
 
-class TimRuntime:
+class ArisRuntime:
     """Один агент PydanticAI на реестр инструментов; состояние вопроса — в deps."""
 
     def __init__(self, *, model: Model, executor: AgentToolExecutor) -> None:
@@ -315,24 +315,24 @@ class TimRuntime:
         tools = {tool.name: build_tool(tool) for tool in executor.tools.values()}
         self._tools = FunctionToolset(list(tools.values()))
         self._workflow_tools = tools
-        self.agent: Agent[TimDeps, TimAnswer | str] = Agent(
+        self.agent: Agent[ArisDeps, ArisAnswer | str] = Agent(
             model,
-            name="tim-pm",
-            deps_type=TimDeps,
+            name="aris-pm",
+            deps_type=ArisDeps,
             # Текстовый ответ разрешён рядом с telos_submit_answer: иначе PydanticAI шлёт
             # tool_choice=required, а Gemini через шлюз отвечает 400 «Request
             # contains an invalid argument», если инструментов больше ~20
             # (замер 30.09.2026 на стенде). Текст становится ответом без source_ids.
             output_type=[
                 ToolOutput(
-                    TimAnswer,
+                    ArisAnswer,
                     name=OUTPUT_TOOL,
                     description="Окончательный ответ участнику и source_ids, подтверждающие его.",
                 ),
                 str,
             ],
             instructions=self._instructions,
-            capabilities=[_PrepareTimTools(self._prepare_tools), ProcessHistory(self._fit_history)],
+            capabilities=[_PrepareArisTools(self._prepare_tools), ProcessHistory(self._fit_history)],
             model_settings=ModelSettings(max_tokens=MAX_OUTPUT_TOKENS),
             retries=TOOL_RETRIES,
             # Все вызовы шага выполняются, даже если в том же ответе есть итог:
@@ -355,7 +355,7 @@ class TimRuntime:
             tool_calls_limit=MAX_CALLS_PER_STEP * rounds,
         )
 
-    def _workflow_capabilities(self, deps: TimDeps) -> list[Capability[TimDeps]]:
+    def _workflow_capabilities(self, deps: ArisDeps) -> list[Capability[ArisDeps]]:
         """Каталог состоит только из наборов с допустимыми для запроса инструментами."""
         groups = list(WORKFLOWS)
         known = {name for workflow in groups for name in workflow.tools}
@@ -374,7 +374,7 @@ class TimRuntime:
             if not tools:
                 continue
             result.append(
-                Capability[TimDeps](
+                Capability[ArisDeps](
                     id=workflow.id,
                     description=workflow.description,
                     instructions=self._workflow_instructions(workflow.id),
@@ -385,8 +385,8 @@ class TimRuntime:
         return result
 
     @staticmethod
-    def _workflow_instructions(group_id: str) -> Callable[[RunContext[TimDeps]], Awaitable[str]]:
-        async def load(ctx: RunContext[TimDeps]) -> str:
+    def _workflow_instructions(group_id: str) -> Callable[[RunContext[ArisDeps]], Awaitable[str]]:
+        async def load(ctx: RunContext[ArisDeps]) -> str:
             deps = ctx.deps
             step = ctx.run_step
             deps._load_steps.add(step)
@@ -399,16 +399,16 @@ class TimRuntime:
                     raise ModelRetry(f"За один шаг — не более {MAX_CALLS_PER_STEP} инструментов.")
                 # Одна SQLAlchemy-сессия не выполняет параллельные чтения разных наборов.
                 async with deps._context_load_lock:
-                    rules = TIM_WORKFLOW_INSTRUCTIONS.get(group_id, "")
+                    rules = ARIS_WORKFLOW_INSTRUCTIONS.get(group_id, "")
                     if group_id not in deps._context_groups:
                         if deps.load_context is not None:
                             await deps.load_context(group_id)
                         if not deps._context_groups:
                             # Common safety/receipt rules are delivered once per run,
                             # then retained in the protected native loader history.
-                            rules = TIM_WORKFLOW_COMMON + "\n\n" + rules
-                            if deps.execution.mode == TimMode.WIDGET_PERSONAL:
-                                rules += "\n\n" + TIM_PERSONAL_WORKFLOW_RULES
+                            rules = ARIS_WORKFLOW_COMMON + "\n\n" + rules
+                            if deps.execution.mode == ArisMode.WIDGET_PERSONAL:
+                                rules += "\n\n" + ARIS_PERSONAL_WORKFLOW_RULES
                         deps._context_groups.add(group_id)
                 return rules
             finally:
@@ -417,7 +417,7 @@ class TimRuntime:
 
         return load
 
-    async def run(self, deps: TimDeps, *, metadata: dict[str, Any]) -> TimRunResult:
+    async def run(self, deps: ArisDeps, *, metadata: dict[str, Any]) -> ArisRunResult:
         """Выполняет вопрос до ответа или исчерпания лимита шагов.
 
         Args:
@@ -460,7 +460,7 @@ class TimRuntime:
                 # Шаги к этому моменту исчерпаны: честно «проверка неполная», а не сбой.
                 if error.status_code != 502 or len(deps._step_calls) < deps.tool_rounds:
                     raise
-                return TimRunResult(
+                return ArisRunResult(
                     output=None,
                     requests=len(deps._step_calls) + 1,
                     tool_calls=deps.calls,
@@ -470,7 +470,7 @@ class TimRuntime:
                     model_requests=journal,
                 )
             except UsageLimitExceeded:
-                return TimRunResult(
+                return ArisRunResult(
                     output=None,
                     requests=run_usage.requests,
                     tool_calls=deps.calls,
@@ -482,8 +482,8 @@ class TimRuntime:
         usage = result.usage
         output = result.output
         if isinstance(output, str):
-            output = TimAnswer(answer=output)
-        return TimRunResult(
+            output = ArisAnswer(answer=output)
+        return ArisRunResult(
             output=output,
             requests=usage.requests,
             tool_calls=deps.calls,
@@ -494,7 +494,7 @@ class TimRuntime:
         )
 
     @staticmethod
-    def _instructions(ctx: RunContext[TimDeps]) -> str:
+    def _instructions(ctx: RunContext[ArisDeps]) -> str:
         # Инструкция — начало каждого запроса: пока она не меняется, провайдер
         # переиспользует кэш префикса (инструкция, схемы, стартовый контекст).
         remaining = max(0, ctx.deps.tool_step_limit - ctx.usage.requests)
@@ -510,7 +510,7 @@ class TimRuntime:
 
     @staticmethod
     async def _prepare_tools(
-        ctx: RunContext[TimDeps], tool_defs: list[ToolDefinition]
+        ctx: RunContext[ArisDeps], tool_defs: list[ToolDefinition]
     ) -> list[ToolDefinition]:
         if ctx.usage.requests >= ctx.deps.tool_step_limit:
             return []
@@ -522,7 +522,7 @@ class TimRuntime:
         ]
 
     async def _fit_history(
-        self, ctx: RunContext[TimDeps], messages: list[ModelMessage]
+        self, ctx: RunContext[ArisDeps], messages: list[ModelMessage]
     ) -> list[ModelMessage]:
         """Держит вход шага в пределах ``context_tokens``.
 
@@ -598,10 +598,10 @@ def tool_json_schema(tool: AgentTool) -> dict[str, Any]:
     return portable(schema)
 
 
-def build_tool(tool: AgentTool) -> Tool[TimDeps]:
+def build_tool(tool: AgentTool) -> Tool[ArisDeps]:
     """Инструмент PydanticAI из записи реестра: схема и описание — из неё же."""
 
-    async def call(ctx: RunContext[TimDeps], **arguments: Any) -> dict[str, Any]:
+    async def call(ctx: RunContext[ArisDeps], **arguments: Any) -> dict[str, Any]:
         return await invoke(ctx, tool, arguments)
 
     # from_schema оставляет проверку аргументов invoke: ошибка должна стать
@@ -618,7 +618,7 @@ def build_tool(tool: AgentTool) -> Tool[TimDeps]:
 
 
 async def invoke(
-    ctx: RunContext[TimDeps], tool: AgentTool, arguments: dict[str, Any]
+    ctx: RunContext[ArisDeps], tool: AgentTool, arguments: dict[str, Any]
 ) -> dict[str, Any]:
     """Проверяет доступ и аргументы, исполняет инструмент реестра, готовит результат.
 
@@ -769,7 +769,7 @@ def _replace_prompt(messages: list[ModelMessage], prompt: str) -> None:
                 return
 
 
-def metrics(result: TimRunResult) -> dict[str, Any]:
+def metrics(result: ArisRunResult) -> dict[str, Any]:
     """Компактные метрики цикла для журнала."""
     return {
         "requests": result.requests,
@@ -787,10 +787,10 @@ __all__ = [
     "MAX_CALLS_PER_STEP",
     "WRITE_NOT_REQUESTED",
     "WriteGate",
-    "TimAnswer",
-    "TimDeps",
-    "TimRunResult",
-    "TimRuntime",
+    "ArisAnswer",
+    "ArisDeps",
+    "ArisRunResult",
+    "ArisRuntime",
     "build_tool",
     "metrics",
 ]

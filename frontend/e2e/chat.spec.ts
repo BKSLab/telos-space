@@ -82,7 +82,7 @@ function chatServer() {
     const files = new Map<string, ChatAttachment>();
     const entity: ChatEntity = { entity_type: "DOCUMENT", entity_id: 1, title: "План тестирования", available: true, status: null, subtitle: null, href: "/projects/DEMO/docs/testing" };
     const tasks = new Map<number, Task>([42, 43].map((id): [number, Task] => [id, {
-        id, project_id: 1, stage_id: 1, number: id, key: `DEMO-${id}`,
+        id, revision: 1, project_id: 1, stage_id: 1, number: id, key: `DEMO-${id}`,
         title: id === 42 ? "Проверить форму заказа" : "Согласовать мобильную версию",
         description_md: id === 42 ? "Проверить обязательные поля и сохранение заказа." : "Согласовать расположение кнопок на телефоне.",
         priority: "MEDIUM", role: null, assignee: "Анна Иванова", participants: [],
@@ -115,7 +115,7 @@ function chatServer() {
         return message;
     };
     const add = (content: string, userId = 2, broadcast = true, patch: Partial<ChatMessage> = {}) => create(userId, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, broadcast, patch);
-    const addTim = (content: string, status: ChatAgentState["status"] = "completed", sources: KnowledgeSource[] = [], broadcast = true) => create(0, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, broadcast, { author_type: "AGENT", author: null, agent: { name: "Арис", status, requester: members[0], request_message_id: 1, error: null, sources, actions: [] } });
+    const addAris = (content: string, status: ChatAgentState["status"] = "completed", sources: KnowledgeSource[] = [], broadcast = true) => create(0, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, broadcast, { author_type: "AGENT", author: null, agent: { name: "Арис", status, requester: members[0], request_message_id: 1, error: null, sources, actions: [] } });
 
     const attach = async (page: Page, userId = 1) => {
         const publicUser = members.find((user) => user.id === userId)!;
@@ -136,7 +136,7 @@ function chatServer() {
             if (path.endsWith("/members")) return reply(members.map((member) => ({ id: member.id, project_id: 1, role: member.id === 1 ? "OWNER" : "MEMBER", user: { ...user, ...member }, created_at: stamp })));
             if (path.endsWith("/stats")) return reply({ total_tasks: 6, in_progress_tasks: 2, done_tasks: 2, overdue_tasks: 0, completion_rate: 0.33 });
             if (path === "/api/v1/projects/1/risks") return reply({ items: [], total: 0, page: 1, page_size: 5 });
-            if (path === "/api/v1/my/task-attention") return reply({ new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] });
+            if (path === "/api/v1/users/me/task-attention") return reply({ new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] });
             if (path === "/api/v1/projects/1/stages") return reply([{ id: 1, project_id: 1, name: "В работе", color: "#7299cc", order_index: 0, is_done_stage: false }]);
             const taskMatch = path.match(/^\/api\/v1\/tasks\/(\d+)$/);
             if (taskMatch) {
@@ -182,7 +182,7 @@ function chatServer() {
             }
             return reply([]);
         });
-        await page.routeWebSocket("**/my/task-attention/ws", socket => {
+        await page.routeWebSocket("**/users/me/task-attention/ws", socket => {
             socket.send(JSON.stringify({ type: "task-attention", data: { new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] } }));
         });
         await page.routeWebSocket("**/projects/1/chat/ws", (socket) => {
@@ -221,26 +221,27 @@ function chatServer() {
             });
         });
     };
-    return { attach, add, addTim, emit, rows, entity, sockets, control, tasks, taskEntity, taskSource, documentSource, fileSource, document, projectFile };
+    return { attach, add, addAris, emit, rows, entity, sockets, control, tasks, taskEntity, taskSource, documentSource, fileSource, document, projectFile };
 }
 
-const LEGACY_CONFIRM = "0f1e2d3c-0000-4000-8000-000000000001";
+const PENDING_CONFIRM = "0f1e2d3c-0000-4000-8000-000000000001";
 
 async function installPersonalHistory(page: Page) {
     const stamp = "2026-09-21T10:00:00Z";
-    const state = { reindexCalls: 0 };
-    await page.route(/\/api\/v1\/(?:projects\/1\/(?:agent\/conversations|knowledge\/)|agent\/pending\/|tim\/conversations)/, async (route) => {
+    const state = { reindexCalls: 0, requests: [] as string[] };
+    await page.route(/\/api\/v1\/(?:projects\/1\/(?:aris\/conversations|knowledge\/)|aris\/pending\/|aris\/conversations)/, async (route) => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
         const headers = { "access-control-allow-origin": "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, OPTIONS" };
         const reply = (json: unknown) => route.fulfill({ json, headers });
         if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
-        if (path === "/api/v1/tim/conversations") return reply({ items: [], next_offset: null });
-        if (path.endsWith("/agent/conversations")) return reply({ items: [{ id: 17, project_id: 1, title: "План проекта", created_at: stamp, updated_at: stamp }], next_offset: null });
-        if (path.endsWith("/agent/conversations/17/messages")) return reply({ items: [{ id: 170, conversation_id: 17, request_id: "history", role: "assistant", content: "Сохранённый план проверки проекта", sources: [], files: [], actions: [], status: "completed", error: null, created_at: stamp }], next_before_id: null });
+        state.requests.push(path);
+        if (path === "/api/v1/aris/conversations") return reply({ items: [], next_offset: null });
+        if (path.endsWith("/aris/conversations")) return reply({ items: [{ id: 17, project_id: 1, title: "План проекта", created_at: stamp, updated_at: stamp }], next_offset: null });
+        if (path.endsWith("/aris/conversations/17/messages")) return reply({ items: [{ id: 170, conversation_id: 17, request_id: "history", role: "assistant", content: "Сохранённый план проверки проекта", sources: [], files: [], actions: [], status: "completed", error: null, created_at: stamp }], next_before_id: null });
         if (path.endsWith("/knowledge/reindex")) { state.reindexCalls += 1; return reply({ queued: true }); }
         if (path.endsWith("/knowledge/status")) return reply({ enabled: true, ready: true, points_count: 23, pending_jobs: 0, processing_jobs: 0, failed_jobs: 1, last_error: null, obsolete_points: 0, coverage: [{ entity_type: "document", total: 2, indexed: 1, missing: 1, stale: 0 }], file_issues: [{ source_id: "attachment:9", title: "План.pdf", status: "failed", detail: "Текст файла недоступен" }] });
-        if (path.endsWith(`/agent/pending/${LEGACY_CONFIRM}`)) return reply({ id: LEGACY_CONFIRM, tool_name: "telos_delete_task", title: "Удалить задачу", status: "pending", arguments: { task_id: 42 }, preview: {}, result: {}, project: { id: 1, key: "DEMO", name: "Портал заказов" }, created_at: stamp, expires_at: "2026-10-01T10:00:00Z" });
+        if (path.endsWith(`/aris/pending/${PENDING_CONFIRM}`)) return reply({ id: PENDING_CONFIRM, tool_name: "telos_delete_task", title: "Удалить задачу", status: "pending", arguments: { task_id: 42 }, preview: {}, result: {}, project: { id: 1, key: "DEMO", name: "Портал заказов" }, created_at: stamp, expires_at: "2026-10-01T10:00:00Z" });
         return reply([]);
     });
     return state;
@@ -417,7 +418,7 @@ test("контекст задачи позволяет писать, перек�
     await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
     await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toHaveCount(0);
     await panel.getByRole("button", { name: "Закрепить контекст", exact: true }).click();
-    server.addTim("Проверим первую задачу перед выпуском", "completed", [server.taskSource(42)]);
+    server.addAris("Проверим первую задачу перед выпуском", "completed", [server.taskSource(42)]);
     await expect(history.getByText("Проверим первую задачу перед выпуском", { exact: true })).toBeVisible();
     await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
     await expect(panel.getByRole("button", { name: "Открепить контекст", exact: true })).toHaveAttribute("aria-pressed", "true");
@@ -452,7 +453,7 @@ test("контекст задачи позволяет писать, перек�
 test("источники Ариса открываются рядом, авто-выбор ждёт готовый однозначный ответ", async ({ page }, info) => {
     watchBrowserErrors(page);
     const server = chatServer();
-    server.addTim("Материалы для проверки", "completed", [{ ...server.taskSource(42), task_id: null }, server.documentSource, server.fileSource], false);
+    server.addAris("Материалы для проверки", "completed", [{ ...server.taskSource(42), task_id: null }, server.documentSource, server.fileSource], false);
     await server.attach(page); await openChat(page);
     const panel = page.getByRole("complementary", { name: "Контекст чата", exact: true });
     const history = page.getByLabel("История сообщений проекта", { exact: true });
@@ -487,7 +488,7 @@ test("источники Ариса открываются рядом, авто-
             await history.getByRole("button", { name: label, exact: true }).click();
             await expect(panel.getByText(server.document.content_md, { exact: true })).toBeVisible();
             server.document.content_md = "Новый ответ Ариса использует последнюю версию документа.";
-            server.addTim("Свежая версия документа", "completed", [server.documentSource]);
+            server.addAris("Свежая версия документа", "completed", [server.documentSource]);
             await expect(panel.getByText(server.document.content_md, { exact: true })).toBeVisible();
         }
         await expect(page).toHaveURL(/\/projects\/DEMO\/chat$/);
@@ -495,7 +496,7 @@ test("источники Ариса открываются рядом, авто-
         await expect(input).toHaveValue("Продолжаю обсуждать источники");
         await expect(input).toBeEditable();
     }
-    const pending = server.addTim("", "processing", [server.taskSource(43)]);
+    const pending = server.addAris("", "processing", [server.taskSource(43)]);
     await expect(history.getByText("Арис думает…", { exact: true })).toBeVisible();
     await expect(panel.getByText(server.projectFile.text, { exact: true })).toBeVisible();
     await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
@@ -503,7 +504,7 @@ test("источники Ариса открываются рядом, авто-
     server.emit("message.updated", { message_id: pending.id, message: pending });
     await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
     await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
-    server.addTim("Оба материала пригодятся", "completed", [server.documentSource, server.fileSource]);
+    server.addAris("Оба материала пригодятся", "completed", [server.documentSource, server.fileSource]);
     await expect(history.getByText("Оба материала пригодятся", { exact: true })).toBeVisible();
     await expect(panel.getByText(server.tasks.get(43)!.description_md!, { exact: true })).toBeVisible();
     await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
@@ -545,7 +546,7 @@ test("на телефоне карточка открывает задачу, к
     await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
     await expect(drawer.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
     await drawer.getByRole("button", { name: "Закрыть контекст", exact: true }).click();
-    server.addTim("Проверим мобильную задачу", "completed", [server.taskSource(43)]);
+    server.addAris("Проверим мобильную задачу", "completed", [server.taskSource(43)]);
     await expect(history.getByText("Проверим мобильную задачу", { exact: true })).toBeVisible();
     await expect(drawer).toHaveCount(0);
     await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
@@ -565,7 +566,7 @@ test("на телефоне карточка открывает задачу, к
 test("недоступный источник 403 или 404 очищает прежний preview и оставляет редактор", async ({ page }) => {
     watchBrowserErrors(page, true);
     const server = chatServer();
-    server.addTim("Проверка доступа к источникам", "completed", [server.taskSource(42), server.documentSource, server.fileSource], false);
+    server.addAris("Проверка доступа к источникам", "completed", [server.taskSource(42), server.documentSource, server.fileSource], false);
     await server.attach(page); await openChat(page);
     const panel = page.getByRole("complementary", { name: "Контекст чата", exact: true });
     const history = page.getByLabel("История сообщений проекта", { exact: true });
@@ -591,15 +592,15 @@ test("недоступный источник 403 или 404 очищает пр
     }
 });
 
-test("старый адрес личного диалога сохраняет историю, подтверждение и контекст в едином чате", async ({ page }) => {
+test("приватный проектный диалог сохраняет историю, подтверждение и контекст", async ({ page }) => {
     const server = chatServer(); await server.attach(page); await installPersonalHistory(page);
-    await page.goto(`/projects/DEMO/agent?conversation=17&confirm=${LEGACY_CONFIRM}&task=42&tag=a&tag=b#context`);
-    await expect(page).toHaveURL(/\/projects\/DEMO\/chat\?/);
+    await page.goto(`/projects/DEMO/conversations?conversation=17&confirm=${PENDING_CONFIRM}&task=42&tag=a&tag=b#context`);
+    await expect(page).toHaveURL(/\/projects\/DEMO\/conversations\?/);
     const confirmation = page.getByRole("dialog", { name: "Подтверждение действия агента", exact: true });
     await expect(confirmation).toBeVisible();
     const redirected = new URL(page.url());
-    expect(redirected.searchParams.get("view")).toBe("personal");
-    expect(redirected.searchParams.get("confirm")).toBe(LEGACY_CONFIRM);
+    expect(redirected.searchParams.has("view")).toBe(false);
+    expect(redirected.searchParams.get("confirm")).toBe(PENDING_CONFIRM);
     expect(redirected.hash).toBe("#context");
     await confirmation.getByRole("button", { name: "Закрыть", exact: true }).last().click();
     await expect(page.getByText("Личные диалоги проекта · видно только вам", { exact: true })).toBeVisible();
@@ -614,7 +615,7 @@ test("старый адрес личного диалога сохраняет �
     expect(current.hash).toBe("#context");
     server.add("Сообщение команды во время личного разговора");
     await expect(page.getByRole("complementary", { name: "Новое сообщение проекта" })).toBeVisible();
-    await page.getByRole("button", { name: "Общий чат", exact: true }).click();
+    await page.getByRole("link", { name: "Общий чат", exact: true }).click();
     await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
     await expect(page.getByText("Сохранённый план проверки проекта", { exact: true })).toHaveCount(0);
 });
@@ -623,21 +624,22 @@ test("знания и переиндексация доступны из еди�
     const server = chatServer(); await server.attach(page); const state = await installPersonalHistory(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/projects/DEMO/knowledge?task=42#knowledge");
-    await expect(page).toHaveURL(/\/projects\/DEMO\/chat\?task=42&view=knowledge#knowledge$/);
+    await expect(page).toHaveURL(/\/projects\/DEMO\/knowledge\?task=42#knowledge$/);
     expect(new URL(page.url()).searchParams.get("task")).toBe("42");
     expect(new URL(page.url()).hash).toBe("#knowledge");
-    const knowledge = page.getByRole("complementary", { name: "Знания проекта", exact: true });
+    const knowledge = page.getByRole("region", { name: "Знания проекта", exact: true });
     await expect(knowledge.getByText("Фрагментов", { exact: true })).toBeVisible();
+    expect(state.requests.some(path => path.includes("/aris/conversations"))).toBe(false);
     await expect(knowledge.getByText("23", { exact: true })).toBeVisible();
     await expect(knowledge.getByText("План.pdf", { exact: true })).toBeVisible();
     await knowledge.getByRole("button", { name: "Переиндексировать", exact: true }).click();
     await expect.poll(() => state.reindexCalls).toBe(1);
     await page.goto("/chat");
     await page.getByRole("button", { name: "Проектные диалоги и знания", exact: true }).click();
-    await expect(page.getByRole("link", { name: "DEMO · Знания", exact: true })).toHaveAttribute("href", "/projects/DEMO/chat?view=knowledge");
+    await expect(page.getByRole("link", { name: "DEMO · Знания", exact: true })).toHaveAttribute("href", "/projects/DEMO/knowledge");
     await page.getByRole("link", { name: "DEMO · Личные диалоги", exact: true }).click();
     await expect(page.getByText("Сохранённый план проверки проекта", { exact: true })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get("view")).toBe("personal");
+    expect(new URL(page.url()).pathname).toBe("/projects/DEMO/conversations");
     expect(new URL(page.url()).searchParams.get("conversation")).toBe("17");
     await expect(page.getByRole("combobox", { name: "Выбор чата", exact: true })).toHaveCount(0);
 });
@@ -804,9 +806,9 @@ test("уведомление, ответ и поиск называют Арис
     const server = chatServer(); await server.attach(page); await openChat(page);
     await page.getByRole("link", { name: "Команда", exact: true }).click();
     await expect(page).toHaveURL(/\/team$/);
-    server.addTim("", "processing");
+    server.addAris("", "processing");
     await expect(page.getByRole("complementary", { name: "Новое сообщение проекта" })).toHaveCount(0);
-    server.addTim("План проверки готов");
+    server.addAris("План проверки готов");
     const notification = page.getByRole("complementary", { name: "Новое сообщение проекта" });
     await expect(notification.getByText("Арис: План проверки готов")).toBeVisible();
     await notification.getByRole("button").first().click();

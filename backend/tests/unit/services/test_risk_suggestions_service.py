@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.exceptions.access import ResourceNotAvailableError
+from src.exceptions.ai import AiProviderError
 from src.exceptions.clients import LlmClientError
-from src.exceptions.knowledge import KnowledgeProviderError
 from src.schemas.risk_suggestions import RiskSuggestionDraftSetSchema
 from src.services.risk_suggestions import RiskSuggestionScope, RiskSuggestionService
 
@@ -121,7 +121,7 @@ async def test_project_denial_precedes_reading_context_and_llm():
 async def test_provider_failure_is_a_service_error_and_does_not_write():
     service, db, llm, state = setup_service()
     llm.get_structured_response.side_effect = LlmClientError("offline")
-    with pytest.raises(KnowledgeProviderError):
+    with pytest.raises(AiProviderError):
         await service.suggest(project_id=1, session_token="session", bearer_secret=None)
     assert not state["open"]
     db.risks.save.assert_not_awaited()

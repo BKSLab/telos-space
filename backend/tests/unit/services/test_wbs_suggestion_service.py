@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.clients.llm import LlmClient
 from src.db.models.tasks import TaskPriority
 from src.exceptions.wbs_nodes import (
     WbsSuggestionEmptyError,
@@ -91,7 +92,7 @@ def build_service(
     activity_repository = AsyncMock(spec=TaskActivityRepository)
     unit_of_work = AsyncMock(spec=UnitOfWork)
 
-    llm_client = AsyncMock()
+    llm_client = AsyncMock(spec=LlmClient)
     if llm_error is not None:
         llm_client.get_structured_response.side_effect = llm_error
     else:

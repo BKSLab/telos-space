@@ -1,11 +1,11 @@
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models.project_boards import ProjectBoard
+from src.db.models.boards import Board
 from src.db.models.project_stages import ProjectStage
 from src.db.models.projects import Project
 from src.db.models.users import User
-from src.repositories.project_boards import ProjectBoardsRepository
+from src.repositories.boards import BoardsRepository
 from src.repositories.project_stages import ProjectStagesRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.users import UsersRepository
@@ -55,9 +55,9 @@ async def stage(db_session: AsyncSession, project: Project) -> ProjectStage:
 
 
 @pytest_asyncio.fixture
-async def board(db_session: AsyncSession, project: Project, user: User) -> ProjectBoard:
+async def board(db_session: AsyncSession, project: Project, user: User) -> Board:
     """Создаёт доску «Основная», без которой у стикера нет места."""
-    return await ProjectBoardsRepository(db_session).insert(
+    return await BoardsRepository(db_session).insert(
         data={
             "project_id": project.id,
             "title": "Основная",

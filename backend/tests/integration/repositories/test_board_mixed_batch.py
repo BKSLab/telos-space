@@ -4,7 +4,7 @@ import pytest
 
 from src.exceptions.board_shapes import BoardBatchConflictError, BoardShapeInvalidError
 from src.schemas.board_shapes import BoardBatchSchema
-from tests.integration.repositories.test_project_boards_service import services
+from tests.integration.repositories.test_boards_service import services
 
 
 def copy_ops():

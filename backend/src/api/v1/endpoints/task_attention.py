@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from src.api.v1.responses import VALIDATION_RESPONSE
 from src.dependencies.access import TaskIdPath, require_task_access
 from src.dependencies.auth import PrincipalDep, require_session
 from src.dependencies.task_attention import TaskAttentionServiceDep
@@ -20,12 +21,12 @@ ERROR_RESPONSES = {
 }
 TASK_ERRORS = ERROR_RESPONSES | {
     404: {"description": "Задача недоступна"},
-    422: {"description": "Некорректные параметры"},
+    422: VALIDATION_RESPONSE,
 }
 
 
 @router.get(
-    "/my/task-attention",
+    "/users/me/task-attention",
     response_model=TaskAttentionSnapshot,
     summary="Непросмотренные задачи",
     operation_id="getTaskAttention",

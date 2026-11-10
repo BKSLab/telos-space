@@ -38,11 +38,6 @@ export function Card({ interactive = false, variant, className, children, ...pro
     );
 }
 
-/** Семантический alias для крупных поверхностей рабочего пространства. */
-export function Surface(props: CardProps) {
-    return <Card {...props} />;
-}
-
 interface SectionProps {
     title: string;
     action?: ReactNode;

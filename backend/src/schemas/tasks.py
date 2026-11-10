@@ -388,7 +388,7 @@ class TaskUpdateSchema(BaseModel):
     )
 
 
-class TaskMoveSchema(BaseModel):
+class TaskStagePlacementSchema(BaseModel):
     """Тело запроса для перемещения задачи по доске."""
 
     model_config = ConfigDict(json_schema_extra={"example": {"stage_id": 3}})

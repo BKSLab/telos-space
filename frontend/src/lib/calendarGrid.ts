@@ -87,7 +87,7 @@ export function normalizeTimelineScale(value: string | null | undefined): Timeli
 
 /**
  * Вид из URL (?view=&scale=&date=), иначе — последний выбор пользователя, иначе умолчание.
- * Старый адрес ?anchor= (ссылки из вех и обзора) читается как date, без view — как шкала.
+ * Вид и дата берутся из канонических параметров view и date.
  */
 export function readCalendarViewState(
     params: URLSearchParams,
@@ -95,10 +95,8 @@ export function readCalendarViewState(
     defaults: CalendarViewDefaults,
     today: string,
 ): CalendarViewState {
-    const legacyTimeline = !params.has("view") && params.has("anchor");
     const view =
         normalizeView(params.get("view")) ??
-        (legacyTimeline ? "timeline" : null) ??
         normalizeView(stored?.view) ??
         defaults.view;
     const urlScale = params.get("scale");
@@ -115,7 +113,7 @@ export function readCalendarViewState(
         (view === "timeline" ? normalizeTimelineScale(urlScale) : view === "split" ? normalizeTimelineScale(params.get("tscale")) : null) ??
         normalizeTimelineScale(stored?.timelineScale) ??
         defaults.timelineScale;
-    const date = normalizeDate(params.get("date") ?? params.get("anchor"), today);
+    const date = normalizeDate(params.get("date"), today);
     return { view, gridScale, timelineScale, date, fit: view !== "grid" && params.get("fit") === "1" };
 }
 
@@ -125,7 +123,6 @@ export function writeCalendarViewParams(
     state: Pick<CalendarViewState, "view" | "date"> & { scale: string; tscale?: string; fit?: boolean },
 ): URLSearchParams {
     const next = new URLSearchParams(params);
-    next.delete("anchor");
     next.set("view", state.view);
     next.set("scale", state.scale);
     next.set("date", state.date);

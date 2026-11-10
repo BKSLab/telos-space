@@ -108,7 +108,7 @@ export function ProjectSettingsPage() {
         mutationFn: () => api.delete(endpoints.project(project.id)),
         onSuccess: () => {
             invalidateProject();
-            navigate("/projects");
+            navigate("/?view=projects");
         },
     });
 
