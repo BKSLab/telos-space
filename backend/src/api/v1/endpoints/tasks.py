@@ -594,7 +594,8 @@ async def create_personal_task(
     description=(
         "Всё, что на текущем пользователе: проектные и "
         "разовые. role: all — все роли, doing — исполнитель, assigned — "
-        "постановщик, watching — наблюдатель. Закрытые по умолчанию скрыты."
+        "постановщик, watching — наблюдатель. Закрытые по умолчанию скрыты. "
+        "project_id сужает список до выбранного проекта до ограничения числа задач."
     ),
     operation_id="getMyTasks",
     responses={422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
@@ -608,6 +609,9 @@ async def get_my_tasks(
     include_closed: Annotated[
         bool, Query(description="Показывать выполненные и отменённые.")
     ] = False,
+    project_id: Annotated[
+        int | None, Query(gt=0, description="Только задачи выбранного проекта.", examples=[1])
+    ] = None,
     attention: Annotated[
         Literal["new", "overdue", "updated", "unread"] | None,
         Query(description="Непросмотренные события: фильтр применяется до ограничения списка."),
@@ -620,6 +624,7 @@ async def get_my_tasks(
             user_id=principal.user_id,
             role=role,
             include_closed=include_closed,
+            project_id=project_id,
             **(
                 {
                     "attention_task_ids": await attention_service.filter_ids(

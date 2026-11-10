@@ -1161,6 +1161,7 @@ class TasksRepository:
         limit: int,
         outside_projects_only: bool = False,
         attention_task_ids: set[int] | None = None,
+        project_id: int | None = None,
     ) -> list[Task]:
         """Календарь проектных и разовых задач с доступом по локальным назначениям."""
         if not roles:
@@ -1183,6 +1184,8 @@ class TasksRepository:
             )
             if attention_task_ids is not None:
                 stmt = stmt.where(Task.id.in_(attention_task_ids))
+            if project_id is not None:
+                stmt = stmt.where(Task.project_id == project_id)
             if outside_projects_only:
                 stmt = stmt.where(Task.project_id.is_(None))
             if not include_closed:

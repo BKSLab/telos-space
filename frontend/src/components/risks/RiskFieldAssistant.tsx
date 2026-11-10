@@ -5,8 +5,14 @@ import { api, endpoints } from "@/lib/api";
 import type { RiskInput } from "@/lib/risks";
 import { Button } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/States";
+import { AiOperationStatus } from "@/components/ui/AiOperationStatus";
 
 type Field = "description" | "mitigation_plan" | "response_plan";
+const PENDING_MESSAGES: Record<Field, string> = {
+    description: "Арис формулирует описание риска…",
+    mitigation_plan: "Арис готовит план митигации…",
+    response_plan: "Арис готовит план реагирования…",
+};
 export function RiskFieldAssistant({ projectId, field, draft, onAccept, disabled }: { projectId: number; field: Field; draft: RiskInput; onAccept: (text: string) => void; disabled?: boolean }) {
     const [proposal, setProposal] = useState<string | null>(null);
     const generate = useMutation({
@@ -17,6 +23,8 @@ export function RiskFieldAssistant({ projectId, field, draft, onAccept, disabled
         <Button type="button" size="sm" variant="ai" disabled={disabled || generate.isPending} onClick={() => generate.mutate()}>
             <WandSparkles size={13} />{generate.isPending ? "Формулируем…" : "Помочь сформулировать"}
         </Button>
+        {generate.isPending && <AiOperationStatus message={PENDING_MESSAGES[field]}
+            description="Предложение можно будет проверить перед применением." />}
         {generate.error && <ErrorMessage message={(generate.error as Error).message} />}
         {proposal && <div className="w-full rounded-control border border-accent-border bg-accent-soft p-3">
             <p className="whitespace-pre-wrap text-[12px] text-secondary">{proposal}</p>

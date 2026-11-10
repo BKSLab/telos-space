@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Input } from "@/components/ui/Field";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
+import { AiOperationStatus } from "@/components/ui/AiOperationStatus";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/wbs/ContextMenu";
 import { MoveNodeDialog, TransferTaskDialog } from "@/components/wbs/MoveDialogs";
@@ -360,6 +361,11 @@ export function StructurePage() {
                     </Button>
                 </div>
             </div>
+
+            {mutations.suggest.isPending && <div className="shrink-0 border-b border-line-subtle px-4 py-2">
+                <AiOperationStatus message="Арис готовит предложение ИСР…"
+                    description="Распределяет задачи по разделам. Изменения можно будет проверить перед применением." />
+            </div>}
 
             <nav className="wbs-mobile-nav" aria-label="Представление ИСР">
                 <button type="button" aria-pressed={mobileView === "canvas" || (mobileView === "suggestion" && !draft)} onClick={() => setMobileView("canvas")}>Холст</button>

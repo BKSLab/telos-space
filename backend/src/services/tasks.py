@@ -760,14 +760,30 @@ class TasksService:
         user_id: int,
         role: str = "all",
         include_closed: bool = False,
+        project_id: int | None = None,
         attention_task_ids: set[int] | None = None,
     ) -> list[MyTaskSchema]:
-        """Задачи, в которых пользователь исполнитель, постановщик или наблюдатель."""
+        """Возвращает задачи участника с фильтрами до ограничения списка.
+
+        Args:
+            user_id: Текущий локальный пользователь.
+            role: Роль пользователя в задаче или все роли.
+            include_closed: Включать выполненные и отменённые задачи.
+            project_id: Ограничить список проектом; None включает разовые задачи.
+            attention_task_ids: Задачи с выбранными непросмотренными событиями.
+
+        Returns:
+            Задачи пользователя, соответствующие всем выбранным фильтрам.
+
+        Raises:
+            TasksServiceError: Если список не удалось прочитать.
+        """
         try:
             tasks = await self.tasks_repository.get_for_person(
                 user_id=user_id,
                 roles=set(MY_TASK_ROLES.get(role, MY_TASK_ROLES["all"])),
                 include_closed=include_closed,
+                project_id=project_id,
                 limit=MY_TASKS_LIMIT,
                 **(
                     {"attention_task_ids": attention_task_ids}

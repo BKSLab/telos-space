@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { ErrorMessage } from "@/components/ui/States";
+import { AiOperationStatus } from "@/components/ui/AiOperationStatus";
 import { TaskDateRangePicker } from "@/components/tasks/TaskDateRangePicker";
 import { TaskDocumentsField } from "@/components/tasks/TaskDocumentsField";
 import { TaskPeopleFields } from "@/components/tasks/TaskPeopleFields";
@@ -275,6 +276,8 @@ export function CreateTaskDialog({
                             {rephraseMutation.isPending ? "Переформулируем…" : "Переформулировать"}
                         </Button>
                     </div>
+                    {rephraseMutation.isPending && <AiOperationStatus message="Арис переформулирует описание задачи…"
+                        description="Учитывает проект и выбранные материалы." />}
                     <Textarea
                         id="new-task-description"
                         rows={6}

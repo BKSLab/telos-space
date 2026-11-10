@@ -147,6 +147,44 @@ async def test_current_user_and_task_placement_routes_keep_distinct_behaviors(ap
     assert tasks.move_task.await_count == 1
 
 
+async def test_my_tasks_project_filter_combines_query_parameters_and_validates_id(api_client):
+    """Проект сужает личный список вместе с прочими фильтрами и имеет положительный ID."""
+    tasks = AsyncMock(spec=TasksService)
+    tasks.get_my_tasks.return_value = []
+    attention = AsyncMock(spec=TaskAttentionService)
+    attention.filter_ids.return_value = {7, 8}
+    app.dependency_overrides.update(
+        {
+            get_tasks_service: lambda: tasks,
+            get_task_attention_service: lambda: attention,
+        }
+    )
+    response = await api_client.get(
+        "/api/v1/users/me/tasks",
+        params={
+            "project_id": 4,
+            "role": "watching",
+            "include_closed": True,
+            "attention": "updated",
+        },
+    )
+    assert response.status_code == 200 and response.json() == []
+    tasks.get_my_tasks.assert_awaited_once_with(
+        user_id=1,
+        project_id=4,
+        role="watching",
+        include_closed=True,
+        attention_task_ids={7, 8},
+    )
+    attention.filter_ids.assert_awaited_once_with(1, "updated")
+    for invalid_id in (0, -1, "unknown"):
+        response = await api_client.get(
+            "/api/v1/users/me/tasks", params={"project_id": invalid_id}
+        )
+        assert response.status_code == 422
+    assert tasks.get_my_tasks.await_count == 1
+
+
 async def test_aris_request_scope_does_not_authorize_pending_action_decisions(
     api_client,
     current_principal,

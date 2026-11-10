@@ -37201,7 +37201,7 @@
     },
     {
       "access": "authenticated",
-      "description": "Всё, что на текущем пользователе: проектные и разовые. role: all — все роли, doing — исполнитель, assigned — постановщик, watching — наблюдатель. Закрытые по умолчанию скрыты.",
+      "description": "Всё, что на текущем пользователе: проектные и разовые. role: all — все роли, doing — исполнитель, assigned — постановщик, watching — наблюдатель. Закрытые по умолчанию скрыты. project_id сужает список до выбранного проекта до ограничения числа задач.",
       "group": "tasks",
       "id": "api-e06cc4b49b83db2a",
       "kind": "http",
@@ -37237,6 +37237,28 @@
             "description": "Показывать выполненные и отменённые.",
             "title": "Include Closed",
             "type": "boolean"
+          }
+        },
+        {
+          "description": "Только задачи выбранного проекта.",
+          "in": "query",
+          "name": "project_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только задачи выбранного проекта.",
+            "examples": [
+              1
+            ],
+            "title": "Project Id"
           }
         },
         {

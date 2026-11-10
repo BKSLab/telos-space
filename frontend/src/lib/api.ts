@@ -214,8 +214,8 @@ projectBaseline: (projectId: number, dryRun = false) =>
 users: (query: string, limit = 20) =>
         `${V1}/users?${new URLSearchParams({ query, limit: String(limit) }).toString()}`,
 personalTasks: () => `${V1}/tasks`,
-myTasks: (role: string, includeClosed: boolean, attention?: string) =>
-        `${V1}/users/me/tasks?${new URLSearchParams({ role, include_closed: String(includeClosed), ...(attention && { attention }) }).toString()}`,
+myTasks: (role: string, includeClosed: boolean, attention?: string, projectId?: number) =>
+        `${V1}/users/me/tasks?${new URLSearchParams({ role, include_closed: String(includeClosed), ...(attention && { attention }), ...(projectId !== undefined && { project_id: String(projectId) }) }).toString()}`,
 taskStatus: (taskId: number) => `${V1}/tasks/${taskId}/status`,
 taskTransfer: (taskId: number) => `${V1}/tasks/${taskId}/transfer`,
 taskTransferPreview: (taskId: number, query: string) => `${V1}/tasks/${taskId}/transfer/preview?${query}`
@@ -280,7 +280,7 @@ portfolioCalendar: (query: string) => ["portfolio", "calendar", query] as const,
 calendarHolidays: (year: number) => ["calendar", "holidays", year] as const,
 users: (query: string) => ["users", query] as const,
 myTasks: ["my-tasks"] as const,
-myTaskList: (role: string, includeClosed: boolean, attention?: string) => ["my-tasks", role, includeClosed, ...(attention ? [attention] : [])] as const
+myTaskList: (role: string, includeClosed: boolean, attention?: string, projectId?: number) => ["my-tasks", role, includeClosed, ...(attention ? [attention] : []), ...(projectId !== undefined ? ["project", projectId] : [])] as const
 };
 
 function boardBase(projectId: number | null, boardId: number): string {

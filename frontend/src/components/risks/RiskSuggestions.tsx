@@ -5,6 +5,7 @@ import { api, endpoints } from "@/lib/api";
 import { riskInput, type RiskSuggestion } from "@/lib/risks";
 import { Button, IconButton } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/States";
+import { AiOperationStatus } from "@/components/ui/AiOperationStatus";
 import { CreateRiskDialog } from "@/components/risks/CreateRiskDialog";
 
 export function RiskSuggestions({ projectId }: { projectId: number }) {
@@ -20,7 +21,8 @@ export function RiskSuggestions({ projectId }: { projectId: number }) {
                 <p className="text-[11px] text-muted">AI может предложить риски по материалам проекта.</p>
                 <Button variant="ghost" size="sm" icon={<Sparkles size={13} className="text-ai" />} disabled={generate.isPending} onClick={() => generate.mutate()}>{generate.isPending ? "Изучаю проект…" : "Предложить риски"}</Button>
             </div>
-            {generate.isPending && <p role="status" className="text-[12px] text-muted">Анализирую задачи, сроки, комментарии и документы…</p>}
+            {generate.isPending && <AiOperationStatus message="Арис изучает проект и предлагает риски…"
+                description="Анализирует задачи, сроки, комментарии и документы." />}
             {generate.error && <ErrorMessage title="Не удалось подготовить предложения" message={generate.error.message} />}
             {suggestions && <div className="rounded-card border border-ai-border/30 bg-ai-soft/30 px-4 py-3">
                 <div className="mb-2 flex items-center justify-between gap-2">

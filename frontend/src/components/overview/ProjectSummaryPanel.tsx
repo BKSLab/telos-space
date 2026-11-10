@@ -9,6 +9,7 @@ import type { AnalyticsHealth, AnalyticsReport } from "@/lib/types";
 import { ANALYTICS_HEALTH_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
+import { AiOperationStatus } from "@/components/ui/AiOperationStatus";
 import { FindingCard, ProgressCard, RecommendationCard } from "@/components/dashboard/AnalyticsCards";
 
 const HEALTH_STYLES: Record<AnalyticsHealth, string> = {
@@ -71,7 +72,7 @@ export function ProjectSummaryPanel({ projectId = null, dataUpdatedAt = null, bl
                 <p className="mt-0.5 text-[12px] leading-relaxed text-muted">{projectId ? "Оценка проекта на момент разбора" : "Оценка активных проектов и разовых задач"}</p>
             </div>
             <Button variant="ai" size="lg" onClick={() => generate.mutate()} disabled={generate.isPending || Boolean(blockedReason)} title={blockedReason}
-                icon={generate.isPending ? <RefreshCw size={15} className="animate-spin" aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}>
+                icon={generate.isPending ? <RefreshCw size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}>
                 {generate.isPending ? "Разбираю…" : report ? "Обновить разбор" : "Разобрать"}
             </Button>
         </header>
@@ -80,7 +81,10 @@ export function ProjectSummaryPanel({ projectId = null, dataUpdatedAt = null, bl
         {reportQuery.error && <div className="px-4 pb-4 sm:px-5"><ErrorMessage title="Разбор недоступен" message={(reportQuery.error as Error).message}
             action={<Button size="sm" onClick={() => void reportQuery.refetch()}>Повторить загрузку</Button>} /></div>}
         {generate.error && <div className="px-4 pb-4 sm:px-5"><ErrorMessage title="Разбор не сформирован" message={(generate.error as Error).message} /></div>}
-        {generate.isPending && <p role="status" className="border-t border-line-subtle px-4 py-3 text-[14px] leading-relaxed text-secondary sm:px-5">Арис сопоставляет задачи, сроки, риски и обсуждения. {report ? "Ниже сохранён предыдущий разбор." : "Результат появится здесь."}</p>}
+        {generate.isPending && <div className="border-t border-line-subtle px-4 py-3 sm:px-5">
+            <AiOperationStatus message={projectId ? "Арис готовит разбор проекта…" : "Арис готовит разбор портфеля…"}
+                description={`Сопоставляет задачи, сроки, риски и обсуждения. ${report ? "Ниже сохранён предыдущий разбор." : "Результат появится здесь."}`} />
+        </div>}
 
         {reportQuery.isPending ? <div role="status" aria-label="Загрузка разбора" className="flex flex-col gap-3 border-t border-line-subtle p-5"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-4 w-1/2" /></div> : report ? <>
             <div className="flex flex-col gap-3 border-t border-line-subtle px-4 py-4 sm:px-5">

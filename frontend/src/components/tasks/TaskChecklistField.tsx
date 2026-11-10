@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { ErrorMessage } from "@/components/ui/States";
 import { Modal } from "@/components/ui/Modal";
+import { AiOperationStatus } from "@/components/ui/AiOperationStatus";
 
 interface EditorProps {
     value: TaskChecklist;
@@ -120,6 +121,8 @@ export function TaskChecklistField({ projectId, taskId, title, description, docu
                 {value && <Button size="sm" aria-label="Удалить чек-лист" disabled={busy} onClick={() => setConfirmDelete(true)}><Trash2 size={13} /></Button>}
             </div>
         </div>
+        {generate.isPending && <AiOperationStatus message="Арис готовит чек-лист задачи…"
+            description="Предложение появится здесь. Вы сможете проверить его перед применением." />}
         {generate.error && <ErrorMessage message={(generate.error as Error).message} />}
         {actionError && <ErrorMessage message={actionError} />}
         {value && (editing ? <ChecklistEditor value={value} onChange={onChange} disabled={busy} /> : <div className="flex flex-col gap-2">
