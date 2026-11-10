@@ -10,12 +10,13 @@ import { useUiStore } from "@/stores/ui";
 import { useTaskAttention } from "@/lib/useTaskAttention";
 import { Page } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Field";
 import { PriorityBadge } from "@/components/ui/Badge";
 import { DueDate } from "@/components/ui/DueDate";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 import { CreatePersonalTaskDialog } from "@/components/tasks/CreatePersonalTaskDialog";
 import { TaskSourceLabel } from "@/components/tasks/TaskSourceLabel";
+import { MyTaskProjectFilter } from "@/components/tasks/MyTaskProjectFilter";
 
 const PAGE_SIZE = 50;
 export function MyTasksPage() {
@@ -55,11 +56,15 @@ export function MyTasksPage() {
                 <Button key={item.key} size="sm" className="shrink-0 whitespace-nowrap" variant={signal === item.key ? "primary" : "ghost"} disabled={item.key !== "all" && !attention} aria-pressed={signal === item.key} onClick={() => { setSearchParams(current => { const next = new URLSearchParams(current); if (item.key === "all") next.delete("attention"); else next.set("attention", item.key); return next; }, { replace: true }); if (item.key !== "all") setIncludeClosed(true); setPage(0); }}>{item.label}{item.count !== undefined && ` · ${item.count}`}</Button>)}
         </div>
         {attentionError && <p role="alert" className="text-xs text-danger">Счётчики непросмотренных изменений недоступны.</p>}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
             <div className="flex flex-wrap gap-1" role="group" aria-label="Моя роль в задаче">{MY_TASK_ROLES.map(item => <Button key={item.value} size="sm" variant={role === item.value ? "primary" : "ghost"} aria-pressed={role === item.value} onClick={() => { setRole(item.value); setPage(0); }}>{item.label}</Button>)}</div>
-            <Field label="Проект" className="w-full sm:w-64">{id => <Select id={id} value={projectId ?? ""} disabled={projects.isPending || (!projects.data && projects.isError)} aria-busy={projects.isPending} onChange={event => { setProjectId(Number(event.target.value) || undefined); setPage(0); }}><option value="">Все проекты</option>{projects.data?.map(project => <option key={project.id} value={project.id}>{project.key} · {project.name}</option>)}</Select>}</Field>
-            <label className="flex items-center gap-2 text-[13px] text-secondary"><input type="checkbox" checked={includeClosed} onChange={event => { setIncludeClosed(event.target.checked); setPage(0); }} />Показывать закрытые</label>
-            <Input className="max-w-xs" aria-label="Поиск по моим задачам" placeholder="Номер, название или проект" value={search} onChange={event => { setSearch(event.target.value); setPage(0); }} />
+            <div className="flex min-w-0 flex-auto flex-wrap items-center gap-3">
+                <MyTaskProjectFilter projects={projects.data ?? []} projectId={projectId}
+                    disabled={projects.isPending || (!projects.data && projects.isError)} loading={projects.isPending}
+                    onChange={id => { setProjectId(id); setPage(0); }} />
+                <label className="flex items-center gap-2 text-[13px] text-secondary"><input type="checkbox" checked={includeClosed} onChange={event => { setIncludeClosed(event.target.checked); setPage(0); }} />Показывать закрытые</label>
+                <Input className="max-w-xs sm:ml-auto" aria-label="Поиск по моим задачам" placeholder="Номер, название или проект" value={search} onChange={event => { setSearch(event.target.value); setPage(0); }} />
+            </div>
         </div>
         {projects.error && <ErrorMessage title="Не удалось загрузить проекты" message={(projects.error as Error).message} action={<Button size="sm" onClick={() => void projects.refetch()}>Повторить загрузку проектов</Button>} />}
         {tasks.error && <ErrorMessage message={(tasks.error as Error).message} />}

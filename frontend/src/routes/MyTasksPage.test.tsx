@@ -62,6 +62,13 @@ function setup(tasks: MyTask[], updatedIds: number[] = [], projectsError?: Error
     return { requests, get, client };
 }
 
+const projectFilter = () => screen.getByRole("button", { name: /Фильтр по проекту$/ });
+async function chooseProject(id?: number) {
+    if (!screen.queryByRole("listbox")) await userEvent.click(projectFilter());
+    const project = projects.find(item => item.id === id);
+    await userEvent.click(await screen.findByRole("option", { name: project ? `${project.key} · ${project.name}` : "Все проекты" }));
+}
+
 beforeEach(() => useUiStore.setState({ selectedTaskId: null }));
 afterEach(() => {
     cleanup();
@@ -73,25 +80,26 @@ describe("фильтр проекта в моих задачах", () => {
     it("использует все доступные проекты и возвращает разовые задачи после сброса", async () => {
         const { client, requests } = setup([task(1, 1, "Задача первого проекта"), task(2, 2, "Задача второго проекта"), task(3, null, "Разовая задача")]);
         await screen.findByRole("button", { name: "Разовая задача" });
-        const select = screen.getByRole("combobox", { name: "Проект" });
-        expect(within(select).getAllByRole("option").map(option => option.textContent)).toEqual([
+        const select = projectFilter();
+        await userEvent.click(select);
+        expect(within(await screen.findByRole("listbox")).getAllByRole("option").map(option => option.getAttribute("aria-label"))).toEqual([
             "Все проекты", "FIRST · Первый проект", "SECOND · Второй проект", "EMPTY · Проект без моих задач",
         ]);
-        await userEvent.selectOptions(select, "1");
+        await chooseProject(1);
         await waitFor(() => expect(screen.queryByRole("button", { name: "Разовая задача" })).toBeNull());
         expect(screen.getByRole("button", { name: "Задача первого проекта" })).toBeTruthy();
         expect(screen.queryByRole("button", { name: "Задача второго проекта" })).toBeNull();
-        await userEvent.selectOptions(select, "2");
+        await chooseProject(2);
         await screen.findByRole("button", { name: "Задача второго проекта" });
         expect(screen.queryByRole("button", { name: "Задача первого проекта" })).toBeNull();
         await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.myTasks }); });
-        expect((select as HTMLSelectElement).value).toBe("2");
+        expect(select.textContent).toContain("Второй проект");
         expect(requests.at(-1)?.searchParams.get("project_id")).toBe("2");
         expect(screen.getByRole("button", { name: "Задача второго проекта" })).toBeTruthy();
         expect(screen.queryByRole("button", { name: "Задача первого проекта" })).toBeNull();
-        await userEvent.selectOptions(select, "3");
+        await chooseProject(3);
         await screen.findByText("Задач пока нет");
-        await userEvent.selectOptions(select, "");
+        await userEvent.click(screen.getByRole("button", { name: "Сбросить фильтр проекта" }));
         await screen.findByRole("button", { name: "Разовая задача" });
         expect(screen.getByRole("button", { name: "Задача первого проекта" })).toBeTruthy();
         expect(screen.getByRole("button", { name: "Задача второго проекта" })).toBeTruthy();
@@ -104,7 +112,7 @@ describe("фильтр проекта в моих задачах", () => {
             task(5, null, "Личный план"),
         ], [3, 4]);
         await screen.findByRole("button", { name: "Личный план" });
-        await userEvent.selectOptions(screen.getByRole("combobox", { name: "Проект" }), "1");
+        await chooseProject(1);
         await userEvent.click(screen.getByRole("button", { name: "Делаю" }));
         await userEvent.click(screen.getByRole("checkbox", { name: "Показывать закрытые" }));
         await userEvent.click(screen.getByRole("button", { name: "Комментарии и изменения · 2" }));
@@ -117,7 +125,7 @@ describe("фильтр проекта в моих задачах", () => {
         expect(screen.getByText("Задач пока нет")).toBeTruthy();
         await userEvent.clear(search);
         expect(screen.getByRole("button", { name: "План проверен" })).toBeTruthy();
-        await userEvent.selectOptions(screen.getByRole("combobox", { name: "Проект" }), "");
+        await chooseProject();
         await screen.findByRole("button", { name: "План другого проекта" });
         expect(screen.getByRole("button", { name: "План проверен" })).toBeTruthy();
         expect(screen.queryByRole("button", { name: "Личный план" })).toBeNull();
@@ -128,14 +136,13 @@ describe("фильтр проекта в моих задачах", () => {
         await screen.findByRole("button", { name: "Задача 1" });
         await userEvent.click(screen.getByRole("button", { name: "Дальше" }));
         expect(screen.getByText("2 / 2")).toBeTruthy();
-        const select = screen.getByRole("combobox", { name: "Проект" });
-        await userEvent.selectOptions(select, "1");
+        await chooseProject(1);
         await screen.findByRole("button", { name: "Задача 1" });
         expect(screen.getByText("1 / 2")).toBeTruthy();
         screen.getByRole("button", { name: "Дальше" }).focus();
         await userEvent.keyboard("{Enter}");
         expect(screen.getByRole("button", { name: "Задача 51" })).toBeTruthy();
-        await userEvent.selectOptions(select, "");
+        await chooseProject();
         await screen.findByRole("button", { name: "Задача 1" });
         expect(screen.getByText("1 / 2")).toBeTruthy();
     });
@@ -144,10 +151,34 @@ describe("фильтр проекта в моих задачах", () => {
         setup([task(1, 1, "Доступная задача")], [], new Error("Список проектов недоступен"));
         await screen.findByRole("button", { name: "Доступная задача" });
         expect(await screen.findByRole("alert")).toBeTruthy();
-        expect((screen.getByRole("combobox", { name: "Проект" }) as HTMLSelectElement).disabled).toBe(true);
+        expect((projectFilter() as HTMLButtonElement).disabled).toBe(true);
         await userEvent.click(screen.getByRole("button", { name: "Повторить загрузку проектов" }));
-        await waitFor(() => expect((screen.getByRole("combobox", { name: "Проект" }) as HTMLSelectElement).disabled).toBe(false));
+        await waitFor(() => expect((projectFilter() as HTMLButtonElement).disabled).toBe(false));
         expect(screen.queryByRole("alert")).toBeNull();
-        expect(screen.getByRole("option", { name: "FIRST · Первый проект" })).toBeTruthy();
+        await userEvent.click(projectFilter());
+        expect(await screen.findByRole("option", { name: "FIRST · Первый проект" })).toBeTruthy();
+    });
+
+    it("выбирает проект с клавиатуры и возвращает фокус после Escape и сброса", async () => {
+        setup([task(1, 1, "Проектная задача"), task(2, null, "Разовая задача")]);
+        await screen.findByRole("button", { name: "Разовая задача" });
+        const trigger = projectFilter();
+        trigger.focus();
+        await userEvent.keyboard("{Enter}");
+        await screen.findByRole("listbox");
+        await userEvent.keyboard("{ArrowDown}{Enter}");
+        await waitFor(() => expect(screen.queryByRole("button", { name: "Разовая задача" })).toBeNull());
+        expect(projectFilter().textContent).toContain("Первый проект");
+        await waitFor(() => expect(document.activeElement).toBe(trigger));
+        await userEvent.keyboard("{Enter}");
+        await screen.findByRole("listbox");
+        await userEvent.keyboard("{Escape}");
+        await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+        await waitFor(() => expect(document.activeElement).toBe(trigger));
+        screen.getByRole("button", { name: "Сбросить фильтр проекта" }).focus();
+        await userEvent.keyboard("{Enter}");
+        await screen.findByRole("button", { name: "Разовая задача" });
+        await waitFor(() => expect(document.activeElement).toBe(trigger));
+        expect(screen.queryByRole("button", { name: "Сбросить фильтр проекта" })).toBeNull();
     });
 });

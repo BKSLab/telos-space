@@ -6,6 +6,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
     test(`фильтр моих задач по проекту: выбор, сочетание и сброс на ${viewport.width}px`, async ({ page }, testInfo) => {
         await page.setViewportSize(viewport);
         const state = mockState();
+        state.projects[1].name = "TELOS SPACE — поддержка и развитие";
         const template = state.tasks[0];
         const personal = state.tasks.find(task => task.project_id === null)!;
         state.tasks = [
@@ -37,15 +38,27 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
         });
 
         await page.goto("/my-tasks");
-        const filter = page.getByRole("combobox", { name: "Проект", exact: true });
+        const filter = page.getByRole("button", { name: /Фильтр по проекту$/ });
+        const chooseProject = async (id?: number) => {
+            const project = state.projects.find(item => item.id === id);
+            await filter.click();
+            await page.getByRole("option", { name: project ? `${project.key} · ${project.name}` : "Все проекты", exact: true }).click();
+        };
         const pages = page.getByRole("navigation", { name: "Страницы задач" });
         await expect(filter).toBeEnabled();
-        await expect(filter.locator("option")).toHaveText(["Все проекты", ...state.projects.map(project => `${project.key} · ${project.name}`)]);
+        await filter.click();
+        await expect(page.getByRole("option")).toHaveCount(state.projects.length + 1);
+        for (const name of ["Все проекты", ...state.projects.map(project => `${project.key} · ${project.name}`)]) {
+            await expect(page.getByRole("option", { name, exact: true })).toBeVisible();
+        }
+        await page.keyboard.press("Escape");
+        await expect(filter).toBeFocused();
+        await page.screenshot({ path: testInfo.outputPath(`project-filter-default-${viewport.width}.png`) });
         await page.getByRole("button", { name: "Дальше", exact: true }).click();
         await expect(pages).toContainText("2 / 2");
         await expect(page.getByRole("button", { name: "Разобрать личные документы", exact: true })).toBeVisible();
 
-        await filter.selectOption("2");
+        await chooseProject(2);
         await expect(page.getByRole("button", { name: "Согласовать результат второго проекта", exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name: "Разобрать личные документы", exact: true })).toHaveCount(0);
         await expect(pages).toHaveCount(0);
@@ -65,15 +78,31 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
         await expect(page.getByRole("button", { name: "Согласовать результат второго проекта", exact: true })).toBeVisible();
         await page.getByRole("heading", { name: "Мои задачи", exact: true }).scrollIntoViewIfNeeded();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        const source = page.locator('td[data-label="Проект"] a').first();
+        const sourceBounds = await source.boundingBox();
+        const cellBounds = await source.locator("..").boundingBox();
+        expect(sourceBounds && cellBounds && sourceBounds.x + sourceBounds.width <= cellBounds.x + cellBounds.width + 1).toBeTruthy();
         await page.screenshot({ path: testInfo.outputPath(`project-filter-${viewport.width}.png`) });
+        await filter.focus();
+        await page.keyboard.press("Enter");
+        const menu = page.getByRole("listbox");
+        await expect(menu).toBeVisible();
+        const bounds = await menu.boundingBox();
+        expect(bounds && bounds.x >= 0 && bounds.x + bounds.width <= viewport.width).toBeTruthy();
+        await page.screenshot({ path: testInfo.outputPath(`project-filter-menu-${viewport.width}.png`) });
+        await page.keyboard.press("Escape");
+        await expect(filter).toBeFocused();
 
-        await filter.selectOption("3");
+        await chooseProject(3);
         await expect(page.getByText("Задач пока нет", { exact: true })).toBeVisible();
-        await filter.selectOption("");
+        await page.getByRole("button", { name: "Сбросить фильтр проекта", exact: true }).click();
         await expect(pages).toContainText("1 / 2");
         await page.getByRole("button", { name: "Дальше", exact: true }).click();
         await expect(page.getByRole("button", { name: "Разобрать личные документы", exact: true })).toBeVisible();
-        await expect(filter).toHaveValue("");
+        await expect(filter).toContainText("Все проекты");
+        await chooseProject(2);
+        await chooseProject();
+        await expect(filter).toContainText("Все проекты");
         expect(state.errors).toEqual([]);
     });
 }
