@@ -12,8 +12,8 @@ for (const width of [1440, 390, 320]) {
         page.on("pageerror", error => errors.push(error.message));
 
         await page.goto("/help/about");
-        await page.getByRole("searchbox", { name: "Поиск по справке" }).fill("tt_create_task");
-        const tool = catalog.mcp.find(entry => entry.name === "tt_create_task")!;
+        await page.getByRole("searchbox", { name: "Поиск по справке" }).fill("telos_create_task");
+        const tool = catalog.mcp.find(entry => entry.name === "telos_create_task")!;
         await page.getByRole("link", { name: `MCP · ${tool.name} · ${tool.summary}`, exact: true }).click();
         await expect(page.locator(`[id="${tool.id}"]`)).toBeFocused();
         const access = page.getByRole("region", { name: `Доступ ${tool.name}`, exact: true });
@@ -46,18 +46,20 @@ for (const width of [1440, 390, 320]) {
     });
 }
 
-test("MCP различает совместимые имена и действия общего диспетчера", async ({ page }) => {
+test("MCP публикует единые имена и действия общего диспетчера", async ({ page }) => {
     await installMockApi(page, mockState());
     await page.goto("/help/mcp#mcp-catalog");
-    await page.getByRole("combobox", { name: "Фильтр каталога", exact: true }).selectOption("aliases");
-    await page.getByRole("searchbox", { name: "Поиск инструментов MCP", exact: true }).fill("add_comment");
-    const alias = catalog.mcp.find(entry => entry.name === "add_comment")!;
-    await page.locator(`[id="${alias.id}"]`).click();
-    await expect(page.getByRole("region", { name: `Доступ ${alias.name}`, exact: true })).toContainText("tt_add_comment");
+    const filter = page.getByRole("combobox", { name: "Фильтр каталога", exact: true });
+    await expect(filter.locator('option[value="aliases"]')).toHaveCount(0);
+    await filter.selectOption("primary");
+    await page.getByRole("searchbox", { name: "Поиск инструментов MCP", exact: true }).fill("telos_add_comment");
+    const tool = catalog.mcp.find(entry => entry.name === "telos_add_comment")!;
+    await page.locator(`[id="${tool.id}"]`).click();
+    await expect(page.getByRole("region", { name: `Доступ ${tool.name}`, exact: true })).toContainText("comments:write");
     await page.getByRole("combobox", { name: "Фильтр каталога", exact: true }).selectOption("actions");
-    await page.getByRole("searchbox", { name: "Поиск инструментов MCP", exact: true }).fill("delete_task");
-    const action = catalog.actions.find(entry => entry.name === "delete_task")!;
+    await page.getByRole("searchbox", { name: "Поиск инструментов MCP", exact: true }).fill("telos_delete_task");
+    const action = catalog.actions.find(entry => entry.name === "telos_delete_task")!;
     await page.locator(`[id="${action.id}"]`).click();
     await expect(page.getByRole("region", { name: `Доступ ${action.name}`, exact: true })).toContainText("подтверждение пользователя");
-    await expect(page.getByText("Через tt_execute_project_tool", { exact: true })).toBeVisible();
+    await expect(page.getByText("Через telos_execute_project_tool", { exact: true })).toBeVisible();
 });

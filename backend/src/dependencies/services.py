@@ -610,10 +610,10 @@ TIM_ACTIONS = PROJECT_ACTIONS + PERSONAL_ACTIONS
 def build_knowledge_tool_executor(query: ProjectQueryService) -> AgentToolExecutor:
     """Регистрирует первый набор инструментов; новые возможности добавляются здесь."""
     descriptions = {
-        "list_sources": "Перечень текущих источников проекта с постраничным продолжением.",
-        "read_source": "Полный текст известного источника по страницам символов.",
-        "related_sources": "Связи источника с другими объектами текущего проекта.",
-        "search_sources": "Полнотекстовый поиск по всем типам источников проекта.",
+        "telos_list_sources": "Перечень текущих источников проекта с постраничным продолжением.",
+        "telos_read_source": "Полный текст известного источника по страницам символов.",
+        "telos_list_related_sources": "Связи источника с другими объектами текущего проекта.",
+        "telos_search_sources": "Полнотекстовый поиск по всем типам источников проекта.",
     }
 
     def bind(name: str) -> AgentToolHandler:
@@ -689,13 +689,13 @@ def build_project_tool_executor(
         definition = actions.actions.get(parameters.name)
         if definition is None or not definition.needs_project:
             return {
-                "error": "Такого проектного действия нет. Имена и схемы — через get_tool_schemas."
+                "error": "Такого проектного действия нет. Имена и схемы — через telos_get_tool_schemas."
             }
         # Обёртка не изменяющая, а действие внутри может менять проект: право
         # записи вопроса и права ключа проверяются здесь, как у прямого вызова.
         if definition.mutating and not (context.can_write and context.allows(definition.name)):
             return {"error": "Текущий запрос не разрешает изменения проекта."}
-        if definition.name == "attach_uploaded_file":
+        if definition.name == "telos_attach_uploaded_file":
             return {"error": "Файл прикрепляется только в проекте страницы."}
         try:
             project_id = await query.resolve_project_id(project_key=parameters.project_key)
@@ -710,9 +710,9 @@ def build_project_tool_executor(
 
     registered.append(
         AgentTool(
-            "run_project_action",
-            "Выполнить проектное действие (list_tasks, create_task, get_project и др.) в проекте "
-            "по его ключу; схему действия получи через get_tool_schemas.",
+            "telos_run_project_action",
+            "Выполнить проектное действие (telos_list_tasks, telos_create_task, telos_get_project и др.) в проекте "
+            "по его ключу; схему действия получи через telos_get_tool_schemas.",
             ProjectActionInput,
             project_action,
             modes=WIDGET_MODES,
@@ -728,7 +728,7 @@ def build_project_tool_executor(
                 for item in executor.describe()
                 if item["name"] in wanted
                 and (not item["mutating"] or (context.can_write and context.allows(item["name"])))
-                # Схема проектного действия нужна и для run_project_action вне проекта.
+                # Схема проектного действия нужна и для telos_run_project_action вне проекта.
                 and (
                     context.mode in executor.tools[item["name"]].modes
                     or (
@@ -742,7 +742,7 @@ def build_project_tool_executor(
 
     registered.append(
         AgentTool(
-            "get_tool_schemas",
+            "telos_get_tool_schemas",
             "Получить точные схемы аргументов перед вызовом выбранных инструментов.",
             ToolSchemasInput,
             schemas,

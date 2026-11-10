@@ -12,7 +12,7 @@ from src.schemas.knowledge import KnowledgeReadRequest, KnowledgeSourceSchema
 
 def _bounded(value: Any) -> Any:
     if isinstance(value, str):
-        return value if len(value) <= 2000 else value[:2000] + "… [полностью: read_source]"
+        return value if len(value) <= 2000 else value[:2000] + "… [полностью: telos_read_source]"
     if isinstance(value, dict):
         return {key: _bounded(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -121,11 +121,11 @@ def read_catalog(
     catalog: ProjectCatalog, request: KnowledgeReadRequest, *, search_hits: list[dict] | None = None
 ) -> dict:
     """Возвращает явные границы страниц; неизвестные/чужие ID не разрешаются."""
-    if request.name in {"read_source", "related_sources"}:
+    if request.name in {"telos_read_source", "telos_list_related_sources"}:
         source = catalog.sources.get(request.source_id or "")
         if source is None:
             return {"error": "Источник не найден в этом проекте."}
-        if request.name == "read_source":
+        if request.name == "telos_read_source":
             return source_view(source, offset=request.offset, max_chars=request.max_chars)
         links = [
             link
@@ -148,7 +148,7 @@ def read_catalog(
             if request.offset + len(page) < len(links)
             else None,
         }
-    if request.name == "search_sources":
+    if request.name == "telos_search_sources":
         page = (search_hits or [])[: request.limit]
         return {
             "items": [

@@ -184,12 +184,12 @@ async def test_extracted_file_is_searchable_readable_and_isolated_by_project(
     )
     read = read_catalog(
         catalog,
-        KnowledgeReadRequest(name="read_source", source_id=source_id, max_chars=8000),
+        KnowledgeReadRequest(name="telos_read_source", source_id=source_id, max_chars=8000),
     )
     assert text in read["text"]
     assert read_catalog(
         catalog,
-        KnowledgeReadRequest(name="read_source", source_id=f"project_file:{foreign['id']}"),
+        KnowledgeReadRequest(name="telos_read_source", source_id=f"project_file:{foreign['id']}"),
     ) == {"error": "Источник не найден в этом проекте."}
 
     await KnowledgeSourceSummariesRepository(db_session).save(
@@ -368,7 +368,7 @@ async def test_deletion_during_processing_hides_source_and_rejects_late_results(
     catalog = build_catalog(project.id, rows)
     assert source_id not in catalog.sources
     assert "error" in read_catalog(
-        catalog, KnowledgeReadRequest(name="read_source", source_id=source_id)
+        catalog, KnowledgeReadRequest(name="telos_read_source", source_id=source_id)
     )
 
     await files.purge_deleted(project_id=project.id + 1000, file_ids=[original["id"]])

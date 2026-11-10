@@ -81,7 +81,7 @@ class KnowledgeReadParameters(BaseModel):
 class KnowledgeReadRequest(KnowledgeReadParameters):
     """Одинаковое постраничное чтение знаний для чата и MCP."""
 
-    name: Literal["list_sources", "read_source", "related_sources", "search_sources"]
+    name: Literal["telos_list_sources", "telos_read_source", "telos_list_related_sources", "telos_search_sources"]
 
 
 class KnowledgeCoverageSchema(BaseModel):

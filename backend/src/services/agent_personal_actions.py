@@ -145,7 +145,7 @@ async def set_task_status(
     grant = await db.access.ensure_task_access(task_id=args.task_id, user_id=ctx.user_id)
     if grant.project_id is not None:
         raise AgentToolAccessError(
-            "Это проектная задача: её стадию меняет move_task в проекте через run_project_action."
+            "Это проектная задача: её стадию меняет telos_move_task в проекте через telos_run_project_action."
         )
     task = await db.tasks.change_status(task_id=args.task_id, status=args.status)
     return _task_payload(task)

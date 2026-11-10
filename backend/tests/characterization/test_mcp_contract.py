@@ -1,10 +1,8 @@
 """Публичный контракт MCP: имена инструментов, входные схемы и форма ответа.
 
-Этап 8 перевёл MCP-инструменты с прямых репозиториев на сервисный слой.
-Наружу при этом не изменилось ничего: ни набор инструментов, ни их входные
-схемы, ни ключи JSON, который видит вызывающая модель. Представления
-теперь принимают DTO сервисов вместо ORM-моделей — это внутренняя замена,
-и множества ключей ниже остались ровно теми же, что до рефакторинга.
+Каталог содержит ровно 46 канонических telos_<действие>_<сущность> имён.
+Входные схемы и единые ответы с метаданными превью зафиксированы явно;
+представления принимают DTO общих сервисов.
 """
 
 from datetime import UTC, date, datetime
@@ -30,42 +28,37 @@ from src.services.project_query import (
     TaskSummaryDto,
 )
 
-EXPECTED_TOOLS = {
-    "list_project_tools",
-    "execute_project_tool",
-    "list_project_risks",
-    "get_project_risk",
-    "create_project_risk",
-    "update_project_risk",
-    "list_projects",
-    "get_project",
-    "list_tasks",
-    "get_task",
-    "list_comments",
-    "search_tasks",
-    "search_project_knowledge",
-    "read_project_knowledge",
-    "get_calendar_range",
-    "list_tasks_without_due_date",
-    "list_milestones",
-    "create_task",
-    "update_task",
-    "move_task",
-    "delete_task",
-    "add_comment",
-    "set_task_dates",
-    "create_milestone",
-}
-
 # Обязательные поля каждого инструмента: изменение этого множества ломает
 # уже настроенных внешних клиентов.
 EXPECTED_REQUIRED = {
-    "list_project_tools": {"project_key"},
-    "execute_project_tool": {"project_key", "name", "arguments"},
-    "read_project_knowledge": {"project_key", "request"},
-    "list_project_risks": {"project_key"},
-    "get_project_risk": {"project_key", "risk_key"},
-    "create_project_risk": {
+    "telos_create_project": {"key", "name", "request_id"},
+    "telos_get_latest_project_summary": {"project_key"},
+    "telos_list_project_members": {"project_key"},
+    "telos_list_stages": {"project_key"},
+    "telos_get_comment": {"task_key", "comment_id"},
+    "telos_list_task_activity": {"task_key"},
+    "telos_list_attachments": {"task_key"},
+    "telos_transfer_task": {"task_key", "target_project_key"},
+    "telos_update_comment": {"comment_id", "body"},
+    "telos_delete_comment": {"comment_id"},
+    "telos_set_checklist": {"task_key", "checklist", "checklist_revision"},
+    "telos_set_watchers": {"task_key", "observers"},
+    "telos_list_dependencies": {"project_key"},
+    "telos_create_dependency": {"predecessor", "successor"},
+    "telos_delete_dependency": {"project_key", "dependency_id"},
+    "telos_ask_aris": {"text"},
+    "telos_get_aris_result": {"request_id"},
+    "telos_list_personal_boards": {"args"},
+    "telos_get_board_scene": {"args"},
+    "telos_draw_board_diagram": {"args", "request_id"},
+    "telos_update_board_shapes": {"args", "request_id"},
+    "telos_arrange_board_objects": {"args", "request_id"},
+    "telos_list_project_tools": {"project_key"},
+    "telos_execute_project_tool": {"project_key", "name", "arguments"},
+    "telos_read_project_knowledge": {"project_key", "request"},
+    "telos_list_project_risks": {"project_key"},
+    "telos_get_project_risk": {"project_key", "risk_key"},
+    "telos_create_project_risk": {
         "project_key",
         "confirmed_by_user",
         "title",
@@ -74,32 +67,36 @@ EXPECTED_REQUIRED = {
         "impact",
         "response_strategy",
     },
-    "update_project_risk": {"project_key", "risk_key", "confirmed_by_user"},
-    "list_projects": set(),
-    "get_project": {"project_key"},
-    "list_tasks": {"project_key"},
-    "get_task": {"task_key"},
-    "list_comments": {"task_key"},
-    "search_tasks": {"project_key", "query"},
-    "search_project_knowledge": {"project_key", "query"},
-    "get_calendar_range": {"project_key", "date_from", "date_to"},
-    "list_tasks_without_due_date": {"project_key"},
-    "list_milestones": {"project_key"},
-    "create_task": {"project_key", "title"},
-    "update_task": {"task_key"},
-    "move_task": {"task_key", "stage"},
-    "delete_task": {"task_key"},
-    "add_comment": {"task_key", "body"},
-    "set_task_dates": {"task_key"},
-    "create_milestone": {"project_key", "title", "due_date"},
+    "telos_update_project_risk": {"project_key", "risk_key", "confirmed_by_user"},
+    "telos_list_projects": set(),
+    "telos_get_project": {"project_key"},
+    "telos_list_tasks": {"project_key"},
+    "telos_get_task": {"task_key"},
+    "telos_list_comments": {"task_key"},
+    "telos_search_tasks": {"project_key", "query"},
+    "telos_search_project_knowledge": {"project_key", "query"},
+    "telos_get_calendar_range": {"project_key", "date_from", "date_to"},
+    "telos_list_tasks_without_due_date": {"project_key"},
+    "telos_list_milestones": {"project_key"},
+    "telos_create_task": {"project_key", "title"},
+    "telos_update_task": {"task_key"},
+    "telos_move_task": {"task_key", "stage"},
+    "telos_delete_task": {"task_key"},
+    "telos_add_comment": {"task_key", "body"},
+    "telos_set_task_dates": {"task_key"},
+    "telos_create_milestone": {"project_key", "title", "due_date"},
 }
+
+
+EXPECTED_TOOLS = set(EXPECTED_REQUIRED)
 
 
 async def test_tool_names_are_frozen() -> None:
     """Набор публичных инструментов не меняется рефакторингом."""
     tools = await mcp_server.list_tools()
 
-    assert EXPECTED_TOOLS <= {tool.name for tool in tools}
+    assert len(EXPECTED_TOOLS) == 46
+    assert EXPECTED_TOOLS == {tool.name for tool in tools}
 
 
 async def test_required_arguments_are_frozen() -> None:
@@ -119,7 +116,7 @@ async def test_tools_never_expose_numeric_ids() -> None:
         if tool.name not in EXPECTED_TOOLS:
             continue
         properties = set(tool.input_schema.get("properties", {}))
-        forbidden = properties & {"project_id", "task_id", "comment_id", "milestone_id"}
+        forbidden = properties & {"project_id", "task_id", "milestone_id"}
         assert not forbidden, f"{tool.name} принимает числовой идентификатор: {forbidden}."
 
 
@@ -180,6 +177,7 @@ def test_presenter_keys_are_frozen() -> None:
         "start_date",
         "due_date",
         "description",
+        "description_meta",
         "total_tasks",
         "stages",
     }
@@ -222,6 +220,7 @@ def test_presenter_keys_are_frozen() -> None:
         "role",
         "wbs_path",
         "description",
+        "description_meta",
         "comment_count",
     }
     # Комментарий сохраняет свои ключи и ISO-формат времени.
@@ -234,7 +233,7 @@ def test_presenter_keys_are_frozen() -> None:
 
     result = comment_item(comment)
 
-    assert set(result) == {"task_key", "author", "created_at", "body"}
+    assert set(result) == {"task_key", "author", "created_at", "body", "body_meta"}
     assert result["created_at"] == "2026-09-01T10:00:00+00:00"
 
 

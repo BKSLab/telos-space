@@ -152,7 +152,7 @@ class TaskCreateInput(TaskCreateSchema, ToolInput):
 
 
 class TaskChangesInput(TaskUpdateSchema, ToolInput):
-    """Изменения задачи с необязательной expected_revision из свежего get_task."""
+    """Изменения задачи с необязательной expected_revision из свежего telos_get_task."""
 
 
 class TaskUpdateInput(TaskInput):
@@ -170,12 +170,12 @@ class TaskMoveInput(TaskInput):
 
 class TaskDeleteInput(TaskInput):
     expected_updated_at: datetime = Field(
-        description="updated_at из свежего get_task; удаление требует решения участника."
+        description="updated_at из свежего telos_get_task; удаление требует решения участника."
     )
 
 
 class ChecklistInput(TaskInput):
-    checklist_revision: int = Field(ge=0, description="Текущая версия чек-листа из get_task.")
+    checklist_revision: int = Field(ge=0, description="Текущая версия чек-листа из telos_get_task.")
     checklist: TaskChecklistSchema | None = Field(
         description="Полный чек-лист с ID пунктов; null удаляет его."
     )
@@ -228,7 +228,7 @@ class StageUpdateInput(StageInput):
     changes: StageChangesInput = Field(description="Изменяемые параметры стадии.")
 
 
-BOARD_ID_DESCRIPTION = "ID доски проекта из list_boards; не указан — первая доска проекта."
+BOARD_ID_DESCRIPTION = "ID доски проекта из telos_list_boards; не указан — первая доска проекта."
 
 
 class StickerListInput(PageInput):
@@ -440,7 +440,7 @@ class TaskStatusInput(ToolInput):
 
 class ProjectActionInput(ToolInput):
     project_key: str = Field(
-        min_length=1, max_length=32, description="Ключ проекта из list_my_projects, например PROJ."
+        min_length=1, max_length=32, description="Ключ проекта из telos_list_my_projects, например PROJ."
     )
     name: str = Field(min_length=1, max_length=64, description="Имя проектного действия.")
     arguments: dict[str, Any] = Field(

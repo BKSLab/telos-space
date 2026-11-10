@@ -62,14 +62,14 @@ async def test_write_requires_intent_and_trusted_transport(write_intent, transpo
         return_value={
             "action": {
                 "id": "saved",
-                "tool_name": "create_task",
+                "tool_name": "telos_create_task",
                 "title": "Создать задачу",
                 "status": "completed",
             }
         }
     )
     service.tools = AgentToolExecutor(
-        [AgentTool("create_task", "Создать задачу", TaskCreateInput, handler, mutating=True)]
+        [AgentTool("telos_create_task", "Создать задачу", TaskCreateInput, handler, mutating=True)]
     )
     prompts = []
     intents = []
@@ -87,7 +87,7 @@ async def test_write_requires_intent_and_trusted_transport(write_intent, transpo
                 answer="",
                 source_ids=[],
                 tool_calls=[
-                    AgentToolRequest(name="create_task", arguments={"title": "Проверка окна"})
+                    AgentToolRequest(name="telos_create_task", arguments={"title": "Проверка окна"})
                 ],
             )
         return AgentOutput(answer="Результат проверен.", source_ids=[])
@@ -111,10 +111,10 @@ async def test_read_answer_does_not_wait_for_the_write_check_and_write_does():
     """Чтение не запускает проверку, запись запускает её и ждёт решения."""
     service, project, runtime, _ = build_service()
     handler = AsyncMock(
-        return_value={"action": {"id": "a", "tool_name": "create_task", "status": "completed"}}
+        return_value={"action": {"id": "a", "tool_name": "telos_create_task", "status": "completed"}}
     )
     service.tools = AgentToolExecutor(
-        [AgentTool("create_task", "Создать задачу", TaskCreateInput, handler, mutating=True)]
+        [AgentTool("telos_create_task", "Создать задачу", TaskCreateInput, handler, mutating=True)]
     )
     release = asyncio.Event()
     intent_calls = 0
@@ -150,7 +150,7 @@ async def test_read_answer_does_not_wait_for_the_write_check_and_write_does():
         if len(steps) == 1:
             asyncio.get_running_loop().call_later(0.05, release.set)
             return AgentOutput(
-                tool_calls=[AgentToolRequest(name="create_task", arguments={"title": "Новая"})]
+                tool_calls=[AgentToolRequest(name="telos_create_task", arguments={"title": "Новая"})]
             )
         return AgentOutput(answer="Создал.", source_ids=[])
 
@@ -180,7 +180,7 @@ async def test_read_answer_does_not_wait_for_the_write_check_and_write_does():
         offered.append(kwargs["offered"])
         if len(steps) == 1:
             return AgentOutput(
-                tool_calls=[AgentToolRequest(name="create_task", arguments={"title": "Новая"})]
+                tool_calls=[AgentToolRequest(name="telos_create_task", arguments={"title": "Новая"})]
             )
         return AgentOutput(answer="Не создавал: поручения не было.", source_ids=[])
 
@@ -189,12 +189,12 @@ async def test_read_answer_does_not_wait_for_the_write_check_and_write_does():
         project_id=project.id, question="Есть задача про окно?", history=[], execution=execution
     )
     handler.assert_not_awaited()
-    assert "create_task" in offered[0] and "create_task" not in offered[1]
+    assert "telos_create_task" in offered[0] and "telos_create_task" not in offered[1]
     assert WRITE_NOT_REQUESTED in json.dumps(steps[1]["read_results"], ensure_ascii=False)
 
 
 async def test_project_action_by_key_does_not_bypass_the_write_check():
-    """run_project_action с изменяющим действием без поручения не пишет, чтение — проходит."""
+    """telos_run_project_action с изменяющим действием без поручения не пишет, чтение — проходит."""
     from src.agent.runtime import PROJECT_ACTION_TOOL, TimDeps, WriteGate, invoke
     from src.agent.tim import TimMode
 
@@ -213,8 +213,8 @@ async def test_project_action_by_key_does_not_bypass_the_write_check():
                 project_action,
                 modes=frozenset({TimMode.WIDGET_PERSONAL}),
             ),
-            AgentTool("create_task", "Создать", TaskCreateInput, AsyncMock(), mutating=True),
-            AgentTool("get_task", "Прочитать", TaskInput, AsyncMock()),
+            AgentTool("telos_create_task", "Создать", TaskCreateInput, AsyncMock(), mutating=True),
+            AgentTool("telos_get_task", "Прочитать", TaskInput, AsyncMock()),
         ]
     )
 
@@ -234,9 +234,9 @@ async def test_project_action_by_key_does_not_bypass_the_write_check():
     )
     context = SimpleNamespace(deps=deps, run_step=1, retry=0)
     tool = executor.tools[PROJECT_ACTION_TOOL]
-    for name in ("create_task", "get_task"):
+    for name in ("telos_create_task", "telos_get_task"):
         await invoke(context, tool, {"project_key": "P", "name": name, "arguments": {}})
-    assert seen == [("create_task", False), ("get_task", True)]
+    assert seen == [("telos_create_task", False), ("telos_get_task", True)]
 
 
 async def test_domain_tool_result_receives_verified_source_handle():
@@ -244,7 +244,7 @@ async def test_domain_tool_result_receives_verified_source_handle():
     service.tools = AgentToolExecutor(
         [
             AgentTool(
-                "get_task",
+                "telos_get_task",
                 "Прочитать задачу",
                 TaskInput,
                 AsyncMock(
@@ -262,7 +262,7 @@ async def test_domain_tool_result_receives_verified_source_handle():
         prompts.append(payload)
         if len(prompts) == 1:
             return AgentOutput(
-                tool_calls=[AgentToolRequest(name="get_task", arguments={"task_id": 7})]
+                tool_calls=[AgentToolRequest(name="telos_get_task", arguments={"task_id": 7})]
             )
         handle = payload["read_results"][0]["result"]["source_handle"]
         return AgentOutput(answer="Задача найдена.", source_ids=[handle])

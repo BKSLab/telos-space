@@ -21,7 +21,7 @@ from tests.integration.repositories.test_agent_project_actions import (
 )
 from tests.integration.repositories.test_agent_project_actions import invoke, result
 
-SUMMARY_TOOLS = ("get_task_statistics", "list_overdue_tasks", "list_recent_activity")
+SUMMARY_TOOLS = ("telos_get_task_statistics", "telos_list_overdue_tasks", "telos_list_recent_activity")
 
 
 async def seed(env):
@@ -29,12 +29,12 @@ async def seed(env):
     today = date.today()
     stages = {}
     for name, done in (("Бэклог", False), ("В работе", False), ("Готово", True)):
-        created = await invoke(env, "create_stage", {"name": name, "is_done_stage": done})
+        created = await invoke(env, "telos_create_stage", {"name": name, "is_done_stage": done})
         stages[name] = result(created)["stage"]["id"]
 
     async def make(title, stage, **fields):
         created = await invoke(
-            env, "create_task", {"title": title, "stage_id": stages[stage], **fields}
+            env, "telos_create_task", {"title": title, "stage_id": stages[stage], **fields}
         )
         return result(created)["task"]
 
@@ -56,7 +56,7 @@ async def test_statistics_break_down_by_stage_names_priority_and_assignee(action
     env = actions_env
     _, late, *_ = await seed(env)
 
-    stats = await invoke(env, "get_task_statistics")
+    stats = await invoke(env, "telos_get_task_statistics")
 
     assert stats["today"] == date.today().isoformat()
     assert stats["total"] == 5
@@ -74,7 +74,7 @@ async def test_overdue_lists_open_late_tasks_oldest_first_with_sources(actions_e
     env = actions_env
     _, late, later, *_ = await seed(env)
 
-    overdue = await invoke(env, "list_overdue_tasks")
+    overdue = await invoke(env, "telos_list_overdue_tasks")
 
     assert [item["task_key"] for item in overdue["items"]] == [late["key"], later["key"]]
     first = overdue["items"][0]
@@ -86,20 +86,20 @@ async def test_overdue_lists_open_late_tasks_oldest_first_with_sources(actions_e
     assert first["title"] == "Сверить акты"
     assert overdue["truncated"] is False
 
-    capped = await invoke(env, "list_overdue_tasks", {"limit": 1})
+    capped = await invoke(env, "telos_list_overdue_tasks", {"limit": 1})
     assert [item["task_key"] for item in capped["items"]] == [late["key"]]
     assert capped["truncated"] is True
     with pytest.raises(AgentToolArgumentsError):
-        await invoke(env, "list_overdue_tasks", {"limit": 31})
+        await invoke(env, "telos_list_overdue_tasks", {"limit": 31})
 
 
 async def test_recent_activity_names_tasks_by_key_and_title(actions_env):
     env = actions_env
     stages, late, later, *_ = await seed(env)
-    await invoke(env, "move_task", {"task_id": late["id"], "stage_id": stages["В работе"]})
-    await invoke(env, "add_comment", {"task_id": later["id"], "body_md": "Жду подпись"})
+    await invoke(env, "telos_move_task", {"task_id": late["id"], "stage_id": stages["В работе"]})
+    await invoke(env, "telos_add_comment", {"task_id": later["id"], "body_md": "Жду подпись"})
 
-    activity = await invoke(env, "list_recent_activity")
+    activity = await invoke(env, "telos_list_recent_activity")
 
     items = activity["items"]
     assert items, "история проекта пуста"
@@ -113,9 +113,9 @@ async def test_recent_activity_names_tasks_by_key_and_title(actions_env):
     stamps = [item["created_at"] for item in items]
     assert stamps == sorted(stamps, reverse=True)
 
-    assert len((await invoke(env, "list_recent_activity", {"limit": 1}))["items"]) == 1
+    assert len((await invoke(env, "telos_list_recent_activity", {"limit": 1}))["items"]) == 1
     with pytest.raises(AgentToolArgumentsError):
-        await invoke(env, "list_recent_activity", {"limit": 51})
+        await invoke(env, "telos_list_recent_activity", {"limit": 51})
 
 
 async def test_summaries_stay_inside_accessible_project(actions_env):
@@ -128,16 +128,16 @@ async def test_summaries_stay_inside_accessible_project(actions_env):
             await invoke(env, name, context=outsider)
     # В своём проекте без задач — пустые сводки, а не данные проекта 1.
     empty = replace(env.context, project_id=2)
-    assert (await invoke(env, "get_task_statistics", context=empty))["total"] == 0
-    assert (await invoke(env, "list_overdue_tasks", context=empty))["items"] == []
-    assert (await invoke(env, "list_recent_activity", context=empty))["items"] == []
+    assert (await invoke(env, "telos_get_task_statistics", context=empty))["total"] == 0
+    assert (await invoke(env, "telos_list_overdue_tasks", context=empty))["items"] == []
+    assert (await invoke(env, "telos_list_recent_activity", context=empty))["items"] == []
 
 
 def test_summaries_are_read_only_and_open_only_with_tasks_read_scope():
     definitions = {item.name: item for item in PROJECT_ACTIONS}
     for name in SUMMARY_TOOLS:
         assert definitions[name].mutating is False
-        assert ACTION_SCOPES[name] == ACTION_SCOPES["list_tasks"] == SCOPE_TASKS_READ
+        assert ACTION_SCOPES[name] == ACTION_SCOPES["telos_list_tasks"] == SCOPE_TASKS_READ
 
     def key(*scopes):
         return SimpleNamespace(api_key=object(), allows=lambda scope: scope in scopes)
@@ -149,7 +149,7 @@ def test_summaries_are_read_only_and_open_only_with_tasks_read_scope():
     reader = key(SCOPE_TASKS_READ)
     assert all(action_allowed(reader, name) for name in SUMMARY_TOOLS)
     assert set(SUMMARY_TOOLS) <= tools_for_scopes([SCOPE_TASKS_READ])
-    # Личный токен (без сервисного ключа) — по уровню токена, как list_tasks.
+    # Личный токен (без сервисного ключа) — по уровню токена, как telos_list_tasks.
     person = SimpleNamespace(api_key=None, allows=lambda scope: False)
     assert all(action_allowed(person, name) for name in SUMMARY_TOOLS)
 
@@ -159,22 +159,22 @@ async def test_get_task_by_key_returns_the_task_with_its_stage_name(actions_env)
     env = actions_env
     stages, late, *_ = await seed(env)
 
-    by_key = await invoke(env, "get_task", {"task_key": late["key"]})
-    by_id = await invoke(env, "get_task", {"task_id": late["id"]})
+    by_key = await invoke(env, "telos_get_task", {"task_key": late["key"]})
+    by_id = await invoke(env, "telos_get_task", {"task_id": late["id"]})
 
     assert by_key["task"]["id"] == late["id"] and by_key["task"] == by_id["task"]
     assert by_key["stage"] == {"id": stages["Бэклог"], "name": "Бэклог", "is_done_stage": False}
     assert by_key["source_id"] == f"task:{late['id']}"
-    assert (await invoke(env, "get_task", {"task_key": late["key"].lower()}))["task"]["id"] == (
+    assert (await invoke(env, "telos_get_task", {"task_key": late["key"].lower()}))["task"]["id"] == (
         late["id"]
     )
     number = late["key"].rpartition("-")[2]
     for wrong in (f"ZZ-{number}", f"{late['key'].rpartition('-')[0]}-99999"):
         with pytest.raises(AgentToolArgumentsError):
-            await invoke(env, "get_task", {"task_key": wrong})
+            await invoke(env, "telos_get_task", {"task_key": wrong})
     for arguments in ({}, {"task_id": late["id"], "task_key": late["key"]}):
         with pytest.raises(AgentToolArgumentsError):
-            await invoke(env, "get_task", arguments)
+            await invoke(env, "telos_get_task", arguments)
 
 
 async def test_task_list_rows_are_light_enough_to_fit_a_full_page(actions_env):
@@ -186,14 +186,14 @@ async def test_task_list_rows_are_light_enough_to_fit_a_full_page(actions_env):
     for index in range(25):
         await invoke(
             env,
-            "create_task",
+            "telos_create_task",
             {
                 "title": f"Задача с довольно длинным названием номер {index}",
                 "stage_id": stages["Бэклог"],
             },
         )
 
-    listed = await invoke(env, "list_tasks", {"limit": 30})
+    listed = await invoke(env, "telos_list_tasks", {"limit": 30})
 
     assert len(listed["items"]) == 30 and listed["total"] == 30
     assert estimate_tokens(encode(listed)) < 12000 // 3

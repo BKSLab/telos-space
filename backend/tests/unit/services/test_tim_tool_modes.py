@@ -31,17 +31,17 @@ def test_chat_mode_has_no_personal_or_cross_project_tools_and_personal_mode_no_r
     widget = names(tools, TimMode.WIDGET_PROJECT)
     personal = names(tools, TimMode.WIDGET_PERSONAL)
     personal_actions = {item.name for item in PERSONAL_ACTIONS}
-    assert not chat & (personal_actions | {"run_project_action", "attach_uploaded_file"})
-    assert {"list_tasks", "read_source", "get_tool_schemas"} <= chat
-    assert personal_actions | {"run_project_action", "attach_uploaded_file", "list_tasks"} <= widget
-    assert personal_actions | {"run_project_action", "get_tool_schemas"} <= personal
-    assert not personal & {"list_tasks", "read_source", "search_sources", "attach_uploaded_file"}
+    assert not chat & (personal_actions | {"telos_run_project_action", "telos_attach_uploaded_file"})
+    assert {"telos_list_tasks", "telos_read_source", "telos_get_tool_schemas"} <= chat
+    assert personal_actions | {"telos_run_project_action", "telos_attach_uploaded_file", "telos_list_tasks"} <= widget
+    assert personal_actions | {"telos_run_project_action", "telos_get_tool_schemas"} <= personal
+    assert not personal & {"telos_list_tasks", "telos_read_source", "telos_search_sources", "telos_attach_uploaded_file"}
 
 
 async def test_executor_refuses_tool_outside_mode_even_if_model_asks():
     tools, actions = executor()
     chat = AgentToolContext(project_id=1, user_id=1, can_write=True, mode=TimMode.PROJECT_CHAT)
-    refused = await tools.execute(chat, AgentToolRequest(name="list_my_tasks", arguments={}))
+    refused = await tools.execute(chat, AgentToolRequest(name="telos_list_my_tasks", arguments={}))
     assert "error" in refused
     actions.execute.assert_not_awaited()
     personal = AgentToolContext(
@@ -50,20 +50,20 @@ async def test_executor_refuses_tool_outside_mode_even_if_model_asks():
     await tools.execute(
         personal,
         AgentToolRequest(
-            name="run_project_action",
-            arguments={"project_key": "prj", "name": "list_tasks", "arguments": {}},
+            name="telos_run_project_action",
+            arguments={"project_key": "prj", "name": "telos_list_tasks", "arguments": {}},
         ),
     )
     context = actions.execute.await_args.kwargs["context"]
     assert context.project_id == 7 and context.user_id == 1
-    # Схемы проектных действий нужны и вне проекта — для run_project_action.
+    # Схемы проектных действий нужны и вне проекта — для telos_run_project_action.
     schemas = await tools.execute(
         personal,
         AgentToolRequest(
-            name="get_tool_schemas", arguments={"names": ["create_task", "read_source"]}
+            name="telos_get_tool_schemas", arguments={"names": ["telos_create_task", "telos_read_source"]}
         ),
     )
-    assert [item["name"] for item in schemas["tools"]] == ["create_task"]
+    assert [item["name"] for item in schemas["tools"]] == ["telos_create_task"]
 
 
 def test_personal_actions_never_leak_into_mcp_catalog():
@@ -75,8 +75,8 @@ def test_personal_actions_never_leak_into_mcp_catalog():
 
 
 def test_structure_permissions_are_separate_from_tasks_for_external_agent():
-    writes = {"create_wbs_node", "update_wbs_node", "move_wbs_node", "delete_wbs_node", "place_task"}
+    writes = {"telos_create_wbs_node", "telos_update_wbs_node", "telos_move_wbs_node", "telos_delete_wbs_node", "telos_place_task"}
     assert not writes & tools_for_scopes({"tasks:write", "tasks:delete"})
-    assert "get_structure" not in tools_for_scopes({"projects:read"})
+    assert "telos_get_structure" not in tools_for_scopes({"projects:read"})
     assert writes <= tools_for_scopes({"structure:write"})
-    assert "get_structure" in tools_for_scopes({"structure:read"})
+    assert "telos_get_structure" in tools_for_scopes({"structure:read"})

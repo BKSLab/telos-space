@@ -42,7 +42,7 @@ from tests.integration.repositories.test_agent_conversations_repository import (
 )
 
 TEST_SCOPES = [SCOPE_TASKS_READ, SCOPE_TASKS_WRITE, SCOPE_TASKS_DELETE, SCOPE_COMMENTS_WRITE]
-WRITE_NAMES = ("create_task", "add_comment")
+WRITE_NAMES = ("telos_create_task", "telos_add_comment")
 
 
 @pytest_asyncio.fixture
@@ -98,7 +98,7 @@ def context(env, user_id=1):
 
 
 async def arguments(env, name):
-    if name == "create_task":
+    if name == "telos_create_task":
         return {
             "project_key": "P1",
             "title": "Проверить идемпотентную запись",
@@ -122,7 +122,7 @@ async def arguments(env, name):
 
 async def call(env, name, payload, request_id=None, user_id=1):
     # tool_context заново собирает AuthService и AgentActionsService на каждый вызов.
-    return await getattr(write_tools, name)(
+    return await mcp_server._tool_manager.get_tool(name).fn(
         context=context(env, user_id), request_id=request_id, **payload
     )
 
@@ -136,7 +136,7 @@ async def snapshot(env):
 
 
 async def assert_single_write(env, name, request_id, baseline):
-    model = Task if name == "create_task" else TaskComment
+    model = Task if name == "telos_create_task" else TaskComment
     current = await snapshot(env)
     assert current[model.__tablename__] == baseline[model.__tablename__] + 1
     assert current[AgentToolRun.__tablename__] == baseline[AgentToolRun.__tablename__] + 1
@@ -163,14 +163,14 @@ async def test_lost_response_retry_uses_fresh_services_and_unkeyed_calls_still_c
     assert repeated == lost_response
     assert await snapshot(env) == committed
     await assert_single_write(env, name, request_id, baseline)
-    if name == "add_comment":
+    if name == "telos_add_comment":
         assert repeated["author"] == "1 Участник"
         assert repeated["comment_id"] > 0 and repeated["created_at"]
     else:
         assert repeated["created"] is True and repeated["task_key"].startswith("P1-")
     first_unkeyed = await call(env, name, payload)
     second_unkeyed = await call(env, name, payload)
-    identity = "task_key" if name == "create_task" else "comment_id"
+    identity = "task_key" if name == "telos_create_task" else "comment_id"
     assert len({repeated[identity], first_unkeyed[identity], second_unkeyed[identity]}) == 3
     assert (await snapshot(env))["agent_tool_runs"] == 1
 
@@ -212,7 +212,7 @@ async def test_same_key_with_different_arguments_is_a_tool_error(mcp_env, name):
     request_id = uuid4()
     await call(env, name, payload, request_id)
     committed = await snapshot(env)
-    changed = {**payload, "title" if name == "create_task" else "body": "Другой текст"}
+    changed = {**payload, "title" if name == "telos_create_task" else "body": "Другой текст"}
     with pytest.raises(ToolError, match="Ключ повтора уже использован.*request_id"):
         await call(env, name, changed, request_id)
     assert await snapshot(env) == committed
@@ -220,10 +220,10 @@ async def test_same_key_with_different_arguments_is_a_tool_error(mcp_env, name):
 
 async def test_create_receipt_replays_original_names_after_stage_rename_and_member_removal(mcp_env):
     env = mcp_env
-    payload = {**await arguments(env, "create_task"), "observers": ["user2"]}
+    payload = {**await arguments(env, "telos_create_task"), "observers": ["user2"]}
     baseline = await snapshot(env)
     request_id = uuid4()
-    original = await call(env, "create_task", payload, request_id)
+    original = await call(env, "telos_create_task", payload, request_id)
     async with env.factory() as session:
         await session.execute(
             update(ProjectStage)
@@ -235,16 +235,14 @@ async def test_create_receipt_replays_original_names_after_stage_rename_and_memb
         )
         await session.commit()
     committed = await snapshot(env)
-    assert await call(env, "create_task", payload, request_id) == original
-    legacy = mcp_server._tool_manager.get_tool("create_task").fn
-    assert await legacy(context=context(env), request_id=request_id, **payload) == {
-        key: value for key, value in original.items() if key != "revision"
-    }
+    assert await call(env, "telos_create_task", payload, request_id) == original
+    registered = mcp_server._tool_manager.get_tool("telos_create_task").fn
+    assert await registered(context=context(env), request_id=request_id, **payload) == original
     changed = {**payload, "stage": "Несуществующая новая стадия"}
-    for tool in (write_tools.create_task, legacy):
+    for tool in (write_tools.create_task, registered):
         with pytest.raises(ToolError, match="Ключ повтора уже использован.*request_id"):
             await tool(context=context(env), request_id=request_id, **changed)
-    await assert_single_write(env, "create_task", request_id, baseline)
+    await assert_single_write(env, "telos_create_task", request_id, baseline)
     assert await snapshot(env) == committed
 
 
@@ -291,9 +289,9 @@ async def test_retry_rechecks_project_membership_before_returning_receipt(mcp_en
 @pytest.mark.parametrize("user_id", (1, 2))
 async def test_create_retry_does_not_return_receipt_for_transferred_task(mcp_env, user_id):
     env = mcp_env
-    payload = await arguments(env, "create_task")
+    payload = await arguments(env, "telos_create_task")
     request_id = uuid4()
-    created = await call(env, "create_task", payload, request_id, user_id=user_id)
+    created = await call(env, "telos_create_task", payload, request_id, user_id=user_id)
     moved = await write_tools.transfer_task(
         context=context(env),
         task_key=created["task_key"],
@@ -303,20 +301,20 @@ async def test_create_retry_does_not_return_receipt_for_transferred_task(mcp_env
     assert moved["task_key"].startswith("P2-")
     committed = await snapshot(env)
     with pytest.raises(ToolError):
-        await call(env, "create_task", payload, request_id, user_id=user_id)
+        await call(env, "telos_create_task", payload, request_id, user_id=user_id)
     assert await snapshot(env) == committed
 
 
 async def test_create_retry_does_not_return_receipt_for_deleted_task(mcp_env):
     env = mcp_env
-    payload = await arguments(env, "create_task")
+    payload = await arguments(env, "telos_create_task")
     request_id = uuid4()
-    created = await call(env, "create_task", payload, request_id)
+    created = await call(env, "telos_create_task", payload, request_id)
     await write_tools.delete_task(context=context(env), task_key=created["task_key"], confirm=True)
     committed = await snapshot(env)
     assert committed["tasks"] == 0 and committed["agent_tool_runs"] == 1
     with pytest.raises(ToolError):
-        await call(env, "create_task", payload, request_id)
+        await call(env, "telos_create_task", payload, request_id)
     assert await snapshot(env) == committed
 
 
@@ -396,6 +394,29 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                 )
                 return rpc_body(response)
 
+            listing = rpc_body(await client.post("/", json={
+                "jsonrpc": "2.0", "id": 2, "method": "tools/list",
+            }))["result"]["tools"]
+            names = {tool["name"] for tool in listing}
+            assert len(names) == 46 and all(name.startswith("telos_") for name in names)
+            removed_names = {"tt_" + name.removeprefix("telos_") for name in names}
+            removed_names -= {"tt_ask_aris", "tt_get_aris_result"}
+            removed_names |= {"tt_projects_ask", "tt_projects_result"}
+            removed_names |= {
+                "list_project_tools", "execute_project_tool", "list_project_risks", "get_project_risk",
+                "create_project_risk", "update_project_risk", "list_projects", "get_project", "list_tasks",
+                "get_task", "list_comments", "search_tasks", "search_project_knowledge", "read_project_knowledge",
+                "get_calendar_range", "list_tasks_without_due_date", "list_milestones", "create_task", "update_task",
+                "move_task", "delete_task", "add_comment", "set_task_dates", "create_milestone",
+            }
+            untouched = await snapshot(env)
+            assert len(removed_names) == 70 and not names & removed_names
+            for removed in sorted(removed_names):
+                refused = await invoke(removed, {})
+                assert refused["result"]["isError"] is True
+                assert "Unknown tool" in refused["result"]["content"][0]["text"]
+            assert await snapshot(env) == untouched
+
             long_description = (
                 "# Полный исходный текст\n\n"
                 + "Кириллица, **Markdown**, emoji 🔎 и строки таблицы | A | Б |.\n" * 120
@@ -407,19 +428,19 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                 "description": long_description,
                 "request_id": str(uuid4()),
             }
-            created = tool_result(await invoke("tt_create_task", create_payload))
-            assert tool_result(await invoke("tt_create_task", create_payload)) == created
+            created = tool_result(await invoke("telos_create_task", create_payload))
+            assert tool_result(await invoke("telos_create_task", create_payload)) == created
             lookup = {"task_key": created["task_key"]}
-            preview = tool_result(await invoke("tt_get_task", lookup))
+            preview = tool_result(await invoke("telos_get_task", lookup))
             assert preview["description_meta"]["truncated"] is True
             assert preview["description_meta"]["length"] == len(long_description)
-            full = tool_result(await invoke("tt_get_task", {**lookup, "full_text": True}))
+            full = tool_result(await invoke("telos_get_task", {**lookup, "full_text": True}))
             assert full["description"].encode("utf-8") == long_description.encode("utf-8")
             assert full["description_meta"]["truncated"] is False
             revised_description = long_description + "\nСогласованное дополнение."
             updated = tool_result(
                 await invoke(
-                    "tt_update_task",
+                    "telos_update_task",
                     {
                         **lookup,
                         "description": revised_description,
@@ -429,7 +450,7 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
             )
             assert updated["revision"] == full["revision"] + 1
             stale = await invoke(
-                "tt_update_task",
+                "telos_update_task",
                 {
                     **lookup,
                     "description": "Устаревшая замена",
@@ -437,7 +458,7 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                 },
             )
             assert stale["result"]["isError"] is True
-            fresh = tool_result(await invoke("tt_get_task", {**lookup, "full_text": True}))
+            fresh = tool_result(await invoke("telos_get_task", {**lookup, "full_text": True}))
             assert fresh["description"] == revised_description
             assert fresh["revision"] == updated["revision"]
             comment_payload = {
@@ -445,16 +466,28 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                 "body": "Комментарий через MCP HTTP",
                 "request_id": str(uuid4()),
             }
-            comment = tool_result(await invoke("tt_add_comment", comment_payload))
-            assert tool_result(await invoke("tt_add_comment", comment_payload)) == comment
+            comment = tool_result(await invoke("telos_add_comment", comment_payload))
+            assert tool_result(await invoke("telos_add_comment", comment_payload)) == comment
             assert comment["comment_id"] > 0 and comment["author"] == "1 Участник"
+            temporary = tool_result(await invoke("telos_create_task", {
+                "project_key": "P1", "title": "Явно подтверждаемое удаление",
+            }))
+            before_delete = await snapshot(env)
+            no_confirmation = await invoke("telos_delete_task", {"task_key": temporary["task_key"]})
+            assert no_confirmation["result"]["isError"] is True
+            assert "confirm=true" in no_confirmation["result"]["content"][0]["text"]
+            assert await snapshot(env) == before_delete
+            deleted = tool_result(await invoke("telos_delete_task", {
+                "task_key": temporary["task_key"], "confirm": True,
+            }))
+            assert deleted == {"task_key": temporary["task_key"], "deleted": True}
             committed = await snapshot(env)
             assert committed["tasks"] == 1 and committed["task_comments"] == 1
             assert committed["agent_tool_runs"] == 2
-            conflict = await invoke("tt_create_task", {**create_payload, "title": "Другой текст"})
+            conflict = await invoke("telos_create_task", {**create_payload, "title": "Другой текст"})
             assert conflict["result"]["isError"] is True
             invalid_uuid = await invoke(
-                "tt_create_task", {**create_payload, "request_id": "invalid"}
+                "telos_create_task", {**create_payload, "request_id": "invalid"}
             )
             assert invalid_uuid["result"]["isError"] is True
             async with env.factory() as session:
@@ -464,13 +497,13 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                     .values(scopes=[SCOPE_TASKS_READ])
                 )
                 await session.commit()
-            denied = await invoke("tt_create_task", create_payload)
+            denied = await invoke("telos_create_task", create_payload)
             assert denied["result"]["isError"] is True
             async with env.factory() as session:
                 await session.execute(
                     update(ApiKey).where(ApiKey.id == env.keys[1].id).values(is_active=False)
                 )
                 await session.commit()
-            revoked = await invoke("tt_add_comment", comment_payload)
+            revoked = await invoke("telos_add_comment", comment_payload)
             assert revoked["result"]["isError"] is True
             assert await snapshot(env) == committed

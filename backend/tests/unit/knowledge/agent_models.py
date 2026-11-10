@@ -4,7 +4,7 @@
 JSON-цикла (``answer``/``source_ids``/``tool_calls``/``reads``): на каждом шаге
 FunctionModel передаёт дублёру ``llm_client.get_structured_response`` входной
 JSON, дополненный ``read_results`` из результатов инструментов, и переводит
-его ответ в нативные вызовы инструментов или в ``final_result``. Инструменты
+его ответ в нативные вызовы инструментов или в ``telos_submit_answer``. Инструменты
 при этом исполняет настоящий цикл PydanticAI: prepare_tools, проверка
 аргументов, реестр действий, бюджет контекста.
 """
@@ -56,8 +56,8 @@ def tool_results(messages: list[ModelMessage]) -> list[dict[str, Any]]:
             if isinstance(part, ToolCallPart):
                 calls[part.tool_call_id] = part
             elif isinstance(part, ToolReturnPart) and part.tool_name not in {
-                "final_result",
-                "load_capability",
+                "telos_submit_answer",
+                "telos_load_capability",
             }:
                 call = calls.get(part.tool_call_id)
                 results.append(
@@ -76,7 +76,7 @@ def final(answer: str = "", source_ids: list[str] | None = None) -> ModelRespons
     """Ответ модели инструментом окончательного ответа."""
     return ModelResponse(
         parts=[
-            ToolCallPart("final_result", {"answer": answer, "source_ids": list(source_ids or [])})
+            ToolCallPart("telos_submit_answer", {"answer": answer, "source_ids": list(source_ids or [])})
         ]
     )
 
@@ -89,27 +89,27 @@ def legacy_model(llm_client) -> FunctionModel:
         # Модель-дублёр сначала проходит настоящий loader, чтобы его инструменты,
         # права и ленивое чтение контекста исполнились тем же runtime, что в приложении.
         instructions = info.instructions or ""
-        if any(tool.name == "load_capability" for tool in info.function_tools):
+        if any(tool.name == "telos_load_capability" for tool in info.function_tools):
             requested = {}
             loaded = set()
             for message in messages:
                 for part in message.parts:
-                    if isinstance(part, ToolCallPart) and part.tool_name == "load_capability":
+                    if isinstance(part, ToolCallPart) and part.tool_name == "telos_load_capability":
                         requested[part.tool_call_id] = part.args_as_dict().get("id")
-                    elif isinstance(part, ToolReturnPart) and part.tool_name == "load_capability":
+                    elif isinstance(part, ToolReturnPart) and part.tool_name == "telos_load_capability":
                         loaded.add(requested.get(part.tool_call_id))
             available = re.findall(r"^- ([a-z_]+):", instructions, re.MULTILINE)
             remaining = [capability for capability in available if capability not in loaded]
             if remaining:
                 return ModelResponse(
                     parts=[
-                        ToolCallPart("load_capability", {"id": capability})
+                        ToolCallPart("telos_load_capability", {"id": capability})
                         for capability in remaining[:8]
                     ]
                 )
         for message in messages:
             for part in message.parts:
-                if isinstance(part, ToolReturnPart) and part.tool_name == "load_capability":
+                if isinstance(part, ToolReturnPart) and part.tool_name == "telos_load_capability":
                     if isinstance(part.content, dict):
                         instructions += "\n" + str(part.content.get("instructions", ""))
         payload = prompt_payload(messages)

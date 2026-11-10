@@ -4,7 +4,7 @@ const KINDS: Record<string, KnowledgeEntityType> = { task: "task", document: "do
 const text = (value: unknown): string | null => typeof value === "string" && value.trim() ? value : null;
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
-/** Старые результаты действий тоже отображаются карточками, без миграции истории. */
+/** Извлекает карточки сущностей из результата или предварительного описания действия. */
 export function actionSources(action: AgentToolRun): KnowledgeSource[] {
     const result = action.status === "pending" || action.status === "rejected" ? record(action.result.preview) : action.result;
     return Object.entries(KINDS).flatMap(([key, kind]) => {

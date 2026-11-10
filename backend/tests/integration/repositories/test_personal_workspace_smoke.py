@@ -118,13 +118,13 @@ async def test_personal_board_to_project_task_moves_and_report_search(agent_env,
         "edges": [{"source": {"type": "node", "key": "intake"},
                    "target": {"type": "node", "key": "done"}}],
     }
-    await run_action(executor, personal, "draw_personal_board_diagram", diagram, allow_write=False)
+    await run_action(executor, personal, "telos_draw_personal_board_diagram", diagram, allow_write=False)
     async with env.factory() as session:
         assert await session.scalar(select(func.count()).select_from(BoardShape)) == 0
         assert await session.scalar(select(func.count()).select_from(AgentToolRun)) == 0
-    drawn = await run_action(executor, personal, "draw_personal_board_diagram", diagram)
+    drawn = await run_action(executor, personal, "telos_draw_personal_board_diagram", diagram)
     shape_id = drawn["board_change"]["batch"]["id_map"]["node_intake"]
-    await run_action(executor, personal, "update_personal_board_shapes", {
+    await run_action(executor, personal, "telos_update_personal_board_shapes", {
         "board_id": board.id,
         "updates": [{"id": shape_id, "revision": 1, "data": {"label": "Приёмка согласована"}}],
     })
@@ -153,9 +153,9 @@ async def test_personal_board_to_project_task_moves_and_report_search(agent_env,
     }
     assert next(shape for shape in scene.shapes if shape.id == shape_id).label == edited.label
 
-    task = (await run_action(executor, project, "create_task", {"title": "Проверить итог схемы"}))["task"]
-    node = (await run_action(executor, project, "create_wbs_node", {"title": "Приёмка результата"}))["node"]
-    placed = await run_action(executor, project, "place_task", {
+    task = (await run_action(executor, project, "telos_create_task", {"title": "Проверить итог схемы"}))["task"]
+    node = (await run_action(executor, project, "telos_create_wbs_node", {"title": "Приёмка результата"}))["node"]
+    placed = await run_action(executor, project, "telos_place_task", {
         "task_id": task["id"], "wbs_node_id": node["id"], "before_task_id": None,
     })
     assert placed["task"]["wbs_node_id"] == node["id"]
@@ -176,15 +176,15 @@ async def test_personal_board_to_project_task_moves_and_report_search(agent_env,
     assert node["id"] in {item.id for item in structure.nodes}
 
     body = "Итог: алмазопроверка завершена, схема и задача прошли сквозную приёмку."
-    published = await run_action(executor, project, "publish_task_report", {
+    published = await run_action(executor, project, "telos_publish_task_report", {
         "task_id": task["id"], "expected_revision": 0, "body_md": body,
     })
-    read = await run_action(executor, project, "get_task_report", {"task_id": task["id"]})
-    listed = await run_action(executor, project, "list_task_reports", {})
+    read = await run_action(executor, project, "telos_get_task_report", {"task_id": task["id"]})
+    listed = await run_action(executor, project, "telos_list_task_reports", {})
     assert published["report"]["revision"] == 1 and published["report"]["author_name"] == "1 Участник"
     assert read["text"] == body and read["source_id"] == published["source_id"]
     assert listed["items"][0]["task_id"] == task["id"] and listed["items"][0]["preview"] == body
-    search = KnowledgeReadRequest(name="search_sources", entity_type=SourceType.TASK_REPORT, query="алмазопроверка")
+    search = KnowledgeReadRequest(name="telos_search_sources", entity_type=SourceType.TASK_REPORT, query="алмазопроверка")
     hits = await query.read_knowledge(project_id=project_id, request=search)
     assert [item["source_id"] for item in hits["items"]] == [published["source_id"]]
 
@@ -200,6 +200,6 @@ async def test_personal_board_to_project_task_moves_and_report_search(agent_env,
         SESSION_FACTORY_STATE_KEY: env.factory}, headers={"Authorization": f"Bearer {secret}"})
     assert await read_project_knowledge(context, "SMOKE", search) == hits
     source = await read_project_knowledge(context, "SMOKE", KnowledgeReadRequest(
-        name="read_source", source_id=published["source_id"], max_chars=8000))
+        name="telos_read_source", source_id=published["source_id"], max_chars=8000))
     assert source["entity_type"] == "task_report" and body in source["text"]
     env.llm.get_structured_response.assert_not_awaited()

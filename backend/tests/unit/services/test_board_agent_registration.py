@@ -29,10 +29,10 @@ SRC = Path(__file__).resolve().parents[3] / "src"
 def test_board_scopes_are_explicit_and_not_implied_by_task_write():
     assert SCOPE_BOARDS_READ in API_SCOPES and SCOPE_BOARDS_READ in READ_SCOPES
     assert SCOPE_BOARDS_WRITE in WRITE_SCOPES
-    assert "draw_board_diagram" not in tools_for_scopes(["tasks:write"])
-    assert "draw_personal_board_diagram" in tools_for_scopes([SCOPE_BOARDS_WRITE])
-    assert "get_board_scene" in tools_for_scopes([SCOPE_BOARDS_READ])
-    assert ACTION_SCOPES["update_personal_board_shapes"] == SCOPE_BOARDS_WRITE
+    assert "telos_draw_board_diagram" not in tools_for_scopes(["tasks:write"])
+    assert "telos_draw_personal_board_diagram" in tools_for_scopes([SCOPE_BOARDS_WRITE])
+    assert "telos_get_board_scene" in tools_for_scopes([SCOPE_BOARDS_READ])
+    assert ACTION_SCOPES["telos_update_personal_board_shapes"] == SCOPE_BOARDS_WRITE
 
 
 def test_catalog_registers_project_and_widget_only_personal_variants():
@@ -46,15 +46,15 @@ def test_catalog_registers_project_and_widget_only_personal_variants():
         ):
             entries[node.args[0].value] = node
     for name in (
-        "get_board_scene",
-        "draw_board_diagram",
-        "update_board_shapes",
-        "arrange_board_objects",
-        "list_personal_boards",
-        "get_personal_board_scene",
-        "draw_personal_board_diagram",
-        "update_personal_board_shapes",
-        "arrange_personal_board_objects",
+        "telos_get_board_scene",
+        "telos_draw_board_diagram",
+        "telos_update_board_shapes",
+        "telos_arrange_board_objects",
+        "telos_list_personal_boards",
+        "telos_get_personal_board_scene",
+        "telos_draw_personal_board_diagram",
+        "telos_update_personal_board_shapes",
+        "telos_arrange_personal_board_objects",
     ):
         assert name in entries
         node = entries[name]
@@ -63,7 +63,7 @@ def test_catalog_registers_project_and_widget_only_personal_variants():
             assert kwargs["needs_project"].value is False
             assert kwargs["modes"].id == "WIDGET_MODES"
     # Destructive existing actions still enter the confirmation path.
-    for name in ("delete_task", "delete_sticker", "delete_document"):
+    for name in ("telos_delete_task", "telos_delete_sticker", "telos_delete_document"):
         assert next(
             k.value.value for k in entries[name].keywords if k.arg == "requires_confirmation"
         )
@@ -79,7 +79,7 @@ def test_mcp_registration_has_read_write_scopes_actor_and_required_retry_id():
         declaration = tool.decorator_list[0]
         kwargs = {item.arg: item.value for item in declaration.keywords}
         is_write = kwargs["scope"].id == "SCOPE_BOARDS_WRITE"
-        assert kwargs["name"].value.startswith("tt_")
+        assert kwargs["name"].value.startswith("telos_")
         if is_write:
             params = [a.arg for a in tool.args.args]
             assert "actor" in params and "request_id" in params
@@ -95,7 +95,7 @@ def test_mcp_registration_has_read_write_scopes_actor_and_required_retry_id():
     "can_write,allowed,mode",
     [
         (False, None, TimMode.WIDGET_PERSONAL),
-        (True, frozenset({"create_task"}), TimMode.WIDGET_PERSONAL),
+        (True, frozenset({"telos_create_task"}), TimMode.WIDGET_PERSONAL),
         (True, None, TimMode.PROJECT_CHAT),
     ],
 )
@@ -104,7 +104,7 @@ async def test_personal_drawing_executor_refuses_readonly_missing_scope_and_proj
 ):
     handler = AsyncMock()
     tool = AgentTool(
-        name="draw_personal_board_diagram",
+        name="telos_draw_personal_board_diagram",
         description="diagram",
         parameters=BoardDiagramInput,
         handler=handler,

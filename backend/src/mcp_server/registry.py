@@ -1,14 +1,14 @@
 """Реестр инструментов MCP: имя, право из ``api_scopes`` и признак записи.
 
-Каждый инструмент объявляется декоратором ``tt_tool`` — он регистрирует
+Каждый инструмент объявляется декоратором ``telos_tool`` — он регистрирует
 его на сервере и записывает, какое право ключа он требует. Проверка права
 выполняется централизованно в ``tool_context``: декоратор кладёт описание
 вызываемого инструмента в переменную контекста, а контекст инструмента
 сверяет его с правами предъявленного ключа. Инструмент без записи в
 реестре вызвать нельзя — ``tool_context`` откажет (закрыто по умолчанию).
 
-Все имена начинаются с ``tt_``: агент внешнего клиента сливает инструменты
-нескольких MCP-серверов, и у bitrix24-mcp есть свои ``create_task``.
+Все имена следуют правилу ``telos_<действие>_<сущность>``: единый префикс
+отделяет инструменты TELOS SPACE от инструментов других MCP-серверов.
 
 По этому же реестру собирается единый каталог справки
 (``python -m src.integration_docs``).
@@ -27,10 +27,11 @@ from typing import Any
 from mcp.server.mcpserver.exceptions import ToolError
 
 from src.utils.api_scopes import API_SCOPES, WRITE_SCOPES
+from src.utils.tool_names import TOOL_PREFIX as TOOL_PREFIX
+from src.utils.tool_names import require_canonical_tool_name
 
 logger = logging.getLogger(__name__)
 
-TOOL_PREFIX = "tt_"
 #: Параметр «от чьего имени» у пишущих инструментов.
 ACTOR_PARAM = "actor"
 
@@ -40,7 +41,7 @@ class ToolSpec:
     """Описание инструмента для проверки прав и справки.
 
     Attributes:
-        name: Имя инструмента с префиксом ``tt_``.
+        name: Имя инструмента в формате ``telos_<действие>_<сущность>``.
         title: Короткое название.
         description: Что делает инструмент (видит агент).
         scope: Право из реестра ``api_scopes``.
@@ -62,7 +63,6 @@ class ToolCall:
     actor: str | None
     started: float
     started_at: datetime
-    legacy: bool = False
     principal: Any = None
     session_factory: Any = None
     params: dict = field(default_factory=dict)
@@ -70,7 +70,6 @@ class ToolCall:
 
 TOOL_REGISTRY: dict[str, ToolSpec] = {}
 _current_call: ContextVar[ToolCall | None] = ContextVar("mcp_tool_call", default=None)
-_legacy_call: ContextVar[bool] = ContextVar("mcp_legacy_call", default=False)
 
 
 def current_tool_call() -> ToolCall | None:
@@ -78,7 +77,7 @@ def current_tool_call() -> ToolCall | None:
     return _current_call.get()
 
 
-def tt_tool(
+def telos_tool(
     *,
     name: str,
     title: str,
@@ -90,7 +89,7 @@ def tt_tool(
     """Регистрирует инструмент на сервере вместе с его правом.
 
     Args:
-        name: Имя инструмента, обязательно с префиксом ``tt_``.
+        name: Имя инструмента, обязательно в формате ``telos_<действие>_<сущность>``.
         title: Короткое название.
         description: Описание для агента.
         scope: Требуемое право из ``api_scopes``.
@@ -104,8 +103,7 @@ def tt_tool(
     """
     from src.mcp_server.server import mcp_server
 
-    if not name.startswith(TOOL_PREFIX):
-        raise ValueError(f"Инструмент {name}: имя обязано начинаться с {TOOL_PREFIX}.")
+    require_canonical_tool_name(name)
     if scope not in API_SCOPES:
         raise ValueError(f"Инструмент {name}: неизвестное право {scope}.")
     if name in TOOL_REGISTRY:
@@ -124,7 +122,6 @@ def tt_tool(
             actor = kwargs.get(ACTOR_PARAM)
             call = ToolCall(
                 spec=spec,
-                legacy=_legacy_call.get(),
                 actor=actor.strip() if isinstance(actor, str) and actor.strip() else None,
                 started=time.perf_counter(),
                 started_at=datetime.now(UTC),
@@ -159,56 +156,6 @@ def tt_tool(
             arguments_model.model_config = {**arguments_model.model_config, "extra": "forbid"}
             arguments_model.model_rebuild(force=True)
             registered.parameters = arguments_model.model_json_schema(by_alias=True)
-        legacy_name = name.removeprefix("tt_")
-        legacy_names = {
-            "list_project_tools", "execute_project_tool", "list_project_risks", "get_project_risk",
-            "create_project_risk", "update_project_risk", "list_projects", "get_project", "list_tasks",
-            "get_task", "list_comments", "search_tasks", "search_project_knowledge", "read_project_knowledge",
-            "get_calendar_range", "list_tasks_without_due_date", "list_milestones", "create_task", "update_task",
-            "move_task", "delete_task", "add_comment", "set_task_dates", "create_milestone",
-        }
-        if legacy_name in legacy_names:
-            @functools.wraps(wrapper)
-            async def legacy_wrapper(*args, **kwargs):
-                legacy_token = _legacy_call.set(True)
-                try:
-                    result = await wrapper(*args, **kwargs)
-                    if legacy_name == "list_tasks" and isinstance(result, dict):
-                        return result["items"]
-                    if legacy_name in {"get_task", "get_project"} and isinstance(result, dict):
-                        return {key: value for key, value in result.items() if key not in {"description_meta", "revision"}}
-                    if legacy_name in {"create_task", "update_task", "set_task_dates"} and isinstance(result, dict):
-                        return {key: value for key, value in result.items() if key != "revision"}
-                    if legacy_name == "list_comments" and isinstance(result, list):
-                        return [{key: value for key, value in item.items() if key not in {"comment_id", "body_meta"}} for item in result]
-                    if legacy_name == "add_comment" and isinstance(result, dict):
-                        return {key: value for key, value in result.items() if key != "comment_id"}
-                    return result
-                finally:
-                    _legacy_call.reset(legacy_token)
-            legacy_description = {
-                "get_project": (
-                    "Возвращает прежнюю карточку проекта со стадиями и числом задач. "
-                    "Описание — превью до 2000 символов; full_text=true возвращает полный "
-                    "исходный Markdown. Структурные метаданные превью доступны в tt_get_project."
-                ),
-                "get_task": (
-                    "Возвращает прежнюю карточку задачи с отчётом, участниками и ссылкой. "
-                    "Описание — превью до 2000 символов; full_text=true возвращает полный "
-                    "исходный Markdown. Структурные метаданные превью доступны в tt_get_task."
-                ),
-                "list_comments": (
-                    "Возвращает прежний список комментариев с превью до 2000 символов. "
-                    "Используйте tt_list_comments для ID, метаданных обрезки и вызова "
-                    "tt_get_comment для полного чтения."
-                ),
-            }.get(legacy_name)
-            mcp_server.tool(
-                name=legacy_name,
-                title=title,
-                description=(f"{legacy_description} Требует право {scope}."
-                             if legacy_description else description),
-            )(legacy_wrapper)
         # Наружу отдаётся обёртка: прямой вызов из кода и тестов проходит ту же
         # проверку права, что и вызов агента через транспорт.
         return wrapper
@@ -242,10 +189,10 @@ async def _record_usage(call: ToolCall, status: int) -> None:
 
 
 def tool_catalog() -> list[dict]:
-    """Сокращённый программный перечень основных tt_* инструментов.
+    """Сокращённый программный перечень инструментов telos_*.
 
     Параметры берутся из входной схемы, которую видит агент.
-    Полный каталог справки с aliases и HTTP экспортируется ``integration_docs``.
+    Полный каталог справки с HTTP экспортируется ``integration_docs``.
     """
     from src.mcp_server.server import mcp_server
 

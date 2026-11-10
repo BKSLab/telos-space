@@ -202,7 +202,7 @@ def result_key(request: dict, result: dict) -> str:
     if isinstance(action, dict) and action.get("id") is not None:
         return f"action:{action['id']}"
     name = request["name"]
-    if name in {"read_source", "get_document"} and result.get("source_id"):
+    if name in {"telos_read_source", "telos_get_document"} and result.get("source_id"):
         page = result.get("document", result)
         offset = page.get("offset", request.get("arguments", {}).get("offset", 0))
         return encode([name, result["source_id"], offset])
@@ -305,7 +305,7 @@ class AgentContextBudget:
                 content.get("previous_actions_omitted", 0) + len(actions) - len(kept_actions)
             )
         content["context_policy"] = (
-            "Описания нужны для отбора. Точные условия проверяй read_source/get_document. "
+            "Описания нужны для отбора. Точные условия проверяй telos_read_source/telos_get_document. "
             "omitted/compacted означают сокращение, а не отсутствие данных. "
             "Читай только нужные объекты и страницы; используй next_offset."
         )

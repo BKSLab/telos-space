@@ -121,7 +121,7 @@ test("новый диалог и возврат к прежнему; ошибк�
 for (const decision of ["approve", "reject"] as const) {
     test(`карточка действия в виджете: ${decision}`, async ({ page }) => {
         const state = await setup(page, (value) => {
-            value.tim.action = { id: "5eea642e-3196-45c0-ac85-1286b0d3a81c", tool_name: "delete_task", title: "Удалить задачу",
+            value.tim.action = { id: "5eea642e-3196-45c0-ac85-1286b0d3a81c", tool_name: "telos_delete_task", title: "Удалить задачу",
                 arguments: { task_id: 100, expected_updated_at: "2026-09-21T10:00:00Z" }, status: "pending",
                 result: { preview: { task: { key: "DEMO-1", title: "Согласовать макеты" } } }, created_at: "2026-09-21T10:00:00Z" };
         });

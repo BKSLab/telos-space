@@ -75,7 +75,7 @@ def small_executor() -> tuple[AgentToolExecutor, AsyncMock, AsyncMock]:
         return_value={
             "action": {
                 "id": "a1",
-                "tool_name": "create_task",
+                "tool_name": "telos_create_task",
                 "title": "Создать задачу",
                 "status": "completed",
                 "result": {"task": {"id": 5, "key": "P-5"}},
@@ -85,8 +85,8 @@ def small_executor() -> tuple[AgentToolExecutor, AsyncMock, AsyncMock]:
     read = AsyncMock(return_value={"task": {"id": 7, "title": "Проверка"}})
     executor = AgentToolExecutor(
         [
-            AgentTool("get_task", "Прочитать задачу", TaskInput, read),
-            AgentTool("create_task", "Создать задачу", TaskCreateInput, create, mutating=True),
+            AgentTool("telos_get_task", "Прочитать задачу", TaskInput, read),
+            AgentTool("telos_create_task", "Создать задачу", TaskCreateInput, create, mutating=True),
         ]
     )
     return executor, read, create
@@ -118,12 +118,55 @@ async def test_tools_are_generated_from_the_registry_without_hand_written_copies
         assert "$defs" not in encode(item.parameters_json_schema)
 
 
+async def test_native_loader_has_one_canonical_name_and_refuses_the_framework_name():
+    executor, read, create = small_executor()
+    deps = deps_for(executor)
+    deps.defer_workflows = True
+    deps.load_context = AsyncMock()
+    step = 0
+
+    async def respond(messages, info: AgentInfo) -> ModelResponse:
+        nonlocal step
+        step += 1
+        visible = {tool.name for tool in info.function_tools}
+        assert all(name.startswith("telos_") for name in visible)
+        assert {tool.name for tool in info.output_tools} == {"telos_submit_answer"}
+        assert "`load_capability`" not in info.instructions
+        assert "`telos_load_capability`" in info.instructions
+        if step == 1:
+            assert visible == {"telos_load_capability"}
+            return ModelResponse(parts=[ToolCallPart("load_capability", {"id": "tasks"})])
+        if step == 2:
+            assert visible == {"telos_load_capability"}
+            assert any(
+                isinstance(part, RetryPromptPart) and "load_capability" in part.content
+                for message in messages
+                for part in message.parts
+            )
+            deps.load_context.assert_not_awaited()
+            return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "tasks"})])
+        if step == 3:
+            assert "telos_get_task" in visible
+            return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": 7})])
+        return final("Прочитано.")
+
+    runtime = TimRuntime(model=FunctionModel(respond), executor=executor)
+    result = await runtime.run(deps, metadata={})
+    assert result.output.answer == "Прочитано."
+    assert [call["tool"] for call in result.tool_calls] == [
+        "telos_load_capability", "telos_get_task"
+    ]
+    deps.load_context.assert_awaited_once_with("tasks")
+    read.assert_awaited_once()
+    create.assert_not_awaited()
+
+
 async def test_write_tools_are_not_offered_without_write_right_or_key_scope():
     executor = registry_executor()
     mutating = {name for name, tool in executor.tools.items() if tool.mutating}
     for can_write, allowed, expect in (
         (False, None, set()),
-        (True, frozenset({"create_task"}), {"create_task"}),
+        (True, frozenset({"telos_create_task"}), {"telos_create_task"}),
         (True, None, None),
     ):
         runtime = TimRuntime(model=TestModel(), executor=executor)
@@ -145,7 +188,7 @@ async def test_write_tools_are_not_offered_without_write_right_or_key_scope():
         else:
             assert visible == expect
         # Чтение доступно всегда.
-        assert "list_sources" in offered
+        assert "telos_list_sources" in offered
 
 
 async def test_hidden_write_tool_called_by_name_is_not_executed():
@@ -157,13 +200,13 @@ async def test_hidden_write_tool_called_by_name_is_not_executed():
         steps.append([item.name for item in info.function_tools])
         if len(steps) == 1:
             # Модель «помнит» имя и зовёт инструмент, которого ей не дали.
-            return ModelResponse(parts=[ToolCallPart("create_task", {"title": "Взлом"})])
+            return ModelResponse(parts=[ToolCallPart("telos_create_task", {"title": "Взлом"})])
         return final("Не могу изменить проект.")
 
     runtime.agent.model = FunctionModel(respond)
     result = await runtime.run(deps_for(executor, can_write=False), metadata={})
 
-    assert steps[0] == ["get_task"]
+    assert steps[0] == ["telos_get_task"]
     create.assert_not_awaited()
     assert result.output.answer == "Не могу изменить проект."
 
@@ -176,7 +219,7 @@ async def test_final_answer_does_not_skip_a_write_in_the_same_model_response():
         return ModelResponse(
             parts=[
                 *final("Задача создана.").parts,
-                ToolCallPart("create_task", {"title": "Проверка миграции"}),
+                ToolCallPart("telos_create_task", {"title": "Проверка миграции"}),
             ]
         )
 
@@ -186,7 +229,7 @@ async def test_final_answer_does_not_skip_a_write_in_the_same_model_response():
     create.assert_awaited_once()
     assert result.output.answer == "Задача создана."
     assert result.requests == 1
-    assert [item["tool"] for item in result.tool_calls] == ["create_task"]
+    assert [item["tool"] for item in result.tool_calls] == ["telos_create_task"]
 
 
 async def test_invalid_arguments_become_model_retry_with_field_and_format():
@@ -198,9 +241,9 @@ async def test_invalid_arguments_become_model_retry_with_field_and_format():
         last = messages[-1]
         retries.extend(part for part in last.parts if isinstance(part, RetryPromptPart))
         if len(messages) == 1:
-            return ModelResponse(parts=[ToolCallPart("get_task", {"task_id": "семь"})])
+            return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": "семь"})])
         if not any(isinstance(part, ToolReturnPart) for part in last.parts):
-            return ModelResponse(parts=[ToolCallPart("get_task", {"task_id": 7})])
+            return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": 7})])
         return final("Задача прочитана.")
 
     runtime.agent.model = FunctionModel(respond)
@@ -222,13 +265,13 @@ async def test_last_step_offers_no_tools_and_limits_end_the_run_gracefully():
     async def respond(messages, info: AgentInfo) -> ModelResponse:
         offered.append([item.name for item in info.function_tools])
         # Модель никогда не отвечает — только читает.
-        return ModelResponse(parts=[ToolCallPart("get_task", {"task_id": 7})])
+        return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": 7})])
 
     runtime.agent.model = FunctionModel(respond)
     result = await runtime.run(deps_for(executor, tool_rounds=2), metadata={})
 
     assert result.output is None
-    assert offered[:2] == [["get_task", "create_task"], ["get_task", "create_task"]]
+    assert offered[:2] == [["telos_get_task", "telos_create_task"], ["telos_get_task", "telos_create_task"]]
     assert all(step == [] for step in offered[2:])
     assert read.await_count == 2
 
@@ -241,7 +284,7 @@ async def test_more_than_eight_calls_in_one_step_are_refused():
         if len(messages) == 1:
             return ModelResponse(
                 parts=[
-                    ToolCallPart("get_task", {"task_id": index + 1})
+                    ToolCallPart("telos_get_task", {"task_id": index + 1})
                     for index in range(MAX_CALLS_PER_STEP + 1)
                 ]
             )
@@ -258,7 +301,7 @@ async def test_history_processor_keeps_input_within_context_budget():
     page = "Длинный текст документа. " * 900
     reader = AsyncMock(side_effect=lambda context, parameters: {"source_id": "d", "text": page})
     executor = AgentToolExecutor(
-        [AgentTool("read_source", "Прочитать источник", KnowledgeReadParameters, reader)]
+        [AgentTool("telos_read_source", "Прочитать источник", KnowledgeReadParameters, reader)]
     )
     runtime = TimRuntime(model=TestModel(), executor=executor)
     deps = deps_for(executor, context_tokens=9000, tool_rounds=5)
@@ -278,7 +321,7 @@ async def test_history_processor_keeps_input_within_context_budget():
                     )
         sizes.append(total)
         if len(sizes) <= 4:
-            return ModelResponse(parts=[ToolCallPart("read_source", {"source_id": "d"})])
+            return ModelResponse(parts=[ToolCallPart("telos_read_source", {"source_id": "d"})])
         return final("Прочитано.")
 
     runtime.agent.model = FunctionModel(respond)
@@ -307,10 +350,10 @@ async def test_project_action_wrapper_does_not_bypass_write_right(can_write):
             project_id=None, user_id=1, can_write=can_write, mode=TimMode.WIDGET_PERSONAL
         ),
         AgentToolRequest(
-            name="run_project_action",
+            name="telos_run_project_action",
             arguments={
                 "project_key": "OTHER",
-                "name": "create_task",
+                "name": "telos_create_task",
                 "arguments": {"title": "Новая"},
             },
         ),
@@ -328,7 +371,7 @@ async def test_arguments_still_wrong_after_retries_do_not_fail_the_answer():
     async def respond(messages, info: AgentInfo) -> ModelResponse:
         calls.append(len(messages))
         if len(calls) <= 3:
-            return ModelResponse(parts=[ToolCallPart("get_task", {"task_id": "семь"})])
+            return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": "семь"})])
         return final("Не смог прочитать задачу.")
 
     runtime.agent.model = FunctionModel(respond)
@@ -405,7 +448,7 @@ async def test_openai_compatible_model_sends_native_tools_to_polza_endpoint(
                     {
                         "id": "c1",
                         "type": "function",
-                        "function": {"name": "get_task", "arguments": '{"task_id": 7}'},
+                        "function": {"name": "telos_get_task", "arguments": '{"task_id": 7}'},
                     }
                 ],
             }
@@ -418,7 +461,7 @@ async def test_openai_compatible_model_sends_native_tools_to_polza_endpoint(
                         "id": "c2",
                         "type": "function",
                         "function": {
-                            "name": "final_result",
+                            "name": "telos_submit_answer",
                             "arguments": '{"answer": "Задача в работе.", "source_ids": []}',
                         },
                     }
@@ -468,7 +511,7 @@ async def test_openai_compatible_model_sends_native_tools_to_polza_endpoint(
         } == expected_fields
     assert len({body["prompt_cache_key"] for _, body in requests}) == len(requests)
     names = {tool["function"]["name"] for tool in payload["tools"]}
-    assert names == {"get_task", "final_result"}
+    assert names == {"telos_get_task", "telos_submit_answer"}
     # Результат инструмента вернулся модели вторым запросом.
     assert any(item.get("role") == "tool" for item in requests[1][1]["messages"])
     # Инструкция не меняется от шага к шагу: префикс запроса кэшируется провайдером.
@@ -543,7 +586,7 @@ async def test_native_model_limits_http_timeout_attempts_and_preserves_legacy_de
 async def test_native_final_response_timeout_does_not_repeat_a_completed_create_task(
     retry_succeeds,
 ):
-    """HTTP-повтор после квитанции create_task не запускает заново runtime или запись."""
+    """HTTP-повтор после квитанции telos_create_task не запускает заново runtime или запись."""
     import json as jsonlib
 
     import httpx
@@ -559,12 +602,12 @@ async def test_native_final_response_timeout_does_not_repeat_a_completed_create_
         body = jsonlib.loads(request.content)
         requests.append((request, body))
         if len(requests) == 1:
-            name, arguments = "create_task", {"title": "Проверка таймаута"}
+            name, arguments = "telos_create_task", {"title": "Проверка таймаута"}
         else:
             create.assert_awaited_once()
             if len(requests) == 2 or not retry_succeeds:
                 raise httpx.ReadTimeout("synthetic final response timeout", request=request)
-            name, arguments = "final_result", {"answer": "Задача создана.", "source_ids": []}
+            name, arguments = "telos_submit_answer", {"answer": "Задача создана.", "source_ids": []}
         return httpx.Response(
             200,
             json={
@@ -623,7 +666,7 @@ async def test_native_final_response_timeout_does_not_repeat_a_completed_create_
             with pytest.raises(ModelTimeoutError):
                 await runtime.run(deps, metadata={})
 
-    assert len(requests) == 3  # create_task, затем две HTTP-попытки итогового ответа.
+    assert len(requests) == 3  # telos_create_task, затем две HTTP-попытки итогового ответа.
     assert all(request.extensions["timeout"]["read"] == 30 for request, _ in requests)
     assert requests[1][1] == requests[2][1]
     receipt = next(item for item in requests[1][1]["messages"] if item["role"] == "tool")
@@ -633,7 +676,7 @@ async def test_native_final_response_timeout_does_not_repeat_a_completed_create_
     read.assert_not_awaited()
     write_intent.assert_awaited_once()
     deps.on_result.assert_awaited_once()
-    assert [call["tool"] for call in deps.calls] == ["create_task"]
+    assert [call["tool"] for call in deps.calls] == ["telos_create_task"]
 
 
 async def test_steps_notice_appears_only_near_the_end():
@@ -645,7 +688,7 @@ async def test_steps_notice_appears_only_near_the_end():
     async def respond(messages, info: AgentInfo) -> ModelResponse:
         instructions.append(messages[-1].instructions)
         if len(instructions) < 4:
-            return ModelResponse(parts=[ToolCallPart("get_task", {"task_id": 7})])
+            return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": 7})])
         return final("Готово.")
 
     runtime.agent.model = FunctionModel(respond)
@@ -698,7 +741,7 @@ async def test_gateway_502_after_the_last_tool_step_gives_an_incomplete_answer_n
         calls += 1
         if not info.function_tools:
             raise ModelHTTPError(502, "google/gemini-3.7-flash", {"code": "BAD_GATEWAY"})
-        return ModelResponse(parts=[ToolCallPart("get_task", {"task_id": 7})])
+        return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": 7})])
 
     runtime.agent.model = FunctionModel(respond)
     result = await runtime.run(deps_for(executor, tool_rounds=2), metadata={})
@@ -724,7 +767,7 @@ async def test_small_talk_offers_only_native_loading_without_domain_context_or_w
     deps.write_gate_factory = Mock()
 
     async def respond(messages, info: AgentInfo) -> ModelResponse:
-        assert {tool.name for tool in info.function_tools} == {"load_capability"}
+        assert {tool.name for tool in info.function_tools} == {"telos_load_capability"}
         assert "tasks:" in info.instructions
         assert "checklist_revision" not in info.instructions
         assert "СХЕМЫ НА ДОСКАХ" not in info.instructions
@@ -786,7 +829,7 @@ async def test_native_workflow_loads_context_rules_and_tools_then_resets_for_the
     executor = AgentToolExecutor(
         [
             *executor.tools.values(),
-            AgentTool("get_board_scene", "Прочитать доску", KnowledgeReadParameters, AsyncMock()),
+            AgentTool("telos_get_board_scene", "Прочитать доску", KnowledgeReadParameters, AsyncMock()),
         ]
     )
     deps = deps_for(executor, tool_rounds=1)
@@ -807,13 +850,13 @@ async def test_native_workflow_loads_context_rules_and_tools_then_resets_for_the
         steps += 1
         visible = {tool.name for tool in info.function_tools}
         if steps == 1:
-            assert visible == {"load_capability"}
+            assert visible == {"telos_load_capability"}
             assert "checklist_revision" not in info.instructions
             deps.write_gate_factory.assert_not_called()
-            return ModelResponse(parts=[ToolCallPart("load_capability", {"id": "tasks"})])
+            return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "tasks"})])
         if steps == 2:
-            assert visible == {"load_capability", "get_task", "create_task"}
-            assert "get_board_scene" not in visible
+            assert visible == {"telos_load_capability", "telos_get_task", "telos_create_task"}
+            assert "telos_get_board_scene" not in visible
             from tests.unit.knowledge.agent_models import prompt_payload
 
             assert prompt_payload(messages)["current_postgres_state"] == {"loaded": True}
@@ -821,12 +864,12 @@ async def test_native_workflow_loads_context_rules_and_tools_then_resets_for_the
                 part.content["instructions"]
                 for message in messages
                 for part in message.parts
-                if isinstance(part, ToolReturnPart) and part.tool_name == "load_capability"
+                if isinstance(part, ToolReturnPart) and part.tool_name == "telos_load_capability"
             ]
             assert len(loaded) == 1
             assert TIM_WORKFLOW_INSTRUCTIONS["tasks"].strip() in loaded[0]
             deps.write_gate_factory.assert_not_called()
-            return ModelResponse(parts=[ToolCallPart("create_task", {"title": "Новая"})])
+            return ModelResponse(parts=[ToolCallPart("telos_create_task", {"title": "Новая"})])
         assert visible == set()
         return final("Создала задачу.")
 
@@ -838,7 +881,7 @@ async def test_native_workflow_loads_context_rules_and_tools_then_resets_for_the
     create.assert_awaited_once()
     deps.load_context.assert_awaited_once_with("tasks")
     deps.write_gate_factory.assert_called_once_with()
-    assert [call["tool"] for call in result.tool_calls] == ["load_capability", "create_task"]
+    assert [call["tool"] for call in result.tool_calls] == ["telos_load_capability", "telos_create_task"]
     deps.write_gate.close()
 
     # Один и тот же агент не переносит раскрытый набор в новый вопрос.
@@ -847,7 +890,7 @@ async def test_native_workflow_loads_context_rules_and_tools_then_resets_for_the
     next_deps.load_context = AsyncMock()
 
     async def next_response(messages, info: AgentInfo) -> ModelResponse:
-        assert {tool.name for tool in info.function_tools} == {"load_capability"}
+        assert {tool.name for tool in info.function_tools} == {"telos_load_capability"}
         assert "checklist_revision" not in info.instructions
         return final("Здравствуйте.")
 
@@ -862,9 +905,9 @@ async def test_loaded_workflows_keep_mode_scope_and_read_only_restrictions():
     assert len(all_grouped) == len(set(all_grouped))
     assert set(executor.tools) <= set(all_grouped)
     for mode, can_write, scopes, group_id in (
-        (TimMode.PROJECT_CHAT, True, frozenset({"create_task"}), "tasks"),
+        (TimMode.PROJECT_CHAT, True, frozenset({"telos_create_task"}), "tasks"),
         (TimMode.WIDGET_PROJECT, False, None, "tasks"),
-        (TimMode.WIDGET_PERSONAL, True, frozenset({"create_personal_task"}), "personal"),
+        (TimMode.WIDGET_PERSONAL, True, frozenset({"telos_create_personal_task"}), "personal"),
     ):
         deps = deps_for(executor, mode=mode, can_write=can_write, allowed_tools=scopes)
         deps.defer_workflows = True
@@ -878,13 +921,13 @@ async def test_loaded_workflows_keep_mode_scope_and_read_only_restrictions():
             nonlocal steps
             steps += 1
             if steps == 1:
-                assert {tool.name for tool in info.function_tools} == {"load_capability"}
+                assert {tool.name for tool in info.function_tools} == {"telos_load_capability"}
                 for workflow in WORKFLOWS:
                     if not any(deps.allowed(name) for name in workflow.tools):
                         assert f"- {workflow.id}:" not in info.instructions
-                return ModelResponse(parts=[ToolCallPart("load_capability", {"id": group_id})])
+                return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": group_id})])
             expected = {name for name in group.tools if deps.allowed(name)}
-            assert {tool.name for tool in info.function_tools} == expected | {"load_capability"}
+            assert {tool.name for tool in info.function_tools} == expected | {"telos_load_capability"}
             assert len(expected) <= 11
             return final("Проверено.")
 
@@ -903,9 +946,9 @@ async def test_loading_a_forbidden_workflow_cannot_read_context_or_reveal_projec
     async def respond(messages, info: AgentInfo) -> ModelResponse:
         nonlocal steps
         steps += 1
-        assert {tool.name for tool in info.function_tools} == {"load_capability"}
+        assert {tool.name for tool in info.function_tools} == {"telos_load_capability"}
         if steps == 1:
-            return ModelResponse(parts=[ToolCallPart("load_capability", {"id": "sources"})])
+            return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "sources"})])
         assert any(
             isinstance(part, RetryPromptPart) and "No capability found" in part.content
             for message in messages
@@ -930,7 +973,7 @@ async def test_a_domain_tool_cannot_execute_before_its_workflow_is_loaded():
         nonlocal steps
         steps += 1
         if steps == 1:
-            return ModelResponse(parts=[ToolCallPart("create_task", {"title": "Скрытая"})])
+            return ModelResponse(parts=[ToolCallPart("telos_create_task", {"title": "Скрытая"})])
         assert any(
             isinstance(part, RetryPromptPart) for message in messages for part in message.parts
         )
@@ -954,16 +997,16 @@ async def test_lazy_write_check_starts_only_for_valid_permitted_mutations_and_de
         steps += 1
         if steps == 1:
             deps.write_gate_factory.assert_not_called()
-            return ModelResponse(parts=[ToolCallPart("get_task", {"task_id": 7})])
+            return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": 7})])
         if steps == 2:
             deps.write_gate_factory.assert_not_called()
-            return ModelResponse(parts=[ToolCallPart("create_task", {})])
+            return ModelResponse(parts=[ToolCallPart("telos_create_task", {})])
         if steps == 3:
             deps.write_gate_factory.assert_not_called()
             return ModelResponse(
                 parts=[
-                    ToolCallPart("create_task", {"title": "Одна"}, tool_call_id="a"),
-                    ToolCallPart("create_task", {"title": "Вторая"}, tool_call_id="b"),
+                    ToolCallPart("telos_create_task", {"title": "Одна"}, tool_call_id="a"),
+                    ToolCallPart("telos_create_task", {"title": "Вторая"}, tool_call_id="b"),
                 ]
             )
         return final("Запись не разрешена.")
@@ -980,7 +1023,7 @@ async def test_lazy_write_check_starts_only_for_valid_permitted_mutations_and_de
 async def test_deferred_instructions_survive_history_result_compaction():
     reader = AsyncMock(return_value={"source_id": "d", "text": "Подробный текст. " * 1800})
     executor = AgentToolExecutor(
-        [AgentTool("read_source", "Прочитать источник", KnowledgeReadParameters, reader)]
+        [AgentTool("telos_read_source", "Прочитать источник", KnowledgeReadParameters, reader)]
     )
     deps = deps_for(executor, context_tokens=9000, tool_rounds=4)
     deps.defer_workflows = True
@@ -994,16 +1037,16 @@ async def test_deferred_instructions_survive_history_result_compaction():
         nonlocal steps
         steps += 1
         if steps == 1:
-            return ModelResponse(parts=[ToolCallPart("load_capability", {"id": "sources"})])
+            return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "sources"})])
         for message in messages:
             for part in message.parts:
                 if isinstance(part, ToolReturnPart):
-                    if part.tool_name == "load_capability":
+                    if part.tool_name == "telos_load_capability":
                         assert TIM_WORKFLOW_INSTRUCTIONS["sources"] in part.content["instructions"]
                     elif isinstance(part.content, dict) and part.content.get("context_compacted"):
                         compacted.append(part.tool_name)
         if steps < 5:
-            return ModelResponse(parts=[ToolCallPart("read_source", {"source_id": "d"})])
+            return ModelResponse(parts=[ToolCallPart("telos_read_source", {"source_id": "d"})])
         return final("Прочитала.")
 
     runtime = TimRuntime(model=FunctionModel(respond), executor=executor)
@@ -1023,8 +1066,8 @@ async def test_deferred_repeated_calls_end_as_incomplete_after_the_actual_loader
         nonlocal steps
         steps += 1
         if steps == 1:
-            return ModelResponse(parts=[ToolCallPart("load_capability", {"id": "tasks"})])
-        return ModelResponse(parts=[ToolCallPart("get_task", {"task_id": 7})])
+            return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "tasks"})])
+        return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": 7})])
 
     runtime = TimRuntime(model=FunctionModel(respond), executor=executor)
     result = await runtime.run(deps, metadata={})
@@ -1059,9 +1102,9 @@ async def test_gateway_sends_and_measures_only_visible_schemas_before_and_after_
         message = {"role": "assistant", "content": "Задача EVL-1 прочитана."}
         if len(seen) <= 2:
             name, arguments = (
-                ("load_capability", {"id": "tasks"})
+                ("telos_load_capability", {"id": "tasks"})
                 if len(seen) == 1
-                else ("get_task", {"task_key": "EVL-1"})
+                else ("telos_get_task", {"task_key": "EVL-1"})
             )
             message = {
                 "role": "assistant",
@@ -1095,7 +1138,7 @@ async def test_gateway_sends_and_measures_only_visible_schemas_before_and_after_
     read = AsyncMock(return_value={"task": {"id": 7, "key": "EVL-1"}})
     executor = AgentToolExecutor(
         [
-            replace(tool, handler=read) if tool.name == "get_task" else tool
+            replace(tool, handler=read) if tool.name == "telos_get_task" else tool
             for tool in registry_executor().tools.values()
         ]
     )
@@ -1120,12 +1163,12 @@ async def test_gateway_sends_and_measures_only_visible_schemas_before_and_after_
     assert result.output.answer == "Задача EVL-1 прочитана."
     read.assert_awaited_once()
     assert {item["function"]["name"] for item in seen[0]["tools"]} == {
-        "load_capability",
-        "final_result",
+        "telos_load_capability",
+        "telos_submit_answer",
     }
     assert seen[0]["tool_choice"] == "auto"
     wire_counts = [
-        sum(item["function"]["name"] != "final_result" for item in payload["tools"])
+        sum(item["function"]["name"] != "telos_submit_answer" for item in payload["tools"])
         for payload in seen
     ]
     assert wire_counts == [1, 11, 11]
@@ -1165,7 +1208,7 @@ async def test_native_loads_share_the_eight_call_limit_and_serialize_context_rea
         if steps == 1:
             return ModelResponse(
                 parts=[
-                    ToolCallPart("load_capability", {"id": group.id}, tool_call_id=group.id)
+                    ToolCallPart("telos_load_capability", {"id": group.id}, tool_call_id=group.id)
                     for group in WORKFLOWS[: MAX_CALLS_PER_STEP + 1]
                 ]
             )
@@ -1173,7 +1216,7 @@ async def test_native_loads_share_the_eight_call_limit_and_serialize_context_rea
             part.content.get("instructions", "")
             for message in messages
             for part in message.parts
-            if isinstance(part, ToolReturnPart) and part.tool_name == "load_capability"
+            if isinstance(part, ToolReturnPart) and part.tool_name == "telos_load_capability"
         ]
         assert sum(TIM_WORKFLOW_COMMON in rules for rules in loaded_rules) == 1
         return final("Выбраны нужные данные.")
@@ -1194,7 +1237,7 @@ async def test_project_action_wrapper_starts_no_gate_for_reads_or_missing_scopes
     query.resolve_project_id = AsyncMock(return_value=2)
     executor = build_project_tool_executor(query, actions)
     deps = deps_for(
-        executor, mode=TimMode.WIDGET_PERSONAL, allowed_tools=frozenset({"create_task"})
+        executor, mode=TimMode.WIDGET_PERSONAL, allowed_tools=frozenset({"telos_create_task"})
     )
     deps.defer_workflows = True
     deps.write_gate_factory = Mock(side_effect=lambda: WriteGate(AsyncMock(return_value=False)()))
@@ -1204,18 +1247,18 @@ async def test_project_action_wrapper_starts_no_gate_for_reads_or_missing_scopes
         nonlocal steps
         steps += 1
         if steps == 1:
-            return ModelResponse(parts=[ToolCallPart("load_capability", {"id": "project_actions"})])
+            return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "project_actions"})])
         if steps < 5:
             deps.write_gate_factory.assert_not_called()
             name, arguments = {
-                2: ("update_task", {"task_id": 7, "title": "Нет scope"}),
-                3: ("get_project", {}),
-                4: ("create_task", {"title": "Нет поручения"}),
+                2: ("telos_update_task", {"task_id": 7, "title": "Нет scope"}),
+                3: ("telos_get_project", {}),
+                4: ("telos_create_task", {"title": "Нет поручения"}),
             }[steps]
             return ModelResponse(
                 parts=[
                     ToolCallPart(
-                        "run_project_action",
+                        "telos_run_project_action",
                         {"project_key": "OTHER", "name": name, "arguments": arguments},
                     )
                 ]
@@ -1226,6 +1269,6 @@ async def test_project_action_wrapper_starts_no_gate_for_reads_or_missing_scopes
     result = await runtime.run(deps, metadata={})
     assert result.output.answer == "Прочитала проект; изменения не выполнены."
     assert handler.await_count == 1
-    assert handler.await_args.kwargs["name"] == "get_project"
+    assert handler.await_args.kwargs["name"] == "telos_get_project"
     deps.write_gate_factory.assert_called_once_with()
     deps.write_gate.close()

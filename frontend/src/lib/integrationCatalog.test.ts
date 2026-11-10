@@ -5,17 +5,23 @@ import { searchHelp } from "./helpSearch";
 it("ищет методы, действия и поля схем и ведёт к конкретной карточке", () => {
     const http = findCatalogEntries("api", ["wbs", "suggestion"]).find(entry => entry.path?.endsWith("/suggestion"))!;
     expect(http.scopes).toEqual(["structure:read"]);
-    const tools = findCatalogEntries("mcp", ["tt_create_task"]);
-    expect(tools.some(entry => entry.name === "tt_create_task")).toBe(true);
-    expect(searchHelp("tt_create_task").some(result => result.article.id === tools[0].id)).toBe(true);
-    expect(findCatalogEntries("mcp", ["request_id"]).some(entry => entry.name === "tt_execute_project_tool")).toBe(true);
+    const tools = findCatalogEntries("mcp", ["telos_create_task"]);
+    expect(tools.some(entry => entry.name === "telos_create_task")).toBe(true);
+    expect(searchHelp("telos_create_task").some(result => result.article.id === tools[0].id)).toBe(true);
+    const matchingLinks = searchHelp("telos_create_task").filter(result => result.article.id.startsWith("mcp-"));
+    expect(new Set(matchingLinks.map(result => result.article.title)).size).toBe(matchingLinks.length);
+    expect(matchingLinks.some(result => result.article.title.startsWith("Действие · telos_create_task"))).toBe(true);
+    expect(findCatalogEntries("mcp", ["request_id"]).some(entry => entry.name === "telos_execute_project_tool")).toBe(true);
     expect(searchHelp("MCP request_id").some(result => result.section.id === "mcp" && result.article.id.startsWith("mcp-"))).toBe(true);
     expect(findCatalogEntries("api", ["start_date"]).some(entry => entry.requestBody)).toBe(true);
 });
 
-it("различает сессию, прежние токены, scopes и совместимые имена", () => {
+it("различает доступ и публикует единые имена MCP без дублей", () => {
     expect(integrationCatalog.api.find(entry => entry.method === "GET" && entry.path === "/api/v1/users/me/api-keys")?.access).toBe("session");
-    expect(integrationCatalog.mcp.find(entry => entry.name === "add_comment")?.aliasFor).toBe("tt_add_comment");
+    expect(integrationCatalog.mcp.every(entry => entry.name.startsWith("telos_"))).toBe(true);
+    expect(integrationCatalog.actions.every(entry => entry.name.startsWith("telos_"))).toBe(true);
+    expect(integrationCatalog.mcp.some(entry => entry.name === "add_comment")).toBe(false);
+    expect(integrationCatalog.mcp.some(entry => entry.name === "tt_add_comment")).toBe(false);
     const entries = [...catalogEntries("api"), ...catalogEntries("mcp")];
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
 });

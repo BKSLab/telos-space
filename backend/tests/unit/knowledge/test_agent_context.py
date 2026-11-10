@@ -19,13 +19,13 @@ def test_repeated_reads_replace_same_page_but_keep_other_pages_and_current_recei
     for _ in range(3):
         budget.add_result(
             content,
-            request={"name": "read_source", "arguments": {"source_id": "document:1", "offset": 0}},
+            request={"name": "telos_read_source", "arguments": {"source_id": "document:1", "offset": 0}},
             result={"source_id": "document:1", "source_handle": "SRC_1", "text": "Первая страница"},
         )
     assert len(content["read_results"]) == 1
     budget.add_result(
         content,
-        request={"name": "read_source", "arguments": {"offset": 0, "source_id": "document:1"}},
+        request={"name": "telos_read_source", "arguments": {"offset": 0, "source_id": "document:1"}},
         result={
             "source_id": "document:1",
             "source_handle": "SRC_1",
@@ -38,14 +38,14 @@ def test_repeated_reads_replace_same_page_but_keep_other_pages_and_current_recei
     assert content["retrieval_context"] == []
     budget.add_result(
         content,
-        request={"name": "read_source", "arguments": {"source_id": "document:1", "offset": 4000}},
+        request={"name": "telos_read_source", "arguments": {"source_id": "document:1", "offset": 4000}},
         result={"source_id": "document:1", "source_handle": "SRC_1", "text": "Вторая страница"},
     )
     assert len(content["read_results"]) == 2
     for i in range(6):
         budget.add_result(
             content,
-            request={"name": "read_source", "arguments": {"source_id": f"document:{i + 2}"}},
+            request={"name": "telos_read_source", "arguments": {"source_id": f"document:{i + 2}"}},
             result={
                 "source_id": f"document:{i + 2}",
                 "source_handle": f"SRC_{i + 2}",
@@ -60,7 +60,7 @@ def test_repeated_reads_replace_same_page_but_keep_other_pages_and_current_recei
         assert json.loads(output)["question"] == "Сравни условия"
     action = {
         "id": 42,
-        "tool_name": "create_document",
+        "tool_name": "telos_create_document",
         "title": "Документ создан",
         "status": "completed",
         "result": {
@@ -70,7 +70,7 @@ def test_repeated_reads_replace_same_page_but_keep_other_pages_and_current_recei
     }
     budget.add_result(
         content,
-        request={"name": "create_document", "arguments": {"content_md": "Огромный текст" * 10000}},
+        request={"name": "telos_create_document", "arguments": {"content_md": "Огромный текст" * 10000}},
         result={"action": action},
     )
     budget.fit(content)
@@ -94,7 +94,7 @@ def test_budget_shrinks_large_page_without_skipping_unseen_items_or_text():
     }
     content = {
         "question": "Покажи задачи",
-        "read_results": [{"request": {"name": "list_sources"}, "result": result}],
+        "read_results": [{"request": {"name": "telos_list_sources"}, "result": result}],
     }
     budget.fit(content)
     assert 0 < len(result["items"]) < 30
@@ -108,7 +108,7 @@ def test_budget_shrinks_large_page_without_skipping_unseen_items_or_text():
         "total_chars": 22500,
         "next_offset": None,
     }
-    content["read_results"] = [{"request": {"name": "read_source"}, "result": page}]
+    content["read_results"] = [{"request": {"name": "telos_read_source"}, "result": page}]
     budget.fit(content)
     assert page["next_offset"] == 500 + len(page["text"])
     assert page["text_truncated"]
@@ -206,7 +206,7 @@ def test_history_budget_counts_json_utf8_and_can_compact_old_user_batches():
 def test_history_receipts_keep_pending_confirmation_and_latest_outcome_metadata():
     pending = {
         "id": "e0af49ce-dc22-48bf-a52f-d8534157c46f",
-        "tool_name": "delete_task",
+        "tool_name": "telos_delete_task",
         "status": "pending",
         "confirmation_id": "confirm-42",
         "confirmation_url": "/agent/pending/confirm-42",
@@ -214,7 +214,7 @@ def test_history_receipts_keep_pending_confirmation_and_latest_outcome_metadata(
     }
     completed = {
         "id": "completed-43",
-        "tool_name": "update_task",
+        "tool_name": "telos_update_task",
         "status": "completed",
         "result": {"task_id": 778, "due_date": "2026-11-15", "participant_decision": "approve"},
     }
@@ -233,7 +233,7 @@ def test_history_receipts_keep_pending_confirmation_and_latest_outcome_metadata(
 def test_prepare_and_fit_keep_old_pending_and_latest_write_outcome_under_pressure():
     pending = {
         "id": "pending-42",
-        "tool_name": "delete_task",
+        "tool_name": "telos_delete_task",
         "title": "Удалить task:777",
         "status": "pending",
         "confirmation_id": "confirm-42",
@@ -244,7 +244,7 @@ def test_prepare_and_fit_keep_old_pending_and_latest_write_outcome_under_pressur
     }
     completed = {
         "id": "completed-99",
-        "tool_name": "update_task",
+        "tool_name": "telos_update_task",
         "title": "Срок обновлён",
         "status": "completed",
         "result": {
@@ -259,7 +259,7 @@ def test_prepare_and_fit_keep_old_pending_and_latest_write_outcome_under_pressur
         + [
             {
                 "id": f"old-{index}",
-                "tool_name": "update_task",
+                "tool_name": "telos_update_task",
                 "status": "completed",
                 "result": {"source_id": f"task:{index}", "message": "Старый результат. " * 50},
             }

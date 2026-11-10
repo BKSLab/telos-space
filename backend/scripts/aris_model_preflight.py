@@ -91,7 +91,7 @@ async def probe(profile: ModelProfile, base: LlmSettings) -> dict:
                 executor = AgentToolExecutor(
                     [
                         AgentTool(
-                            "get_task",
+                            "telos_get_task",
                             "Прочитать синтетическую задачу по ID.",
                             TaskInput,
                             read_task,
@@ -105,7 +105,7 @@ async def probe(profile: ModelProfile, base: LlmSettings) -> dict:
                     executor=executor,
                     system_prompt=system,
                     content={
-                        "question": "Прочитай задачу COMPAT-7 с ID 7 инструментом get_task и назови её точный заголовок, стадию и срок. Сначала загрузи набор tasks, затем прочитай задачу. Ответ оформи через final_result.",
+                        "question": "Прочитай задачу COMPAT-7 с ID 7 инструментом telos_get_task и назови её точный заголовок, стадию и срок. Сначала загрузи набор tasks, затем прочитай задачу. Ответ оформи через telos_submit_answer.",
                         "current_date": date.today().isoformat(),
                     },
                     budget=AgentContextBudget(

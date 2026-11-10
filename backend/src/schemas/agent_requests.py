@@ -57,7 +57,7 @@ class AgentActionLinkSchema(BaseModel):
     """Действие агента в ответе: выполненное или ждущее решения сотрудника."""
 
     id: UUID = Field(description="ID действия.")
-    tool: str = Field(description="Имя инструмента.", examples=["update_task"])
+    tool: str = Field(description="Имя инструмента.", examples=["telos_update_task"])
     title: str = Field(description="Что сделано или предложено.", examples=["Изменить задачу"])
     status: Literal["completed", "pending", "rejected", "failed"] = Field(
         description="Состояние действия."

@@ -19,9 +19,9 @@ description: Создаёт проект с паспортом, проверяе
 3. Сгенерируйте отдельный UUID для каждой записи и сохраните его вместе с
    исходными аргументами до получения результата. При потере ответа
    повторяйте тот же UUID и те же аргументы, включая после переподключения.
-4. Вызовите `tt_create_project`, затем `tt_get_project(full_text=true)` с
+4. Вызовите `telos_create_project`, затем `telos_get_project(full_text=true)` с
    возвращённым `project_key`. Сверьте полный паспорт.
-5. Создайте первую задачу через `tt_create_task`. Без `stage` используется
+5. Создайте первую задачу через `telos_create_task`. Без `stage` используется
    первая стадия нового проекта.
 6. Верните ключи и `url` из ответов; не собирайте ссылки самостоятельно.
 
@@ -32,7 +32,7 @@ UUID ниже приведены для примера. Для нового со
 
 ```json
 {
-  "tool": "tt_create_project",
+  "tool": "telos_create_project",
   "arguments": {
     "key": "LAUNCH",
     "name": "Запуск продукта",
@@ -54,14 +54,14 @@ UUID ниже приведены для примера. Для нового со
 
 ```json
 {
-  "tool": "tt_get_project",
+  "tool": "telos_get_project",
   "arguments": {"project_key": "LAUNCH", "full_text": true}
 }
 ```
 
 ```json
 {
-  "tool": "tt_create_task",
+  "tool": "telos_create_task",
   "arguments": {
     "project_key": "LAUNCH",
     "title": "Согласовать критерии приёмки запуска",

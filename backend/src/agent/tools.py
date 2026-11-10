@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from src.agent.tim import ALL_MODES, TimMode
 from src.exceptions.base import ServiceError
+from src.utils.tool_names import require_canonical_tool_name
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,9 @@ class AgentTool:
     mutating: bool = False
     requires_confirmation: bool = False
     modes: frozenset[TimMode] = ALL_MODES
+
+    def __post_init__(self) -> None:
+        require_canonical_tool_name(self.name)
 
 
 class AgentToolExecutor:

@@ -158,7 +158,7 @@ async def test_full_source_read_uses_the_same_project_access_check(search):
     from src.schemas.knowledge import KnowledgeReadRequest
 
     context, _, runtime, services = search()
-    request = KnowledgeReadRequest(name="read_source", source_id="document:9", offset=1200)
+    request = KnowledgeReadRequest(name="telos_read_source", source_id="document:9", offset=1200)
     services.query.read_knowledge.return_value = {"text": "Продолжение", "next_offset": None}
     result = await srv.read_project_knowledge(context, project_key="PROJ", request=request)
     assert result["text"] == "Продолжение"

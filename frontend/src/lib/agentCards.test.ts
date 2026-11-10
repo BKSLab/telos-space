@@ -3,7 +3,7 @@ import { actionSources } from "./agentCards";
 import type { AgentToolRun } from "./types";
 
 const action = (result: Record<string, unknown>): AgentToolRun => ({
-    id: "action-1", tool_name: "read_project_file", title: "Файл проекта", arguments: {},
+    id: "action-1", tool_name: "telos_read_project_file", title: "Файл проекта", arguments: {},
     status: "completed", result, created_at: "2026-11-06T10:00:00Z",
 });
 

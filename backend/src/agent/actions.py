@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from src.agent.tim import PROJECT_MODES, TimMode
 from src.agent.tools import AgentToolContext
+from src.utils.tool_names import require_canonical_tool_name
 
 if TYPE_CHECKING:
     from src.services.agent_tool_scope import AgentProjectToolScope
@@ -31,3 +32,6 @@ class ProjectAction:
     """False — личное действие Ариса вне проекта (мои задачи, разовые)."""
     modes: frozenset[TimMode] = PROJECT_MODES
     """Режимы Ариса, в которых действие доступно модели; MCP режимы не проверяет."""
+
+    def __post_init__(self) -> None:
+        require_canonical_tool_name(self.name)

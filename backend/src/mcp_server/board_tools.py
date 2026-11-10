@@ -11,7 +11,7 @@ from src.agent.tim import TimMode
 from src.agent.tools import AgentToolContext
 from src.exceptions.agent_tools import AgentToolsServiceError
 from src.mcp_server.context import resolve_project, tool_context
-from src.mcp_server.registry import tt_tool
+from src.mcp_server.registry import telos_tool
 from src.schemas.board_diagrams import (
     BoardArrangeInput,
     BoardDiagramInput,
@@ -50,8 +50,8 @@ async def _execute(
         raise ToolError(error.detail) from error
 
 
-@tt_tool(
-    name="tt_list_personal_boards",
+@telos_tool(
+    name="telos_list_personal_boards",
     title="Мои личные доски",
     description="Личные доски текущего пользователя; чужие и проектные доски сюда не входят.",
     scope=SCOPE_BOARDS_READ,
@@ -64,14 +64,14 @@ async def list_personal_boards(
     return await _execute(
         context,
         project_key=None,
-        name="list_personal_boards",
-        personal_name="list_personal_boards",
+        name="telos_list_personal_boards",
+        personal_name="telos_list_personal_boards",
         arguments=args.model_dump(mode="json", exclude_unset=True),
     )
 
 
-@tt_tool(
-    name="tt_get_board_scene",
+@telos_tool(
+    name="telos_get_board_scene",
     title="Прочитать схему доски",
     description="Фигуры, стрелки, стикеры и ревизии. project_key — проект; без него только личная доска владельца. next_offset означает продолжение.",
     scope=SCOPE_BOARDS_READ,
@@ -85,14 +85,14 @@ async def get_board_scene(
     return await _execute(
         context,
         project_key=project_key,
-        name="get_board_scene",
-        personal_name="get_personal_board_scene",
+        name="telos_get_board_scene",
+        personal_name="telos_get_personal_board_scene",
         arguments=args.model_dump(mode="json", exclude_unset=True),
     )
 
 
-@tt_tool(
-    name="tt_draw_board_diagram",
+@telos_tool(
+    name="telos_draw_board_diagram",
     title="Нарисовать схему",
     description="Детерминированная раскладка nodes/edges в редактируемые фигуры одним атомарным batch. Привязки к существующим блокам берите из сцены; project_key опущен — личная доска. Повтор после сетевого сбоя — с тем же request_id.",
     scope=SCOPE_BOARDS_WRITE,
@@ -107,16 +107,16 @@ async def draw_board_diagram(
     return await _execute(
         context,
         project_key=project_key,
-        name="draw_board_diagram",
-        personal_name="draw_personal_board_diagram",
+        name="telos_draw_board_diagram",
+        personal_name="telos_draw_personal_board_diagram",
         arguments=args.model_dump(mode="json", exclude_unset=True),
         write=True,
         request_id=request_id,
     )
 
 
-@tt_tool(
-    name="tt_update_board_shapes",
+@telos_tool(
+    name="telos_update_board_shapes",
     title="Дополнить фигуры схемы",
     description="Правит прочитанные фигуры одним batch с обязательной revision каждой фигуры. Не удаляет объекты. Автор и права — текущего принципала; повторы с тем же request_id.",
     scope=SCOPE_BOARDS_WRITE,
@@ -131,16 +131,16 @@ async def update_board_shapes(
     return await _execute(
         context,
         project_key=project_key,
-        name="update_board_shapes",
-        personal_name="update_personal_board_shapes",
+        name="telos_update_board_shapes",
+        personal_name="telos_update_personal_board_shapes",
         arguments=args.model_dump(mode="json", exclude_unset=True),
         write=True,
         request_id=request_id,
     )
 
 
-@tt_tool(
-    name="tt_arrange_board_objects",
+@telos_tool(
+    name="telos_arrange_board_objects",
     title="Упорядочить объекты доски",
     description="Атомарно раскладывает (layout TB/LR) или выравнивает (align) выбранные фигуры и стикеры с учётом groups/locks. expected_revision доски и revision объектов берите из свежей сцены; при конфликте перечитайте её. project_key опущен — личная доска владельца. После сетевого сбоя повторяйте тот же request_id.",
     scope=SCOPE_BOARDS_WRITE,
@@ -155,8 +155,8 @@ async def arrange_board_objects(
     return await _execute(
         context,
         project_key=project_key,
-        name="arrange_board_objects",
-        personal_name="arrange_personal_board_objects",
+        name="telos_arrange_board_objects",
+        personal_name="telos_arrange_personal_board_objects",
         arguments=args.model_dump(mode="json", exclude_unset=True),
         write=True,
         request_id=request_id,

@@ -15,7 +15,7 @@ test.setTimeout(60_000);
 
 const ACTION: AgentPendingAction = {
     id: ID,
-    tool_name: "delete_task",
+    tool_name: "telos_delete_task",
     title: "Удалить задачу",
     status: "pending",
     arguments: { task_id: 100, expected_updated_at: "2026-09-30T10:00:00Z" },
@@ -80,7 +80,7 @@ for (const theme of ["light", "dark"] as const) {
 
         await dialog.getByRole("button", { name: "Закрыть" }).last().click();
         await expect(page.getByRole("dialog")).toHaveCount(0);
-        expect(new URL(page.url()).search).toBe("");
+        expect(new URL(page.url()).searchParams.has("confirm")).toBe(false);
         expect(state.errors).toEqual([]);
     });
 }

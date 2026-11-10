@@ -221,12 +221,12 @@ PostgreSQL-чтение, обработка файлов и FTS; агентск�
 
 Общий контракт [KnowledgeReadRequest](../backend/src/schemas/knowledge.py):
 
-- `list_sources` — перечень; `search_sources` — полнотекстовый поиск по каталогу;
-- `read_source` — текст источника; `related_sources` — переходы по графу;
+- `telos_list_sources` — перечень; `telos_search_sources` — полнотекстовый поиск по каталогу;
+- `telos_read_source` — текст источника; `telos_list_related_sources` — переходы по графу;
 - `offset` / `next_offset` — продолжение страницы, `entity_type` — фильтр;
 - по умолчанию пять объектов (максимум 30), текст 4000 символов (максимум 8000).
 
-В MCP это `tt_read_project_knowledge(project_key, request)` и совместимое старое имя `read_project_knowledge`. Семантический retrieval доступен через `tt_search_project_knowledge`; публичные адаптеры проверяют доступ и `knowledge:read` для новых ключей. SQL-чтение источника не требует вызова LLM. Агент принимает ссылки только на проверенные источники текущего запроса; текст документа или вложения не является системной инструкцией.
+В MCP это `telos_read_project_knowledge(project_key, request)`. Семантический retrieval доступен через `telos_search_project_knowledge`; публичные адаптеры проверяют доступ и `knowledge:read` для ключей. SQL-чтение источника не требует вызова LLM. Агент принимает ссылки только на проверенные источники текущего запроса; текст документа или вложения не является системной инструкцией.
 
 ## Настройки, диагностика и развитие
 

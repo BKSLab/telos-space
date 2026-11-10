@@ -162,8 +162,8 @@ async def test_task_key_routes_to_project_with_verbatim_and_key_scopes(tracker_e
     assert call["verbatim"] is None
     # Права ключа: tasks:write открывает изменения задач, но не комментарии и удаление.
     allowed = call["execution"].allowed_tools
-    assert {"create_task", "update_task"} <= allowed
-    assert not {"add_comment", "delete_task"} & allowed
+    assert {"telos_create_task", "telos_update_task"} <= allowed
+    assert not {"telos_add_comment", "telos_delete_task"} & allowed
     assert call["execution"].project_id == 1 and call["execution"].can_write is True
     # Ключ задачи дал проект без обращения к модели выбора.
     env.llm.get_structured_response.assert_not_awaited()
@@ -266,7 +266,7 @@ async def test_pending_action_links_and_decision_in_conversation_without_project
             user_id=1,
             message_id=message.id,
             request_id=uuid4(),
-            tool_name="delete_task",
+            tool_name="telos_delete_task",
             title="Удалить задачу",
             arguments={"task_id": 5},
             status="pending",

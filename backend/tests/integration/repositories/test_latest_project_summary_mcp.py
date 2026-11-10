@@ -80,10 +80,10 @@ async def test_summary_transport_reads_full_latest_report_and_rechecks_access(mc
                 )
 
             empty = tool_result(
-                await invoke("tt_get_latest_project_summary", {"project_key": "P1"})
+                await invoke("telos_get_latest_project_summary", {"project_key": "P1"})
             )
             assert empty["found"] is False and empty["report"] is None
-            assert (await invoke("tt_get_latest_project_summary", {"project_key": "P2"}))["result"][
+            assert (await invoke("telos_get_latest_project_summary", {"project_key": "P2"}))["result"][
                 "isError"
             ]
 
@@ -94,7 +94,7 @@ async def test_summary_transport_reads_full_latest_report_and_rechecks_access(mc
                 await session.commit()
                 latest_id = latest.id
             result = tool_result(
-                await invoke("tt_get_latest_project_summary", {"project_key": "P1"})
+                await invoke("telos_get_latest_project_summary", {"project_key": "P1"})
             )
             assert (
                 result["found"] is True and result["source_id"] == f"analytics_report:{latest_id}"
@@ -107,10 +107,10 @@ async def test_summary_transport_reads_full_latest_report_and_rechecks_access(mc
             )
             generic = tool_result(
                 await invoke(
-                    "tt_execute_project_tool",
+                    "telos_execute_project_tool",
                     {
                         "project_key": "P1",
-                        "name": "get_latest_project_summary",
+                        "name": "telos_get_latest_project_summary",
                         "arguments": {},
                     },
                 )
@@ -125,7 +125,7 @@ async def test_summary_transport_reads_full_latest_report_and_rechecks_access(mc
                     .values(scopes=[SCOPE_TASKS_READ])
                 )
                 await session.commit()
-            assert (await invoke("tt_get_latest_project_summary", {"project_key": "P1"}))["result"][
+            assert (await invoke("telos_get_latest_project_summary", {"project_key": "P1"}))["result"][
                 "isError"
             ]
             async with env.factory() as session:
@@ -135,7 +135,7 @@ async def test_summary_transport_reads_full_latest_report_and_rechecks_access(mc
                     .values(scopes=[SCOPE_PROJECTS_READ], is_active=False)
                 )
                 await session.commit()
-            assert (await invoke("tt_get_latest_project_summary", {"project_key": "P1"}))["result"][
+            assert (await invoke("telos_get_latest_project_summary", {"project_key": "P1"}))["result"][
                 "isError"
             ]
             async with env.factory() as session:
@@ -148,6 +148,6 @@ async def test_summary_transport_reads_full_latest_report_and_rechecks_access(mc
                     )
                 )
                 await session.commit()
-            assert (await invoke("tt_get_latest_project_summary", {"project_key": "P1"}))["result"][
+            assert (await invoke("telos_get_latest_project_summary", {"project_key": "P1"}))["result"][
                 "isError"
             ]

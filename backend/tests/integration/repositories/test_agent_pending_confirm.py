@@ -46,16 +46,16 @@ async def test_external_pending_cannot_be_approved_through_widget_decision(actio
     with pytest.raises(AgentToolAccessError):
         await env.actions.decide(context=AgentToolContext(project_id=None, user_id=1, can_write=True),
             action_id=action_id, decision="approve", conversation_id=conversation.id)
-    assert (await invoke(env, "list_tasks"))["total"] == 1
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 1
     decision = await env.actions.decide_pending(user_id=1, action_id=action_id, decision="approve")
     assert decision.status == "completed"
-    assert (await invoke(env, "list_tasks"))["total"] == 0
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 0
 
 
 async def propose_delete(env, original, *, context=None):
     response = await invoke(
         env,
-        "delete_task",
+        "telos_delete_task",
         {"task_id": original["id"], "expected_updated_at": original["updated_at"]},
         context=context,
     )
@@ -82,11 +82,11 @@ async def test_only_initiator_sees_and_decides_and_repeat_is_an_error(actions_en
     ):
         with pytest.raises(AgentToolAccessError):
             await call
-    assert (await invoke(env, "list_tasks"))["total"] == 1
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 1
 
     done = await env.actions.decide_pending(user_id=1, action_id=action_id, decision="approve")
     assert done.status == "completed" and done.result["participant_decision"] == "approve"
-    assert (await invoke(env, "list_tasks"))["total"] == 0
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 0
     for decision in ("approve", "reject"):
         with pytest.raises(AgentToolDecidedError):
             await env.actions.decide_pending(user_id=1, action_id=action_id, decision=decision)
@@ -98,7 +98,7 @@ async def test_reject_changes_nothing_and_blocks_later_approve(actions_env):
     action_id = await propose_delete(env, original)
     rejected = await env.actions.decide_pending(user_id=1, action_id=action_id, decision="reject")
     assert rejected.status == "rejected"
-    assert (await invoke(env, "list_tasks"))["total"] == 1
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 1
     with pytest.raises(AgentToolDecidedError):
         await env.actions.decide_pending(user_id=1, action_id=action_id, decision="approve")
 
@@ -120,7 +120,7 @@ async def test_expired_action_cannot_be_approved_but_can_be_rejected(actions_env
     # Истечение срока закрывает и путь из чата/MCP, а не только ссылку.
     with pytest.raises(AgentToolExpiredError):
         await env.actions.decide(context=env.context, action_id=action_id, decision="approve")
-    assert (await invoke(env, "list_tasks"))["total"] == 1
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 1
     closed = await env.actions.decide_pending(user_id=1, action_id=action_id, decision="reject")
     assert closed.status == "rejected"
 
@@ -139,7 +139,7 @@ async def test_initiator_without_project_access_gets_not_found(actions_env):
         await env.actions.get_pending(user_id=2, action_id=action_id)
     with pytest.raises(AgentToolAccessError):
         await env.actions.decide_pending(user_id=2, action_id=action_id, decision="approve")
-    assert (await invoke(env, "list_tasks"))["total"] == 1
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 1
 
 
 async def test_link_decision_of_chat_action_finds_conversation_and_resumes_answer(actions_env):
@@ -153,7 +153,7 @@ async def test_link_decision_of_chat_action_finds_conversation_and_resumes_answe
         if len(calls) == 1:
             await env.actions.execute(
                 context=kwargs["execution"],
-                name="delete_task",
+                name="telos_delete_task",
                 arguments={
                     "task_id": original["id"],
                     "expected_updated_at": original["updated_at"],

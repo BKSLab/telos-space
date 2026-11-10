@@ -17,7 +17,7 @@ from src.exceptions.agent_tools import AgentToolsServiceError
 from src.exceptions.base import ApplicationError
 from src.mcp_server.context import bearer_secret_of, resolve_project, tool_context
 from src.mcp_server.links import build_links, put_url
-from src.mcp_server.registry import tt_tool
+from src.mcp_server.registry import telos_tool
 from src.schemas.project_stages import StageCreateSchema
 from src.schemas.projects import ProjectCreateSchema, ProjectDescriptionSchema, ProjectStatus
 from src.utils.api_scopes import SCOPE_PROJECTS_READ, SCOPE_PROJECTS_WRITE
@@ -27,8 +27,8 @@ ACTION_CLOSED_FOR_KEYS = (
 )
 
 
-@tt_tool(
-    name="tt_create_project",
+@telos_tool(
+    name="telos_create_project",
     scope=SCOPE_PROJECTS_WRITE,
     title="Создать проект",
     strict_arguments=True,
@@ -40,7 +40,7 @@ ACTION_CLOSED_FOR_KEYS = (
         "аргументы: повтор возвращает исходный результат; другой payload с тем же UUID "
         "даёт конфликт. Ключ проекта должен быть свободен, участники — существующими "
         "активными пользователями. Права ключа и доступ проверяются заново при повторе. "
-        "После создания используйте project_key для tt_get_project и tt_create_task."
+        "После создания используйте project_key для telos_get_project и telos_create_task."
     ),
 )
 async def create_project(
@@ -110,8 +110,8 @@ class ActionApproval(BaseModel):
     approve: bool = Field(description="Выполнить указанное действие с показанными параметрами?")
 
 
-@tt_tool(
-    name="tt_get_latest_project_summary",
+@telos_tool(
+    name="telos_get_latest_project_summary",
     scope=SCOPE_PROJECTS_READ,
     title="Последний сохранённый обзор проекта",
     description=(
@@ -143,14 +143,14 @@ async def get_latest_project_summary(
         )
     try:
         return await actions.execute(
-            context=actor, name="get_latest_project_summary", arguments={},
+            context=actor, name="telos_get_latest_project_summary", arguments={},
         )
     except AgentToolsServiceError as error:
         raise ToolError(error.detail) from error
 
 
-@tt_tool(
-    name="tt_list_project_tools",
+@telos_tool(
+    name="telos_list_project_tools",
     scope=SCOPE_PROJECTS_READ,
     title="Каталог действий проекта",
     description="Все операции проектного агента. Без names возвращает краткий каталог; names раскрывает до 8 точных схем. Числовые ID берутся из ответов этих инструментов. Сервисному ключу видны только действия, на которые у него есть права.",
@@ -189,12 +189,12 @@ async def list_project_tools(
         }
 
 
-@tt_tool(
-    name="tt_execute_project_tool",
+@telos_tool(
+    name="telos_execute_project_tool",
     scope=SCOPE_PROJECTS_READ,
     write=False,
     title="Выполнить действие проекта",
-    description="Исполняет операцию из list_project_tools с общей проверкой проекта и прав. Для записи передавайте стабильный UUID request_id и повторяйте его при сетевом сбое. Удаления и массовые действия запрашивают решение участника через MCP elicitation; параметра самоподтверждения нет.",
+    description="Исполняет операцию из telos_list_project_tools с общей проверкой проекта и прав. Для записи передавайте стабильный UUID request_id и повторяйте его при сетевом сбое. Удаления и массовые действия запрашивают решение участника через MCP elicitation; параметра самоподтверждения нет.",
 )
 async def execute_project_tool(
     context: Context,

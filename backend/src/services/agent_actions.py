@@ -94,7 +94,7 @@ class AgentActionsService:
         )
         if definition.needs_project and context.project_id is None:
             raise AgentToolConflictError(
-                "Действию нужен проект: укажи его ключ через run_project_action."
+                "Действию нужен проект: укажи его ключ через telos_run_project_action."
             )
         if not definition.needs_project:
             # Личное действие не живёт в проекте, даже если страница указывала на проект.

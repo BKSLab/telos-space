@@ -251,7 +251,7 @@ async def test_smalltalk_does_not_load_project_data_or_start_write_intent():
     )
 
     assert answer.answer == "Привет! Я Арис, готов помочь."
-    assert seen == [{"load_capability"}]
+    assert seen == [{"telos_load_capability"}]
     db.sources.get_project_rows.assert_not_awaited()
     db.sources.search.assert_not_awaited()
     clients.embedding_client.get_embedding.assert_not_awaited()
@@ -271,7 +271,7 @@ async def test_task_workflow_loads_sql_once_without_embeddings_or_write_intent()
     service, project, clients, db = build_service()
     handler = AsyncMock(return_value={"source_id": "task:7", "task": {"id": 7, "key": "PROJ-12"}})
     service.tools = AgentToolExecutor(
-        [AgentTool("get_task", "Прочитать задачу", TaskInput, handler)]
+        [AgentTool("telos_get_task", "Прочитать задачу", TaskInput, handler)]
     )
     step = 0
 
@@ -279,11 +279,11 @@ async def test_task_workflow_loads_sql_once_without_embeddings_or_write_intent()
         nonlocal step
         step += 1
         if step == 1:
-            assert {tool.name for tool in info.function_tools} == {"load_capability"}
-            return ModelResponse(parts=[ToolCallPart("load_capability", {"id": "tasks"})])
+            assert {tool.name for tool in info.function_tools} == {"telos_load_capability"}
+            return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "tasks"})])
         if step == 2:
-            assert "get_task" in {tool.name for tool in info.function_tools}
-            return ModelResponse(parts=[ToolCallPart("get_task", {"task_id": 7})])
+            assert "telos_get_task" in {tool.name for tool in info.function_tools}
+            return ModelResponse(parts=[ToolCallPart("telos_get_task", {"task_id": 7})])
         handle = next(
             item["source_handle"]
             for item in prompt_payload(messages)["retrieval_context"]
@@ -364,7 +364,7 @@ async def test_created_task_receives_a_handle_before_the_next_step_and_is_revali
         return {
             "action": {
                 "id": "created-receipt",
-                "tool_name": "create_task",
+                "tool_name": "telos_create_task",
                 "status": "completed",
                 "result": {"source_id": "task:8", "task": {"id": 8, "title": created.title}},
             }
@@ -372,7 +372,7 @@ async def test_created_task_receives_a_handle_before_the_next_step_and_is_revali
 
     handler = AsyncMock(side_effect=create)
     service.tools = AgentToolExecutor(
-        [AgentTool("create_task", "Создать задачу", TaskCreateInput, handler, mutating=True)]
+        [AgentTool("telos_create_task", "Создать задачу", TaskCreateInput, handler, mutating=True)]
     )
 
     async def respond(*, schema, content, **_kwargs):
@@ -382,7 +382,7 @@ async def test_created_task_receives_a_handle_before_the_next_step_and_is_revali
         if not payload.get("read_results"):
             return AgentOutput(
                 tool_calls=[
-                    AgentToolRequest(name="create_task", arguments={"title": created.title})
+                    AgentToolRequest(name="telos_create_task", arguments={"title": created.title})
                 ]
             )
         result = payload["read_results"][0]["result"]["action"]["result"]
@@ -412,32 +412,32 @@ async def test_created_task_receives_a_handle_before_the_next_step_and_is_revali
     ("tool_name", "receipts", "write_intent", "expected_count"),
     [
         pytest.param(
-            "create_task", [{"id": "new", "status": "completed"}], True, 1, id="completed"
+            "telos_create_task", [{"id": "new", "status": "completed"}], True, 1, id="completed"
         ),
         pytest.param(
-            "create_task",
+            "telos_create_task",
             [{"id": "new", "status": "completed"}, {"id": "new", "status": "completed"}],
             True,
             1,
             id="same-receipt",
         ),
         pytest.param(
-            "create_task",
+            "telos_create_task",
             [{"id": "one", "status": "completed"}, {"id": "two", "status": "completed"}],
             True,
             2,
             id="two-receipts",
         ),
         pytest.param(
-            "create_task", [{"id": "pending", "status": "pending"}], True, 0, id="pending"
+            "telos_create_task", [{"id": "pending", "status": "pending"}], True, 0, id="pending"
         ),
-        pytest.param("create_task", [{"status": "completed"}], True, 0, id="missing-id"),
+        pytest.param("telos_create_task", [{"status": "completed"}], True, 0, id="missing-id"),
         pytest.param(
-            "get_task", [{"id": "read", "status": "completed"}], True, 0, id="read-receipt"
+            "telos_get_task", [{"id": "read", "status": "completed"}], True, 0, id="read-receipt"
         ),
-        pytest.param("get_task", [None], True, 0, id="no-current-action"),
+        pytest.param("telos_get_task", [None], True, 0, id="no-current-action"),
         pytest.param(
-            "create_task", [{"id": "denied", "status": "completed"}], False, 0, id="write-denied"
+            "telos_create_task", [{"id": "denied", "status": "completed"}], False, 0, id="write-denied"
         ),
     ],
 )
@@ -445,7 +445,7 @@ async def test_empty_final_answer_uses_only_current_completed_write_receipts(
     tool_name, receipts, write_intent, expected_count
 ):
     service, project, clients, _db = build_service()
-    mutating = tool_name == "create_task"
+    mutating = tool_name == "telos_create_task"
     returned = 0
 
     async def invoke(_context, _arguments):
@@ -489,7 +489,7 @@ async def test_empty_final_answer_uses_only_current_completed_write_receipts(
         project_id=project.id,
         question="Выполни действие с задачей",
         history=[],
-        action_history=[{"id": "previous", "tool_name": "create_task", "status": "completed"}],
+        action_history=[{"id": "previous", "tool_name": "telos_create_task", "status": "completed"}],
         execution=AgentToolContext(project_id=project.id, user_id=1, can_write=True),
     )
 
@@ -904,7 +904,7 @@ async def test_agent_reads_full_source_and_links_without_holding_database_scope(
     async def answer(*, schema, content, **kwargs):
         assert not active
         if schema is not WriteIntent:
-            assert {"read_source", "related_sources"} <= set(kwargs["offered"])
+            assert {"telos_read_source", "telos_list_related_sources"} <= set(kwargs["offered"])
         if schema is WriteIntent:
             assert json.loads(content)["dialog_memory"] == "Обсуждали резервного поставщика."
             return WriteIntent()
@@ -916,10 +916,10 @@ async def test_agent_reads_full_source_and_links_without_holding_database_scope(
             return AgentOutput(
                 tool_calls=[
                     AgentToolRequest(
-                        name="read_source", arguments={"source_id": "document:9", "offset": offset}
+                        name="telos_read_source", arguments={"source_id": "document:9", "offset": offset}
                     ),
-                    AgentToolRequest(name="related_sources", arguments={"source_id": "task:7"}),
-                    AgentToolRequest(name="read_source", arguments={"source_id": "document:999"}),
+                    AgentToolRequest(name="telos_list_related_sources", arguments={"source_id": "task:7"}),
+                    AgentToolRequest(name="telos_read_source", arguments={"source_id": "document:999"}),
                 ]
             )
         page, links, missing = [entry["result"] for entry in payload["read_results"]]
@@ -954,7 +954,7 @@ async def test_agent_stops_repeated_read_requests_with_explicit_incompleteness()
             WriteIntent()
             if schema is WriteIntent
             else AgentOutput(
-                answer="Проверена часть проекта.", reads=[KnowledgeReadRequest(name="list_sources")]
+                answer="Проверена часть проекта.", reads=[KnowledgeReadRequest(name="telos_list_sources")]
             )
         )
 

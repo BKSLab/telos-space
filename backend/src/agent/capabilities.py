@@ -1,6 +1,6 @@
 """Небольшие предметные наборы Ариса; обработчики остаются в общем реестре.
 
-Идентификаторы устойчивы: они используются нативным ``load_capability`` и
+Идентификаторы устойчивы: они используются нативным ``telos_load_capability`` и
 серверной ленивой загрузкой контекста. Здесь нет отдельного исполнителя или
 классификатора вопроса.
 """
@@ -22,36 +22,36 @@ WORKFLOWS = (
         "точный срок одной задачи; количества, распределение и просроченные задачи.",
         frozenset(
             {
-                "list_tasks",
-                "get_task_statistics",
-                "list_overdue_tasks",
-                "get_task",
-                "create_task",
-                "update_task",
-                "move_task",
-                "delete_task",
-                "set_checklist",
-                "fix_task_baseline",
+                "telos_list_tasks",
+                "telos_get_task_statistics",
+                "telos_list_overdue_tasks",
+                "telos_get_task",
+                "telos_create_task",
+                "telos_update_task",
+                "telos_move_task",
+                "telos_delete_task",
+                "telos_set_checklist",
+                "telos_fix_task_baseline",
             }
         ),
     ),
     Workflow(
         "comments",
         "Комментарии задачи: прочитать обсуждение, добавить или изменить комментарий.",
-        frozenset({"list_comments", "add_comment", "update_comment", "delete_comment"}),
+        frozenset({"telos_list_comments", "telos_add_comment", "telos_update_comment", "telos_delete_comment"}),
     ),
     Workflow(
         "documents",
         "Документы проекта: найти, прочитать полный текст, создать, изменить и связать с задачей.",
         frozenset(
             {
-                "list_documents",
-                "get_document",
-                "create_document",
-                "update_document",
-                "delete_document",
-                "link_document",
-                "unlink_document",
+                "telos_list_documents",
+                "telos_get_document",
+                "telos_create_document",
+                "telos_update_document",
+                "telos_delete_document",
+                "telos_link_document",
+                "telos_unlink_document",
             }
         ),
     ),
@@ -61,11 +61,11 @@ WORKFLOWS = (
         "скопировать или создать текстовый файл.",
         frozenset(
             {
-                "list_attachments",
-                "copy_attachment",
-                "create_text_attachment",
-                "delete_attachment",
-                "attach_uploaded_file",
+                "telos_list_attachments",
+                "telos_copy_attachment",
+                "telos_create_text_attachment",
+                "telos_delete_attachment",
+                "telos_attach_uploaded_file",
             }
         ),
     ),
@@ -73,24 +73,24 @@ WORKFLOWS = (
         "reports",
         "Сохранённый обзор/разбор проекта Ариса, последняя аналитическая сводка; "
         "опубликованные итоговые отчёты задач: наличие, чтение и новая версия.",
-        frozenset({"get_latest_project_summary", "list_task_reports", "get_task_report", "publish_task_report"}),
+        frozenset({"telos_get_latest_project_summary", "telos_list_task_reports", "telos_get_task_report", "telos_publish_task_report"}),
     ),
     Workflow(
         "project",
         "Паспорт проекта, состав команды, стадии канбана и последние изменения проекта.",
         frozenset(
             {
-                "get_project",
-                "update_project",
-                "list_members",
-                "add_member",
-                "remove_member",
-                "transfer_project_ownership",
-                "list_stages",
-                "create_stage",
-                "update_stage",
-                "delete_stage",
-                "list_recent_activity",
+                "telos_get_project",
+                "telos_update_project",
+                "telos_list_members",
+                "telos_add_member",
+                "telos_remove_member",
+                "telos_transfer_project_ownership",
+                "telos_list_stages",
+                "telos_create_stage",
+                "telos_update_stage",
+                "telos_delete_stage",
+                "telos_list_recent_activity",
             }
         ),
     ),
@@ -100,35 +100,35 @@ WORKFLOWS = (
         "точная дата одной задачи без перепланирования — tasks.",
         frozenset(
             {
-                "list_milestones",
-                "create_milestone",
-                "update_milestone",
-                "delete_milestone",
-                "list_dependencies",
-                "create_dependency",
-                "delete_dependency",
-                "get_calendar",
-                "preview_schedule_change",
-                "apply_schedule_change",
+                "telos_list_milestones",
+                "telos_create_milestone",
+                "telos_update_milestone",
+                "telos_delete_milestone",
+                "telos_list_dependencies",
+                "telos_create_dependency",
+                "telos_delete_dependency",
+                "telos_get_calendar",
+                "telos_preview_schedule_change",
+                "telos_apply_schedule_change",
             }
         ),
     ),
     Workflow(
         "risks",
         "Реестр зарегистрированных рисков проекта: прочитать, создать или изменить риск.",
-        frozenset({"list_risks", "get_risk", "create_risk", "update_risk", "delete_risk"}),
+        frozenset({"telos_list_risks", "telos_get_risk", "telos_create_risk", "telos_update_risk", "telos_delete_risk"}),
     ),
     Workflow(
         "structure",
         "ИСР: дерево разделов, декомпозиция и размещение задач; свободный пул и холст.",
         frozenset(
             {
-                "get_structure",
-                "create_wbs_node",
-                "update_wbs_node",
-                "move_wbs_node",
-                "delete_wbs_node",
-                "place_task",
+                "telos_get_structure",
+                "telos_create_wbs_node",
+                "telos_update_wbs_node",
+                "telos_move_wbs_node",
+                "telos_delete_wbs_node",
+                "telos_place_task",
             }
         ),
     ),
@@ -137,16 +137,16 @@ WORKFLOWS = (
         "Доски проекта: стикеры, редактируемые схемы, фигуры, стрелки и упорядочивание выделения.",
         frozenset(
             {
-                "list_boards",
-                "get_board_scene",
-                "draw_board_diagram",
-                "update_board_shapes",
-                "arrange_board_objects",
-                "list_stickers",
-                "create_sticker",
-                "update_sticker",
-                "move_sticker",
-                "delete_sticker",
+                "telos_list_boards",
+                "telos_get_board_scene",
+                "telos_draw_board_diagram",
+                "telos_update_board_shapes",
+                "telos_arrange_board_objects",
+                "telos_list_stickers",
+                "telos_create_sticker",
+                "telos_update_sticker",
+                "telos_move_sticker",
+                "telos_delete_sticker",
             }
         ),
     ),
@@ -155,11 +155,11 @@ WORKFLOWS = (
         "Личные доски пользователя: найти, прочитать, нарисовать или упорядочить схему.",
         frozenset(
             {
-                "list_personal_boards",
-                "get_personal_board_scene",
-                "draw_personal_board_diagram",
-                "update_personal_board_shapes",
-                "arrange_personal_board_objects",
+                "telos_list_personal_boards",
+                "telos_get_personal_board_scene",
+                "telos_draw_personal_board_diagram",
+                "telos_update_personal_board_shapes",
+                "telos_arrange_personal_board_objects",
             }
         ),
     ),
@@ -169,12 +169,12 @@ WORKFLOWS = (
         "и её статус. Для «мои задачи», в том числе просроченных.",
         frozenset(
             {
-                "list_my_tasks",
-                "list_my_projects",
-                "search_tasks",
-                "get_any_task",
-                "create_personal_task",
-                "set_task_status",
+                "telos_list_my_tasks",
+                "telos_list_my_projects",
+                "telos_search_tasks",
+                "telos_get_any_task",
+                "telos_create_personal_task",
+                "telos_set_task_status",
             }
         ),
     ),
@@ -182,13 +182,13 @@ WORKFLOWS = (
         "project_actions",
         "В личном диалоге: чтение или изменение другого проекта по его ключу "
         "и точные схемы проектных действий.",
-        frozenset({"run_project_action", "get_tool_schemas"}),
+        frozenset({"telos_run_project_action", "telos_get_tool_schemas"}),
     ),
     Workflow(
         "sources",
         "Знания проекта: поиск фактов и текста по всем источникам, чтение оригиналов "
         "и связанных объектов для анализа или ответа по документам.",
-        frozenset({"list_sources", "read_source", "related_sources", "search_sources"}),
+        frozenset({"telos_list_sources", "telos_read_source", "telos_list_related_sources", "telos_search_sources"}),
     ),
 )
 

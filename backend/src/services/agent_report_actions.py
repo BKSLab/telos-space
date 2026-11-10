@@ -62,7 +62,7 @@ async def list_task_reports(
         item["source_id"] = f"task_report:{item['task_id']}"
         item["preview"] = body[:400]
         item["total_chars"] = len(body)
-        item["read_with"] = "get_task_report"
+        item["read_with"] = "telos_get_task_report"
     return result
 
 

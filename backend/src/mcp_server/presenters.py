@@ -50,7 +50,7 @@ def project_summary(project: ProjectSummaryDto) -> dict:
 
 
 def project_detail(
-    overview: ProjectOverviewDto, *, full_text: bool = False, include_text_metadata: bool = False
+    overview: ProjectOverviewDto, *, full_text: bool = False
 ) -> dict:
     """Возвращает карточку проекта с превью или полным описанием."""
     result = {
@@ -66,15 +66,14 @@ def project_detail(
             for stage in overview.stages
         ],
     }
-    if include_text_metadata:
-        result["description_meta"] = _text_metadata(
-            overview.description,
-            full_text=full_text,
-            read_full={
-                "tool": "tt_get_project",
-                "arguments": {"project_key": overview.summary.project_key, "full_text": True},
-            },
-        )
+    result["description_meta"] = _text_metadata(
+        overview.description,
+        full_text=full_text,
+        read_full={
+            "tool": "telos_get_project",
+            "arguments": {"project_key": overview.summary.project_key, "full_text": True},
+        },
+    )
     return result
 
 
@@ -93,7 +92,7 @@ def task_summary(task: TaskSummaryDto) -> dict:
 
 
 def task_detail(
-    details: TaskDetailsDto, *, full_text: bool = False, include_text_metadata: bool = False
+    details: TaskDetailsDto, *, full_text: bool = False
 ) -> dict:
     """Возвращает карточку задачи с превью или полным описанием."""
     result = {
@@ -103,20 +102,19 @@ def task_detail(
         "description": details.description if full_text else shorten(details.description),
         "comment_count": details.comment_count,
     }
-    if include_text_metadata:
-        result["description_meta"] = _text_metadata(
-            details.description,
-            full_text=full_text,
-            read_full={
-                "tool": "tt_get_task",
-                "arguments": {"task_key": details.summary.task_key, "full_text": True},
-            },
-        )
+    result["description_meta"] = _text_metadata(
+        details.description,
+        full_text=full_text,
+        read_full={
+            "tool": "telos_get_task",
+            "arguments": {"task_key": details.summary.task_key, "full_text": True},
+        },
+    )
     return result
 
 
 def comment_item(
-    comment: CommentDto, *, full_text: bool = False, include_text_metadata: bool = False
+    comment: CommentDto, *, full_text: bool = False
 ) -> dict:
     """Возвращает комментарий с превью или полным текстом."""
     result = {
@@ -125,18 +123,17 @@ def comment_item(
         "created_at": comment.created_at.isoformat(),
         "body": comment.body if full_text else shorten(comment.body),
     }
-    if include_text_metadata:
-        result["body_meta"] = _text_metadata(
-            comment.body,
-            full_text=full_text,
-            read_full=(
-                {
-                    "tool": "tt_get_comment",
-                    "arguments": {"task_key": comment.task_key, "comment_id": comment.comment_id},
-                }
-                if comment.comment_id is not None else None
-            ),
-        )
+    result["body_meta"] = _text_metadata(
+        comment.body,
+        full_text=full_text,
+        read_full=(
+            {
+                "tool": "telos_get_comment",
+                "arguments": {"task_key": comment.task_key, "comment_id": comment.comment_id},
+            }
+            if comment.comment_id is not None else None
+        ),
+    )
     return result
 
 

@@ -117,14 +117,14 @@ def test_matching_tail_chunk_is_kept_and_reading_pages_covers_entire_source():
         page = read_catalog(
             catalog,
             KnowledgeReadRequest(
-                name="read_source", source_id="document:9", offset=offset, max_chars=8000
+                name="telos_read_source", source_id="document:9", offset=offset, max_chars=8000
             ),
         )
         pages.append(page["text"])
         offset = page["next_offset"]
     assert "".join(pages) == catalog.sources["document:9"].text
     assert "error" in read_catalog(
-        catalog, KnowledgeReadRequest(name="read_source", source_id="document:999")
+        catalog, KnowledgeReadRequest(name="telos_read_source", source_id="document:999")
     )
 
 
@@ -135,13 +135,13 @@ def test_relationship_and_source_lists_expose_next_page():
     ]
     catalog = build_catalog(1, rows)
     first = read_catalog(
-        catalog, KnowledgeReadRequest(name="list_sources", entity_type="comment", limit=30)
+        catalog, KnowledgeReadRequest(name="telos_list_sources", entity_type="comment", limit=30)
     )
     assert first["total"] == 35 and first["next_offset"] == 30
     second = read_catalog(
         catalog,
         KnowledgeReadRequest(
-            name="related_sources", source_id="task:7", entity_type="comment", offset=30
+            name="telos_list_related_sources", source_id="task:7", entity_type="comment", offset=30
         ),
     )
     assert second["total"] == 35 and second["next_offset"] is None and len(second["items"]) == 5

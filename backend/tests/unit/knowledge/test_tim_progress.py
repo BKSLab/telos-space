@@ -47,37 +47,37 @@ class Sink:
 
 
 def test_phrases_name_the_step_without_technical_names():
-    assert describe_call("get_task", {"task_key": "evl-1"}) == "Читаю задачу EVL-1…"
-    assert describe_call("get_task", {"task_id": 7}) == "Читаю задачу…"
-    assert describe_call("search_tasks", {"search": "  отчёт   по складу "}) == (
+    assert describe_call("telos_get_task", {"task_key": "evl-1"}) == "Читаю задачу EVL-1…"
+    assert describe_call("telos_get_task", {"task_id": 7}) == "Читаю задачу…"
+    assert describe_call("telos_search_tasks", {"search": "  отчёт   по складу "}) == (
         "Ищу задачи: «отчёт по складу»…"
     )
-    assert describe_call("get_calendar", {}) == "Смотрю календарь…"
-    assert describe_call("create_task", {"title": "Новая"}) == "Создаю задачу…"
+    assert describe_call("telos_get_calendar", {}) == "Смотрю календарь…"
+    assert describe_call("telos_create_task", {"title": "Новая"}) == "Создаю задачу…"
     # Проектное действие по ключу описывается действием внутри.
     assert (
         describe_call(
-            "run_project_action",
-            {"project_key": "EVL", "name": "get_task", "arguments": {"task_key": "EVL-3"}},
+            "telos_run_project_action",
+            {"project_key": "EVL", "name": "telos_get_task", "arguments": {"task_key": "EVL-3"}},
         )
         == "Читаю задачу EVL-3…"
     )
     # Неизвестный инструмент и мусорные аргументы — общая фраза, без исключений.
     assert describe_call("brand_new_tool", {"x": 1}) == GENERIC
-    assert describe_call("run_project_action", {"arguments": "мусор"}) == GENERIC
-    assert describe_call("get_task", None) == "Читаю задачу…"  # type: ignore[arg-type]
+    assert describe_call("telos_run_project_action", {"arguments": "мусор"}) == GENERIC
+    assert describe_call("telos_get_task", None) == "Читаю задачу…"  # type: ignore[arg-type]
 
 
 def test_every_registered_tool_has_a_phrase_and_long_queries_are_cut():
     executor = registry_executor()
     missing = [
-        name for name in executor.tools if name not in PHRASES and name != "run_project_action"
+        name for name in executor.tools if name not in PHRASES and name != "telos_run_project_action"
     ]
     assert missing == []
     assert {definition.name for definition in TIM_ACTIONS} <= set(PHRASES)
-    phrase = describe_call("search_tasks", {"search": "слово " * 200})
+    phrase = describe_call("telos_search_tasks", {"search": "слово " * 200})
     assert len(phrase) < 80 and phrase.endswith("»…")
-    assert len(describe_call("get_task", {"task_key": "K" * 500})) <= MAX_PROGRESS_CHARS
+    assert len(describe_call("telos_get_task", {"task_key": "K" * 500})) <= MAX_PROGRESS_CHARS
     for text in PHRASES.values():
         assert "_" not in text and text.endswith("…")
     # Действие с подтверждением Арис только предлагает — фраза не обещает изменение.
@@ -88,7 +88,7 @@ def test_every_registered_tool_has_a_phrase_and_long_queries_are_cut():
 
 async def test_runtime_reports_start_and_one_phrase_per_model_step():
     read = AsyncMock(return_value={"task": {"id": 7, "key": "EVL-1"}})
-    executor = AgentToolExecutor([AgentTool("get_task", "Прочитать задачу", TaskLookupInput, read)])
+    executor = AgentToolExecutor([AgentTool("telos_get_task", "Прочитать задачу", TaskLookupInput, read)])
     runtime = TimRuntime(model=TestModel(), executor=executor)
     steps = 0
 
@@ -99,8 +99,8 @@ async def test_runtime_reports_start_and_one_phrase_per_model_step():
             # Два вызова в одном шаге — одна фраза, по первому вызову.
             return ModelResponse(
                 parts=[
-                    ToolCallPart("get_task", {"task_key": "EVL-1"}, tool_call_id="a"),
-                    ToolCallPart("get_task", {"task_key": "EVL-2"}, tool_call_id="b"),
+                    ToolCallPart("telos_get_task", {"task_key": "EVL-1"}, tool_call_id="a"),
+                    ToolCallPart("telos_get_task", {"task_key": "EVL-2"}, tool_call_id="b"),
                 ]
             )
         return final("Готово.")
@@ -130,7 +130,7 @@ async def test_mutating_call_waiting_for_the_write_check_says_so(lazy):
         if not seen:
             seen.append("call")
             return ModelResponse(
-                parts=[ToolCallPart("create_task", {"title": "Новая"}, tool_call_id="c")]
+                parts=[ToolCallPart("telos_create_task", {"title": "Новая"}, tool_call_id="c")]
             )
         return final("Создал.")
 
@@ -168,7 +168,7 @@ async def test_failing_or_slow_progress_never_breaks_or_delays_the_answer():
             calls += 1
             if calls == 1:
                 return ModelResponse(
-                    parts=[ToolCallPart("get_task", {"task_key": "EVL-1"}, tool_call_id="r")]
+                    parts=[ToolCallPart("telos_get_task", {"task_key": "EVL-1"}, tool_call_id="r")]
                 )
             return final("Ответ.")
 

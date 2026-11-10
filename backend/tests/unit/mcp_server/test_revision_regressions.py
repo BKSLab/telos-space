@@ -99,7 +99,7 @@ def test_api_key_scope_table_has_no_nonexistent_methods() -> None:
     assert not API_KEY_ROUTE_SCOPES.keys() - actual
 
 
-async def test_legacy_comment_name_cannot_replace_authenticated_author(tools):
+async def test_canonical_comment_cannot_replace_authenticated_author(tools):
     services = tools(ApiTokenScope.WRITE)
     services.query.resolve_task.return_value = ResolvedTask(
         task_id=7, project_id=PROJECT_ID, task_key="PROJ-142"
@@ -107,8 +107,8 @@ async def test_legacy_comment_name_cannot_replace_authenticated_author(tools):
     services.comments.add_comment.return_value = SimpleNamespace(
         id=1, author_name="Тестов Тест", created_at=datetime.now(UTC)
     )
-    legacy = mcp_server._tool_manager.get_tool("add_comment")
-    await legacy.fn(
+    registered = mcp_server._tool_manager.get_tool("telos_add_comment")
+    await registered.fn(
         context=FakeContext(), task_key="PROJ-142", body="Текст", author="Подставной автор"
     )
     assert services.comments.add_comment.await_args.kwargs == {

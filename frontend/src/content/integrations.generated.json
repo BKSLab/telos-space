@@ -3,7 +3,7 @@
     {
       "description": "Комментарий от имени инициатора, определённого сервером.",
       "group": "comments",
-      "id": "mcp-action-14a4e2b13d6fa400",
+      "id": "mcp-action-9c84618e2401f45b",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -32,7 +32,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "add_comment",
+      "name": "telos_add_comment",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -46,7 +46,7 @@
     {
       "description": "Владелец добавляет существующего пользователя по точному логину.",
       "group": "projects",
-      "id": "mcp-action-852db760cd3acc01",
+      "id": "mcp-action-e1272fae4e030fde",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -68,7 +68,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "add_member",
+      "name": "telos_add_member",
       "needsProject": true,
       "ownerOnly": true,
       "requiresConfirmation": false,
@@ -79,7 +79,7 @@
     {
       "description": "Применяет конкретные даты и expected_updated_at из preview после решения участника.",
       "group": "tasks",
-      "id": "mcp-action-578c8fe4ad034b35",
+      "id": "mcp-action-581439353cf3a15c",
       "inputSchema": {
         "$defs": {
           "ScenarioApplyChangeInput": {
@@ -155,7 +155,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "apply_schedule_change",
+      "name": "telos_apply_schedule_change",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -166,7 +166,7 @@
     {
       "description": "Атомарно раскладывает (layout TB/LR) или выравнивает (align) выбранные фигуры/стикеры. expected_revision доски и revision объектов бери из свежей сцены; учитывай groups/locks. При конфликте перечитай сцену.",
       "group": "boards",
-      "id": "mcp-action-a5a8b92b66bebf50",
+      "id": "mcp-action-b95d23823b062c14",
       "inputSchema": {
         "$defs": {
           "ArrangeObjectRef": {
@@ -272,7 +272,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "arrange_board_objects",
+      "name": "telos_arrange_board_objects",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -286,7 +286,7 @@
     {
       "description": "Копирует в задачу файл, отправленный участником в личном чате. file_id берётся из uploaded_files; пути и ссылки не принимаются.",
       "group": "tasks",
-      "id": "mcp-action-f892632bda02c928",
+      "id": "mcp-action-ab39ecd5276b1cc9",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -314,7 +314,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "attach_uploaded_file",
+      "name": "telos_attach_uploaded_file",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -325,7 +325,7 @@
     {
       "description": "Копирует файл одной задачи к другой внутри проекта, сохраняя исходный файл.",
       "group": "task-attachments",
-      "id": "mcp-action-29d2cc0516e9b111",
+      "id": "mcp-action-eb77d5e9cbb2858a",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -360,7 +360,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "copy_attachment",
+      "name": "telos_copy_attachment",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -371,7 +371,7 @@
     {
       "description": "Связывает задачи одного проекта с проверкой циклов.",
       "group": "calendar",
-      "id": "mcp-action-ceccd29bd8ffed18",
+      "id": "mcp-action-c9a50d27c1631935",
       "inputSchema": {
         "$defs": {
           "TaskDependencyType": {
@@ -419,7 +419,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "create_dependency",
+      "name": "telos_create_dependency",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -433,7 +433,7 @@
     {
       "description": "Документ проекта в Markdown.",
       "group": "documents",
-      "id": "mcp-action-b6434a09d98aad19",
+      "id": "mcp-action-e1d6ac3c4b0e7788",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Новый документ проекта.",
@@ -491,7 +491,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "create_document",
+      "name": "telos_create_document",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -502,7 +502,7 @@
     {
       "description": "Новая контрольная точка проекта.",
       "group": "calendar",
-      "id": "mcp-action-d7c49fb89964ced8",
+      "id": "mcp-action-de88af834b20430b",
       "inputSchema": {
         "$defs": {
           "ProjectMilestoneStatus": {
@@ -570,7 +570,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "create_milestone",
+      "name": "telos_create_milestone",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -584,7 +584,7 @@
     {
       "description": "Добавляет риск с доменной проверкой владельца и связанной задачи.",
       "group": "risks",
-      "id": "mcp-action-270834af3b571584",
+      "id": "mcp-action-ae33457aacbf3bd6",
       "inputSchema": {
         "$defs": {
           "RiskRating": {
@@ -787,7 +787,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "create_risk",
+      "name": "telos_create_risk",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -801,7 +801,7 @@
     {
       "description": "Добавляет стадию канбана.",
       "group": "projects",
-      "id": "mcp-action-6865f2c0f16dd8af",
+      "id": "mcp-action-78de2905089f4441",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Создание стадии канбана.",
@@ -850,7 +850,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "create_stage",
+      "name": "telos_create_stage",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -861,7 +861,7 @@
     {
       "description": "Текст, цвет, положение и связи с задачами на доске board_id (по умолчанию — первой); автор задаётся сервером.",
       "group": "boards",
-      "id": "mcp-action-536561ae3f51460a",
+      "id": "mcp-action-9fc59d7c6a3c81e7",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Новый стикер с привязками к задачам и координатами.",
@@ -877,7 +877,7 @@
               }
             ],
             "default": null,
-            "description": "ID доски проекта из list_boards; не указан — первая доска проекта.",
+            "description": "ID доски проекта из telos_list_boards; не указан — первая доска проекта.",
             "title": "Board Id"
           },
           "body": {
@@ -952,7 +952,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "create_sticker",
+      "name": "telos_create_sticker",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -963,7 +963,7 @@
     {
       "description": "Создание задачи, назначений и необязательного чек-листа.",
       "group": "agent",
-      "id": "mcp-action-fc7cff20decf8b06",
+      "id": "mcp-action-f136dc568e8defb0",
       "inputSchema": {
         "$defs": {
           "ChecklistItemSchema": {
@@ -1318,7 +1318,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "create_task",
+      "name": "telos_create_task",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -1332,7 +1332,7 @@
     {
       "description": "Прикрепляет к задаче сформированный TXT, Markdown, CSV, JSON или LOG.",
       "group": "task-attachments",
-      "id": "mcp-action-4823c857f26049cf",
+      "id": "mcp-action-210384a01f16dd2e",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1368,7 +1368,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "create_text_attachment",
+      "name": "telos_create_text_attachment",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -1379,7 +1379,7 @@
     {
       "description": "Создаёт раздел в корне или внутри родительского раздела.",
       "group": "structure",
-      "id": "mcp-action-f7b82f9d2ded4db2",
+      "id": "mcp-action-98fe386bc5fec748",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1415,7 +1415,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "create_wbs_node",
+      "name": "telos_create_wbs_node",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -1429,7 +1429,7 @@
     {
       "description": "Удаляет выбранный файл задачи после решения участника.",
       "group": "task-attachments",
-      "id": "mcp-action-a9f799e1b0b379c0",
+      "id": "mcp-action-a26f190ecffd1a27",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1457,7 +1457,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_attachment",
+      "name": "telos_delete_attachment",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1468,7 +1468,7 @@
     {
       "description": "Удаляет выбранный комментарий после решения участника.",
       "group": "comments",
-      "id": "mcp-action-50b3ade8ed0c1a0d",
+      "id": "mcp-action-f1dc9f89e673a1d8",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1489,7 +1489,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_comment",
+      "name": "telos_delete_comment",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1503,7 +1503,7 @@
     {
       "description": "Удаляет связь задач после решения участника.",
       "group": "calendar",
-      "id": "mcp-action-8dff90abbf897621",
+      "id": "mcp-action-e102efeea8605317",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1524,7 +1524,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_dependency",
+      "name": "telos_delete_dependency",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1538,7 +1538,7 @@
     {
       "description": "Удаляет документ и его связи после решения участника.",
       "group": "documents",
-      "id": "mcp-action-4e5f41a96d87aadb",
+      "id": "mcp-action-9189c8d19c9ed0bc",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1559,7 +1559,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_document",
+      "name": "telos_delete_document",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1570,7 +1570,7 @@
     {
       "description": "Удаляет веху после решения участника.",
       "group": "calendar",
-      "id": "mcp-action-033dff8555c4e9c5",
+      "id": "mcp-action-c20559da04ebade7",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1591,7 +1591,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_milestone",
+      "name": "telos_delete_milestone",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1602,7 +1602,7 @@
     {
       "description": "Удаляет риск после решения участника.",
       "group": "risks",
-      "id": "mcp-action-f2f9e2970ced182f",
+      "id": "mcp-action-49d32ad770c147b7",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1623,7 +1623,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_risk",
+      "name": "telos_delete_risk",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1634,7 +1634,7 @@
     {
       "description": "Удаляет стадию по правилам канбана после решения участника.",
       "group": "projects",
-      "id": "mcp-action-3e42b1a1a4cbc7f3",
+      "id": "mcp-action-f6e2a588d4198cbb",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1655,7 +1655,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_stage",
+      "name": "telos_delete_stage",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1666,7 +1666,7 @@
     {
       "description": "Удаляет прочитанную ревизию после решения участника.",
       "group": "boards",
-      "id": "mcp-action-945c4f7f4f817021",
+      "id": "mcp-action-8a1fadb798a00987",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1708,7 +1708,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_sticker",
+      "name": "telos_delete_sticker",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1719,12 +1719,12 @@
     {
       "description": "Удаляет задачу с комментариями и файлами; нужен свежий expected_updated_at и решение участника.",
       "group": "agent",
-      "id": "mcp-action-5dc273ee2e4c1136",
+      "id": "mcp-action-821d3e80e1acf5ca",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "expected_updated_at": {
-            "description": "updated_at из свежего get_task; удаление требует решения участника.",
+            "description": "updated_at из свежего telos_get_task; удаление требует решения участника.",
             "format": "date-time",
             "title": "Expected Updated At",
             "type": "string"
@@ -1747,7 +1747,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_task",
+      "name": "telos_delete_task",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1761,7 +1761,7 @@
     {
       "description": "Удаляет раздел по правилам ИСР с сохранением задач; требует решения участника.",
       "group": "structure",
-      "id": "mcp-action-bcee60ba57663e35",
+      "id": "mcp-action-22c97726bf4f3823",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1782,7 +1782,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "delete_wbs_node",
+      "name": "telos_delete_wbs_node",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -1794,9 +1794,9 @@
       "write": true
     },
     {
-      "description": "Строит nodes/edges в редактируемые фигуры с авторством участника одним batch. TB/LR; существующие объекты сохраняет. Стрелки могут ссылаться на блоки и стикеры из get_board_scene.",
+      "description": "Строит nodes/edges в редактируемые фигуры с авторством участника одним batch. TB/LR; существующие объекты сохраняет. Стрелки могут ссылаться на блоки и стикеры из telos_get_board_scene.",
       "group": "boards",
-      "id": "mcp-action-07d54d9256dbad7e",
+      "id": "mcp-action-3c38ba4b5eb87010",
       "inputSchema": {
         "$defs": {
           "DiagramEdge": {
@@ -1994,7 +1994,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "draw_board_diagram",
+      "name": "telos_draw_board_diagram",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2008,7 +2008,7 @@
     {
       "description": "Записывает текущие даты задачи как baseline после решения участника.",
       "group": "calendar",
-      "id": "mcp-action-0599e5307937141a",
+      "id": "mcp-action-29d981aa05f77999",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2029,7 +2029,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "fix_task_baseline",
+      "name": "telos_fix_task_baseline",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": true,
@@ -2043,7 +2043,7 @@
     {
       "description": "Фигуры, стрелки, стикеры, авторы и revision выбранной доски; next_offset — продолжение.",
       "group": "boards",
-      "id": "mcp-action-58d44ede61e719eb",
+      "id": "mcp-action-4a27c4471be4599f",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2077,7 +2077,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_board_scene",
+      "name": "telos_get_board_scene",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2091,7 +2091,7 @@
     {
       "description": "Задачи, вехи и рассчитанные сигналы в диапазоне дат.",
       "group": "calendar",
-      "id": "mcp-action-308eb651f8e25dc5",
+      "id": "mcp-action-cd80d2569f66caf1",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2120,7 +2120,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_calendar",
+      "name": "telos_get_calendar",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2133,7 +2133,7 @@
     {
       "description": "Страница оригинального текста и связи с задачами; next_offset указывает продолжение.",
       "group": "documents",
-      "id": "mcp-action-e6fc1ae19f9bb87a",
+      "id": "mcp-action-3cebbb95e2823f71",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2170,7 +2170,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_document",
+      "name": "telos_get_document",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2181,7 +2181,7 @@
     {
       "description": "Последний сохранённый анализ текущего проекта целиком: дата, автор, модель, находки, прогресс, рекомендации и границы контекста. Это состояние на дату формирования; новый анализ не запускается. Если свода нет, сообщает об отсутствии.",
       "group": "projects",
-      "id": "mcp-action-094c18eb76e0668a",
+      "id": "mcp-action-55cf26e3ffe96b1c",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Инструмент без аргументов.",
@@ -2194,7 +2194,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_latest_project_summary",
+      "name": "telos_get_latest_project_summary",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2207,7 +2207,7 @@
     {
       "description": "Паспорт, статистика и история сроков текущего проекта.",
       "group": "projects",
-      "id": "mcp-action-d0572e06eb6b8416",
+      "id": "mcp-action-3d1c68a6eed229f7",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Инструмент без аргументов.",
@@ -2220,7 +2220,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_project",
+      "name": "telos_get_project",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2233,7 +2233,7 @@
     {
       "description": "Карточка риска с оценкой, владельцем, статусом и планами.",
       "group": "risks",
-      "id": "mcp-action-dc16262dae457883",
+      "id": "mcp-action-e2541ec6e62049ab",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2255,7 +2255,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_risk",
+      "name": "telos_get_risk",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2268,7 +2268,7 @@
     {
       "description": "Разделы ИСР, размещение задач и свободный пул.",
       "group": "structure",
-      "id": "mcp-action-b837efc9b506c8f6",
+      "id": "mcp-action-84fecbe46b256d62",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Инструмент без аргументов.",
@@ -2281,7 +2281,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_structure",
+      "name": "telos_get_structure",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2293,9 +2293,9 @@
       "write": false
     },
     {
-      "description": "Полная задача по task_id или ключу KEY-12: стадия с названием, участники, чек-лист, revision и updated_at. По ключу искать задачу через list_tasks не нужно.",
+      "description": "Полная задача по task_id или ключу KEY-12: стадия с названием, участники, чек-лист, revision и updated_at. По ключу искать задачу через telos_list_tasks не нужно.",
       "group": "agent",
-      "id": "mcp-action-92ac4e14a27a92a4",
+      "id": "mcp-action-badc01a73297d2af",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Задача по ID или по ключу вида KEY-12 — ключ избавляет от шага поиска.",
@@ -2337,7 +2337,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_task",
+      "name": "telos_get_task",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2351,7 +2351,7 @@
     {
       "description": "Текущая версия, автор и страница полного текста по ID или ключу; next_offset означает продолжение.",
       "group": "reports",
-      "id": "mcp-action-285ea4b41fc48ed3",
+      "id": "mcp-action-9ed5a576676f9f46",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Постраничное чтение актуального текста, включая большие отчёты.",
@@ -2406,7 +2406,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_task_report",
+      "name": "telos_get_task_report",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2420,7 +2420,7 @@
     {
       "description": "Сколько задач в проекте: всего, просрочено, по стадиям, приоритетам и исполнителям. Для вопросов «сколько», «как распределены», «у кого больше задач».",
       "group": "agent",
-      "id": "mcp-action-2dfa305b07cee127",
+      "id": "mcp-action-72d9dc6a4f1f7d5d",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Инструмент без аргументов.",
@@ -2433,7 +2433,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "get_task_statistics",
+      "name": "telos_get_task_statistics",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2447,7 +2447,7 @@
     {
       "description": "Связывает документ и задачу одного проекта.",
       "group": "documents",
-      "id": "mcp-action-8195dcb952ff89e5",
+      "id": "mcp-action-b99d4f76d18d7c83",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2475,7 +2475,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "link_document",
+      "name": "telos_link_document",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2486,7 +2486,7 @@
     {
       "description": "Метаданные и ссылки файлов задачи.",
       "group": "task-attachments",
-      "id": "mcp-action-dd506f6156537685",
+      "id": "mcp-action-d5346ecdcf56f64a",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2508,7 +2508,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_attachments",
+      "name": "telos_list_attachments",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2522,7 +2522,7 @@
     {
       "description": "Доски проекта (вкладки) с id и ревизиями; board_id нужен стикерным действиям.",
       "group": "boards",
-      "id": "mcp-action-cdb4f17966fb575f",
+      "id": "mcp-action-24a1899d09a5ebd8",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Инструмент без аргументов.",
@@ -2535,7 +2535,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_boards",
+      "name": "telos_list_boards",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2549,7 +2549,7 @@
     {
       "description": "Обсуждение задачи с ID комментариев.",
       "group": "comments",
-      "id": "mcp-action-16229f2ae6abe319",
+      "id": "mcp-action-afe0674319a5fb30",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Страница объектов задачи.",
@@ -2587,7 +2587,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_comments",
+      "name": "telos_list_comments",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2601,7 +2601,7 @@
     {
       "description": "Связи задач с типом и задержкой.",
       "group": "tasks",
-      "id": "mcp-action-e98ba9e307c06673",
+      "id": "mcp-action-3a472436f380c9b9",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2629,7 +2629,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_dependencies",
+      "name": "telos_list_dependencies",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2643,7 +2643,7 @@
     {
       "description": "Постраничный перечень документов проекта.",
       "group": "documents",
-      "id": "mcp-action-92234570806ac565",
+      "id": "mcp-action-8b5cf20517cbc7d9",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2671,7 +2671,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_documents",
+      "name": "telos_list_documents",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2682,7 +2682,7 @@
     {
       "description": "Участники, логины, ID и роли доступа; личные контакты не возвращаются.",
       "group": "projects",
-      "id": "mcp-action-e33455663eeb4fd3",
+      "id": "mcp-action-685c82523a5d7d6c",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2710,7 +2710,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_members",
+      "name": "telos_list_members",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2723,7 +2723,7 @@
     {
       "description": "Страница вех проекта с датами и статусами.",
       "group": "calendar",
-      "id": "mcp-action-b8aadbb68dc783cb",
+      "id": "mcp-action-5356c9eee38be32f",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2751,7 +2751,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_milestones",
+      "name": "telos_list_milestones",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2764,7 +2764,7 @@
     {
       "description": "Незавершённые задачи со сроком раньше сегодняшнего, самые давние первыми. Для вопросов «что просрочено», «что горит».",
       "group": "agent",
-      "id": "mcp-action-5d206962efe4833b",
+      "id": "mcp-action-2ad6bc795a203ef1",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2785,7 +2785,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_overdue_tasks",
+      "name": "telos_list_overdue_tasks",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2799,7 +2799,7 @@
     {
       "description": "История изменений задач проекта, свежие первыми: смена стадии, сроков, исполнителя, комментарии, время. Для вопросов «что менялось недавно», «что нового».",
       "group": "tasks",
-      "id": "mcp-action-9d5bf0bd6978709c",
+      "id": "mcp-action-b31ceb5668eb4bd3",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2820,7 +2820,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_recent_activity",
+      "name": "telos_list_recent_activity",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -2834,7 +2834,7 @@
     {
       "description": "Фильтры и страница реестра зарегистрированных рисков проекта.",
       "group": "risks",
-      "id": "mcp-action-4ba86a6d742c8b91",
+      "id": "mcp-action-2c10a62ff2dc1486",
       "inputSchema": {
         "$defs": {
           "RiskRating": {
@@ -3005,7 +3005,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_risks",
+      "name": "telos_list_risks",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3018,7 +3018,7 @@
     {
       "description": "Стадии канбана, их ID, порядок и признак завершения.",
       "group": "projects",
-      "id": "mcp-action-02f92962d600dfd7",
+      "id": "mcp-action-602b2f44b8f362e3",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Инструмент без аргументов.",
@@ -3031,7 +3031,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_stages",
+      "name": "telos_list_stages",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3044,7 +3044,7 @@
     {
       "description": "Стикеры доски с ревизиями, координатами, слоем и задачами; без board_id — первая доска.",
       "group": "boards",
-      "id": "mcp-action-588e850ad9d8b5fd",
+      "id": "mcp-action-adcfac1817920d37",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3059,7 +3059,7 @@
               }
             ],
             "default": null,
-            "description": "ID доски проекта из list_boards; не указан — первая доска проекта.",
+            "description": "ID доски проекта из telos_list_boards; не указан — первая доска проекта.",
             "title": "Board Id"
           },
           "limit": {
@@ -3086,7 +3086,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_stickers",
+      "name": "telos_list_stickers",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3095,9 +3095,9 @@
       "write": false
     },
     {
-      "description": "Полный перечень актуальных опубликованных отчётов, total_tasks/total_reports/without_report и next_offset. Для сводки пройди все страницы и прочитай тексты get_task_report; комментарии не являются опубликованными отчётами.",
+      "description": "Полный перечень актуальных опубликованных отчётов, total_tasks/total_reports/without_report и next_offset. Для сводки пройди все страницы и прочитай тексты telos_get_task_report; комментарии не являются опубликованными отчётами.",
       "group": "reports",
-      "id": "mcp-action-55597abd0f0b7a56",
+      "id": "mcp-action-2faee7cf01313836",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3125,7 +3125,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_task_reports",
+      "name": "telos_list_task_reports",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3139,7 +3139,7 @@
     {
       "description": "Поиск и страница задач; возвращает ID, ключи и актуальные поля.",
       "group": "agent",
-      "id": "mcp-action-c7932d7e885e9cca",
+      "id": "mcp-action-a9674b4a13c90531",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3195,7 +3195,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "list_tasks",
+      "name": "telos_list_tasks",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3209,7 +3209,7 @@
     {
       "description": "Координаты, размеры и слой стикера.",
       "group": "boards",
-      "id": "mcp-action-5f9a93697f90f8a6",
+      "id": "mcp-action-c28635063e31953b",
       "inputSchema": {
         "$defs": {
           "ProjectStickerPositionUpdateSchema": {
@@ -3320,7 +3320,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "move_sticker",
+      "name": "telos_move_sticker",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3331,7 +3331,7 @@
     {
       "description": "Стадия и положение задачи в канбане.",
       "group": "agent",
-      "id": "mcp-action-f3b50c341e129e55",
+      "id": "mcp-action-103f0367538f769b",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3372,7 +3372,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "move_task",
+      "name": "telos_move_task",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3386,7 +3386,7 @@
     {
       "description": "Меняет родителя и порядок с проверкой циклов.",
       "group": "structure",
-      "id": "mcp-action-a0e05365760bda6d",
+      "id": "mcp-action-c1dc457d902f968f",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3434,7 +3434,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "move_wbs_node",
+      "name": "telos_move_wbs_node",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3448,7 +3448,7 @@
     {
       "description": "Назначить раздел, порядок, координаты или вернуть задачу в пул через wbs_node_id=null.",
       "group": "structure",
-      "id": "mcp-action-99c5aac7939c46d2",
+      "id": "mcp-action-ceb0b9e29ba66f6c",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3522,7 +3522,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "place_task",
+      "name": "telos_place_task",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3536,7 +3536,7 @@
     {
       "description": "Preview последствий изменения дат без записи; возвращает версии задач для apply.",
       "group": "tasks",
-      "id": "mcp-action-1e1e5d6f360452eb",
+      "id": "mcp-action-a29692c53d7b638c",
       "inputSchema": {
         "$defs": {
           "ScenarioChangeInput": {
@@ -3607,7 +3607,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "preview_schedule_change",
+      "name": "telos_preview_schedule_change",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3616,9 +3616,9 @@
       "write": false
     },
     {
-      "description": "Публикует новую версию самостоятельного отчёта, не комментарий. Нужна expected_revision из get_task_report; прежние версии сохраняются.",
+      "description": "Публикует новую версию самостоятельного отчёта, не комментарий. Нужна expected_revision из telos_get_task_report; прежние версии сохраняются.",
       "group": "reports",
-      "id": "mcp-action-e2f233fa4a3fc61c",
+      "id": "mcp-action-1298b72aceded06d",
       "inputSchema": {
         "additionalProperties": false,
         "description": "Полная новая версия с защитой от потери изменений.",
@@ -3652,7 +3652,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "publish_task_report",
+      "name": "telos_publish_task_report",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3666,7 +3666,7 @@
     {
       "description": "Владелец удаляет участника и назначения; владельца удалить нельзя.",
       "group": "projects",
-      "id": "mcp-action-87b627f7b053f541",
+      "id": "mcp-action-539622a318722fe7",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3687,7 +3687,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "remove_member",
+      "name": "telos_remove_member",
       "needsProject": true,
       "ownerOnly": true,
       "requiresConfirmation": true,
@@ -3698,7 +3698,7 @@
     {
       "description": "Создать, изменить, переупорядочить, отметить пункты или удалить чек-лист; требуется его текущая revision. Сохраняй ID существующих пунктов.",
       "group": "tasks",
-      "id": "mcp-action-2c6678590ebfc05b",
+      "id": "mcp-action-26146d1e7ccd3f26",
       "inputSchema": {
         "$defs": {
           "ChecklistItemSchema": {
@@ -3783,7 +3783,7 @@
             "description": "Полный чек-лист с ID пунктов; null удаляет его."
           },
           "checklist_revision": {
-            "description": "Текущая версия чек-листа из get_task.",
+            "description": "Текущая версия чек-листа из telos_get_task.",
             "minimum": 0,
             "title": "Checklist Revision",
             "type": "integer"
@@ -3807,7 +3807,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "set_checklist",
+      "name": "telos_set_checklist",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3821,7 +3821,7 @@
     {
       "description": "Роли доступа OWNER/MEMBER: назначает нового владельца из команды, прежний становится участником.",
       "group": "projects",
-      "id": "mcp-action-e09f43bd266d4e61",
+      "id": "mcp-action-b9a9dc26192eb603",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3842,7 +3842,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "transfer_project_ownership",
+      "name": "telos_transfer_project_ownership",
       "needsProject": true,
       "ownerOnly": true,
       "requiresConfirmation": true,
@@ -3853,7 +3853,7 @@
     {
       "description": "Удаляет связь документа с задачей; сам документ сохраняется.",
       "group": "documents",
-      "id": "mcp-action-69e2ce00936ffdd0",
+      "id": "mcp-action-d2564022c315d057",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3874,7 +3874,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "unlink_document",
+      "name": "telos_unlink_document",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -3885,7 +3885,7 @@
     {
       "description": "Правит фигуры одним batch; id и обязательная revision берутся из свежей сцены. Не удаляет объекты.",
       "group": "boards",
-      "id": "mcp-action-fea92df0f50af8d6",
+      "id": "mcp-action-026e1d9b7847e47f",
       "inputSchema": {
         "$defs": {
           "AgentShapeUpdate": {
@@ -4319,7 +4319,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_board_shapes",
+      "name": "telos_update_board_shapes",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -4333,7 +4333,7 @@
     {
       "description": "Правка прочитанной версии без изменения авторства.",
       "group": "comments",
-      "id": "mcp-action-c6a7f102e7d33961",
+      "id": "mcp-action-6ab5d5a60c70ae07",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -4368,7 +4368,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_comment",
+      "name": "telos_update_comment",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -4382,7 +4382,7 @@
     {
       "description": "Название или содержимое документа.",
       "group": "documents",
-      "id": "mcp-action-f392ef4854fac5cb",
+      "id": "mcp-action-277075b75cf7989a",
       "inputSchema": {
         "$defs": {
           "DocumentChangesInput": {
@@ -4456,7 +4456,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_document",
+      "name": "telos_update_document",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -4467,7 +4467,7 @@
     {
       "description": "Дата, название, статус и описание вехи.",
       "group": "calendar",
-      "id": "mcp-action-778299a153b5a782",
+      "id": "mcp-action-34ae7703acdfa842",
       "inputSchema": {
         "$defs": {
           "MilestoneChangesInput": {
@@ -4575,7 +4575,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_milestone",
+      "name": "telos_update_milestone",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -4589,7 +4589,7 @@
     {
       "description": "Паспорт, настройки и срок проекта; перенос срока требует причины и expected_due_date.",
       "group": "projects",
-      "id": "mcp-action-a9fcded31d3f8433",
+      "id": "mcp-action-513c21a8ca8e5f5e",
       "inputSchema": {
         "$defs": {
           "ProjectDescriptionSchema": {
@@ -4841,7 +4841,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_project",
+      "name": "telos_update_project",
       "needsProject": true,
       "ownerOnly": true,
       "requiresConfirmation": false,
@@ -4852,7 +4852,7 @@
     {
       "description": "Поля риска, планы и статусы, включая закрытие через CLOSED.",
       "group": "risks",
-      "id": "mcp-action-e19f885c5ed06a2f",
+      "id": "mcp-action-1ca72083bc324281",
       "inputSchema": {
         "$defs": {
           "RiskChangesInput": {
@@ -5105,7 +5105,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_risk",
+      "name": "telos_update_risk",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -5119,7 +5119,7 @@
     {
       "description": "Название, цвет, порядок и признак завершения стадии.",
       "group": "projects",
-      "id": "mcp-action-ee9d5a826ae71ef4",
+      "id": "mcp-action-ea5e0bc977774fbf",
       "inputSchema": {
         "$defs": {
           "StageChangesInput": {
@@ -5226,7 +5226,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_stage",
+      "name": "telos_update_stage",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -5237,7 +5237,7 @@
     {
       "description": "Текст, цвет и связи с задачами с проверкой revision.",
       "group": "boards",
-      "id": "mcp-action-418171ea7ed07d9b",
+      "id": "mcp-action-0ecd7366ac6ccbf2",
       "inputSchema": {
         "$defs": {
           "ProjectStickerUpdateSchema": {
@@ -5341,7 +5341,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_sticker",
+      "name": "telos_update_sticker",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -5352,7 +5352,7 @@
     {
       "description": "Название, описание, приоритет, роли, участники и сроки; отсутствующие поля сохраняются, null очищает допустимое поле.",
       "group": "agent",
-      "id": "mcp-action-8694bccc45d521e1",
+      "id": "mcp-action-06ccc8db03922062",
       "inputSchema": {
         "$defs": {
           "ChecklistItemSchema": {
@@ -5396,7 +5396,7 @@
           },
           "TaskChangesInput": {
             "additionalProperties": false,
-            "description": "Изменения задачи с необязательной expected_revision из свежего get_task.",
+            "description": "Изменения задачи с необязательной expected_revision из свежего telos_get_task.",
             "example": {
               "priority": "URGENT"
             },
@@ -5703,7 +5703,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_task",
+      "name": "telos_update_task",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -5717,7 +5717,7 @@
     {
       "description": "Переименовывает раздел.",
       "group": "structure",
-      "id": "mcp-action-1596a9b8846d6e6b",
+      "id": "mcp-action-db79f249202cf265",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -5746,7 +5746,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "update_wbs_node",
+      "name": "telos_update_wbs_node",
       "needsProject": true,
       "ownerOnly": false,
       "requiresConfirmation": false,
@@ -24054,7 +24054,7 @@
     },
     {
       "access": "authenticated",
-      "description": "Возвращает задачи проекта. Фильтры: стадия, текст (название, описание, комментарии, номер), исполнитель, приоритет, открытые/завершённые, срок от и до, задачи без срока — те же правила, что у MCP-инструмента tt_list_tasks.",
+      "description": "Возвращает задачи проекта. Фильтры: стадия, текст (название, описание, комментарии, номер), исполнитель, приоритет, открытые/завершённые, срок от и до, задачи без срока — те же правила, что у MCP-инструмента telos_list_tasks.",
       "group": "tasks",
       "id": "api-4d3b3edb0b85a002",
       "kind": "http",
@@ -32874,1827 +32874,9 @@
   ],
   "mcp": [
     {
-      "aliasFor": "tt_add_comment",
-      "description": "Добавляет комментарий к задаче от имени проверенного пользователя запроса и фиксирует событие в её истории. Автор определяется сервером. Повторяйте тот же request_id и текст после потери ответа, чтобы не создать дубль. Требует право comments:write.",
-      "group": "legacy-aliases",
-      "id": "mcp-14a4e2b13d6fa400",
-      "inputSchema": {
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "author": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Прежнее поле подписи: принимается для совместимости, автор определяется сервером.",
-            "title": "Author"
-          },
-          "body": {
-            "description": "Текст комментария в Markdown.",
-            "minLength": 1,
-            "title": "Body",
-            "type": "string"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Стабильный UUID операции: повтор с тем же ключом не добавляет ещё один комментарий.",
-            "title": "Request Id"
-          },
-          "task_key": {
-            "description": "Ключ задачи, например PROJ-142.",
-            "title": "Task Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_key",
-          "body"
-        ],
-        "title": "add_commentArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "WRITE"
-      ],
-      "name": "add_comment",
-      "outputSchema": null,
-      "scopes": [
-        "comments:write"
-      ],
-      "summary": "Добавить комментарий к задаче",
-      "write": true
-    },
-    {
-      "aliasFor": "tt_create_milestone",
-      "description": "Создаёт простую календарную веху проекта без отдельного workflow. Требует право tasks:write.",
-      "group": "legacy-aliases",
-      "id": "mcp-d7c49fb89964ced8",
-      "inputSchema": {
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Описание вехи в Markdown.",
-            "title": "Description"
-          },
-          "due_date": {
-            "description": "Дата вехи в формате ГГГГ-ММ-ДД.",
-            "title": "Due Date",
-            "type": "string"
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          },
-          "status": {
-            "default": "PLANNED",
-            "description": "Статус PLANNED или ACHIEVED.",
-            "title": "Status",
-            "type": "string"
-          },
-          "title": {
-            "description": "Название вехи.",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key",
-          "title",
-          "due_date"
-        ],
-        "title": "create_milestoneArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "WRITE"
-      ],
-      "name": "create_milestone",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:write"
-      ],
-      "summary": "Создать проектную веху",
-      "write": true
-    },
-    {
-      "aliasFor": "tt_create_project_risk",
-      "description": "Создаёт риск только после явного подтверждения пользователем предложенных полей. risk_level вычисляет сервер. Требует право tasks:write.",
-      "group": "legacy-aliases",
-      "id": "mcp-f22b1b437d1ed684",
-      "inputSchema": {
-        "$defs": {
-          "RiskRating": {
-            "description": "Трёхуровневая шкала вероятности, влияния и итоговой оценки риска.",
-            "enum": [
-              "LOW",
-              "MEDIUM",
-              "HIGH"
-            ],
-            "title": "RiskRating",
-            "type": "string"
-          },
-          "RiskResponseStrategy": {
-            "description": "Выбранная человеком стратегия работы с риском.",
-            "enum": [
-              "AVOID",
-              "MITIGATE",
-              "TRANSFER",
-              "ACCEPT"
-            ],
-            "title": "RiskResponseStrategy",
-            "type": "string"
-          },
-          "RiskSource": {
-            "description": "Происхождение зарегистрированного человеком риска.",
-            "enum": [
-              "MANUAL",
-              "AI_SUGGESTED"
-            ],
-            "title": "RiskSource",
-            "type": "string"
-          },
-          "RiskStatus": {
-            "description": "Состояние рискового события независимо от стадий задач.",
-            "enum": [
-              "OPEN",
-              "MITIGATING",
-              "OCCURRED",
-              "CLOSED"
-            ],
-            "title": "RiskStatus",
-            "type": "string"
-          }
-        },
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "confirmed_by_user": {
-            "description": "true только после явного подтверждения пользователем этих полей; AI не регистрирует риски самостоятельно.",
-            "title": "Confirmed By User",
-            "type": "boolean"
-          },
-          "description": {
-            "description": "Причины и последствия в Markdown.",
-            "maxLength": 20000,
-            "minLength": 1,
-            "title": "Description",
-            "type": "string"
-          },
-          "impact": {
-            "$ref": "#/$defs/RiskRating",
-            "description": "Влияние."
-          },
-          "mitigation_plan": {
-            "default": "",
-            "description": "Превентивный план.",
-            "maxLength": 20000,
-            "title": "Mitigation Plan",
-            "type": "string"
-          },
-          "owner": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин участника проекта.",
-            "title": "Owner"
-          },
-          "probability": {
-            "$ref": "#/$defs/RiskRating",
-            "description": "Вероятность."
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Project Key",
-            "type": "string"
-          },
-          "response_plan": {
-            "default": "",
-            "description": "План при наступлении.",
-            "maxLength": 20000,
-            "title": "Response Plan",
-            "type": "string"
-          },
-          "response_strategy": {
-            "$ref": "#/$defs/RiskResponseStrategy",
-            "description": "Стратегия реагирования."
-          },
-          "review_date": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Следующий контроль, не дедлайн.",
-            "title": "Review Date"
-          },
-          "source": {
-            "$ref": "#/$defs/RiskSource",
-            "default": "MANUAL",
-            "description": "MANUAL либо AI_SUGGESTED для принятого человеком AI-предложения."
-          },
-          "status": {
-            "$ref": "#/$defs/RiskStatus",
-            "default": "OPEN",
-            "description": "Начальное состояние."
-          },
-          "task_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Задача этого проекта.",
-            "title": "Task Key"
-          },
-          "title": {
-            "description": "Название события.",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key",
-          "confirmed_by_user",
-          "title",
-          "description",
-          "probability",
-          "impact",
-          "response_strategy"
-        ],
-        "title": "create_project_riskArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "WRITE"
-      ],
-      "name": "create_project_risk",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:write"
-      ],
-      "summary": "Зарегистрировать риск",
-      "write": true
-    },
-    {
-      "aliasFor": "tt_create_task",
-      "description": "Создаёт задачу в проекте. Без указания стадии задача попадает в начальную стадию проекта — крайнюю левую колонку доски, обычно «Бэклог». Возвращает ключ и ссылку на задачу. Для безопасного повтора после потери ответа передайте тот же request_id и те же аргументы. Требует право tasks:write.",
-      "group": "legacy-aliases",
-      "id": "mcp-fc7cff20decf8b06",
-      "inputSchema": {
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "assignee": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Точный логин исполнителя из команды проекта.",
-            "title": "Assignee"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Описание задачи в Markdown.",
-            "title": "Description"
-          },
-          "due_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Срок в формате ГГГГ-ММ-ДД.",
-            "title": "Due Date"
-          },
-          "observers": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логины наблюдателей из команды проекта.",
-            "title": "Observers"
-          },
-          "priority": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Приоритет: LOW, MEDIUM, HIGH или URGENT.",
-            "title": "Priority"
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Стабильный UUID операции: повтор с тем же ключом не создаёт новую задачу.",
-            "title": "Request Id"
-          },
-          "stage": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Название стадии. Без значения задача попадает в начальную стадию проекта — крайнюю левую колонку доски, обычно «Бэклог».",
-            "title": "Stage"
-          },
-          "start_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Начало в формате ГГГГ-ММ-ДД.",
-            "title": "Start Date"
-          },
-          "title": {
-            "description": "Заголовок задачи.",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key",
-          "title"
-        ],
-        "title": "create_taskArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "WRITE"
-      ],
-      "name": "create_task",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:write"
-      ],
-      "summary": "Создать задачу",
-      "write": true
-    },
-    {
-      "aliasFor": "tt_delete_task",
-      "description": "Безвозвратно удаляет задачу вместе с её комментариями и файлами. Требует явного подтверждения confirm=true и права tasks:delete. Требует право tasks:delete.",
-      "group": "legacy-aliases",
-      "id": "mcp-5dc273ee2e4c1136",
-      "inputSchema": {
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "confirm": {
-            "default": false,
-            "description": "Подтверждение удаления; без него задача не удаляется.",
-            "title": "Confirm",
-            "type": "boolean"
-          },
-          "task_key": {
-            "description": "Ключ задачи, например PROJ-142.",
-            "title": "Task Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_key"
-        ],
-        "title": "delete_taskArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "WRITE"
-      ],
-      "name": "delete_task",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:delete"
-      ],
-      "summary": "Удалить задачу",
-      "write": true
-    },
-    {
-      "aliasFor": "tt_execute_project_tool",
-      "description": "Исполняет операцию из list_project_tools с общей проверкой проекта и прав. Для записи передавайте стабильный UUID request_id и повторяйте его при сетевом сбое. Удаления и массовые действия запрашивают решение участника через MCP elicitation; параметра самоподтверждения нет. Требует право projects:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-7e08ff234da391bc",
-      "inputSchema": {
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие выполняется с правами владельца ключа.",
-            "title": "Actor"
-          },
-          "arguments": {
-            "additionalProperties": true,
-            "description": "Параметры по точной схеме инструмента.",
-            "title": "Arguments",
-            "type": "object"
-          },
-          "name": {
-            "description": "Имя из каталога проектных действий.",
-            "maxLength": 64,
-            "title": "Name",
-            "type": "string"
-          },
-          "project_key": {
-            "description": "Ключ текущего проекта.",
-            "title": "Project Key",
-            "type": "string"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Стабильный ключ повторной записи; обязателен для изменений.",
-            "title": "Request Id"
-          }
-        },
-        "required": [
-          "project_key",
-          "name",
-          "arguments"
-        ],
-        "title": "execute_project_toolArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "execute_project_tool",
-      "outputSchema": null,
-      "scopes": [
-        "projects:read"
-      ],
-      "summary": "Выполнить действие проекта",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_get_calendar_range",
-      "description": "Возвращает ограниченный диапазон временной карты: даты задач, вехи, baseline, drift и рассчитанные backend-причины риска. Требует право projects:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-1f2934966f600164",
-      "inputSchema": {
-        "properties": {
-          "date_from": {
-            "description": "Первый день диапазона, ГГГГ-ММ-ДД.",
-            "title": "Date From",
-            "type": "string"
-          },
-          "date_to": {
-            "description": "Последний день диапазона, ГГГГ-ММ-ДД.",
-            "title": "Date To",
-            "type": "string"
-          },
-          "limit": {
-            "default": 50,
-            "description": "Максимум задач в ответе.",
-            "maximum": 200,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          },
-          "today": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Текущая локальная дата пользователя, ГГГГ-ММ-ДД.",
-            "title": "Today"
-          }
-        },
-        "required": [
-          "project_key",
-          "date_from",
-          "date_to"
-        ],
-        "title": "get_calendar_rangeArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "get_calendar_range",
-      "outputSchema": null,
-      "scopes": [
-        "projects:read"
-      ],
-      "summary": "Временной диапазон проекта",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_get_project",
-      "description": "Возвращает прежнюю карточку проекта со стадиями и числом задач. Описание — превью до 2000 символов; full_text=true возвращает полный исходный Markdown. Структурные метаданные превью доступны в tt_get_project. Требует право projects:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-d0572e06eb6b8416",
-      "inputSchema": {
-        "properties": {
-          "full_text": {
-            "default": false,
-            "description": "Вернуть полное описание без обрезки; false — превью до 2000 символов.",
-            "title": "Full Text",
-            "type": "boolean"
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key"
-        ],
-        "title": "get_projectArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "get_project",
-      "outputSchema": null,
-      "scopes": [
-        "projects:read"
-      ],
-      "summary": "Карточка проекта",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_get_project_risk",
-      "description": "Возвращает оценки, состояние, владельца, контроль, связь с задачей, стратегию и оба плана риска. Длинные тексты отмечены truncated_fields. Требует право projects:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-392673439fa6a4a4",
-      "inputSchema": {
-        "properties": {
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Project Key",
-            "type": "string"
-          },
-          "risk_key": {
-            "description": "Стабильный ключ риска, например RISK-12.",
-            "pattern": "^RISK-[1-9][0-9]{0,9}$",
-            "title": "Risk Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key",
-          "risk_key"
-        ],
-        "title": "get_project_riskArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "get_project_risk",
-      "outputSchema": null,
-      "scopes": [
-        "projects:read"
-      ],
-      "summary": "Карточка риска",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_get_task",
-      "description": "Возвращает прежнюю карточку задачи с отчётом, участниками и ссылкой. Описание — превью до 2000 символов; full_text=true возвращает полный исходный Markdown. Структурные метаданные превью доступны в tt_get_task. Требует право tasks:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-92ac4e14a27a92a4",
-      "inputSchema": {
-        "properties": {
-          "full_text": {
-            "default": false,
-            "description": "Вернуть полное описание без обрезки; false — превью до 2000 символов.",
-            "title": "Full Text",
-            "type": "boolean"
-          },
-          "task_key": {
-            "description": "Ключ задачи, например PROJ-142.",
-            "title": "Task Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_key"
-        ],
-        "title": "get_taskArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "get_task",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:read"
-      ],
-      "summary": "Карточка задачи",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_list_comments",
-      "description": "Возвращает прежний список комментариев с превью до 2000 символов. Используйте tt_list_comments для ID, метаданных обрезки и вызова tt_get_comment для полного чтения. Требует право tasks:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-16229f2ae6abe319",
-      "inputSchema": {
-        "properties": {
-          "limit": {
-            "default": 50,
-            "description": "Максимум комментариев в ответе.",
-            "maximum": 200,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "task_key": {
-            "description": "Ключ задачи, например PROJ-142.",
-            "title": "Task Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_key"
-        ],
-        "title": "list_commentsArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "list_comments",
-      "outputSchema": {
-        "properties": {
-          "result": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Result",
-            "type": "array"
-          }
-        },
-        "required": [
-          "result"
-        ],
-        "title": "list_commentsOutput",
-        "type": "object"
-      },
-      "scopes": [
-        "tasks:read"
-      ],
-      "summary": "Комментарии задачи",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_list_milestones",
-      "description": "Возвращает пользовательские вехи проекта и системную веху дедлайна проекта без внутренних числовых идентификаторов. Требует право projects:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-b8aadbb68dc783cb",
-      "inputSchema": {
-        "properties": {
-          "limit": {
-            "default": 50,
-            "description": "Максимум пользовательских вех.",
-            "maximum": 200,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key"
-        ],
-        "title": "list_milestonesArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "list_milestones",
-      "outputSchema": {
-        "properties": {
-          "result": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Result",
-            "type": "array"
-          }
-        },
-        "required": [
-          "result"
-        ],
-        "title": "list_milestonesOutput",
-        "type": "object"
-      },
-      "scopes": [
-        "projects:read"
-      ],
-      "summary": "Вехи проекта",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_list_project_risks",
-      "description": "Читает зарегистрированные риски с фильтрами и пагинацией; это отдельные записи, не календарные сигналы. Требует право projects:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-0526cfc83ca758d1",
-      "inputSchema": {
-        "$defs": {
-          "RiskRating": {
-            "description": "Трёхуровневая шкала вероятности, влияния и итоговой оценки риска.",
-            "enum": [
-              "LOW",
-              "MEDIUM",
-              "HIGH"
-            ],
-            "title": "RiskRating",
-            "type": "string"
-          },
-          "RiskStatus": {
-            "description": "Состояние рискового события независимо от стадий задач.",
-            "enum": [
-              "OPEN",
-              "MITIGATING",
-              "OCCURRED",
-              "CLOSED"
-            ],
-            "title": "RiskStatus",
-            "type": "string"
-          }
-        },
-        "properties": {
-          "active_only": {
-            "default": false,
-            "description": "Исключить CLOSED.",
-            "title": "Active Only",
-            "type": "boolean"
-          },
-          "impact": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RiskRating"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Влияние."
-          },
-          "owner": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Точный логин владельца.",
-            "title": "Owner"
-          },
-          "page": {
-            "default": 1,
-            "description": "Номер страницы.",
-            "minimum": 1,
-            "title": "Page",
-            "type": "integer"
-          },
-          "page_size": {
-            "default": 25,
-            "description": "Размер страницы до 100.",
-            "maximum": 100,
-            "minimum": 1,
-            "title": "Page Size",
-            "type": "integer"
-          },
-          "probability": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RiskRating"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Вероятность."
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Project Key",
-            "type": "string"
-          },
-          "risk_level": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RiskRating"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Серверный уровень."
-          },
-          "search": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Поиск по ключу, названию и описанию.",
-            "title": "Search"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RiskStatus"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Состояние риска."
-          },
-          "task_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Ключ связанной задачи.",
-            "title": "Task Key"
-          }
-        },
-        "required": [
-          "project_key"
-        ],
-        "title": "list_project_risksArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "list_project_risks",
-      "outputSchema": null,
-      "scopes": [
-        "projects:read"
-      ],
-      "summary": "Реестр рисков проекта",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_list_project_tools",
-      "description": "Все операции проектного агента. Без names возвращает краткий каталог; names раскрывает до 8 точных схем. Числовые ID берутся из ответов этих инструментов. Сервисному ключу видны только действия, на которые у него есть права. Требует право projects:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-37ae93094cf2e5c6",
-      "inputSchema": {
-        "properties": {
-          "names": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "maxItems": 8,
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Имена для получения схем аргументов.",
-            "title": "Names"
-          },
-          "project_key": {
-            "description": "Ключ текущего проекта.",
-            "title": "Project Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key"
-        ],
-        "title": "list_project_toolsArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "list_project_tools",
-      "outputSchema": null,
-      "scopes": [
-        "projects:read"
-      ],
-      "summary": "Каталог действий проекта",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_list_projects",
-      "description": "Возвращает проекты, доступные вызывающему, с ключом, названием, статусом и ссылкой. Поле url — ссылка на задачу или проект в интерфейсе трекера: давай её человеку целиком и как есть, не сокращай и не собирай адрес сам. Нет поля — нет ссылки. Требует право projects:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-fad77282b98865a0",
-      "inputSchema": {
-        "properties": {},
-        "title": "list_projectsArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "list_projects",
-      "outputSchema": {
-        "properties": {
-          "result": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Result",
-            "type": "array"
-          }
-        },
-        "required": [
-          "result"
-        ],
-        "title": "list_projectsOutput",
-        "type": "object"
-      },
-      "scopes": [
-        "projects:read"
-      ],
-      "summary": "Список проектов",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_list_tasks",
-      "description": "Возвращает страницу задач проекта с фильтрами: стадия, исполнитель, открытые или завершённые, приоритет, срок от и до, задачи без срока, текст. Ответ: items, total, has_more, next_offset. Поле url — ссылка на задачу или проект в интерфейсе трекера: давай её человеку целиком и как есть, не сокращай и не собирай адрес сам. Нет поля — нет ссылки. Требует право tasks:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-c7932d7e885e9cca",
-      "inputSchema": {
-        "properties": {
-          "assignee": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Имя исполнителя целиком.",
-            "title": "Assignee"
-          },
-          "due_from": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Срок не раньше, ГГГГ-ММ-ДД.",
-            "title": "Due From"
-          },
-          "due_to": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Срок не позже, ГГГГ-ММ-ДД.",
-            "title": "Due To"
-          },
-          "is_done": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "true — только завершённые, false — только открытые.",
-            "title": "Is Done"
-          },
-          "limit": {
-            "default": 50,
-            "description": "Максимум задач в ответе.",
-            "maximum": 200,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "default": 0,
-            "description": "Сколько задач пропустить.",
-            "minimum": 0,
-            "title": "Offset",
-            "type": "integer"
-          },
-          "only_open": {
-            "default": false,
-            "description": "Оставить только незавершённые задачи.",
-            "title": "Only Open",
-            "type": "boolean"
-          },
-          "priority": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Приоритет: LOW, MEDIUM, HIGH или URGENT.",
-            "title": "Priority"
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          },
-          "stage": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Название стадии, например «В работе».",
-            "title": "Stage"
-          },
-          "text": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Текст: поиск по названию, описанию и комментариям.",
-            "title": "Text"
-          },
-          "without_due_date": {
-            "default": false,
-            "description": "Только задачи без срока.",
-            "title": "Without Due Date",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "project_key"
-        ],
-        "title": "list_tasksArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "list_tasks",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:read"
-      ],
-      "summary": "Список задач проекта",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_list_tasks_without_due_date",
-      "description": "Возвращает ограниченный пул задач без due_date, чтобы их можно было явно запланировать, не загружая весь backlog проекта. Требует право tasks:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-15820e6b957c1ee1",
-      "inputSchema": {
-        "properties": {
-          "limit": {
-            "default": 50,
-            "description": "Максимум задач в ответе.",
-            "maximum": 200,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key"
-        ],
-        "title": "list_tasks_without_due_dateArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "list_tasks_without_due_date",
-      "outputSchema": {
-        "properties": {
-          "result": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Result",
-            "type": "array"
-          }
-        },
-        "required": [
-          "result"
-        ],
-        "title": "list_tasks_without_due_dateOutput",
-        "type": "object"
-      },
-      "scopes": [
-        "tasks:read"
-      ],
-      "summary": "Задачи проекта без срока",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_move_task",
-      "description": "Переводит задачу в стадию с указанным названием и ставит её в конец стадии. Перевод в завершающую стадию закрывает задачу. Требует право tasks:write.",
-      "group": "legacy-aliases",
-      "id": "mcp-f3b50c341e129e55",
-      "inputSchema": {
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "stage": {
-            "description": "Название целевой стадии.",
-            "minLength": 1,
-            "title": "Stage",
-            "type": "string"
-          },
-          "task_key": {
-            "description": "Ключ задачи, например PROJ-142.",
-            "title": "Task Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_key",
-          "stage"
-        ],
-        "title": "move_taskArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "WRITE"
-      ],
-      "name": "move_task",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:write"
-      ],
-      "summary": "Перевести задачу в другую стадию",
-      "write": true
-    },
-    {
-      "aliasFor": "tt_read_project_knowledge",
-      "description": "Читает все типы знаний проекта: list_sources — список, read_source — текст по страницам, related_sources — связи в обе стороны, search_sources — FTS. Используйте source_id из результатов поиска/списка; next_offset задаёт следующую страницу. Для read_source offset измеряется в символах. Работает без векторного поиска. Требует право knowledge:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-69c5f343a25cd3ba",
-      "inputSchema": {
-        "$defs": {
-          "KnowledgeReadRequest": {
-            "additionalProperties": false,
-            "description": "Одинаковое постраничное чтение знаний для чата и MCP.",
-            "properties": {
-              "entity_type": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/SourceType"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null
-              },
-              "limit": {
-                "default": 5,
-                "maximum": 30,
-                "minimum": 1,
-                "title": "Limit",
-                "type": "integer"
-              },
-              "max_chars": {
-                "default": 4000,
-                "maximum": 8000,
-                "minimum": 500,
-                "title": "Max Chars",
-                "type": "integer"
-              },
-              "name": {
-                "enum": [
-                  "list_sources",
-                  "read_source",
-                  "related_sources",
-                  "search_sources"
-                ],
-                "title": "Name",
-                "type": "string"
-              },
-              "offset": {
-                "default": 0,
-                "minimum": 0,
-                "title": "Offset",
-                "type": "integer"
-              },
-              "query": {
-                "anyOf": [
-                  {
-                    "maxLength": 2000,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Query"
-              },
-              "source_id": {
-                "anyOf": [
-                  {
-                    "maxLength": 64,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Source Id"
-              }
-            },
-            "required": [
-              "name"
-            ],
-            "title": "KnowledgeReadRequest",
-            "type": "object"
-          },
-          "SourceType": {
-            "enum": [
-              "project",
-              "task",
-              "task_report",
-              "document",
-              "comment",
-              "attachment",
-              "project_file",
-              "milestone",
-              "risk",
-              "wbs_node",
-              "stage",
-              "sticker",
-              "member",
-              "activity",
-              "deadline_change",
-              "analytics_report"
-            ],
-            "title": "SourceType",
-            "type": "string"
-          }
-        },
-        "properties": {
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          },
-          "request": {
-            "$ref": "#/$defs/KnowledgeReadRequest"
-          }
-        },
-        "required": [
-          "project_key",
-          "request"
-        ],
-        "title": "read_project_knowledgeArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "read_project_knowledge",
-      "outputSchema": null,
-      "scopes": [
-        "knowledge:read"
-      ],
-      "summary": "Источники и связи проекта",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_search_project_knowledge",
-      "description": "Ищет по смыслу в задачах, документах, комментариях и вложениях проекта и возвращает фрагменты с указанием источника. Подходит для вопросов «что решили по…», когда точные слова неизвестны. Требует право knowledge:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-cf3f005618830c7f",
-      "inputSchema": {
-        "$defs": {
-          "SourceType": {
-            "enum": [
-              "project",
-              "task",
-              "task_report",
-              "document",
-              "comment",
-              "attachment",
-              "project_file",
-              "milestone",
-              "risk",
-              "wbs_node",
-              "stage",
-              "sticker",
-              "member",
-              "activity",
-              "deadline_change",
-              "analytics_report"
-            ],
-            "title": "SourceType",
-            "type": "string"
-          }
-        },
-        "properties": {
-          "entity_type": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/SourceType"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Ограничить тип источника. Все поля проверяются по текущему состоянию проекта."
-          },
-          "limit": {
-            "default": 10,
-            "description": "Максимум фрагментов в ответе.",
-            "maximum": 50,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          },
-          "query": {
-            "description": "Смысловой запрос.",
-            "minLength": 2,
-            "title": "Query",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key",
-          "query"
-        ],
-        "title": "search_project_knowledgeArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "search_project_knowledge",
-      "outputSchema": {
-        "properties": {
-          "result": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Result",
-            "type": "array"
-          }
-        },
-        "required": [
-          "result"
-        ],
-        "title": "search_project_knowledgeOutput",
-        "type": "object"
-      },
-      "scopes": [
-        "knowledge:read"
-      ],
-      "summary": "Смысловой поиск по базе знаний проекта",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_search_tasks",
-      "description": "Ищет задачи проекта по названию, описанию, тексту комментариев и номеру. Это лексический поиск: он точен по словам и номерам задач. Требует право tasks:read.",
-      "group": "legacy-aliases",
-      "id": "mcp-7a07156cb8b825af",
-      "inputSchema": {
-        "properties": {
-          "limit": {
-            "default": 50,
-            "description": "Максимум задач в ответе.",
-            "maximum": 200,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "title": "Project Key",
-            "type": "string"
-          },
-          "query": {
-            "description": "Поисковый запрос.",
-            "minLength": 1,
-            "title": "Query",
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_key",
-          "query"
-        ],
-        "title": "search_tasksArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "search_tasks",
-      "outputSchema": {
-        "properties": {
-          "result": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Result",
-            "type": "array"
-          }
-        },
-        "required": [
-          "result"
-        ],
-        "title": "search_tasksOutput",
-        "type": "object"
-      },
-      "scopes": [
-        "tasks:read"
-      ],
-      "summary": "Поиск задач по тексту",
-      "write": false
-    },
-    {
-      "aliasFor": "tt_set_task_dates",
-      "description": "Изменяет start_date и/или due_date задачи через доменный сервис и историю. Пустая строка снимает дату. expected_revision из tt_get_task защищает от изменения поверх устаревшей версии; без него действует прежнее поведение. Требует право tasks:write.",
-      "group": "legacy-aliases",
-      "id": "mcp-9dbfbaac21c672ed",
-      "inputSchema": {
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "due_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Завершение ГГГГ-ММ-ДД; пустая строка снимает срок.",
-            "title": "Due Date"
-          },
-          "expected_revision": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Ожидаемая revision общих полей из tt_get_task.",
-            "title": "Expected Revision"
-          },
-          "start_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Начало ГГГГ-ММ-ДД; пустая строка снимает начало.",
-            "title": "Start Date"
-          },
-          "task_key": {
-            "description": "Ключ задачи, например PROJ-142.",
-            "title": "Task Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_key"
-        ],
-        "title": "set_task_datesArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "WRITE"
-      ],
-      "name": "set_task_dates",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:write"
-      ],
-      "summary": "Изменить плановые даты задачи",
-      "write": true
-    },
-    {
-      "aliasFor": null,
       "description": "Добавляет комментарий к задаче от имени проверенного пользователя запроса и фиксирует событие в её истории. Автор определяется сервером. Повторяйте тот же request_id и текст после потери ответа, чтобы не создать дубль. Требует право comments:write.",
       "group": "comments",
-      "id": "mcp-975e2ab4040a8b01",
+      "id": "mcp-9c84618e2401f45b",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -34760,7 +32942,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_add_comment",
+      "name": "telos_add_comment",
       "outputSchema": null,
       "scopes": [
         "comments:write"
@@ -34769,10 +32951,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Атомарно раскладывает (layout TB/LR) или выравнивает (align) выбранные фигуры и стикеры с учётом groups/locks. expected_revision доски и revision объектов берите из свежей сцены; при конфликте перечитайте её. project_key опущен — личная доска владельца. После сетевого сбоя повторяйте тот же request_id. Требует право boards:write.",
       "group": "boards",
-      "id": "mcp-3df94df9807d1a7e",
+      "id": "mcp-b95d23823b062c14",
       "inputSchema": {
         "$defs": {
           "ArrangeObjectRef": {
@@ -34922,7 +33103,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_arrange_board_objects",
+      "name": "telos_arrange_board_objects",
       "outputSchema": null,
       "scopes": [
         "boards:write"
@@ -34931,10 +33112,198 @@
       "write": true
     },
     {
-      "aliasFor": null,
+      "description": "Передай Арису — проектному менеджеру — любой вопрос или поручение сотрудника про его проекты, задачи, сроки, разовые задачи — одной фразой. Агент сам найдёт проект (по ключу задачи вида PROJ-12 или по смыслу), проверит права сотрудника и сделает; если неясно, о каком проекте речь, — задаст уточняющий вопрос. Менять данные он будет только по дословной реплике сотрудника в user_text; без user_text — только чтение. Опасные действия (удаление) не выполняются сразу: сотрудник подтверждает их сам по ссылке. Держи один conversation_id на одну беседу с сотрудником. Если сотрудник смотрит трекер (встройка прислала контекст страницы), передай page_context — тогда «эта задача» и «этот проект» поймутся без ключа. Ответ: status (completed — готово; queued/processing — ещё готовится, спроси telos_get_aris_result с request_id позже; failed — ошибка в error), answer — полный текст для сотрудника со ссылками на задачи, links — задачи ответа, done — выполненные действия, pending — предложенные действия: передай сотруднику confirm_url, он сам подтвердит или отклонит. Не утверждай, что pending выполнено. Требует право agent:ask.",
+      "group": "agent",
+      "id": "mcp-6a67c215b3f79f5c",
+      "inputSchema": {
+        "$defs": {
+          "TimBoardSelectionRefSchema": {
+            "additionalProperties": false,
+            "description": "Ссылка выделения: пространство имён типа и положительный ID.",
+            "properties": {
+              "id": {
+                "exclusiveMinimum": 0,
+                "title": "Id",
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "shape",
+                  "sticker"
+                ],
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "title": "TimBoardSelectionRefSchema",
+            "type": "object"
+          },
+          "TimPageContextSchema": {
+            "additionalProperties": false,
+            "description": "Страница, с которой пользователь пишет Арису в виджете.\n\nКонтекст — подсказка для «этот проект», «эта задача»: права на объект\nсервер проверяет сам, недоступный объект Арису просто не показывается.",
+            "properties": {
+              "board_id": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "ID открытой личной или проектной доски; права проверяются сервером.",
+                "title": "Board Id"
+              },
+              "board_selection": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "$ref": "#/$defs/TimBoardSelectionRefSchema"
+                    },
+                    "maxItems": 200,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Выделенные фигуры и стикеры; сервер проверяет тип, доску и доступ.",
+                "title": "Board Selection"
+              },
+              "project_key": {
+                "anyOf": [
+                  {
+                    "maxLength": 32,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Ключ проекта открытой страницы.",
+                "title": "Project Key"
+              },
+              "route": {
+                "description": "Маршрут страницы фронта, например /projects/PROJ/board.",
+                "maxLength": 500,
+                "title": "Route",
+                "type": "string"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "ID открытой задачи.",
+                "title": "Task Id"
+              }
+            },
+            "required": [
+              "route"
+            ],
+            "title": "TimPageContextSchema",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
+            "title": "Actor"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Ключ беседы, например external:chat:<id чата>. Одна беседа — один диалог агента с памятью; без ключа каждый вопрос начинает новый диалог.",
+            "title": "Conversation Id"
+          },
+          "page_context": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/TimPageContextSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Экран трекера, открытый у сотрудника: route, project_key, task_id, board_id из последнего контекст страницы. «Эта задача» — task_id. Прав не даёт: чужое молча игнорируется; ключ задачи в тексте главнее."
+          },
+          "text": {
+            "description": "Вопрос или поручение своими словами: что нужно узнать или сделать. По нему агент ищет, но менять данные по нему не будет.",
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "user_text": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Дословная реплика сотрудника, без пересказа. Только она разрешает агенту изменения; не передавай её, если сотрудник ничего не поручал.",
+            "title": "User Text"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "projects_askArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "name": "telos_ask_aris",
+      "outputSchema": null,
+      "scopes": [
+        "agent:ask"
+      ],
+      "summary": "Спросить Ариса — проектного менеджера",
+      "write": false
+    },
+    {
       "description": "Создаёт связь «predecessor должна закончиться до начала successor» (FINISH_TO_START) с необязательным лагом в днях. Обе задачи — одного проекта; цикл сервис не допустит. Требует право tasks:write.",
       "group": "calendar",
-      "id": "mcp-1f4b1e38914b3acb",
+      "id": "mcp-c9a50d27c1631935",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -34980,7 +33349,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_create_dependency",
+      "name": "telos_create_dependency",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -34989,10 +33358,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Создаёт простую календарную веху проекта без отдельного workflow. Требует право tasks:write.",
       "group": "calendar",
-      "id": "mcp-7ac8ef1c68f34a9e",
+      "id": "mcp-de88af834b20430b",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -35057,7 +33425,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_create_milestone",
+      "name": "telos_create_milestone",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -35066,10 +33434,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
-      "description": "Создаёт проект вне контекста другого проекта: паспорт, команду, стадии и начальную свободную доску одной транзакцией. Владелец — текущий пользователь. description_sections имеет приоритет перед description_md, как в REST. Для безопасного повтора после потери ответа сохраните UUID request_id и все аргументы: повтор возвращает исходный результат; другой payload с тем же UUID даёт конфликт. Ключ проекта должен быть свободен, участники — существующими активными пользователями. Права ключа и доступ проверяются заново при повторе. После создания используйте project_key для tt_get_project и tt_create_task. Требует право projects:write.",
+      "description": "Создаёт проект вне контекста другого проекта: паспорт, команду, стадии и начальную свободную доску одной транзакцией. Владелец — текущий пользователь. description_sections имеет приоритет перед description_md, как в REST. Для безопасного повтора после потери ответа сохраните UUID request_id и все аргументы: повтор возвращает исходный результат; другой payload с тем же UUID даёт конфликт. Ключ проекта должен быть свободен, участники — существующими активными пользователями. Права ключа и доступ проверяются заново при повторе. После создания используйте project_key для telos_get_project и telos_create_task. Требует право projects:write.",
       "group": "projects",
-      "id": "mcp-6bcba79d721f0dfe",
+      "id": "mcp-c80d2e1110ce7d45",
       "inputSchema": {
         "$defs": {
           "ProjectDescriptionSchema": {
@@ -35345,7 +33712,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_create_project",
+      "name": "telos_create_project",
       "outputSchema": null,
       "scopes": [
         "projects:write"
@@ -35354,10 +33721,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Создаёт риск только после явного подтверждения пользователем предложенных полей. risk_level вычисляет сервер. Требует право tasks:write.",
       "group": "risks",
-      "id": "mcp-196602daccc4114b",
+      "id": "mcp-bc91141933de770b",
       "inputSchema": {
         "$defs": {
           "RiskRating": {
@@ -35535,7 +33901,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_create_project_risk",
+      "name": "telos_create_project_risk",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -35544,10 +33910,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Создаёт задачу в проекте. Без указания стадии задача попадает в начальную стадию проекта — крайнюю левую колонку доски, обычно «Бэклог». Возвращает ключ и ссылку на задачу. Для безопасного повтора после потери ответа передайте тот же request_id и те же аргументы. Требует право tasks:write.",
       "group": "agent",
-      "id": "mcp-59bab5f6abfcf186",
+      "id": "mcp-f136dc568e8defb0",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -35695,7 +34060,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_create_task",
+      "name": "telos_create_task",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -35704,10 +34069,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Удаляет комментарий. Удалить можно свой; чужой — только владельцу проекта. Требует confirm=true. Требует право comments:write.",
       "group": "comments",
-      "id": "mcp-a26915c87cd1a288",
+      "id": "mcp-f1dc9f89e673a1d8",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -35746,7 +34110,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_delete_comment",
+      "name": "telos_delete_comment",
       "outputSchema": null,
       "scopes": [
         "comments:write"
@@ -35755,10 +34119,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
-      "description": "Удаляет связь задач по dependency_id из tt_list_dependencies. Требует confirm=true. Требует право tasks:write.",
+      "description": "Удаляет связь задач по dependency_id из telos_list_dependencies. Требует confirm=true. Требует право tasks:write.",
       "group": "calendar",
-      "id": "mcp-dafaed8fbe2eda11",
+      "id": "mcp-e102efeea8605317",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -35803,7 +34166,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_delete_dependency",
+      "name": "telos_delete_dependency",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -35812,10 +34175,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Безвозвратно удаляет задачу вместе с её комментариями и файлами. Требует явного подтверждения confirm=true и права tasks:delete. Требует право tasks:delete.",
       "group": "agent",
-      "id": "mcp-08d08814453473ef",
+      "id": "mcp-821d3e80e1acf5ca",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -35853,7 +34215,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_delete_task",
+      "name": "telos_delete_task",
       "outputSchema": null,
       "scopes": [
         "tasks:delete"
@@ -35862,10 +34224,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Детерминированная раскладка nodes/edges в редактируемые фигуры одним атомарным batch. Привязки к существующим блокам берите из сцены; project_key опущен — личная доска. Повтор после сетевого сбоя — с тем же request_id. Требует право boards:write.",
       "group": "boards",
-      "id": "mcp-e7f0a1268a7154dc",
+      "id": "mcp-3c38ba4b5eb87010",
       "inputSchema": {
         "$defs": {
           "BoardDiagramInput": {
@@ -36107,7 +34468,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_draw_board_diagram",
+      "name": "telos_draw_board_diagram",
       "outputSchema": null,
       "scopes": [
         "boards:write"
@@ -36116,10 +34477,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
-      "description": "Исполняет операцию из list_project_tools с общей проверкой проекта и прав. Для записи передавайте стабильный UUID request_id и повторяйте его при сетевом сбое. Удаления и массовые действия запрашивают решение участника через MCP elicitation; параметра самоподтверждения нет. Требует право projects:read.",
+      "description": "Исполняет операцию из telos_list_project_tools с общей проверкой проекта и прав. Для записи передавайте стабильный UUID request_id и повторяйте его при сетевом сбое. Удаления и массовые действия запрашивают решение участника через MCP elicitation; параметра самоподтверждения нет. Требует право projects:read.",
       "group": "project-actions",
-      "id": "mcp-57397ca95defe345",
+      "id": "mcp-18915e05420cf1d9",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -36180,7 +34540,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_execute_project_tool",
+      "name": "telos_execute_project_tool",
       "outputSchema": null,
       "scopes": [
         "projects:read"
@@ -36189,10 +34549,53 @@
       "write": false
     },
     {
-      "aliasFor": null,
+      "description": "Результат вопроса, заданного через telos_ask_aris, по его request_id — когда ответ не успел за время вызова. Доступен только тому ключу и сотруднику, что задали вопрос. Ответ: status (completed — готово; queued/processing — ещё готовится, спроси telos_get_aris_result с request_id позже; failed — ошибка в error), answer — полный текст для сотрудника со ссылками на задачи, links — задачи ответа, done — выполненные действия, pending — предложенные действия: передай сотруднику confirm_url, он сам подтвердит или отклонит. Не утверждай, что pending выполнено. Требует право agent:ask.",
+      "group": "tasks",
+      "id": "mcp-28f07e188f32dc1c",
+      "inputSchema": {
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
+            "title": "Actor"
+          },
+          "request_id": {
+            "description": "request_id из ответа telos_ask_aris.",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "projects_resultArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "legacy": [
+        "READ",
+        "WRITE"
+      ],
+      "name": "telos_get_aris_result",
+      "outputSchema": null,
+      "scopes": [
+        "agent:ask"
+      ],
+      "summary": "Результат вопроса Арису",
+      "write": false
+    },
+    {
       "description": "Фигуры, стрелки, стикеры и ревизии. project_key — проект; без него только личная доска владельца. next_offset означает продолжение. Требует право boards:read.",
       "group": "boards",
-      "id": "mcp-c0af06a0de1f7a6a",
+      "id": "mcp-4a27c4471be4599f",
       "inputSchema": {
         "$defs": {
           "BoardSceneInput": {
@@ -36266,7 +34669,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_get_board_scene",
+      "name": "telos_get_board_scene",
       "outputSchema": null,
       "scopes": [
         "boards:read"
@@ -36275,10 +34678,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает ограниченный диапазон временной карты: даты задач, вехи, baseline, drift и рассчитанные backend-причины риска. Требует право projects:read.",
       "group": "calendar",
-      "id": "mcp-a8872ccb29f9d61c",
+      "id": "mcp-e844f8bfe47d32fc",
       "inputSchema": {
         "properties": {
           "date_from": {
@@ -36331,7 +34733,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_get_calendar_range",
+      "name": "telos_get_calendar_range",
       "outputSchema": null,
       "scopes": [
         "projects:read"
@@ -36340,10 +34742,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
-      "description": "Возвращает полный исходный Markdown комментария без обрезки. Используйте task_key и comment_id из tt_list_comments; проверяются принадлежность комментария задаче и текущий проект задачи. Требует право tasks:read.",
+      "description": "Возвращает полный исходный Markdown комментария без обрезки. Используйте task_key и comment_id из telos_list_comments; проверяются принадлежность комментария задаче и текущий проект задачи. Требует право tasks:read.",
       "group": "comments",
-      "id": "mcp-393afd1615326bd0",
+      "id": "mcp-85e77ad784b8edc7",
       "inputSchema": {
         "properties": {
           "comment_id": {
@@ -36370,7 +34771,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_get_comment",
+      "name": "telos_get_comment",
       "outputSchema": null,
       "scopes": [
         "tasks:read"
@@ -36379,10 +34780,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Читает последний сохранённый обзор Ариса со вкладки «Обзор»: дату, автора, оценку, находки, результаты и рекомендации целиком. found=false означает, что обзор ещё не создавался. Это исторический анализ на created_at; новый разбор и вызов модели не выполняются. Требует право projects:read.",
       "group": "projects",
-      "id": "mcp-817775bf3ef92d8e",
+      "id": "mcp-55cf26e3ffe96b1c",
       "inputSchema": {
         "properties": {
           "project_key": {
@@ -36402,7 +34802,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_get_latest_project_summary",
+      "name": "telos_get_latest_project_summary",
       "outputSchema": null,
       "scopes": [
         "projects:read"
@@ -36411,10 +34811,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает описание проекта, его стадии и число задач в каждой стадии. По умолчанию описание — превью до 2000 символов; description_meta содержит факт обрезки, полную длину и вызов для дочитывания. full_text=true возвращает полный исходный Markdown. Проект задаётся ключом, например PROJ. Требует право projects:read.",
       "group": "projects",
-      "id": "mcp-d2cc45a21e3cf53b",
+      "id": "mcp-3d1c68a6eed229f7",
       "inputSchema": {
         "properties": {
           "full_text": {
@@ -36440,7 +34839,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_get_project",
+      "name": "telos_get_project",
       "outputSchema": null,
       "scopes": [
         "projects:read"
@@ -36449,10 +34848,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает оценки, состояние, владельца, контроль, связь с задачей, стратегию и оба плана риска. Длинные тексты отмечены truncated_fields. Требует право projects:read.",
       "group": "risks",
-      "id": "mcp-125fed7ff19fcbea",
+      "id": "mcp-139494488c90a740",
       "inputSchema": {
         "properties": {
           "project_key": {
@@ -36481,7 +34879,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_get_project_risk",
+      "name": "telos_get_project_risk",
       "outputSchema": null,
       "scopes": [
         "projects:read"
@@ -36490,10 +34888,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает карточку задачи: описание, стадию, приоритет, исполнителя, сроки, чек-лист, актуальный опубликованный отчёт, участников (исполнитель, постановщик, наблюдатели) и ссылку. По умолчанию описание — превью до 2000 символов; description_meta содержит факт обрезки, полную длину и вызов для дочитывания. full_text=true возвращает полный исходный Markdown. Задача задаётся ключом, например PROJ-142. revision — версия общих полей для expected_revision при изменении. Требует право tasks:read.",
       "group": "agent",
-      "id": "mcp-ca542492dc7924e5",
+      "id": "mcp-badc01a73297d2af",
       "inputSchema": {
         "properties": {
           "full_text": {
@@ -36519,7 +34916,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_get_task",
+      "name": "telos_get_task",
       "outputSchema": null,
       "scopes": [
         "tasks:read"
@@ -36528,10 +34925,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает файлы задачи: имя, тип, размер и дату загрузки. Требует право tasks:read.",
       "group": "task-attachments",
-      "id": "mcp-29777979fee662a6",
+      "id": "mcp-d5346ecdcf56f64a",
       "inputSchema": {
         "properties": {
           "task_key": {
@@ -36551,7 +34947,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_attachments",
+      "name": "telos_list_attachments",
       "outputSchema": {
         "properties": {
           "result": {
@@ -36576,10 +34972,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
-      "description": "Возвращает комментарии задачи в порядке добавления с превью текста до 2000 символов. body_meta содержит факт обрезки, полную длину и вызов tt_get_comment для полного чтения. comment_id нужен также tt_update_comment и tt_delete_comment. Требует право tasks:read.",
+      "description": "Возвращает комментарии задачи в порядке добавления с превью текста до 2000 символов. body_meta содержит факт обрезки, полную длину и вызов telos_get_comment для полного чтения. comment_id нужен также telos_update_comment и telos_delete_comment. Требует право tasks:read.",
       "group": "comments",
-      "id": "mcp-13f8a3e352f3c383",
+      "id": "mcp-afe0674319a5fb30",
       "inputSchema": {
         "properties": {
           "limit": {
@@ -36607,7 +35002,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_comments",
+      "name": "telos_list_comments",
       "outputSchema": {
         "properties": {
           "result": {
@@ -36632,10 +35027,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает связи «задача A должна закончиться до начала задачи B» в проекте; можно оставить только связи одной задачи. Требует право tasks:read.",
       "group": "tasks",
-      "id": "mcp-aa087aeee0608d72",
+      "id": "mcp-3a472436f380c9b9",
       "inputSchema": {
         "properties": {
           "project_key": {
@@ -36668,7 +35062,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_dependencies",
+      "name": "telos_list_dependencies",
       "outputSchema": {
         "properties": {
           "result": {
@@ -36693,10 +35087,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает пользовательские вехи проекта и системную веху дедлайна проекта без внутренних числовых идентификаторов. Требует право projects:read.",
       "group": "calendar",
-      "id": "mcp-74a419b096d4421f",
+      "id": "mcp-5356c9eee38be32f",
       "inputSchema": {
         "properties": {
           "limit": {
@@ -36724,7 +35117,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_milestones",
+      "name": "telos_list_milestones",
       "outputSchema": {
         "properties": {
           "result": {
@@ -36749,10 +35142,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Личные доски текущего пользователя; чужие и проектные доски сюда не входят. Требует право boards:read.",
       "group": "boards",
-      "id": "mcp-fa6602a02e72c57b",
+      "id": "mcp-5a8952d9fbe41c94",
       "inputSchema": {
         "$defs": {
           "PersonalBoardsInput": {
@@ -36805,7 +35197,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_personal_boards",
+      "name": "telos_list_personal_boards",
       "outputSchema": null,
       "scopes": [
         "boards:read"
@@ -36814,10 +35206,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает участников проекта: логин, ФИО и роль (OWNER, MEMBER). Логин отсюда годится для assignee, observers и owner в пишущих инструментах. Требует право projects:read.",
       "group": "projects",
-      "id": "mcp-c99d06045540075a",
+      "id": "mcp-ba459e551cc19ddf",
       "inputSchema": {
         "properties": {
           "project_key": {
@@ -36837,7 +35228,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_project_members",
+      "name": "telos_list_project_members",
       "outputSchema": {
         "properties": {
           "result": {
@@ -36862,10 +35253,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Читает зарегистрированные риски с фильтрами и пагинацией; это отдельные записи, не календарные сигналы. Требует право projects:read.",
       "group": "risks",
-      "id": "mcp-7c584df0e0b7da60",
+      "id": "mcp-dcf42f59c40d2717",
       "inputSchema": {
         "$defs": {
           "RiskRating": {
@@ -37019,7 +35409,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_project_risks",
+      "name": "telos_list_project_risks",
       "outputSchema": null,
       "scopes": [
         "projects:read"
@@ -37028,10 +35418,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Все операции проектного агента. Без names возвращает краткий каталог; names раскрывает до 8 точных схем. Числовые ID берутся из ответов этих инструментов. Сервисному ключу видны только действия, на которые у него есть права. Требует право projects:read.",
       "group": "project-actions",
-      "id": "mcp-ce481c0855147978",
+      "id": "mcp-0a7817b4c1ac486e",
       "inputSchema": {
         "properties": {
           "names": {
@@ -37068,7 +35457,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_project_tools",
+      "name": "telos_list_project_tools",
       "outputSchema": null,
       "scopes": [
         "projects:read"
@@ -37077,10 +35466,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает проекты, доступные вызывающему, с ключом, названием, статусом и ссылкой. Поле url — ссылка на задачу или проект в интерфейсе трекера: давай её человеку целиком и как есть, не сокращай и не собирай адрес сам. Нет поля — нет ссылки. Требует право projects:read.",
       "group": "projects",
-      "id": "mcp-2f83a9652631e62d",
+      "id": "mcp-73d14cdadd0da96b",
       "inputSchema": {
         "properties": {},
         "title": "list_projectsArguments",
@@ -37091,7 +35479,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_projects",
+      "name": "telos_list_projects",
       "outputSchema": {
         "properties": {
           "result": {
@@ -37116,10 +35504,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
-      "description": "Возвращает стадии (колонки доски) проекта по порядку: название и признак завершающей стадии. Название стадии используют tt_move_task и tt_create_task. Требует право projects:read.",
+      "description": "Возвращает стадии (колонки доски) проекта по порядку: название и признак завершающей стадии. Название стадии используют telos_move_task и telos_create_task. Требует право projects:read.",
       "group": "projects",
-      "id": "mcp-cd752746f8136b26",
+      "id": "mcp-602b2f44b8f362e3",
       "inputSchema": {
         "properties": {
           "project_key": {
@@ -37139,7 +35526,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_stages",
+      "name": "telos_list_stages",
       "outputSchema": {
         "properties": {
           "result": {
@@ -37164,10 +35551,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает историю изменений задачи: что поменялось (стадия, срок, исполнитель…), было и стало, кто сделал и через какой ключ. Требует право tasks:read.",
       "group": "agent",
-      "id": "mcp-181423795d19dbfe",
+      "id": "mcp-5f4a1e0782da47a1",
       "inputSchema": {
         "properties": {
           "limit": {
@@ -37195,7 +35581,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_task_activity",
+      "name": "telos_list_task_activity",
       "outputSchema": {
         "properties": {
           "result": {
@@ -37220,10 +35606,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает страницу задач проекта с фильтрами: стадия, исполнитель, открытые или завершённые, приоритет, срок от и до, задачи без срока, текст. Ответ: items, total, has_more, next_offset. Поле url — ссылка на задачу или проект в интерфейсе трекера: давай её человеку целиком и как есть, не сокращай и не собирай адрес сам. Нет поля — нет ссылки. Требует право tasks:read.",
       "group": "agent",
-      "id": "mcp-1aec53df452afbd6",
+      "id": "mcp-a9674b4a13c90531",
       "inputSchema": {
         "properties": {
           "assignee": {
@@ -37361,7 +35746,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_tasks",
+      "name": "telos_list_tasks",
       "outputSchema": null,
       "scopes": [
         "tasks:read"
@@ -37370,10 +35755,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Возвращает ограниченный пул задач без due_date, чтобы их можно было явно запланировать, не загружая весь backlog проекта. Требует право tasks:read.",
       "group": "agent",
-      "id": "mcp-bdcd99987615fa02",
+      "id": "mcp-e2ac6e659d128087",
       "inputSchema": {
         "properties": {
           "limit": {
@@ -37401,7 +35785,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_list_tasks_without_due_date",
+      "name": "telos_list_tasks_without_due_date",
       "outputSchema": {
         "properties": {
           "result": {
@@ -37426,10 +35810,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Переводит задачу в стадию с указанным названием и ставит её в конец стадии. Перевод в завершающую стадию закрывает задачу. Требует право tasks:write.",
       "group": "agent",
-      "id": "mcp-8f9bb1c518ae5b36",
+      "id": "mcp-103f0367538f769b",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -37468,7 +35851,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_move_task",
+      "name": "telos_move_task",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -37477,245 +35860,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
-      "description": "Передай Арису — проектному менеджеру — любой вопрос или поручение сотрудника про его проекты, задачи, сроки, разовые задачи — одной фразой. Агент сам найдёт проект (по ключу задачи вида PROJ-12 или по смыслу), проверит права сотрудника и сделает; если неясно, о каком проекте речь, — задаст уточняющий вопрос. Менять данные он будет только по дословной реплике сотрудника в user_text; без user_text — только чтение. Опасные действия (удаление) не выполняются сразу: сотрудник подтверждает их сам по ссылке. Держи один conversation_id на одну беседу с сотрудником. Если сотрудник смотрит трекер (встройка прислала контекст страницы), передай page_context — тогда «эта задача» и «этот проект» поймутся без ключа. Ответ: status (completed — готово; queued/processing — ещё готовится, спроси tt_projects_result с request_id позже; failed — ошибка в error), answer — полный текст для сотрудника со ссылками на задачи, links — задачи ответа, done — выполненные действия, pending — предложенные действия: передай сотруднику confirm_url, он сам подтвердит или отклонит. Не утверждай, что pending выполнено. Требует право agent:ask.",
-      "group": "agent",
-      "id": "mcp-7a8944d423e5d4bd",
-      "inputSchema": {
-        "$defs": {
-          "TimBoardSelectionRefSchema": {
-            "additionalProperties": false,
-            "description": "Ссылка выделения: пространство имён типа и положительный ID.",
-            "properties": {
-              "id": {
-                "exclusiveMinimum": 0,
-                "title": "Id",
-                "type": "integer"
-              },
-              "type": {
-                "enum": [
-                  "shape",
-                  "sticker"
-                ],
-                "title": "Type",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "id"
-            ],
-            "title": "TimBoardSelectionRefSchema",
-            "type": "object"
-          },
-          "TimPageContextSchema": {
-            "additionalProperties": false,
-            "description": "Страница, с которой пользователь пишет Арису в виджете.\n\nКонтекст — подсказка для «этот проект», «эта задача»: права на объект\nсервер проверяет сам, недоступный объект Арису просто не показывается.",
-            "properties": {
-              "board_id": {
-                "anyOf": [
-                  {
-                    "exclusiveMinimum": 0,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "ID открытой личной или проектной доски; права проверяются сервером.",
-                "title": "Board Id"
-              },
-              "board_selection": {
-                "anyOf": [
-                  {
-                    "items": {
-                      "$ref": "#/$defs/TimBoardSelectionRefSchema"
-                    },
-                    "maxItems": 200,
-                    "type": "array"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Выделенные фигуры и стикеры; сервер проверяет тип, доску и доступ.",
-                "title": "Board Selection"
-              },
-              "project_key": {
-                "anyOf": [
-                  {
-                    "maxLength": 32,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Ключ проекта открытой страницы.",
-                "title": "Project Key"
-              },
-              "route": {
-                "description": "Маршрут страницы фронта, например /projects/PROJ/board.",
-                "maxLength": 500,
-                "title": "Route",
-                "type": "string"
-              },
-              "task_id": {
-                "anyOf": [
-                  {
-                    "exclusiveMinimum": 0,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "ID открытой задачи.",
-                "title": "Task Id"
-              }
-            },
-            "required": [
-              "route"
-            ],
-            "title": "TimPageContextSchema",
-            "type": "object"
-          }
-        },
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "conversation_id": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Ключ беседы, например external:chat:<id чата>. Одна беседа — один диалог агента с памятью; без ключа каждый вопрос начинает новый диалог.",
-            "title": "Conversation Id"
-          },
-          "page_context": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/TimPageContextSchema"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Экран трекера, открытый у сотрудника: route, project_key, task_id, board_id из последнего контекст страницы. «Эта задача» — task_id. Прав не даёт: чужое молча игнорируется; ключ задачи в тексте главнее."
-          },
-          "text": {
-            "description": "Вопрос или поручение своими словами: что нужно узнать или сделать. По нему агент ищет, но менять данные по нему не будет.",
-            "maxLength": 8000,
-            "minLength": 1,
-            "title": "Text",
-            "type": "string"
-          },
-          "user_text": {
-            "anyOf": [
-              {
-                "maxLength": 8000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Дословная реплика сотрудника, без пересказа. Только она разрешает агенту изменения; не передавай её, если сотрудник ничего не поручал.",
-            "title": "User Text"
-          }
-        },
-        "required": [
-          "text"
-        ],
-        "title": "projects_askArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "tt_projects_ask",
-      "outputSchema": null,
-      "scopes": [
-        "agent:ask"
-      ],
-      "summary": "Спросить Ариса — проектного менеджера",
-      "write": false
-    },
-    {
-      "aliasFor": null,
-      "description": "Результат вопроса, заданного через tt_projects_ask, по его request_id — когда ответ не успел за время вызова. Доступен только тому ключу и сотруднику, что задали вопрос. Ответ: status (completed — готово; queued/processing — ещё готовится, спроси tt_projects_result с request_id позже; failed — ошибка в error), answer — полный текст для сотрудника со ссылками на задачи, links — задачи ответа, done — выполненные действия, pending — предложенные действия: передай сотруднику confirm_url, он сам подтвердит или отклонит. Не утверждай, что pending выполнено. Требует право agent:ask.",
-      "group": "projects",
-      "id": "mcp-1c62a8b210769686",
-      "inputSchema": {
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "request_id": {
-            "description": "request_id из ответа tt_projects_ask.",
-            "title": "Request Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "request_id"
-        ],
-        "title": "projects_resultArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "READ",
-        "WRITE"
-      ],
-      "name": "tt_projects_result",
-      "outputSchema": null,
-      "scopes": [
-        "agent:ask"
-      ],
-      "summary": "Результат вопроса Арису",
-      "write": false
-    },
-    {
-      "aliasFor": null,
-      "description": "Читает все типы знаний проекта: list_sources — список, read_source — текст по страницам, related_sources — связи в обе стороны, search_sources — FTS. Используйте source_id из результатов поиска/списка; next_offset задаёт следующую страницу. Для read_source offset измеряется в символах. Работает без векторного поиска. Требует право knowledge:read.",
+      "description": "Читает все типы знаний проекта: telos_list_sources — список, telos_read_source — текст по страницам, telos_list_related_sources — связи в обе стороны, telos_search_sources — FTS. Используйте source_id из результатов поиска/списка; next_offset задаёт следующую страницу. Для telos_read_source offset измеряется в символах. Работает без векторного поиска. Требует право knowledge:read.",
       "group": "knowledge",
-      "id": "mcp-59f32c7953214600",
+      "id": "mcp-051c38eaf10a53aa",
       "inputSchema": {
         "$defs": {
           "KnowledgeReadRequest": {
@@ -37749,10 +35896,10 @@
               },
               "name": {
                 "enum": [
-                  "list_sources",
-                  "read_source",
-                  "related_sources",
-                  "search_sources"
+                  "telos_list_sources",
+                  "telos_read_source",
+                  "telos_list_related_sources",
+                  "telos_search_sources"
                 ],
                 "title": "Name",
                 "type": "string"
@@ -37841,7 +35988,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_read_project_knowledge",
+      "name": "telos_read_project_knowledge",
       "outputSchema": null,
       "scopes": [
         "knowledge:read"
@@ -37850,10 +35997,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Ищет по смыслу в задачах, документах, комментариях и вложениях проекта и возвращает фрагменты с указанием источника. Подходит для вопросов «что решили по…», когда точные слова неизвестны. Требует право knowledge:read.",
       "group": "knowledge",
-      "id": "mcp-915f4e43ffc377aa",
+      "id": "mcp-8f65a6bcdb023b2b",
       "inputSchema": {
         "$defs": {
           "SourceType": {
@@ -37924,7 +36070,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_search_project_knowledge",
+      "name": "telos_search_project_knowledge",
       "outputSchema": {
         "properties": {
           "result": {
@@ -37949,10 +36095,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
       "description": "Ищет задачи проекта по названию, описанию, тексту комментариев и номеру. Это лексический поиск: он точен по словам и номерам задач. Требует право tasks:read.",
       "group": "agent",
-      "id": "mcp-cb54b74f4059d790",
+      "id": "mcp-c45a9966cefdebfe",
       "inputSchema": {
         "properties": {
           "limit": {
@@ -37987,7 +36132,7 @@
         "READ",
         "WRITE"
       ],
-      "name": "tt_search_tasks",
+      "name": "telos_search_tasks",
       "outputSchema": {
         "properties": {
           "result": {
@@ -38012,10 +36157,9 @@
       "write": false
     },
     {
-      "aliasFor": null,
-      "description": "Заменяет чек-лист задачи целиком (пункты в нужном порядке) или удаляет его (checklist=null). checklist_revision — из tt_get_task: если чек-лист успели поменять, вернётся конфликт, и его надо перечитать. Требует право tasks:write.",
+      "description": "Заменяет чек-лист задачи целиком (пункты в нужном порядке) или удаляет его (checklist=null). checklist_revision — из telos_get_task: если чек-лист успели поменять, вернётся конфликт, и его надо перечитать. Требует право tasks:write.",
       "group": "tasks",
-      "id": "mcp-9f0287aa42df488d",
+      "id": "mcp-26146d1e7ccd3f26",
       "inputSchema": {
         "$defs": {
           "ChecklistItemSchema": {
@@ -38112,7 +36256,7 @@
             "description": "Полный чек-лист: title и items[{text, done}]; null удаляет."
           },
           "checklist_revision": {
-            "description": "Ожидаемая версия чек-листа из tt_get_task.",
+            "description": "Ожидаемая версия чек-листа из telos_get_task.",
             "minimum": 0,
             "title": "Checklist Revision",
             "type": "integer"
@@ -38135,7 +36279,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_set_checklist",
+      "name": "telos_set_checklist",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -38144,10 +36288,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
-      "description": "Изменяет start_date и/или due_date задачи через доменный сервис и историю. Пустая строка снимает дату. expected_revision из tt_get_task защищает от изменения поверх устаревшей версии; без него действует прежнее поведение. Требует право tasks:write.",
+      "description": "Изменяет start_date и/или due_date задачи через доменный сервис и историю. Пустая строка снимает дату. expected_revision из telos_get_task защищает от изменения поверх устаревшей версии; без него действует прежнее поведение. Требует право tasks:write.",
       "group": "calendar",
-      "id": "mcp-1d114b327e817538",
+      "id": "mcp-15ed6a93725c9515",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -38187,7 +36330,7 @@
               }
             ],
             "default": null,
-            "description": "Ожидаемая revision общих полей из tt_get_task.",
+            "description": "Ожидаемая revision общих полей из telos_get_task.",
             "title": "Expected Revision"
           },
           "start_date": {
@@ -38219,7 +36362,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_set_task_dates",
+      "name": "telos_set_task_dates",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -38228,10 +36371,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
-      "description": "Заменяет список наблюдателей задачи. Логины — участники проекта (tt_list_project_members); пустой список снимает всех наблюдателей. Требует право tasks:write.",
+      "description": "Заменяет список наблюдателей задачи. Логины — участники проекта (telos_list_project_members); пустой список снимает всех наблюдателей. Требует право tasks:write.",
       "group": "tasks",
-      "id": "mcp-35dd31a5d7147698",
+      "id": "mcp-45fd20f49f945ae9",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -38258,7 +36400,7 @@
               }
             ],
             "default": null,
-            "description": "Ожидаемая revision задачи из tt_get_task; без неё прежнее поведение.",
+            "description": "Ожидаемая revision задачи из telos_get_task; без неё прежнее поведение.",
             "title": "Expected Revision"
           },
           "observers": {
@@ -38286,7 +36428,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_set_watchers",
+      "name": "telos_set_watchers",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -38295,10 +36437,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Переносит задачу в другой проект: у задачи будет новый ключ, связи с задачами и документами старого проекта снимаются. dry_run=true только показывает, что изменится. Нужна запись в оба проекта. Требует право tasks:write.",
       "group": "agent",
-      "id": "mcp-e115e59a3b2f68ec",
+      "id": "mcp-e6d42fd5c3fb6de5",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -38361,7 +36502,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_transfer_task",
+      "name": "telos_transfer_task",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -38370,10 +36511,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Правит прочитанные фигуры одним batch с обязательной revision каждой фигуры. Не удаляет объекты. Автор и права — текущего принципала; повторы с тем же request_id. Требует право boards:write.",
       "group": "boards",
-      "id": "mcp-e3df40ea9b5e6721",
+      "id": "mcp-026e1d9b7847e47f",
       "inputSchema": {
         "$defs": {
           "AgentShapeUpdate": {
@@ -38851,7 +36991,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_update_board_shapes",
+      "name": "telos_update_board_shapes",
       "outputSchema": null,
       "scopes": [
         "boards:write"
@@ -38860,10 +37000,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
-      "description": "Заменяет текст комментария. Править можно свой комментарий; чужой — только владельцу проекта. comment_id — из tt_list_comments. Требует право comments:write.",
+      "description": "Заменяет текст комментария. Править можно свой комментарий; чужой — только владельцу проекта. comment_id — из telos_list_comments. Требует право comments:write.",
       "group": "comments",
-      "id": "mcp-d1d5af04996dd8d5",
+      "id": "mcp-6ab5d5a60c70ae07",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -38903,7 +37042,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_update_comment",
+      "name": "telos_update_comment",
       "outputSchema": null,
       "scopes": [
         "comments:write"
@@ -38912,10 +37051,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
       "description": "Изменяет только переданные поля после подтверждения человеком. Пустая строка owner/task_key/review_date удаляет соответствующее значение; источник неизменяем. Требует право tasks:write.",
       "group": "risks",
-      "id": "mcp-2af2e33fb69311ef",
+      "id": "mcp-4685d3f7484fe6f5",
       "inputSchema": {
         "$defs": {
           "RiskRating": {
@@ -39139,7 +37277,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_update_project_risk",
+      "name": "telos_update_project_risk",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -39148,10 +37286,9 @@
       "write": true
     },
     {
-      "aliasFor": null,
-      "description": "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, приоритет, исполнитель, сроки. Стадия — tt_move_task, чек-лист — tt_set_checklist, наблюдатели — tt_set_watchers. Передавайте expected_revision из tt_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется прежнее поведение без защиты от затирания чужой правки. Требует право tasks:write.",
+      "description": "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, приоритет, исполнитель, сроки. Стадия — telos_move_task, чек-лист — telos_set_checklist, наблюдатели — telos_set_watchers. Передавайте expected_revision из telos_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется прежнее поведение без защиты от затирания чужой правки. Требует право tasks:write.",
       "group": "agent",
-      "id": "mcp-7a1ce54e3ee97028",
+      "id": "mcp-06ccc8db03922062",
       "inputSchema": {
         "properties": {
           "actor": {
@@ -39217,7 +37354,7 @@
               }
             ],
             "default": null,
-            "description": "Ожидаемая revision из tt_get_task; устаревшая версия даёт конфликт.",
+            "description": "Ожидаемая revision из telos_get_task; устаревшая версия даёт конфликт.",
             "title": "Expected Revision"
           },
           "priority": {
@@ -39276,380 +37413,7 @@
       "legacy": [
         "WRITE"
       ],
-      "name": "tt_update_task",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:write"
-      ],
-      "summary": "Изменить задачу",
-      "write": true
-    },
-    {
-      "aliasFor": "tt_update_project_risk",
-      "description": "Изменяет только переданные поля после подтверждения человеком. Пустая строка owner/task_key/review_date удаляет соответствующее значение; источник неизменяем. Требует право tasks:write.",
-      "group": "legacy-aliases",
-      "id": "mcp-fd168190fe226f56",
-      "inputSchema": {
-        "$defs": {
-          "RiskRating": {
-            "description": "Трёхуровневая шкала вероятности, влияния и итоговой оценки риска.",
-            "enum": [
-              "LOW",
-              "MEDIUM",
-              "HIGH"
-            ],
-            "title": "RiskRating",
-            "type": "string"
-          },
-          "RiskResponseStrategy": {
-            "description": "Выбранная человеком стратегия работы с риском.",
-            "enum": [
-              "AVOID",
-              "MITIGATE",
-              "TRANSFER",
-              "ACCEPT"
-            ],
-            "title": "RiskResponseStrategy",
-            "type": "string"
-          },
-          "RiskStatus": {
-            "description": "Состояние рискового события независимо от стадий задач.",
-            "enum": [
-              "OPEN",
-              "MITIGATING",
-              "OCCURRED",
-              "CLOSED"
-            ],
-            "title": "RiskStatus",
-            "type": "string"
-          }
-        },
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "confirmed_by_user": {
-            "description": "true только после явного подтверждения пользователем этих полей; AI не регистрирует риски самостоятельно.",
-            "title": "Confirmed By User",
-            "type": "boolean"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 20000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Новое Markdown-описание.",
-            "title": "Description"
-          },
-          "impact": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RiskRating"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Новое влияние."
-          },
-          "mitigation_plan": {
-            "anyOf": [
-              {
-                "maxLength": 20000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Превентивный план; пустая строка очищает.",
-            "title": "Mitigation Plan"
-          },
-          "owner": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин участника; пустая строка снимает назначение.",
-            "title": "Owner"
-          },
-          "probability": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RiskRating"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Новая вероятность."
-          },
-          "project_key": {
-            "description": "Ключ проекта, например PROJ.",
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Project Key",
-            "type": "string"
-          },
-          "response_plan": {
-            "anyOf": [
-              {
-                "maxLength": 20000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "План при наступлении; пустая строка очищает.",
-            "title": "Response Plan"
-          },
-          "response_strategy": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RiskResponseStrategy"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Новая стратегия."
-          },
-          "review_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Дата ГГГГ-ММ-ДД; пустая строка очищает.",
-            "title": "Review Date"
-          },
-          "risk_key": {
-            "description": "Стабильный ключ риска, например RISK-12.",
-            "pattern": "^RISK-[1-9][0-9]{0,9}$",
-            "title": "Risk Key",
-            "type": "string"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RiskStatus"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Новое состояние."
-          },
-          "task_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Ключ задачи; пустая строка удаляет связь.",
-            "title": "Task Key"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Новое название.",
-            "title": "Title"
-          }
-        },
-        "required": [
-          "project_key",
-          "risk_key",
-          "confirmed_by_user"
-        ],
-        "title": "update_project_riskArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "WRITE"
-      ],
-      "name": "update_project_risk",
-      "outputSchema": null,
-      "scopes": [
-        "tasks:write"
-      ],
-      "summary": "Изменить риск",
-      "write": true
-    },
-    {
-      "aliasFor": "tt_update_task",
-      "description": "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, приоритет, исполнитель, сроки. Стадия — tt_move_task, чек-лист — tt_set_checklist, наблюдатели — tt_set_watchers. Передавайте expected_revision из tt_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется прежнее поведение без защиты от затирания чужой правки. Требует право tasks:write.",
-      "group": "legacy-aliases",
-      "id": "mcp-8694bccc45d521e1",
-      "inputSchema": {
-        "properties": {
-          "actor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
-            "title": "Actor"
-          },
-          "assignee": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Точный логин исполнителя из команды проекта; пустая строка снимает исполнителя.",
-            "title": "Assignee"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Новое описание в Markdown.",
-            "title": "Description"
-          },
-          "due_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Срок в формате ГГГГ-ММ-ДД; пустая строка снимает срок.",
-            "title": "Due Date"
-          },
-          "expected_revision": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Ожидаемая revision из tt_get_task; устаревшая версия даёт конфликт.",
-            "title": "Expected Revision"
-          },
-          "priority": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Приоритет: LOW, MEDIUM, HIGH или URGENT.",
-            "title": "Priority"
-          },
-          "start_date": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Начало ГГГГ-ММ-ДД; пустая строка снимает начало.",
-            "title": "Start Date"
-          },
-          "task_key": {
-            "description": "Ключ задачи, например PROJ-142.",
-            "title": "Task Key",
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "description": "Новый заголовок.",
-            "title": "Title"
-          }
-        },
-        "required": [
-          "task_key"
-        ],
-        "title": "update_taskArguments",
-        "type": "object"
-      },
-      "kind": "mcp",
-      "legacy": [
-        "WRITE"
-      ],
-      "name": "update_task",
+      "name": "telos_update_task",
       "outputSchema": null,
       "scopes": [
         "tasks:write"
@@ -39840,7 +37604,7 @@
         "tool": {
           "description": "Имя инструмента.",
           "examples": [
-            "update_task"
+            "telos_update_task"
           ],
           "title": "Tool",
           "type": "string"

@@ -54,10 +54,10 @@ def result(response):
 
 
 async def task(env, title="Проверить окно заказа"):
-    stages = (await invoke(env, "list_stages"))["items"]
+    stages = (await invoke(env, "telos_list_stages"))["items"]
     if not stages:
-        await invoke(env, "create_stage", {"name": "Бэклог", "color": "#334455"})
-    return result(await invoke(env, "create_task", {"title": title}))["task"]
+        await invoke(env, "telos_create_stage", {"name": "Бэклог", "color": "#334455"})
+    return result(await invoke(env, "telos_create_task", {"title": title}))["task"]
 
 
 async def approve(env, response, *, context=None):
@@ -68,6 +68,118 @@ async def approve(env, response, *, context=None):
     )
 
 
+async def test_canonical_actions_reject_former_names_without_writes_or_receipts(actions_env):
+    env = actions_env
+    for old_name in ("create_task", "tt_create_task", "get_project", "tt_get_project"):
+        with pytest.raises(AgentToolConflictError, match="отсутствует в реестре"):
+            await invoke(env, old_name, {"title": "Не создавать"})
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 0
+    async with env.factory() as session:
+        assert not (await session.scalars(select(AgentToolRun))).all()
+
+
+async def test_canonical_runtime_write_gate_receipts_and_confirmation_on_postgres(actions_env):
+    from pydantic_ai.messages import ModelResponse, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from src.agent.context import AgentContextBudget
+    from src.agent.runtime import TimDeps, TimRuntime, WriteGate
+    from src.dependencies.scopes import build_project_knowledge_query_scope
+    from src.dependencies.services import build_project_tool_executor
+    from src.services.project_query import ProjectQueryService
+
+    env = actions_env
+    await invoke(env, "telos_create_stage", {"name": "Бэклог", "color": "#334455"})
+    executor = build_project_tool_executor(
+        ProjectQueryService(
+            scope=build_project_knowledge_query_scope(session_factory=env.factory)
+        ),
+        env.actions,
+    )
+
+    async def run(name, arguments, request_id, *, write_allowed):
+        step = 0
+        responses = []
+
+        async def decide_write():
+            return write_allowed
+
+        async def remember(_tool, result):
+            responses.append(result)
+
+        async def respond(_messages, info):
+            nonlocal step
+            step += 1
+            assert all(tool.name.startswith("telos_") for tool in info.function_tools)
+            if step == 1:
+                return ModelResponse(
+                    parts=[ToolCallPart("telos_load_capability", {"id": "tasks"})]
+                )
+            if step == 2:
+                return ModelResponse(parts=[ToolCallPart(name, arguments)])
+            return ModelResponse(
+                parts=[ToolCallPart("telos_submit_answer", {"answer": "Проверено."})]
+            )
+
+        deps = TimDeps(
+            execution=replace(env.context, request_id=request_id),
+            executor=executor,
+            system_prompt="Проверь поручение инструментами.",
+            content={"question": "Выполни поручение."},
+            budget=AgentContextBudget(
+                system_prompt="Проверь поручение инструментами.",
+                max_tokens=12000,
+                history_tokens=1000,
+            ),
+            tool_rounds=4,
+            defer_workflows=True,
+            write_gate_factory=lambda: WriteGate(decide_write()),
+            on_result=remember,
+        )
+        try:
+            result = await TimRuntime(model=FunctionModel(respond), executor=executor).run(
+                deps, metadata={}
+            )
+            assert result.output.answer == "Проверено."
+            return result, responses
+        finally:
+            if deps.write_gate is not None:
+                deps.write_gate.close()
+
+    request_id = uuid4()
+    denied, responses = await run(
+        "telos_create_task", {"title": "Из канонического runtime"}, request_id,
+        write_allowed=False,
+    )
+    assert not responses
+    assert denied.tool_calls[-1]["refused"] == "write_intent"
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 0
+
+    _, created = await run(
+        "telos_create_task", {"title": "Из канонического runtime"}, request_id,
+        write_allowed=True,
+    )
+    _, repeated = await run(
+        "telos_create_task", {"title": "Из канонического runtime"}, request_id,
+        write_allowed=True,
+    )
+    assert created == repeated
+    assert created[0]["action"]["tool_name"] == "telos_create_task"
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 1
+    original = created[0]["action"]["result"]["task"]
+    _, proposed = await run(
+        "telos_delete_task",
+        {"task_id": original["id"], "expected_updated_at": original["updated_at"]},
+        uuid4(), write_allowed=True,
+    )
+    assert proposed[0]["action"]["tool_name"] == "telos_delete_task"
+    assert proposed[0]["action"]["status"] == "pending"
+    assert (await invoke(env, "telos_get_task", {"task_id": original["id"]}))["task"]["id"] == original["id"]
+    completed = await approve(env, proposed[0])
+    assert completed.status == "completed" and completed.tool_name == "telos_delete_task"
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 0
+
+
 async def test_tasks_assignments_checklist_comments_and_deletion(actions_env):
     env = actions_env
     original = await task(env)
@@ -75,7 +187,7 @@ async def test_tasks_assignments_checklist_comments_and_deletion(actions_env):
     updated = result(
         await invoke(
             env,
-            "update_task",
+            "telos_update_task",
             {
                 "task_id": task_id,
                 "changes": {
@@ -92,11 +204,11 @@ async def test_tasks_assignments_checklist_comments_and_deletion(actions_env):
     assert any(
         item["user"]["id"] == 2 and item["role"] == "EXECUTOR" for item in updated["participants"]
     )
-    assert (await invoke(env, "list_tasks", {"search": "Проверка формы"}))["total"] == 1
+    assert (await invoke(env, "telos_list_tasks", {"search": "Проверка формы"}))["total"] == 1
     checklist = result(
         await invoke(
             env,
-            "set_checklist",
+            "telos_set_checklist",
             {
                 "task_id": task_id,
                 "checklist_revision": 0,
@@ -109,7 +221,7 @@ async def test_tasks_assignments_checklist_comments_and_deletion(actions_env):
     checked = result(
         await invoke(
             env,
-            "set_checklist",
+            "telos_set_checklist",
             {
                 "task_id": task_id,
                 "checklist_revision": checklist["checklist_revision"],
@@ -120,22 +232,22 @@ async def test_tasks_assignments_checklist_comments_and_deletion(actions_env):
     assert checked["checklist"]["items"][0]["is_completed"]
     with pytest.raises(AgentToolOperationError):
         await invoke(
-            env, "set_checklist", {"task_id": task_id, "checklist_revision": 0, "checklist": None}
+            env, "telos_set_checklist", {"task_id": task_id, "checklist_revision": 0, "checklist": None}
         )
-    stage = result(await invoke(env, "create_stage", {"name": "Готово", "is_done_stage": True}))[
+    stage = result(await invoke(env, "telos_create_stage", {"name": "Готово", "is_done_stage": True}))[
         "stage"
     ]
-    moved = result(await invoke(env, "move_task", {"task_id": task_id, "stage_id": stage["id"]}))[
+    moved = result(await invoke(env, "telos_move_task", {"task_id": task_id, "stage_id": stage["id"]}))[
         "task"
     ]
     assert moved["stage_id"] == stage["id"]
     comment = result(
-        await invoke(env, "add_comment", {"task_id": task_id, "body_md": "Проверено"})
+        await invoke(env, "telos_add_comment", {"task_id": task_id, "body_md": "Проверено"})
     )["comment"]
     edited = result(
         await invoke(
             env,
-            "update_comment",
+            "telos_update_comment",
             {
                 "comment_id": comment["id"],
                 "body_md": "Проверено дважды",
@@ -149,45 +261,45 @@ async def test_tasks_assignments_checklist_comments_and_deletion(actions_env):
     with pytest.raises(AgentToolOperationError):
         await invoke(
             env,
-            "update_comment",
+            "telos_update_comment",
             {
                 "comment_id": comment["id"],
                 "body_md": "Устаревшая правка",
                 "expected_body_md": "Проверено",
             },
         )
-    assert (await invoke(env, "list_comments", {"task_id": task_id}))["total"] == 1
-    await approve(env, await invoke(env, "delete_comment", {"comment_id": comment["id"]}))
-    assert not (await invoke(env, "list_comments", {"task_id": task_id}))["items"]
-    await approve(env, await invoke(env, "fix_task_baseline", {"task_id": task_id}))
-    fresh = (await invoke(env, "get_task", {"task_id": task_id}))["task"]
+    assert (await invoke(env, "telos_list_comments", {"task_id": task_id}))["total"] == 1
+    await approve(env, await invoke(env, "telos_delete_comment", {"comment_id": comment["id"]}))
+    assert not (await invoke(env, "telos_list_comments", {"task_id": task_id}))["items"]
+    await approve(env, await invoke(env, "telos_fix_task_baseline", {"task_id": task_id}))
+    fresh = (await invoke(env, "telos_get_task", {"task_id": task_id}))["task"]
     deletion = await invoke(
-        env, "delete_task", {"task_id": task_id, "expected_updated_at": fresh["updated_at"]}
+        env, "telos_delete_task", {"task_id": task_id, "expected_updated_at": fresh["updated_at"]}
     )
-    assert (await invoke(env, "get_task", {"task_id": task_id}))["task"]["id"] == task_id
+    assert (await invoke(env, "telos_get_task", {"task_id": task_id}))["task"]["id"] == task_id
     done = await approve(env, deletion)
     assert done.status == "completed"
     assert await approve(env, deletion) == done
-    assert not (await invoke(env, "list_tasks"))["items"]
+    assert not (await invoke(env, "telos_list_tasks"))["items"]
 
 
 async def test_project_team_stickers_and_roles(actions_env):
     env = actions_env
-    assert (await invoke(env, "get_project"))["project"]["id"] == 1
+    assert (await invoke(env, "telos_get_project"))["project"]["id"] == 1
     assert (
-        result(await invoke(env, "update_project", {"name": "Пилот"}))["project"]["name"] == "Пилот"
+        result(await invoke(env, "telos_update_project", {"name": "Пилот"}))["project"]["name"] == "Пилот"
     )
     member = replace(env.context, user_id=2)
     with pytest.raises(AgentToolAccessError):
-        await invoke(env, "update_project", {"name": "Запрещено"}, context=member)
+        await invoke(env, "telos_update_project", {"name": "Запрещено"}, context=member)
     original = await task(env)
     sticker = result(
-        await invoke(env, "create_sticker", {"body": "Проверить UX", "task_ids": [original["id"]]})
+        await invoke(env, "telos_create_sticker", {"body": "Проверить UX", "task_ids": [original["id"]]})
     )["sticker"]
     revised = result(
         await invoke(
             env,
-            "update_sticker",
+            "telos_update_sticker",
             {
                 "sticker_id": sticker["id"],
                 "changes": {"revision": sticker["revision"], "body": "Обсудить UX"},
@@ -197,61 +309,61 @@ async def test_project_team_stickers_and_roles(actions_env):
     assert revised["body"] == "Обсудить UX"
     await invoke(
         env,
-        "move_sticker",
+        "telos_move_sticker",
         {"sticker_id": sticker["id"], "position": {"canvas_x": 150, "canvas_y": 200}},
     )
-    current = (await invoke(env, "list_stickers"))["items"][0]
+    current = (await invoke(env, "telos_list_stickers"))["items"][0]
     assert current["canvas_x"] == 150
     await approve(
         env,
         await invoke(
-            env, "delete_sticker", {"sticker_id": current["id"], "revision": current["revision"]}
+            env, "telos_delete_sticker", {"sticker_id": current["id"], "revision": current["revision"]}
         ),
     )
-    assert not (await invoke(env, "list_stickers"))["items"]
-    await approve(env, await invoke(env, "remove_member", {"user_id": 2}))
-    assert (await invoke(env, "list_members"))["total"] == 1
-    await invoke(env, "add_member", {"username": "user2"})
-    transfer = await invoke(env, "transfer_project_ownership", {"user_id": 2})
+    assert not (await invoke(env, "telos_list_stickers"))["items"]
+    await approve(env, await invoke(env, "telos_remove_member", {"user_id": 2}))
+    assert (await invoke(env, "telos_list_members"))["total"] == 1
+    await invoke(env, "telos_add_member", {"username": "user2"})
+    transfer = await invoke(env, "telos_transfer_project_ownership", {"user_id": 2})
     with pytest.raises(AgentToolAccessError):
         await approve(env, transfer, context=member)
     await approve(env, transfer)
-    assert (await invoke(env, "get_project"))["project"]["owner_id"] == 2
+    assert (await invoke(env, "telos_get_project"))["project"]["owner_id"] == 2
     with pytest.raises(AgentToolAccessError):
-        await invoke(env, "remove_member", {"user_id": 2})
+        await invoke(env, "telos_remove_member", {"user_id": 2})
 
 
 async def test_documents_links_and_binary_attachment_copy(actions_env):
     env = actions_env
     first, second = await task(env, "Первая"), await task(env, "Вторая")
     document = result(
-        await invoke(env, "create_document", {"title": "Приёмка", "content_md": "Исходный план"})
+        await invoke(env, "telos_create_document", {"title": "Приёмка", "content_md": "Исходный план"})
     )["document"]
     document_id = document["id"]
     await invoke(
         env,
-        "update_document",
+        "telos_update_document",
         {"document_id": document_id, "changes": {"content_md": "Проверить форму заказа"}},
     )
-    assert (await invoke(env, "list_documents"))["total"] == 1
+    assert (await invoke(env, "telos_list_documents"))["total"] == 1
     link = result(
-        await invoke(env, "link_document", {"document_id": document_id, "task_id": first["id"]})
+        await invoke(env, "telos_link_document", {"document_id": document_id, "task_id": first["id"]})
     )["link"]
-    read = await invoke(env, "get_document", {"document_id": document_id})
+    read = await invoke(env, "telos_get_document", {"document_id": document_id})
     assert read["document"]["content_md"] == "Проверить форму заказа" and len(read["tasks"]) == 1
-    await invoke(env, "unlink_document", {"link_id": link["id"]})
-    assert not (await invoke(env, "get_document", {"document_id": document_id}))["tasks"]
+    await invoke(env, "telos_unlink_document", {"link_id": link["id"]})
+    assert not (await invoke(env, "telos_get_document", {"document_id": document_id}))["tasks"]
     attached = result(
         await invoke(
             env,
-            "create_text_attachment",
+            "telos_create_text_attachment",
             {"task_id": first["id"], "file_name": "plan.md", "content": "Проверить форму заказа"},
         )
     )["attachment"]
     copied = result(
         await invoke(
             env,
-            "copy_attachment",
+            "telos_copy_attachment",
             {
                 "task_id": first["id"],
                 "attachment_id": attached["id"],
@@ -260,97 +372,97 @@ async def test_documents_links_and_binary_attachment_copy(actions_env):
         )
     )["attachment"]
     assert copied["id"] != attached["id"] and copied["size"] == attached["size"]
-    assert len((await invoke(env, "list_attachments", {"task_id": second["id"]}))["items"]) == 1
+    assert len((await invoke(env, "telos_list_attachments", {"task_id": second["id"]}))["items"]) == 1
     await approve(
         env,
         await invoke(
-            env, "delete_attachment", {"task_id": first["id"], "attachment_id": attached["id"]}
+            env, "telos_delete_attachment", {"task_id": first["id"], "attachment_id": attached["id"]}
         ),
     )
-    assert not (await invoke(env, "list_attachments", {"task_id": first["id"]}))["items"]
+    assert not (await invoke(env, "telos_list_attachments", {"task_id": first["id"]}))["items"]
     assert len(list(env.files.rglob("*.md"))) == 1
-    await approve(env, await invoke(env, "delete_document", {"document_id": document_id}))
-    assert not (await invoke(env, "list_documents"))["items"]
+    await approve(env, await invoke(env, "telos_delete_document", {"document_id": document_id}))
+    assert not (await invoke(env, "telos_list_documents"))["items"]
 
 
 async def test_wbs_milestones_dependencies_calendar_and_stages(actions_env):
     env = actions_env
     first, second = await task(env, "Спроектировать"), await task(env, "Проверить")
-    stage = result(await invoke(env, "create_stage", {"name": "Проверка"}))["stage"]
-    await invoke(env, "update_stage", {"stage_id": stage["id"], "changes": {"name": "Приёмка"}})
-    root = result(await invoke(env, "create_wbs_node", {"title": "Заказы"}))["node"]
+    stage = result(await invoke(env, "telos_create_stage", {"name": "Проверка"}))["stage"]
+    await invoke(env, "telos_update_stage", {"stage_id": stage["id"], "changes": {"name": "Приёмка"}})
+    root = result(await invoke(env, "telos_create_wbs_node", {"title": "Заказы"}))["node"]
     child = result(
-        await invoke(env, "create_wbs_node", {"title": "Интерфейс", "parent_id": root["id"]})
+        await invoke(env, "telos_create_wbs_node", {"title": "Интерфейс", "parent_id": root["id"]})
     )["node"]
-    await invoke(env, "update_wbs_node", {"node_id": child["id"], "title": "Форма"})
-    await invoke(env, "move_wbs_node", {"node_id": child["id"], "parent_id": None})
-    await invoke(env, "place_task", {"task_id": first["id"], "wbs_node_id": child["id"]})
-    structure = await invoke(env, "get_structure")
+    await invoke(env, "telos_update_wbs_node", {"node_id": child["id"], "title": "Форма"})
+    await invoke(env, "telos_move_wbs_node", {"node_id": child["id"], "parent_id": None})
+    await invoke(env, "telos_place_task", {"task_id": first["id"], "wbs_node_id": child["id"]})
+    structure = await invoke(env, "telos_get_structure")
     assert len(structure["nodes"]) == 2 and structure["stats"]["assigned_tasks"] == 1
     milestone = result(
         await invoke(
             env,
-            "create_milestone",
+            "telos_create_milestone",
             {"title": "Демо", "due_date": "2026-09-30", "wbs_node_id": child["id"]},
         )
     )["milestone"]
     await invoke(
         env,
-        "update_milestone",
+        "telos_update_milestone",
         {"milestone_id": milestone["id"], "changes": {"title": "Демо формы"}},
     )
-    assert (await invoke(env, "list_milestones"))["total"] == 1
+    assert (await invoke(env, "telos_list_milestones"))["total"] == 1
     dependency = result(
         await invoke(
             env,
-            "create_dependency",
+            "telos_create_dependency",
             {"predecessor_task_id": first["id"], "successor_task_id": second["id"]},
         )
     )["dependency"]
-    assert (await invoke(env, "list_dependencies"))["total"] == 1
+    assert (await invoke(env, "telos_list_dependencies"))["total"] == 1
     changes = [{"task_id": first["id"], "start_date": "2026-09-21", "due_date": "2026-09-25"}]
-    preview = await invoke(env, "preview_schedule_change", {"changes": changes})
+    preview = await invoke(env, "telos_preview_schedule_change", {"changes": changes})
     assert preview
-    fresh = (await invoke(env, "get_task", {"task_id": first["id"]}))["task"]
+    fresh = (await invoke(env, "telos_get_task", {"task_id": first["id"]}))["task"]
     await approve(
         env,
         await invoke(
             env,
-            "apply_schedule_change",
+            "telos_apply_schedule_change",
             {"changes": [{**changes[0], "expected_updated_at": fresh["updated_at"]}]},
         ),
     )
-    assert (await invoke(env, "get_task", {"task_id": first["id"]}))["task"][
+    assert (await invoke(env, "telos_get_task", {"task_id": first["id"]}))["task"][
         "due_date"
     ] == "2026-09-25"
-    assert await invoke(env, "get_calendar", {"date_from": "2026-09-01", "date_to": "2026-10-31"})
-    await approve(env, await invoke(env, "delete_dependency", {"dependency_id": dependency["id"]}))
-    await approve(env, await invoke(env, "delete_milestone", {"milestone_id": milestone["id"]}))
-    await approve(env, await invoke(env, "delete_wbs_node", {"node_id": child["id"]}))
-    assert (await invoke(env, "get_structure"))["stats"]["assigned_tasks"] == 0
-    await approve(env, await invoke(env, "delete_stage", {"stage_id": stage["id"]}))
+    assert await invoke(env, "telos_get_calendar", {"date_from": "2026-09-01", "date_to": "2026-10-31"})
+    await approve(env, await invoke(env, "telos_delete_dependency", {"dependency_id": dependency["id"]}))
+    await approve(env, await invoke(env, "telos_delete_milestone", {"milestone_id": milestone["id"]}))
+    await approve(env, await invoke(env, "telos_delete_wbs_node", {"node_id": child["id"]}))
+    assert (await invoke(env, "telos_get_structure"))["stats"]["assigned_tasks"] == 0
+    await approve(env, await invoke(env, "telos_delete_stage", {"stage_id": stage["id"]}))
 
 
 async def test_risks_cross_project_isolation_and_stale_deletion(actions_env):
     env = actions_env
     original = await task(env)
     foreign_ctx = replace(env.context, project_id=2)
-    await invoke(env, "create_stage", {"name": "Чужой бэклог"}, context=foreign_ctx)
+    await invoke(env, "telos_create_stage", {"name": "Чужой бэклог"}, context=foreign_ctx)
     foreign = result(
-        await invoke(env, "create_task", {"title": "Чужая задача"}, context=foreign_ctx)
+        await invoke(env, "telos_create_task", {"title": "Чужая задача"}, context=foreign_ctx)
     )["task"]
     for name, arguments in [
-        ("get_task", {"task_id": foreign["id"]}),
-        ("update_task", {"task_id": foreign["id"], "changes": {"title": "Нельзя"}}),
-        ("add_comment", {"task_id": foreign["id"], "body_md": "Нельзя"}),
-        ("delete_task", {"task_id": foreign["id"], "expected_updated_at": foreign["updated_at"]}),
+        ("telos_get_task", {"task_id": foreign["id"]}),
+        ("telos_update_task", {"task_id": foreign["id"], "changes": {"title": "Нельзя"}}),
+        ("telos_add_comment", {"task_id": foreign["id"], "body_md": "Нельзя"}),
+        ("telos_delete_task", {"task_id": foreign["id"], "expected_updated_at": foreign["updated_at"]}),
     ]:
         with pytest.raises(AgentToolAccessError):
             await invoke(env, name, arguments)
     risk = result(
         await invoke(
             env,
-            "create_risk",
+            "telos_create_risk",
             {
                 "title": "Срыв проверки",
                 "description": "Не хватает времени на проверку",
@@ -362,23 +474,23 @@ async def test_risks_cross_project_isolation_and_stale_deletion(actions_env):
             },
         )
     )["risk"]
-    assert (await invoke(env, "get_risk", {"risk_id": risk["id"]}))["risk"]["task_id"] == original[
+    assert (await invoke(env, "telos_get_risk", {"risk_id": risk["id"]}))["risk"]["task_id"] == original[
         "id"
     ]
     await invoke(
         env,
-        "update_risk",
+        "telos_update_risk",
         {"risk_id": risk["id"], "changes": {"status": "CLOSED", "mitigation_plan": "Проверено"}},
     )
-    assert not (await invoke(env, "list_risks", {"active_only": True}))["items"]
-    await approve(env, await invoke(env, "delete_risk", {"risk_id": risk["id"]}))
+    assert not (await invoke(env, "telos_list_risks", {"active_only": True}))["items"]
+    await approve(env, await invoke(env, "telos_delete_risk", {"risk_id": risk["id"]}))
     deletion = await invoke(
         env,
-        "delete_task",
+        "telos_delete_task",
         {"task_id": original["id"], "expected_updated_at": original["updated_at"]},
     )
     await invoke(
-        env, "update_task", {"task_id": original["id"], "changes": {"title": "Уже изменена"}}
+        env, "telos_update_task", {"task_id": original["id"], "changes": {"title": "Уже изменена"}}
     )
     with pytest.raises((AgentToolConflictError, AgentToolOperationError)):
         await approve(env, deletion)
@@ -386,7 +498,7 @@ async def test_risks_cross_project_isolation_and_stale_deletion(actions_env):
         context=env.context, action_id=UUID(deletion["action"]["id"]), decision="reject"
     )
     assert rejected.status == "rejected"
-    assert (await invoke(env, "get_task", {"task_id": original["id"]}))["task"][
+    assert (await invoke(env, "telos_get_task", {"task_id": original["id"]}))["task"][
         "title"
     ] == "Уже изменена"
 
@@ -395,11 +507,11 @@ async def test_action_commit_and_result_are_atomic_and_concurrent_retry_creates_
     actions_env,
 ):
     env = actions_env
-    await invoke(env, "create_stage", {"name": "Бэклог", "color": "#334455"})
+    await invoke(env, "telos_create_stage", {"name": "Бэклог", "color": "#334455"})
     request_id = uuid4()
     first, duplicate = await asyncio.gather(
-        invoke(env, "create_task", {"title": "Одна задача"}, request_id=request_id),
-        invoke(env, "create_task", {"title": "Одна задача"}, request_id=request_id),
+        invoke(env, "telos_create_task", {"title": "Одна задача"}, request_id=request_id),
+        invoke(env, "telos_create_task", {"title": "Одна задача"}, request_id=request_id),
     )
     assert first == duplicate
     async with env.factory() as session:
@@ -408,18 +520,18 @@ async def test_action_commit_and_result_are_atomic_and_concurrent_retry_creates_
             len(
                 (
                     await session.scalars(
-                        select(AgentToolRun).where(AgentToolRun.tool_name == "create_task")
+                        select(AgentToolRun).where(AgentToolRun.tool_name == "telos_create_task")
                     )
                 ).all()
             )
             == 1
         )
     with pytest.raises(AgentToolConflictError):
-        await invoke(env, "create_task", {"title": "Другой текст"}, request_id=request_id)
+        await invoke(env, "telos_create_task", {"title": "Другой текст"}, request_id=request_id)
     with pytest.raises(AgentToolAccessError):
         await invoke(
             env,
-            "create_task",
+            "telos_create_task",
             {"title": "Запрещено"},
             context=replace(env.context, can_write=False),
         )
@@ -436,11 +548,11 @@ async def test_failed_result_write_rolls_back_domain_commits_and_new_file(action
 
     monkeypatch.setattr(AgentToolRunsRepository, "save", fail)
     with pytest.raises(AgentToolsServiceError):
-        await invoke(env, "create_task", {"title": "Не должна сохраниться"})
+        await invoke(env, "telos_create_task", {"title": "Не должна сохраниться"})
     with pytest.raises(AgentToolsServiceError):
         await invoke(
             env,
-            "create_text_attachment",
+            "telos_create_text_attachment",
             {"task_id": original["id"], "file_name": "test.txt", "content": "Тест"},
         )
     async with env.factory() as session:

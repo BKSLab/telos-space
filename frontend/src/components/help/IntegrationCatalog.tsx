@@ -54,7 +54,7 @@ function Operation({ entry, initialOpen }: { entry: CatalogEntry; initialOpen: b
             <span className="flex min-w-0 flex-col gap-2">
                 <span className="flex min-w-0 flex-wrap items-start gap-2">{entry.method && <span className="rounded border border-accent/25 bg-accent-soft px-1.5 py-0.5 font-mono text-[10px] font-semibold text-accent">{entry.method}</span>}<code className="min-w-0 text-[12px] font-semibold break-all text-primary">{entry.path ?? entry.name}</code></span>
                 <span className="text-[13px] leading-6 text-secondary">{entry.summary}</span>
-                {entry.kind === "action" && <span className="text-[11px] text-muted">Через tt_execute_project_tool</span>}
+                {entry.kind === "action" && <span className="text-[11px] text-muted">Через telos_execute_project_tool</span>}
             </span><ChevronDown size={15} aria-hidden="true" className={`mt-1 shrink-0 text-muted ${open ? "rotate-180" : ""}`} />
         </summary>
         {open && <div className="min-w-0 space-y-5 border-t border-line-subtle bg-surface/25 px-3 py-5 sm:px-4">
@@ -66,7 +66,6 @@ function Operation({ entry, initialOpen }: { entry: CatalogEntry; initialOpen: b
                     {entry.legacy.length > 0 && <p>Прежний токен tt_: {entry.legacy.includes("READ") ? "READ или WRITE" : "WRITE"}.</p>}
                     <p>Действует текущий доступ владельца к объекту.</p>
                 </>}
-                {entry.aliasFor && <p>Прежнее имя для <code className="break-all">{entry.aliasFor}</code>. Схема и формат ответа сохраняются для совместимости.</p>}
                 {entry.ownerOnly && <p>Требуется роль владельца проекта.</p>}
                 {entry.requiresConfirmation && <p>Нужно отдельное подтверждение пользователя через MCP-клиент.</p>}
             </section>
@@ -95,7 +94,7 @@ export function IntegrationCatalog({ kind }: { kind: CatalogKind }) {
     const terms = helpSearchTerms(query);
     const filtered = entries.filter(entry => terms.every(term => catalogSearchText(entry).includes(term))
         && (filter === "all" || filter === "keys" && !!entry.scopes || filter === "session" && entry.access === "session"
-            || filter === "primary" && entry.kind === "mcp" && !entry.aliasFor || filter === "aliases" && !!entry.aliasFor || filter === "actions" && entry.kind === "action"));
+            || filter === "primary" && entry.kind === "mcp" || filter === "actions" && entry.kind === "action"));
     const groups = new Map<string, CatalogEntry[]>();
     for (const entry of filtered) {
         const title = catalogGroup(entry);
@@ -110,7 +109,7 @@ export function IntegrationCatalog({ kind }: { kind: CatalogKind }) {
             <div className="relative min-w-0 basis-full sm:flex-1 sm:basis-auto"><Search size={15} aria-hidden="true" className="pointer-events-none absolute top-3 left-3 text-muted" /><Input type="search" aria-label={kind === "api" ? "Поиск методов API" : "Поиск инструментов MCP"} placeholder="Имя, путь, возможность или параметр" value={query} onChange={event => { clearAnchor(); setQuery(event.target.value); }} className="h-10 pl-9" /></div>
             <Select aria-label="Фильтр каталога" value={filter} onChange={event => { clearAnchor(); setFilter(event.target.value); }} className="h-10 w-full sm:w-auto">
                 <option value="all">{kind === "api" ? "Все методы" : "Весь каталог"}</option><option value="keys">Для ключей ttk_</option>
-                {kind === "api" ? <option value="session">Только сессия интерфейса</option> : <><option value="primary">Основные инструменты</option><option value="aliases">Прежние имена</option><option value="actions">Действия каталога</option></>}
+                {kind === "api" ? <option value="session">Только сессия интерфейса</option> : <><option value="primary">Инструменты MCP</option><option value="actions">Действия каталога</option></>}
             </Select>
         </div>
         <p role="status" aria-label="Результат фильтра каталога" className="text-[12px] text-muted">Найдено: {filtered.length} из {entries.length}</p>

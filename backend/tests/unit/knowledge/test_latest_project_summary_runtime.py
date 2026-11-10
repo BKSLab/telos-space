@@ -30,7 +30,7 @@ async def test_saved_summary_is_discovered_in_reports_and_returned_to_model(foun
     executor = AgentToolExecutor(
         [
             AgentTool(
-                name="get_latest_project_summary",
+                name="telos_get_latest_project_summary",
                 description="Последний сохранённый обзор проекта",
                 parameters=EmptyInput,
                 handler=reader,
@@ -53,19 +53,19 @@ async def test_saved_summary_is_discovered_in_reports_and_returned_to_model(foun
         step += 1
         visible = {tool.name for tool in info.function_tools}
         if step == 1:
-            assert visible == {"load_capability"}
+            assert visible == {"telos_load_capability"}
             assert "сохранённый обзор" in info.instructions.lower()
-            return ModelResponse(parts=[ToolCallPart("load_capability", {"id": "reports"})])
+            return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "reports"})])
         if step == 2:
-            assert visible == {"load_capability", "get_latest_project_summary"}
+            assert visible == {"telos_load_capability", "telos_get_latest_project_summary"}
             assert "found=false" in TIM_WORKFLOW_INSTRUCTIONS["reports"]
             assert "created_at" in TIM_WORKFLOW_INSTRUCTIONS["reports"]
-            return ModelResponse(parts=[ToolCallPart("get_latest_project_summary", {})])
+            return ModelResponse(parts=[ToolCallPart("telos_get_latest_project_summary", {})])
         returned = [
             part.content
             for message in messages
             for part in message.parts
-            if isinstance(part, ToolReturnPart) and part.tool_name == "get_latest_project_summary"
+            if isinstance(part, ToolReturnPart) and part.tool_name == "telos_get_latest_project_summary"
         ]
         assert returned[-1]["found"] is found
         assert returned[-1]["report"] == report["report"]

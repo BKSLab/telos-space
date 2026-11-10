@@ -20,7 +20,7 @@
   инструментов не выходят за ``context_tokens`` — старые большие результаты
   сворачиваются в квитанции, затем сокращается стартовый контекст. Схемы
   инструментов в бюджет не входят. В production предметные правила и схемы
-  раскрываются небольшими наборами через нативный ``load_capability``;
+  раскрываются небольшими наборами через нативный ``telos_load_capability``;
 - **лимиты**: шагов модели и вызовов инструментов — ``UsageLimits``, не
   больше восьми вызовов за шаг.
 """
@@ -53,11 +53,13 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
-from pydantic_ai.models import Model
+from pydantic_ai.models import Model, ModelRequestContext
 from pydantic_ai.profiles import InlineDefsJsonSchemaTransformer
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.toolsets import AbstractToolset, FunctionToolset, PreparedToolset
+from pydantic_ai.toolsets.abstract import ToolsetTool
+from pydantic_ai.toolsets.renamed import RenamedToolset
 from pydantic_ai.usage import RunUsage
 
 from src.agent.capabilities import WORKFLOWS, Workflow, workflow_for_tool
@@ -85,9 +87,9 @@ MAX_OUTPUT_TOKENS = 4000
 #: Сколько раз модель может исправить аргументы одного инструмента.
 TOOL_RETRIES = 2
 #: Имя инструмента, которым личный режим выполняет действие в проекте по ключу.
-PROJECT_ACTION_TOOL = "run_project_action"
+PROJECT_ACTION_TOOL = "telos_run_project_action"
 #: Имя инструмента окончательного ответа.
-OUTPUT_TOOL = "final_result"
+OUTPUT_TOOL = "telos_submit_answer"
 #: Результат инструмента дороже этого числа токенов сворачивается первым.
 RECEIPT_THRESHOLD_TOKENS = 160
 #: Нижняя граница бюджета стартового контекста при сокращении.
@@ -97,7 +99,7 @@ MIN_PROMPT_TOKENS = 3000
 STEPS_NOTICE_FROM = 2
 #: Не более двух дополнительных шагов на выбор наборов; предметный бюджет прежний.
 MAX_WORKFLOW_LOAD_ROUNDS = 2
-LOAD_CAPABILITY_TOOL = "load_capability"
+LOAD_CAPABILITY_TOOL = "telos_load_capability"
 
 
 class TimAnswer(BaseModel):
@@ -253,9 +255,50 @@ class _PrepareTimTools(PrepareTools[TimDeps]):
         return CapabilityOrdering(position="outermost")
 
     def get_wrapper_toolset(self, toolset: AbstractToolset[TimDeps]) -> AbstractToolset[TimDeps]:
-        # PydanticAI adds load_capability outside its ordinary PrepareTools hook.
-        # Keep one outer public wrapper so the final-answer step hides it as well.
-        return PreparedToolset(toolset, self.prepare_func)
+        # The framework owns the native loader implementation. Its one public
+        # registration uses our name; the original name is never in get_tools().
+        return PreparedToolset(
+            _CanonicalLoaderToolset(toolset, name_map={LOAD_CAPABILITY_TOOL: "load_capability"}),
+            self.prepare_func,
+        )
+
+    async def before_model_request(
+        self, ctx: RunContext[TimDeps], request_context: ModelRequestContext
+    ) -> ModelRequestContext:
+        parameters = request_context.model_request_parameters
+        if not parameters.instruction_parts:
+            return request_context
+        parts = [
+            dataclass_replace(part, content=_loader_instructions(part.content))
+            if str(part.id) == "capability:deferred_capabilities"
+            else part
+            for part in parameters.instruction_parts
+        ]
+        return dataclass_replace(
+            request_context,
+            model_request_parameters=dataclass_replace(parameters, instruction_parts=parts),
+        )
+
+
+def _loader_instructions(text: str) -> str:
+    """Имя нативной реализации не попадает в инструкции и ошибки для модели."""
+    return text.replace("`load_capability`", f"`{LOAD_CAPABILITY_TOOL}`")
+
+
+class _CanonicalLoaderToolset(RenamedToolset[TimDeps]):
+    async def call_tool(
+        self,
+        name: str,
+        tool_args: dict[str, Any],
+        ctx: RunContext[TimDeps],
+        tool: ToolsetTool[TimDeps],
+    ) -> Any:
+        try:
+            return await super().call_tool(name, tool_args, ctx, tool)
+        except ModelRetry as error:
+            if name != LOAD_CAPABILITY_TOOL:
+                raise
+            raise ModelRetry(_loader_instructions(error.message)) from error
 
 
 class TimRuntime:
@@ -276,7 +319,7 @@ class TimRuntime:
             model,
             name="tim-pm",
             deps_type=TimDeps,
-            # Текстовый ответ разрешён рядом с final_result: иначе PydanticAI шлёт
+            # Текстовый ответ разрешён рядом с telos_submit_answer: иначе PydanticAI шлёт
             # tool_choice=required, а Gemini через шлюз отвечает 400 «Request
             # contains an invalid argument», если инструментов больше ~20
             # (замер 30.09.2026 на стенде). Текст становится ответом без source_ids.

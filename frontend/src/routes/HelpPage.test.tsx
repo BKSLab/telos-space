@@ -55,8 +55,8 @@ it("позволяет выбрать раздел компактным конт
 });
 
 it("открывает найденный MCP-инструмент вместе с аргументами и правами", async () => {
-    setup("/help/about?q=tt_create_task");
-    const entry = integrationCatalog.mcp.find(item => item.name === "tt_create_task")!;
+    setup("/help/about?q=telos_create_task");
+    const entry = integrationCatalog.mcp.find(item => item.name === "telos_create_task")!;
     const result = screen.getByRole("link", { name: `MCP · ${entry.name} · ${entry.summary}` });
     await userEvent.click(result);
     await waitFor(() => expect(document.activeElement?.id).toBe(entry.id));
@@ -73,5 +73,5 @@ it("фильтрует API по доступу и показывает сесс�
     const entry = integrationCatalog.api.find(item => item.method === "GET" && item.path === "/api/v1/users/me/api-keys")!;
     await userEvent.click(document.getElementById(entry.id)!);
     expect(screen.getByRole("region", { name: `Доступ ${entry.name}` }).textContent).toContain("Только сессия интерфейса");
-    expect(screen.queryByText("tt_create_task", { selector: "code" })).toBeNull();
+    expect(screen.queryByText("telos_create_task", { selector: "code" })).toBeNull();
 });

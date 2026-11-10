@@ -14,7 +14,7 @@ from pydantic import Field
 
 from src.exceptions.base import ApplicationError
 from src.mcp_server.context import resolve_project, resolve_task, tool_context
-from src.mcp_server.registry import tt_tool
+from src.mcp_server.registry import telos_tool
 from src.mcp_server.server import TaskKey, domain_message, with_task_url
 from src.mcp_server.write_tools import Actor, ProjectKey, member_user_id
 from src.schemas.task_checklists import TaskChecklistSchema
@@ -23,12 +23,12 @@ from src.utils.api_scopes import SCOPE_TASKS_READ, SCOPE_TASKS_WRITE
 # ── Чек-лист и наблюдатели ─────────────────────────────────────────────────
 
 
-@tt_tool(
-    name="tt_set_checklist",
+@telos_tool(
+    name="telos_set_checklist",
     title="Задать чек-лист задачи",
     description=(
         "Заменяет чек-лист задачи целиком (пункты в нужном порядке) или удаляет его "
-        "(checklist=null). checklist_revision — из tt_get_task: если чек-лист успели "
+        "(checklist=null). checklist_revision — из telos_get_task: если чек-лист успели "
         "поменять, вернётся конфликт, и его надо перечитать."
     ),
     scope=SCOPE_TASKS_WRITE,
@@ -41,7 +41,7 @@ async def set_checklist(
         Field(description="Полный чек-лист: title и items[{text, done}]; null удаляет."),
     ],
     checklist_revision: Annotated[
-        int, Field(description="Ожидаемая версия чек-листа из tt_get_task.", ge=0)
+        int, Field(description="Ожидаемая версия чек-листа из telos_get_task.", ge=0)
     ],
     actor: Actor = None,
 ) -> dict:
@@ -66,12 +66,12 @@ async def set_checklist(
         )
 
 
-@tt_tool(
-    name="tt_set_watchers",
+@telos_tool(
+    name="telos_set_watchers",
     title="Задать наблюдателей задачи",
     description=(
         "Заменяет список наблюдателей задачи. Логины — участники проекта "
-        "(tt_list_project_members); пустой список снимает всех наблюдателей."
+        "(telos_list_project_members); пустой список снимает всех наблюдателей."
     ),
     scope=SCOPE_TASKS_WRITE,
 )
@@ -82,7 +82,7 @@ async def set_watchers(
     actor: Actor = None,
     expected_revision: Annotated[
         int | None,
-        Field(ge=1, strict=True, description="Ожидаемая revision задачи из tt_get_task; без неё прежнее поведение."),
+        Field(ge=1, strict=True, description="Ожидаемая revision задачи из telos_get_task; без неё прежнее поведение."),
     ] = None,
 ) -> dict:
     """Заменяет наблюдателей тем же сценарием, что PATCH /tasks/{id}."""
@@ -115,8 +115,8 @@ async def set_watchers(
 # ── Зависимости ────────────────────────────────────────────────────────────
 
 
-@tt_tool(
-    name="tt_list_dependencies",
+@telos_tool(
+    name="telos_list_dependencies",
     title="Зависимости задач проекта",
     description=(
         "Возвращает связи «задача A должна закончиться до начала задачи B» в проекте; "
@@ -160,8 +160,8 @@ async def list_dependencies(
         ]
 
 
-@tt_tool(
-    name="tt_create_dependency",
+@telos_tool(
+    name="telos_create_dependency",
     title="Связать задачи зависимостью",
     description=(
         "Создаёт связь «predecessor должна закончиться до начала successor» "
@@ -202,10 +202,10 @@ async def create_dependency(
         }
 
 
-@tt_tool(
-    name="tt_delete_dependency",
+@telos_tool(
+    name="telos_delete_dependency",
     title="Удалить зависимость",
-    description="Удаляет связь задач по dependency_id из tt_list_dependencies. Требует confirm=true.",
+    description="Удаляет связь задач по dependency_id из telos_list_dependencies. Требует confirm=true.",
     scope=SCOPE_TASKS_WRITE,
 )
 async def delete_dependency(

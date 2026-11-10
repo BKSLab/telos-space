@@ -35,7 +35,7 @@ async def test_action_decision_uses_server_actor_and_does_not_accept_changed_arg
     action_id = uuid4()
     actions.decide.return_value = AgentToolRunSchema(
         id=action_id,
-        tool_name="delete_task",
+        tool_name="telos_delete_task",
         title="Удалить задачу",
         arguments={"task_id": 7},
         status="completed",

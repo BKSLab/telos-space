@@ -38,7 +38,6 @@ export interface CatalogEntry {
     access?: "public" | "subscription" | "session" | "authenticated";
     scopes: string[] | null;
     legacy: string[];
-    aliasFor?: string | null;
     write?: boolean;
     requiresConfirmation?: boolean;
     ownerOnly?: boolean;
@@ -76,7 +75,7 @@ const GROUPS: Record<string, string> = {
     dashboard: "Аналитика", analytics: "Аналитика",
     auth: "Вход и сессия", users: "Профиль и пользователи",
     "personal api keys": "API-ключи", "api tokens": "Прежние токены",
-    websocket: "WebSocket", "legacy-aliases": "Прежние имена MCP",
+    websocket: "WebSocket",
     "project-actions": "Каталог действий проекта",
 };
 
@@ -146,7 +145,7 @@ export function schemaDocument(schema: JsonSchema): { schema: JsonSchema; defini
 export function catalogSearchText(entry: CatalogEntry): string {
     let text = searchCache.get(entry);
     if (text === undefined) {
-        text = normalize(`${entry.name} ${entry.summary} ${entry.description} ${catalogGroup(entry)} ${entry.scopes?.join(" ") ?? ""} ${entry.aliasFor ?? ""} ${entry.legacy.join(" ")} ${schemaText(entry, entry.inputSchema, new Set())}`);
+        text = normalize(`${entry.name} ${entry.summary} ${entry.description} ${catalogGroup(entry)} ${entry.scopes?.join(" ") ?? ""} ${entry.legacy.join(" ")} ${schemaText(entry, entry.inputSchema, new Set())}`);
         searchCache.set(entry, text);
     }
     return text;

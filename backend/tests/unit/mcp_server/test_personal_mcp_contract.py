@@ -1,4 +1,4 @@
-"""Нейтральный отдельный MCP и совместимость действующих клиентов."""
+"""Отдельный MCP, единый формат и проверки актуальных прав."""
 
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -36,7 +36,7 @@ async def test_standalone_health_is_public_and_mcp_requires_local_credentials(mo
     check.assert_awaited_once_with(None, "ttk_invalid")
 
 
-async def test_legacy_list_tasks_remains_a_list_while_new_tool_returns_page(tools):
+async def test_canonical_list_tasks_returns_one_paginated_shape(tools):
     from src.services.project_query import TaskPageDto, TaskSummaryDto
 
     services = tools()
@@ -44,10 +44,10 @@ async def test_legacy_list_tasks_remains_a_list_while_new_tool_returns_page(tool
         items=[TaskSummaryDto("PROJ-1", "Задача", "Новая", False, "MEDIUM", None, None)],
         total=1, offset=0, limit=50,
     )
-    legacy = await mcp_server._tool_manager.get_tool("list_tasks").fn(FakeContext(), project_key="PROJ")
-    current = await mcp_server._tool_manager.get_tool("tt_list_tasks").fn(FakeContext(), project_key="PROJ")
-    assert isinstance(legacy, list) and legacy[0]["task_key"] == "PROJ-1"
-    assert current["items"] == legacy and current["total"] == 1
+    current = await mcp_server._tool_manager.get_tool("telos_list_tasks").fn(FakeContext(), project_key="PROJ")
+    assert current["items"][0]["task_key"] == "PROJ-1"
+    assert current["total"] == 1 and current["has_more"] is False
+    assert current["next_offset"] is None
 
 
 @pytest.mark.parametrize("scopes", [{"tasks:write"}, {"boards:read"}])
@@ -72,7 +72,7 @@ async def test_scope_removed_during_elicitation_prevents_destructive_action(serv
     services.auth.resolve_principal.side_effect = [before, after]
     monkeypatch.setattr(ctx, "build_tool_services", lambda **_: services)
     monkeypatch.setattr(registry, "_record_usage", AsyncMock())
-    action = AgentToolRunSchema(id=uuid4(), tool_name="delete_task", title="Удалить задачу",
+    action = AgentToolRunSchema(id=uuid4(), tool_name="telos_delete_task", title="Удалить задачу",
         arguments={"task_id": 7, "expected_updated_at": "2026-09-21T10:00:00Z"},
         status="pending", result={}, created_at=datetime.now(UTC))
     services.actions.execute.return_value = {"action": action.model_dump(mode="json")}
@@ -80,6 +80,6 @@ async def test_scope_removed_during_elicitation_prevents_destructive_action(serv
     context.elicit = AsyncMock(return_value=SimpleNamespace(action="accept",
         data=project_tools.ActionApproval(approve=True)))
     with pytest.raises(ToolError, match="недоступно"):
-        await project_tools.execute_project_tool(context, "PROJ", "delete_task", action.arguments, uuid4())
+        await project_tools.execute_project_tool(context, "PROJ", "telos_delete_task", action.arguments, uuid4())
     services.actions.execute.assert_awaited_once()
     services.actions.decide.assert_not_awaited()

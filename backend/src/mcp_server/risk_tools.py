@@ -10,7 +10,7 @@ from pydantic import Field, ValidationError
 
 from src.exceptions.base import ApplicationError
 from src.mcp_server.context import ToolContext, resolve_project, resolve_task, tool_context
-from src.mcp_server.registry import tt_tool
+from src.mcp_server.registry import telos_tool
 from src.mcp_server.write_tools import Actor
 from src.schemas.enums import RiskRating, RiskResponseStrategy, RiskSource, RiskStatus
 from src.schemas.project_risks import (
@@ -102,8 +102,8 @@ async def _items(
     return result
 
 
-@tt_tool(
-    name="tt_list_project_risks",
+@telos_tool(
+    name="telos_list_project_risks",
     scope=SCOPE_PROJECTS_READ,
     title="Реестр рисков проекта",
     description="Читает зарегистрированные риски с фильтрами и пагинацией; это отдельные записи, не календарные сигналы.",
@@ -158,8 +158,8 @@ async def list_project_risks(
     }
 
 
-@tt_tool(
-    name="tt_get_project_risk",
+@telos_tool(
+    name="telos_get_project_risk",
     scope=SCOPE_PROJECTS_READ,
     title="Карточка риска",
     description="Возвращает оценки, состояние, владельца, контроль, связь с задачей, стратегию и оба плана риска. Длинные тексты отмечены truncated_fields.",
@@ -180,8 +180,8 @@ async def get_project_risk(context: Context, project_key: ProjectKey, risk_key: 
     return result
 
 
-@tt_tool(
-    name="tt_create_project_risk",
+@telos_tool(
+    name="telos_create_project_risk",
     scope=SCOPE_TASKS_WRITE,
     title="Зарегистрировать риск",
     description="Создаёт риск только после явного подтверждения пользователем предложенных полей. risk_level вычисляет сервер.",
@@ -249,8 +249,8 @@ async def create_project_risk(
     return {"key": risk.key, "risk_level": risk.risk_level.value, "created": True}
 
 
-@tt_tool(
-    name="tt_update_project_risk",
+@telos_tool(
+    name="telos_update_project_risk",
     scope=SCOPE_TASKS_WRITE,
     title="Изменить риск",
     description="Изменяет только переданные поля после подтверждения человеком. Пустая строка owner/task_key/review_date удаляет соответствующее значение; источник неизменяем.",

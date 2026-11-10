@@ -34,7 +34,7 @@ def test_every_registered_tool_has_typed_array_items_for_gemini():
         check_array_items(tool_json_schema(tool), tool.name)
 
 
-@pytest.mark.parametrize("name", ["update_board_shapes", "update_personal_board_shapes"])
+@pytest.mark.parametrize("name", ["telos_update_board_shapes", "telos_update_personal_board_shapes"])
 def test_arrow_coordinates_have_portable_numeric_items_and_exact_pair_length(name):
     schema = tool_json_schema(registry_executor().tools[name])
     data = schema["properties"]["updates"]["items"]["properties"]["data"]

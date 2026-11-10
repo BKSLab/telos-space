@@ -139,7 +139,7 @@ async def test_minimal_defaults_match_rest_and_owner_does_not_need_previous_memb
         board = (await session.scalars(select(ProjectBoard))).one()
         assert board.project_id == stored.id and board.created_by_user_id == stored.owner_id
         receipt = (await session.scalars(select(AgentToolRun))).one()
-        assert receipt.project_id is None and receipt.tool_name == "create_project" and receipt.status == "completed"
+        assert receipt.project_id is None and receipt.tool_name == "telos_create_project" and receipt.status == "completed"
         assert (await counts(env))["knowledge_index_jobs"] == 1
     # HTTP вызывает тот же доменный сервис: сохраняем и сравниваем его defaults.
     async with rest_client(env) as client:
@@ -362,31 +362,31 @@ async def test_real_mcp_minimal_full_passport_read_rest_unicode_and_create_task(
     async with app.router.lifespan_context(app):
         async with mcp_client(env, transport=ASGITransport(app=with_resources)) as (client, invoke):
             catalog = rpc_body(await client.post("/", json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"}))["result"]["tools"]
-            schema = next(tool["inputSchema"] for tool in catalog if tool["name"] == "tt_create_project")
+            schema = next(tool["inputSchema"] for tool in catalog if tool["name"] == "telos_create_project")
             assert set(schema["required"]) == {"key", "name", "request_id"}
             assert schema["additionalProperties"] is False
-            simple = tool_result(await invoke("tt_create_project", {"key": "MIN", "name": "Минимальный", "request_id": str(uuid4())}))
+            simple = tool_result(await invoke("telos_create_project", {"key": "MIN", "name": "Минимальный", "request_id": str(uuid4())}))
             assert simple["status"] == "PLANNING" and simple["url"].endswith("/projects/MIN")
             payload = {"key": "FULL", "name": "Полный паспорт", "request_id": str(uuid4()), "description_sections": sections,
                        "description_md": "Этот текст уступает блокам", "member_usernames": ["TEAMMATE", "creator", "teammate"],
                        "stages": [{"name": " Идея ", "color": "#123456"}, {"name": "Принято", "is_done_stage": True}],
                        "status": "ACTIVE", "color": "#abcdef", "icon": "lucide:rocket", "start_date": "2026-11-10", "due_date": "2026-12-01"}
-            full = tool_result(await invoke("tt_create_project", payload))
+            full = tool_result(await invoke("telos_create_project", payload))
             assert full["project_key"] == "FULL" and full["status"] == "ACTIVE"
-            read = tool_result(await invoke("tt_get_project", {"project_key": full["project_key"], "full_text": True}))
+            read = tool_result(await invoke("telos_get_project", {"project_key": full["project_key"], "full_text": True}))
             expected = "## Проблема\n\nРазрозненные данные\n\n## Цель\n\nЕдиное пространство\n\n## Ожидаемый результат\n\nРабочий трекер\n\n## Дополнительно\n\n" + long_text.strip()
             assert read["description"] == expected and not read["description_meta"]["truncated"]
-            raw = tool_result(await invoke("tt_create_project", {"key": "RAW", "name": "Без блоков", "request_id": str(uuid4()), "description_md": long_text}))
-            raw_read = tool_result(await invoke("tt_get_project", {"project_key": raw["project_key"], "full_text": True}))
+            raw = tool_result(await invoke("telos_create_project", {"key": "RAW", "name": "Без блоков", "request_id": str(uuid4()), "description_md": long_text}))
+            raw_read = tool_result(await invoke("telos_get_project", {"project_key": raw["project_key"], "full_text": True}))
             assert raw_read["description"] == long_text
-            task = tool_result(await invoke("tt_create_task", {"project_key": full["project_key"], "title": "Первая задача", "request_id": str(uuid4())}))
+            task = tool_result(await invoke("telos_create_task", {"project_key": full["project_key"], "title": "Первая задача", "request_id": str(uuid4())}))
             assert task["task_key"] == "FULL-1"
-            assert tool_result(await invoke("tt_get_task", {"task_key": task["task_key"]}))["stage"] == "Идея"
+            assert tool_result(await invoke("telos_get_task", {"task_key": task["task_key"]}))["stage"] == "Идея"
             baseline = await counts(env)
-            assert (await invoke("tt_create_project", {**payload, "owner_id": env.keys["teammate"].user_id}))["result"]["isError"]
-            assert (await invoke("tt_create_project", {**payload, "request_id": "invalid"}))["result"]["isError"]
+            assert (await invoke("telos_create_project", {**payload, "owner_id": env.keys["teammate"].user_id}))["result"]["isError"]
+            assert (await invoke("telos_create_project", {**payload, "request_id": "invalid"}))["result"]["isError"]
             assert await counts(env) == baseline
-            assert tool_result(await invoke("tt_create_project", payload)) == full
+            assert tool_result(await invoke("telos_create_project", payload)) == full
             async with rest_client(env) as rest:
                 result = await rest.get(f"/api/v1/projects/{await project_id(env, 'FULL')}")
                 assert result.status_code == 200
@@ -473,15 +473,15 @@ async def test_lost_http_response_new_session_and_process_restart_return_one_dur
         async with mcp_client(env, base_url=base_url) as (_, invoke):
             # Сервис уже сделал commit, но сервер разрывает ответ до доставки клиенту.
             with pytest.raises(HTTPError):
-                await invoke("tt_create_project", payload)
+                await invoke("telos_create_project", payload)
         assert (await counts(env))["projects"] == (await counts(env))["agent_tool_runs"] == 1
         async with mcp_client(env, base_url=base_url) as (_, invoke):
-            original = tool_result(await invoke("tt_create_project", payload))
+            original = tool_result(await invoke("telos_create_project", payload))
             assert original["project_key"] == "DURABLE"
     async with fresh_mcp_process(env) as base_url:
         async with mcp_client(env, base_url=base_url) as (_, invoke):
-            assert tool_result(await invoke("tt_create_project", payload)) == original
-            assert (await invoke("tt_create_project", {**payload, "name": "Другие аргументы"}))["result"]["isError"]
-            assert tool_result(await invoke("tt_get_project", {"project_key": "DURABLE"}))["project_key"] == "DURABLE"
+            assert tool_result(await invoke("telos_create_project", payload)) == original
+            assert (await invoke("telos_create_project", {**payload, "name": "Другие аргументы"}))["result"]["isError"]
+            assert tool_result(await invoke("telos_get_project", {"project_key": "DURABLE"}))["project_key"] == "DURABLE"
     stored = await counts(env)
     assert stored["projects"] == stored["project_boards"] == stored["agent_tool_runs"] == 1

@@ -40,7 +40,7 @@ from tests.integration.repositories.test_agent_conversations_repository import (
 )
 
 SAVED_AT = datetime(2026, 11, 4, 8, 30, tzinfo=UTC)
-ACTION_NAME = "get_latest_project_summary"
+ACTION_NAME = "telos_get_latest_project_summary"
 
 
 def report_data(*, project_id: int | None = 1, headline: str = "Сохранённый анализ") -> dict:

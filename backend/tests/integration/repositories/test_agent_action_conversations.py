@@ -42,7 +42,7 @@ async def test_file_is_private_until_sent_then_attaches_original_bytes_once(acti
     original = await task(env)
     call = {"file_id": str(uploaded.id), "task_id": original["id"]}
     with pytest.raises(AgentToolOperationError):
-        await invoke(env, "attach_uploaded_file", call)
+        await invoke(env, "telos_attach_uploaded_file", call)
     with pytest.raises(AgentFileNotFoundError):
         await files.delete_draft(**{**arguments, "user_id": 2}, file_id=uploaded.id)
     accepted = await env.service.send_message(
@@ -55,13 +55,13 @@ async def test_file_is_private_until_sent_then_attaches_original_bytes_once(acti
     with pytest.raises(AgentFileConflictError):
         await files.delete_draft(**arguments, file_id=uploaded.id)
     request_id = uuid4()
-    first = await invoke(env, "attach_uploaded_file", call, request_id=request_id)
-    assert first == await invoke(env, "attach_uploaded_file", call, request_id=request_id)
+    first = await invoke(env, "telos_attach_uploaded_file", call, request_id=request_id)
+    assert first == await invoke(env, "telos_attach_uploaded_file", call, request_id=request_id)
     assert result(first)["attachment"]["size"] == len(binary)
     copied_files = list((env.files / "tasks").rglob("*.pdf"))
     assert len(copied_files) == 1 and copied_files[0].read_bytes() == binary
     with pytest.raises(AgentToolOperationError):
-        await invoke(env, "attach_uploaded_file", call, context=replace(env.context, user_id=2))
+        await invoke(env, "telos_attach_uploaded_file", call, context=replace(env.context, user_id=2))
     await env.service.process_next()
     assert env.responder.ask.await_args.kwargs["uploaded_files"][0]["id"] == str(uploaded.id)
     assert (await read(env, conversation.id)).items[0].files[0].id == uploaded.id
@@ -98,7 +98,7 @@ async def test_confirmed_action_resumes_chat_and_old_worker_cannot_write(actions
         if len(seen) == 1:
             await env.actions.execute(
                 context=kwargs["execution"],
-                name="delete_task",
+                name="telos_delete_task",
                 arguments={
                     "task_id": original["id"],
                     "expected_updated_at": original["updated_at"],
@@ -117,7 +117,7 @@ async def test_confirmed_action_resumes_chat_and_old_worker_cannot_write(actions
         action.status == "pending"
         and action.result["preview"]["task"]["title"] == original["title"]
     )
-    assert (await invoke(env, "list_tasks"))["total"] == 1
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 1
     with pytest.raises(AgentToolAccessError):
         await env.actions.decide(
             context=replace(env.context, user_id=2),
@@ -138,12 +138,12 @@ async def test_confirmed_action_resumes_chat_and_old_worker_cannot_write(actions
     with pytest.raises(AgentToolConflictError):
         await env.actions.execute(
             context=seen[0]["execution"],
-            name="create_task",
+            name="telos_create_task",
             arguments={"title": "Устаревшая попытка"},
         )
     await env.service.process_next()
     assert (await read(env, conversation.id)).items[-1].content == "Задача удалена."
-    assert not (await invoke(env, "list_tasks"))["items"]
+    assert not (await invoke(env, "telos_list_tasks"))["items"]
 
 
 async def test_new_question_rejects_pending_action_and_changed_arguments_cannot_approve(
@@ -156,7 +156,7 @@ async def test_new_question_rejects_pending_action_and_changed_arguments_cannot_
     async def respond(**kwargs):
         await env.actions.execute(
             context=kwargs["execution"],
-            name="delete_task",
+            name="telos_delete_task",
             arguments={"task_id": original["id"], "expected_updated_at": original["updated_at"]},
         )
         return KnowledgeAnswerSchema(answer="Ожидаю решения.", sources=[])
@@ -174,4 +174,4 @@ async def test_new_question_rejects_pending_action_and_changed_arguments_cannot_
             decision="approve",
         )
     assert (await read(env, conversation.id)).items[1].actions[0].status == "rejected"
-    assert (await invoke(env, "list_tasks"))["total"] == 1
+    assert (await invoke(env, "telos_list_tasks"))["total"] == 1

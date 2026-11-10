@@ -395,7 +395,7 @@ class ProjectAgentService:
                         )
                     state["stale"] = False
                 self._register_views(result, state["catalog"], registry)
-                if tool.name in {"list_members", "list_sources"}:
+                if tool.name in {"telos_list_members", "telos_list_sources"}:
                     for item in result.get("items", []):
                         source_id = item.get("source_id", "")
                         if source_id.startswith("member:"):
@@ -514,7 +514,7 @@ class ProjectAgentService:
 
         Каталога и RAG проекта здесь нет: модель видит только результаты
         личных инструментов (мои задачи, поиск по всем проектам, потоки,
-        разовые задачи) и run_project_action для проекта по ключу.
+        разовые задачи) и telos_run_project_action для проекта по ключу.
 
         Args:
             question: Текущий вопрос пользователя.

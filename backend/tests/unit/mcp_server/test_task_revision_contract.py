@@ -34,8 +34,8 @@ async def test_task_revision_is_from_same_snapshot_as_description(tools):
     assert result["description"] == "Первоначальный текст"
     assert result["revision"] == 3
     assert result["start_date"] == "2026-11-01"
-    legacy = await mcp_server._tool_manager.get_tool("get_task").fn(FakeContext(), task_key="PROJ-7")
-    assert "revision" not in legacy and "description_meta" not in legacy
+    registered = await mcp_server._tool_manager.get_tool("telos_get_task").fn(FakeContext(), task_key="PROJ-7")
+    assert registered == result
 
 
 async def test_stale_revision_has_visible_conflict_and_new_writes_return_revision(tools):
@@ -52,7 +52,7 @@ async def test_stale_revision_has_visible_conflict_and_new_writes_return_revisio
     )
     assert result == {"task_key": "PROJ-7", "updated_fields": ["title"], "revision": 5}
     assert services.tasks.update_task.await_args.kwargs["data"]["expected_revision"] == 4
-    legacy = await mcp_server._tool_manager.get_tool("update_task").fn(
-        FakeContext(), task_key="PROJ-7", title="Прежний клиент",
+    registered = await mcp_server._tool_manager.get_tool("telos_update_task").fn(
+        FakeContext(), task_key="PROJ-7", title="Согласованная правка", expected_revision=4,
     )
-    assert legacy == {"task_key": "PROJ-7", "updated_fields": ["title"]}
+    assert registered == result

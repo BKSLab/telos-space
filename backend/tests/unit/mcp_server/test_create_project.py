@@ -12,7 +12,7 @@ from src.utils.api_scopes import SCOPE_PROJECTS_WRITE
 
 
 async def test_project_creation_catalog_has_rest_fields_and_rejects_client_owner():
-    tool = mcp_server._tool_manager.get_tool("tt_create_project")
+    tool = mcp_server._tool_manager.get_tool("telos_create_project")
     schema = tool.parameters
     assert set(schema["required"]) == {"key", "name", "request_id"}
     assert set(schema["properties"]) == set(ProjectCreateSchema.model_fields) | {"actor", "request_id"}

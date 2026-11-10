@@ -193,7 +193,7 @@ class ProjectQueryService:
                         limit=request.limit + 1,
                         offset=request.offset,
                     )
-                    if request.name == "search_sources"
+                    if request.name == "telos_search_sources"
                     else None
                 )
                 return read_catalog(catalog, request, search_hits=hits)

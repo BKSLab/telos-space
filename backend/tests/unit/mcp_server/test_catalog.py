@@ -12,17 +12,17 @@ from src.mcp_server.catalog_probe import compare_snapshots, main
 
 def test_catalog_fingerprint_and_comparison_preserve_the_complete_contract() -> None:
     original = {
-        "name": "tt_read",
+        "name": "telos_read_source",
         "description": "Полное чтение",
         "inputSchema": {"type": "object", "properties": {
             "full_text": {"type": "boolean", "default": False, "description": "Читать полностью"},
         }},
         "outputSchema": {"type": "object"},
     }
-    other = {"name": "tt_other", "inputSchema": {"type": "object"}}
+    other = {"name": "telos_get_other", "inputSchema": {"type": "object"}}
     reordered = json.loads(json.dumps(original, sort_keys=True))
     assert catalog_hash([original, other]) == catalog_hash([other, reordered])
-    assert normalize_tools([other, original])[0]["name"] == "tt_other"
+    assert normalize_tools([other, original])[0]["name"] == "telos_get_other"
     for key, replacement in (
         ("description", "Изменённое описание"),
         ("inputSchema", {"type": "object", "properties": {"full_text": {"default": True}}}),
@@ -31,8 +31,8 @@ def test_catalog_fingerprint_and_comparison_preserve_the_complete_contract() -> 
         changed = {**original, key: replacement}
         comparison = compare_snapshots({"tools": [original]}, {"tools": [changed, other]})
         assert not comparison["same_catalog"]
-        assert comparison["changed"] == {"tt_read": [key]}
-        assert comparison["added"] == ["tt_other"]
+        assert comparison["changed"] == {"telos_read_source": [key]}
+        assert comparison["added"] == ["telos_get_other"]
         assert comparison["removed"] == []
     # JSON Schema различает boolean и число; Python dict equality их смешивает.
     numeric = copy.deepcopy(original)
@@ -44,7 +44,7 @@ def test_catalog_fingerprint_and_comparison_preserve_the_complete_contract() -> 
             catalog_hash(invalid)
     # Короткая выдача tool search/ALL_TOOLS не считается полным tools/list.
     with pytest.raises(ValueError, match="JSON Schema"):
-        compare_snapshots({"tools": [original]}, {"tools": [{"name": "tt_read"}]})
+        compare_snapshots({"tools": [original]}, {"tools": [{"name": "telos_read_source"}]})
 
 
 def test_build_identity_tracks_code_and_dependencies_and_ignores_secrets(tmp_path: Path) -> None:

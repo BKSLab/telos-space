@@ -61,12 +61,12 @@ async def read_after(full_text: bool = True, request_id: str | None = None) -> d
 
 async def test_old_and_new_sessions_observe_schema_change_and_explicit_legacy_notification():
     server = isolated_server()
-    server.add_tool(read_before, name="tt_read")
+    server.add_tool(read_before, name="telos_read_source")
 
-    @server.tool()
+    @server.tool(name="telos_change_catalog")
     async def change_catalog(context: Context) -> str:
-        server.remove_tool("tt_read")
-        server.add_tool(read_after, name="tt_read")
+        server.remove_tool("telos_read_source")
+        server.add_tool(read_after, name="telos_read_source")
         await context.session.send_tool_list_changed()
         return "changed"
 
@@ -83,14 +83,14 @@ async def test_old_and_new_sessions_observe_schema_change_and_explicit_legacy_no
                 # Статический каталог приложения не обещает legacy live reload.
                 assert initialized.capabilities.tools.list_changed is False
                 before = await old.list_tools()
-                await old.call_tool("change_catalog")
+                await old.call_tool("telos_change_catalog")
                 async with asyncio.timeout(5):
                     await received.wait()
                 after = await old.list_tools()
                 assert catalog_hash(before.tools) != catalog_hash(after.tools)
                 assert before.meta[CATALOG_META_KEY]["sha256"] == catalog_hash(before.tools)
                 assert after.meta[CATALOG_META_KEY]["sha256"] == catalog_hash(after.tools)
-                updated = next(tool for tool in after.tools if tool.name == "tt_read")
+                updated = next(tool for tool in after.tools if tool.name == "telos_read_source")
                 assert updated.input_schema["properties"]["full_text"]["default"] is True
                 assert "request_id" in updated.input_schema["properties"]
                 fresh = await remote_snapshot(endpoint)
@@ -100,9 +100,9 @@ async def test_old_and_new_sessions_observe_schema_change_and_explicit_legacy_no
 
 async def test_legacy_notification_invalidates_cached_listing_and_refresh_refetches():
     server = isolated_server()
-    server.add_tool(read_before, name="tt_read")
+    server.add_tool(read_before, name="telos_read_source")
 
-    @server.tool()
+    @server.tool(name="telos_notify_change")
     async def notify_change(context: Context) -> str:
         await context.session.send_tool_list_changed()
         return "notified"
@@ -120,26 +120,26 @@ async def test_legacy_notification_invalidates_cached_listing_and_refresh_refetc
         ) as old:
             assert old.server_capabilities.tools.list_changed is False
             before = await old.list_tools()
-            server.remove_tool("tt_read")
-            server.add_tool(read_after, name="tt_read")
+            server.remove_tool("telos_read_source")
+            server.add_tool(read_after, name="telos_read_source")
             # add_tool сам не отправляет событие; локальная копия клиента устаревает.
             assert catalog_hash((await old.list_tools()).tools) == catalog_hash(before.tools)
             refreshed = await old.list_tools(cache_mode="refresh")
             assert catalog_hash(refreshed.tools) != catalog_hash(before.tools)
-            server.add_tool(lambda: "new", name="tt_added")
+            server.add_tool(lambda: "new", name="telos_get_added")
             assert catalog_hash((await old.list_tools()).tools) == catalog_hash(refreshed.tools)
-            await old.call_tool("notify_change")
+            await old.call_tool("telos_notify_change")
             async with asyncio.timeout(5):
                 await received.wait()
             notified = await old.list_tools()
-            assert "tt_added" in {tool.name for tool in notified.tools}
+            assert "telos_get_added" in {tool.name for tool in notified.tools}
             assert notified.meta[CATALOG_META_KEY]["sha256"] == catalog_hash(notified.tools)
             assert (await remote_snapshot(endpoint))["sha256"] == catalog_hash(notified.tools)
 
 
 async def test_restart_requires_a_new_session_and_reports_the_new_build():
     before = isolated_server("build-before")
-    before.add_tool(read_before, name="tt_read")
+    before.add_tool(read_before, name="telos_read_source")
     headers = {"Accept": "application/json, text/event-stream"}
     async with httpx.AsyncClient(headers=headers) as http:
         async with serve(before) as endpoint:
@@ -162,7 +162,7 @@ async def test_restart_requires_a_new_session_and_reports_the_new_build():
                 "Mcp-Session-Id": old_id, "MCP-Protocol-Version": result["protocolVersion"],
             }, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
         after = isolated_server("build-after")
-        after.add_tool(read_after, name="tt_read")
+        after.add_tool(read_after, name="telos_read_source")
         async with serve(after, port=port) as restarted:
             stale = await http.post(restarted, headers={
                 "Mcp-Session-Id": old_id, "MCP-Protocol-Version": result["protocolVersion"],
@@ -176,7 +176,7 @@ async def test_restart_requires_a_new_session_and_reports_the_new_build():
 async def test_probe_reads_every_page_and_keeps_page_hash_separate_from_catalog_hash():
     tools = [
         Tool(name=name, input_schema={"type": "object"})
-        for name in ("tt_first", "tt_second")
+        for name in ("telos_get_first", "telos_get_second")
     ]
 
     async def list_page(_context, params):

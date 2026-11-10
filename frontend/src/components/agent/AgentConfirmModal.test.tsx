@@ -11,7 +11,7 @@ const ID = "0f1e2d3c-0000-4000-8000-000000000001";
 function action(overrides: Partial<AgentPendingAction> = {}): AgentPendingAction {
     return {
         id: ID,
-        tool_name: "delete_task",
+        tool_name: "telos_delete_task",
         title: "Удалить задачу",
         status: "pending",
         arguments: { task_id: 7, expected_updated_at: "2026-09-30T10:00:00Z" },

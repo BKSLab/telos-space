@@ -1,4 +1,4 @@
-"""Полное чтение MCP, явные превью и сохранение прежнего контракта."""
+"""Полное чтение MCP, явные превью и единый канонический контракт."""
 
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -87,8 +87,8 @@ async def test_full_descriptions_preserve_unicode_markdown_and_last_condition(to
     services = tools()
     project, task, _ = configure_reads(services)
     for name, arguments, source in (
-        ("tt_get_project", {"project_key": "PROJ"}, project),
-        ("tt_get_task", {"task_key": "PROJ-142"}, task),
+        ("telos_get_project", {"project_key": "PROJ"}, project),
+        ("telos_get_task", {"task_key": "PROJ-142"}, task),
     ):
         tool = srv.mcp_server._tool_manager.get_tool(name)
         preview = await tool.fn(FakeContext(), **arguments)
@@ -124,7 +124,7 @@ async def test_comment_preview_can_be_read_by_id_without_text_loss(tools):
         "length": len(LONG_TEXT),
         "length_unit": "unicode_code_points",
         "read_full": {
-            "tool": "tt_get_comment", "arguments": {"task_key": "PROJ-142", "comment_id": 31}
+            "tool": "telos_get_comment", "arguments": {"task_key": "PROJ-142", "comment_id": 31}
         },
     }
     read = preview["body_meta"]["read_full"]
@@ -151,7 +151,7 @@ async def test_empty_boundary_and_literal_truncation_note_are_unambiguous(tools)
             (task_detail, replace(task, description=text), "description"),
             (comment_item, replace(comment, body=text), "body"),
         ):
-            preview = presenter(source, include_text_metadata=True)
+            preview = presenter(source)
             meta = preview[f"{text_field}_meta"]
             assert meta["length"] == len(text or "")
             assert meta["truncated"] is (text is not None and len(text) > TEXT_LIMIT)
@@ -160,27 +160,27 @@ async def test_empty_boundary_and_literal_truncation_note_are_unambiguous(tools)
             elif len(text) <= TEXT_LIMIT:
                 assert preview[text_field] == text
                 assert meta["read_full"] is None
-            complete = presenter(source, full_text=True, include_text_metadata=True)
+            complete = presenter(source, full_text=True)
             assert complete[text_field] == text
             assert complete[f"{text_field}_meta"]["truncated"] is False
 
 
-async def test_legacy_read_defaults_and_compact_lists_keep_their_shapes(tools):
-    """Прежние алиасы не получают новые поля; списки задач не содержат описаний."""
+async def test_canonical_read_defaults_and_compact_lists_keep_their_shapes(tools):
+    """Карточки содержат метаданные превью; компактные списки не несут описаний."""
     project, task, comment = configure_reads(tools())
     for name, arguments, expected in (
-        ("get_project", {"project_key": "PROJ"}, project_detail(project)),
-        ("get_task", {"task_key": "PROJ-142"}, {
+        ("telos_get_project", {"project_key": "PROJ"}, project_detail(project)),
+        ("telos_get_task", {"task_key": "PROJ-142"}, {
             **task_detail(task), "start_date": None, "checklist_revision": 0,
-            "report": None, "participants": [],
+            "report": None, "participants": [], "revision": task.revision,
         }),
     ):
         result = await srv.mcp_server._tool_manager.get_tool(name).fn(FakeContext(), **arguments)
         assert {key: value for key, value in result.items() if key != "url"} == expected
-    legacy_comments = await srv.mcp_server._tool_manager.get_tool("list_comments").fn(
+    comments = await srv.mcp_server._tool_manager.get_tool("telos_list_comments").fn(
         FakeContext(), task_key="PROJ-142"
     )
-    assert legacy_comments == [comment_item(comment)]
+    assert comments == [{**comment_item(comment), "comment_id": comment.comment_id}]
 
     projects = await srv.list_projects(FakeContext())
     tasks = await srv.list_tasks(FakeContext(), project_key="PROJ")
@@ -277,12 +277,11 @@ async def test_comment_query_rejects_missing_foreign_and_moved_sources():
 async def test_full_text_is_optional_and_comment_id_has_a_positive_schema():
     """Новые параметры необязательны; ID берётся из доступного списка комментариев."""
     tools = {tool.name: tool for tool in await srv.mcp_server.list_tools()}
-    for name, required in (("get_project", {"project_key"}), ("get_task", {"task_key"})):
-        for prefix in ("", "tt_"):
-            schema = tools[prefix + name].input_schema
-            assert set(schema["required"]) == required
-            assert schema["properties"]["full_text"]["default"] is False
-    schema = tools["tt_get_comment"].input_schema
+    for name, required in (("telos_get_project", {"project_key"}), ("telos_get_task", {"task_key"})):
+        schema = tools[name].input_schema
+        assert set(schema["required"]) == required
+        assert schema["properties"]["full_text"]["default"] is False
+    schema = tools["telos_get_comment"].input_schema
     assert set(schema["required"]) == {"task_key", "comment_id"}
     assert schema["properties"]["comment_id"]["exclusiveMinimum"] == 0
-    assert registry.TOOL_REGISTRY["tt_get_comment"].scope == "tasks:read"
+    assert registry.TOOL_REGISTRY["telos_get_comment"].scope == "tasks:read"

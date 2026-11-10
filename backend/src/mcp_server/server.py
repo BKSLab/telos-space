@@ -3,7 +3,7 @@
 Собственной бизнес-логики здесь нет. Каждый инструмент проходит ту же
 аутентификацию и ту же проверку участия в проекте, что и HTTP-эндпоинты,
 и вызывает те же сервисы. Право ключа на инструмент объявлено в реестре
-(``registry.tt_tool``) и проверяется централизованно в ``tool_context``.
+(``registry.telos_tool``) и проверяется централизованно в ``tool_context``.
 
 Сервер живёт отдельным процессом (``python -m src.mcp_server.worker``,
 контейнер ``mcp``); сборка ASGI-приложения — в ``src/mcp_server/app.py``.
@@ -36,7 +36,7 @@ from src.mcp_server.presenters import (
     task_detail,
     task_summary,
 )
-from src.mcp_server.registry import tt_tool
+from src.mcp_server.registry import telos_tool
 from src.mcp_server.services import build_knowledge_search
 from src.schemas.knowledge import KnowledgeReadRequest
 from src.services.project_query import UnknownStageError
@@ -51,13 +51,13 @@ MAX_LIMIT = 200
 
 INSTRUCTIONS = """TELOS SPACE — пространство проектов и задач с помощником Арисом (ARIS).
 Ключ проекта PROJ, задачи PROJ-142.
-Инструменты tt_ используют те же сервисы и права владельца ключа, что REST.
+Инструменты telos_ используют те же сервисы и права владельца ключа, что REST.
 Списки постраничные: учитывай limit, offset и next_offset. Не выдумывай ID.
 Описания в карточках и комментарии в списке — превью до 2000 символов.
 Метаданные *_meta содержат truncated, полную length в Unicode code points
-и вызов read_full; tt_get_task/tt_get_project с full_text=true и tt_get_comment
+и вызов read_full; telos_get_task/telos_get_project с full_text=true и telos_get_comment
 возвращают полный исходный текст без разбиения на части.
-Поле url содержит проверенную ссылку. Каталог tt_list_project_tools раскрывает
+Поле url содержит проверенную ссылку. Каталог telos_list_project_tools раскрывает
 общие операции, включая ИСР. Для изменений нужны соответствующие права;
 опасные действия запрашивают отдельное подтверждение пользователя."""
 
@@ -105,8 +105,8 @@ def parse_date(value: str, field_name: str = "Дата") -> date:
 # ── Проекты ─────────────────────────────────────────────────────────────────
 
 
-@tt_tool(
-    name="tt_list_projects",
+@telos_tool(
+    name="telos_list_projects",
     title="Список проектов",
     description=(
         "Возвращает проекты, доступные вызывающему, с ключом, названием, статусом и "
@@ -129,8 +129,8 @@ async def list_projects(context: Context) -> list[dict]:
         ]
 
 
-@tt_tool(
-    name="tt_get_project",
+@telos_tool(
+    name="telos_get_project",
     title="Карточка проекта",
     description=(
         "Возвращает описание проекта, его стадии и число задач в каждой стадии. "
@@ -151,13 +151,13 @@ async def get_project(
         except ApplicationError as error:
             raise ToolError("Не удалось получить состав проекта.") from error
         return put_url(
-            project_detail(overview, full_text=full_text, include_text_metadata=True),
+            project_detail(overview, full_text=full_text),
             links_of(tools).project(project_key),
         )
 
 
-@tt_tool(
-    name="tt_list_project_members",
+@telos_tool(
+    name="telos_list_project_members",
     title="Команда проекта",
     description=(
         "Возвращает участников проекта: логин, ФИО и роль (OWNER, MEMBER). "
@@ -183,12 +183,12 @@ async def list_project_members(context: Context, project_key: ProjectKey) -> lis
         ]
 
 
-@tt_tool(
-    name="tt_list_stages",
+@telos_tool(
+    name="telos_list_stages",
     title="Стадии проекта",
     description=(
         "Возвращает стадии (колонки доски) проекта по порядку: название и признак "
-        "завершающей стадии. Название стадии используют tt_move_task и tt_create_task."
+        "завершающей стадии. Название стадии используют telos_move_task и telos_create_task."
     ),
     scope=SCOPE_PROJECTS_READ,
 )
@@ -209,8 +209,8 @@ async def list_stages(context: Context, project_key: ProjectKey) -> list[dict]:
 # ── Задачи: чтение ─────────────────────────────────────────────────────────
 
 
-@tt_tool(
-    name="tt_list_tasks",
+@telos_tool(
+    name="telos_list_tasks",
     title="Список задач проекта",
     description=(
         "Возвращает страницу задач проекта с фильтрами: стадия, исполнитель, открытые "
@@ -280,8 +280,8 @@ async def list_tasks(
         }
 
 
-@tt_tool(
-    name="tt_search_tasks",
+@telos_tool(
+    name="telos_search_tasks",
     title="Поиск задач по тексту",
     description=(
         "Ищет задачи проекта по названию, описанию, тексту комментариев и номеру. "
@@ -312,8 +312,8 @@ async def search_tasks(
         return [with_task_url(tools, task_summary(item), item.task_id) for item in tasks]
 
 
-@tt_tool(
-    name="tt_get_task",
+@telos_tool(
+    name="telos_get_task",
     title="Карточка задачи",
     description=(
         "Возвращает карточку задачи: описание, стадию, приоритет, исполнителя, сроки, "
@@ -334,7 +334,7 @@ async def get_task(context: Context, task_key: TaskKey, full_text: FullText = Fa
             full = await tools.services.tasks.get_task(resolved.task_id)
         except ApplicationError as error:
             raise ToolError("Не удалось получить задачу.") from error
-        item = task_detail(details, full_text=full_text, include_text_metadata=True)
+        item = task_detail(details, full_text=full_text)
         item.update(
             revision=details.revision,
             start_date=details.start_date.isoformat() if details.start_date else None,
@@ -352,14 +352,14 @@ async def get_task(context: Context, task_key: TaskKey, full_text: FullText = Fa
         return with_task_url(tools, item, resolved.task_id)
 
 
-@tt_tool(
-    name="tt_list_comments",
+@telos_tool(
+    name="telos_list_comments",
     title="Комментарии задачи",
     description=(
         "Возвращает комментарии задачи в порядке добавления с превью текста до "
         "2000 символов. body_meta содержит факт обрезки, полную длину и вызов "
-        "tt_get_comment для полного чтения. comment_id нужен также "
-        "tt_update_comment и tt_delete_comment."
+        "telos_get_comment для полного чтения. comment_id нужен также "
+        "telos_update_comment и telos_delete_comment."
     ),
     scope=SCOPE_TASKS_READ,
 )
@@ -383,17 +383,17 @@ async def list_comments(
         except ApplicationError as error:
             raise ToolError("Не удалось получить комментарии.") from error
         return [
-            {**comment_item(item, include_text_metadata=True), "comment_id": item.comment_id}
+            {**comment_item(item), "comment_id": item.comment_id}
             for item in comments
         ]
 
 
-@tt_tool(
-    name="tt_get_comment",
+@telos_tool(
+    name="telos_get_comment",
     title="Полный комментарий задачи",
     description=(
         "Возвращает полный исходный Markdown комментария без обрезки. "
-        "Используйте task_key и comment_id из tt_list_comments; проверяются "
+        "Используйте task_key и comment_id из telos_list_comments; проверяются "
         "принадлежность комментария задаче и текущий проект задачи."
     ),
     scope=SCOPE_TASKS_READ,
@@ -418,15 +418,15 @@ async def get_comment(
         return with_task_url(
             tools,
             {
-                **comment_item(comment, full_text=True, include_text_metadata=True),
+                **comment_item(comment, full_text=True),
                 "comment_id": comment.comment_id,
             },
             resolved.task_id,
         )
 
 
-@tt_tool(
-    name="tt_list_task_activity",
+@telos_tool(
+    name="telos_list_task_activity",
     title="История задачи",
     description=(
         "Возвращает историю изменений задачи: что поменялось (стадия, срок, "
@@ -461,8 +461,8 @@ async def list_task_activity(
         ]
 
 
-@tt_tool(
-    name="tt_list_attachments",
+@telos_tool(
+    name="telos_list_attachments",
     title="Файлы задачи",
     description="Возвращает файлы задачи: имя, тип, размер и дату загрузки.",
     scope=SCOPE_TASKS_READ,
@@ -490,8 +490,8 @@ async def list_attachments(context: Context, task_key: TaskKey) -> list[dict]:
 # ── База знаний ─────────────────────────────────────────────────────────────
 
 
-@tt_tool(
-    name="tt_search_project_knowledge",
+@telos_tool(
+    name="telos_search_project_knowledge",
     title="Смысловой поиск по базе знаний проекта",
     description=(
         "Ищет по смыслу в задачах, документах, комментариях и вложениях проекта "
@@ -530,10 +530,10 @@ async def search_project_knowledge(
         raise ToolError("Не удалось прочитать источники проекта.") from error
 
 
-@tt_tool(
-    name="tt_read_project_knowledge",
+@telos_tool(
+    name="telos_read_project_knowledge",
     title="Источники и связи проекта",
-    description="Читает все типы знаний проекта: list_sources — список, read_source — текст по страницам, related_sources — связи в обе стороны, search_sources — FTS. Используйте source_id из результатов поиска/списка; next_offset задаёт следующую страницу. Для read_source offset измеряется в символах. Работает без векторного поиска.",
+    description="Читает все типы знаний проекта: telos_list_sources — список, telos_read_source — текст по страницам, telos_list_related_sources — связи в обе стороны, telos_search_sources — FTS. Используйте source_id из результатов поиска/списка; next_offset задаёт следующую страницу. Для telos_read_source offset измеряется в символах. Работает без векторного поиска.",
     scope=SCOPE_KNOWLEDGE_READ,
 )
 async def read_project_knowledge(
@@ -553,8 +553,8 @@ async def read_project_knowledge(
 # ── Календарь и вехи ───────────────────────────────────────────────────────
 
 
-@tt_tool(
-    name="tt_get_calendar_range",
+@telos_tool(
+    name="telos_get_calendar_range",
     title="Временной диапазон проекта",
     description=(
         "Возвращает ограниченный диапазон временной карты: даты задач, вехи, "
@@ -635,8 +635,8 @@ async def get_calendar_range(
         }
 
 
-@tt_tool(
-    name="tt_list_tasks_without_due_date",
+@telos_tool(
+    name="telos_list_tasks_without_due_date",
     title="Задачи проекта без срока",
     description=(
         "Возвращает ограниченный пул задач без due_date, чтобы их можно было "
@@ -681,8 +681,8 @@ async def list_tasks_without_due_date(
         ]
 
 
-@tt_tool(
-    name="tt_list_milestones",
+@telos_tool(
+    name="telos_list_milestones",
     title="Вехи проекта",
     description=(
         "Возвращает пользовательские вехи проекта и системную веху дедлайна "

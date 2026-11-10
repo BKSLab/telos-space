@@ -245,12 +245,12 @@ async def test_proposed_action_is_decided_by_requester_or_member_with_rights(tim
     owner = AgentToolContext(project_id=1, user_id=1, can_write=True)
     await env.actions.execute(
         context=replace(owner, request_id=uuid4()),
-        name="create_stage",
+        name="telos_create_stage",
         arguments={"name": "Бэклог", "color": "#334455"},
     )
     created = await env.actions.execute(
         context=replace(owner, request_id=uuid4()),
-        name="create_task",
+        name="telos_create_task",
         arguments={"title": "Проверить окно заказа"},
     )
     task = created["action"]["result"]["task"]
@@ -260,7 +260,7 @@ async def test_proposed_action_is_decided_by_requester_or_member_with_rights(tim
         assert kwargs["execution"].mode is not TimMode.WIDGET_PERSONAL
         await env.actions.execute(
             context=replace(kwargs["execution"], mode=TimMode.PROJECT_CHAT),
-            name="delete_task",
+            name="telos_delete_task",
             arguments={"task_id": task["id"], "expected_updated_at": task["updated_at"]},
         )
         return KnowledgeAnswerSchema(answer="Подтвердите удаление в карточке.", sources=[])
@@ -270,7 +270,7 @@ async def test_proposed_action_is_decided_by_requester_or_member_with_rights(tim
     await env.tim.process_next()
     reply = (await env.service.history(1, 1)).messages[-1]
     action = reply.agent.actions[0]
-    assert action.status == "pending" and action.tool_name == "delete_task"
+    assert action.status == "pending" and action.tool_name == "telos_delete_task"
 
     def decide(user_id, decision, project_id=1):
         return env.actions.decide_in_chat(
@@ -301,7 +301,7 @@ async def test_owner_only_action_needs_owner_rights_and_requester_can_reject(tim
 
     async def propose(**kwargs):
         await env.actions.execute(
-            context=kwargs["execution"], name="remove_member", arguments={"user_id": 2}
+            context=kwargs["execution"], name="telos_remove_member", arguments={"user_id": 2}
         )
         return KnowledgeAnswerSchema(answer="Жду решения.", sources=[])
 

@@ -5,47 +5,68 @@ from httpx import ASGITransport, AsyncClient
 
 from main import app
 from src.core.settings import get_settings
+from src.mcp_server.registry import TOOL_REGISTRY, telos_tool
 from src.mcp_server.server import MAX_LIMIT, mcp_server
 
 READ_TOOLS = {
-    "list_project_tools",
-    "list_project_risks",
-    "get_project_risk",
-    "list_projects",
-    "get_project",
-    "list_tasks",
-    "get_task",
-    "list_comments",
-    "search_tasks",
-    "search_project_knowledge",
-    "read_project_knowledge",
-    "get_calendar_range",
-    "list_tasks_without_due_date",
-    "list_milestones",
+    "telos_list_project_tools",
+    "telos_list_project_risks",
+    "telos_get_project_risk",
+    "telos_list_projects",
+    "telos_get_project",
+    "telos_list_tasks",
+    "telos_get_task",
+    "telos_list_comments",
+    "telos_search_tasks",
+    "telos_search_project_knowledge",
+    "telos_read_project_knowledge",
+    "telos_get_calendar_range",
+    "telos_list_tasks_without_due_date",
+    "telos_list_milestones",
 }
 WRITE_TOOLS = {
-    "execute_project_tool",
-    "create_project_risk",
-    "update_project_risk",
-    "create_task",
-    "update_task",
-    "move_task",
-    "delete_task",
-    "add_comment",
-    "set_task_dates",
-    "create_milestone",
+    "telos_execute_project_tool",
+    "telos_create_project_risk",
+    "telos_update_project_risk",
+    "telos_create_task",
+    "telos_update_task",
+    "telos_move_task",
+    "telos_delete_task",
+    "telos_add_comment",
+    "telos_set_task_dates",
+    "telos_create_milestone",
 }
+
+
+@pytest.mark.parametrize("name", [
+    "tt_create_task", "create_task", "telos_create", "telos_Create_task",
+    "telos_create__task", "telos_create_task_", " telos_create_task",
+])
+def test_registration_rejects_noncanonical_tool_names(name: str) -> None:
+    """Неверное публичное имя отклоняется при регистрации без нормализации."""
+    before = set(TOOL_REGISTRY)
+    with pytest.raises(ValueError, match="telos_"):
+        telos_tool(name=name, title="Проверка", description="Проверка имени", scope="tasks:read")
+    assert set(TOOL_REGISTRY) == before
+
+
+async def test_transport_catalog_matches_the_single_rights_registry() -> None:
+    """Защищённый реестр и публикуемые инструменты содержат одни и те же 46 имён."""
+    actual = {tool.name for tool in await mcp_server.list_tools()}
+    assert len(actual) == 46
+    assert actual == set(TOOL_REGISTRY)
+    assert all(name.startswith("telos_") for name in actual)
 
 
 @pytest.mark.parametrize(
     "name",
     [
-        "list_tasks",
-        "list_comments",
-        "search_tasks",
-        "get_calendar_range",
-        "list_tasks_without_due_date",
-        "list_milestones",
+        "telos_list_tasks",
+        "telos_list_comments",
+        "telos_search_tasks",
+        "telos_get_calendar_range",
+        "telos_list_tasks_without_due_date",
+        "telos_list_milestones",
     ],
 )
 async def test_list_tools_have_bounded_limit(name: str) -> None:
@@ -66,7 +87,7 @@ async def test_tool_schemas_follow_the_declared_conventions() -> None:
     assert READ_TOOLS | WRITE_TOOLS <= {tool.name for tool in tools}
     # У необратимого удаления есть отдельное поле подтверждения.
     tools = {tool.name: tool for tool in await mcp_server.list_tools()}
-    properties = tools["delete_task"].input_schema["properties"]
+    properties = tools["telos_delete_task"].input_schema["properties"]
 
     assert "confirm" in properties
     assert properties["confirm"].get("default") is False
@@ -92,14 +113,14 @@ async def test_tool_schemas_follow_the_declared_conventions() -> None:
     tools = {tool.name: tool for tool in await mcp_server.list_tools()}
 
     for name in (
-        "get_project",
-        "list_tasks",
-        "search_tasks",
-        "search_project_knowledge",
-        "get_calendar_range",
-        "list_tasks_without_due_date",
-        "list_milestones",
-        "create_milestone",
+        "telos_get_project",
+        "telos_list_tasks",
+        "telos_search_tasks",
+        "telos_search_project_knowledge",
+        "telos_get_calendar_range",
+        "telos_list_tasks_without_due_date",
+        "telos_list_milestones",
+        "telos_create_milestone",
     ):
         assert "project_key" in tools[name].input_schema.get("required", []), name
 
@@ -131,7 +152,7 @@ async def test_mcp_transport_requires_a_token_and_its_own_protocol() -> None:
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "list_projects", "arguments": {}},
+                "params": {"name": "telos_list_projects", "arguments": {}},
             },
             headers={
                 "Content-Type": "application/json",
@@ -139,4 +160,4 @@ async def test_mcp_transport_requires_a_token_and_its_own_protocol() -> None:
             },
         )
 
-    assert response.status_code != 200 or "list_projects" not in response.text
+    assert response.status_code != 200 or "telos_list_projects" not in response.text

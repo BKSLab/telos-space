@@ -5,7 +5,7 @@
 находит проект, проверяет права сотрудника и делает. Вопрос встаёт в общую
 очередь ответов агента (её обрабатывает backend), вызов ждёт готового ответа
 до ``AGENT_ASK_WAIT_SECONDS`` и иначе отдаёт ``request_id`` для
-``tt_projects_result``.
+``telos_get_aris_result``.
 
 Право ключа — ``agent:ask``. Изменения агент делает только по дословной
 реплике сотрудника ``user_text`` и только в пределах остальных прав ключа.
@@ -23,7 +23,7 @@ from pydantic import Field, ValidationError
 from src.exceptions.agent_conversations import AgentConversationsServiceError
 from src.exceptions.auth import AuthServiceError
 from src.mcp_server.context import tool_context
-from src.mcp_server.registry import tt_tool
+from src.mcp_server.registry import telos_tool
 from src.mcp_server.write_tools import Actor
 from src.schemas.agent_conversations import TimPageContextSchema
 from src.schemas.agent_requests import AgentAskSchema
@@ -34,15 +34,15 @@ logger = logging.getLogger(__name__)
 
 RESULT_HINT = (
     "Ответ: status (completed — готово; queued/processing — ещё готовится, спроси "
-    "tt_projects_result с request_id позже; failed — ошибка в error), answer — полный "
+    "telos_get_aris_result с request_id позже; failed — ошибка в error), answer — полный "
     "текст для сотрудника со ссылками на задачи, links — задачи ответа, done — выполненные "
     "действия, pending — предложенные действия: передай сотруднику confirm_url, он сам "
     "подтвердит или отклонит. Не утверждай, что pending выполнено."
 )
 
 
-@tt_tool(
-    name="tt_projects_ask",
+@telos_tool(
+    name="telos_ask_aris",
     title="Спросить Ариса — проектного менеджера",
     description=(
         "Передай Арису — проектному менеджеру — любой вопрос или "
@@ -140,15 +140,15 @@ async def projects_ask(
         )
     except (AgentConversationsServiceError, AuthServiceError) as error:
         raise ToolError(error.detail) from error
-    logger.info("✅ tt_projects_ask: request_id=%s, status=%s.", request_id, result.status)
+    logger.info("✅ telos_ask_aris: request_id=%s, status=%s.", request_id, result.status)
     return result.model_dump(mode="json")
 
 
-@tt_tool(
-    name="tt_projects_result",
+@telos_tool(
+    name="telos_get_aris_result",
     title="Результат вопроса Арису",
     description=(
-        "Результат вопроса, заданного через tt_projects_ask, по его request_id — когда ответ "
+        "Результат вопроса, заданного через telos_ask_aris, по его request_id — когда ответ "
         "не успел за время вызова. Доступен только тому ключу и сотруднику, что задали вопрос. "
         + RESULT_HINT
     ),
@@ -157,14 +157,14 @@ async def projects_ask(
 )
 async def projects_result(
     context: Context,
-    request_id: Annotated[str, Field(description="request_id из ответа tt_projects_ask.")],
+    request_id: Annotated[str, Field(description="request_id из ответа telos_ask_aris.")],
     actor: Actor = None,
 ) -> dict:
     """Отдаёт результат вопроса его автору."""
     try:
         parsed = UUID(request_id.strip())
     except ValueError as error:
-        raise ToolError("request_id должен быть UUID из ответа tt_projects_ask.") from error
+        raise ToolError("request_id должен быть UUID из ответа telos_ask_aris.") from error
     async with tool_context(context) as tools:
         try:
             result = await tools.services.requests.get_external_result(

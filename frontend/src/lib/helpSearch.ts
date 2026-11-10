@@ -39,9 +39,9 @@ export function searchHelp(query: string, sections: HelpSection[] = HELP_SECTION
     for (const section of sections) for (const article of section.articles) {
         if (article.catalog) {
             for (const entry of findCatalogEntries(article.catalog, terms.filter(term => term !== article.catalog))) {
-                const title = `${entry.name} · ${entry.summary}`;
+                const title = `${entry.kind === "action" ? "Действие · " : ""}${entry.name} · ${entry.summary}`;
                 results.push({ section, article: { id: entry.id, title, paragraphs: [entry.description] },
-                    excerpt: `${entry.kind === "action" ? "Через tt_execute_project_tool. " : ""}${entry.description || entry.summary}`.slice(0, 260),
+                    excerpt: `${entry.kind === "action" ? "Через telos_execute_project_tool. " : ""}${entry.description || entry.summary}`.slice(0, 260),
                     score: terms.filter(term => normalizeHelpText(title).includes(term)).length - 1 });
             }
         }

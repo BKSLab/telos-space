@@ -17,21 +17,32 @@ from tests.unit.mcp_server.conftest import FakeContext
 async def test_catalog_and_execution_share_registry_and_enforce_read_token(tools):
     services = tools(ApiTokenScope.READ)
     catalog = await pt.list_project_tools(FakeContext(), "PROJ")
-    assert "get_task" in {item["name"] for item in catalog["tools"]}
+    assert "telos_get_task" in {item["name"] for item in catalog["tools"]}
     assert not any(item["mutating"] for item in catalog["tools"])
-    schema = await pt.list_project_tools(FakeContext(), "PROJ", names=["get_task"])
+    schema = await pt.list_project_tools(FakeContext(), "PROJ", names=["telos_get_task"])
     assert "task_id" in schema["tools"][0]["parameters"]["properties"]
     with pytest.raises(ToolError):
         await pt.execute_project_tool(
-            FakeContext(), "PROJ", "create_task", {"title": "Нельзя"}, uuid4()
+            FakeContext(), "PROJ", "telos_create_task", {"title": "Нельзя"}, uuid4()
         )
     services.actions.execute.assert_not_awaited()
     services.actions.execute.return_value = {"task": {"id": 7}}
-    assert await pt.execute_project_tool(FakeContext(), "PROJ", "get_task", {"task_id": 7}) == {
+    assert await pt.execute_project_tool(FakeContext(), "PROJ", "telos_get_task", {"task_id": 7}) == {
         "task": {"id": 7}
     }
     assert services.actions.execute.await_args.kwargs["context"].project_id == 1
     assert not services.actions.execute.await_args.kwargs["context"].can_write
+
+
+@pytest.mark.parametrize("name", ["get_task", "tt_get_task", "projects_ask", "tt_projects_ask"])
+async def test_dispatcher_rejects_removed_action_names_before_execution(tools, name):
+    """Диспетчер не переводит прежние публичные имена в канонические."""
+    services = tools()
+    with pytest.raises(ToolError, match="Неизвестное имя"):
+        await pt.execute_project_tool(FakeContext(), "PROJ", name, {})
+    with pytest.raises(ToolError, match="Неизвестное имя"):
+        await pt.list_project_tools(FakeContext(), "PROJ", names=[name])
+    services.actions.execute.assert_not_awaited()
 
 
 @pytest.mark.parametrize("accepted", [True, False])
@@ -40,7 +51,7 @@ async def test_destructive_mcp_action_uses_elicitation_and_stored_arguments(tool
     request_id = uuid4()
     run = AgentToolRunSchema(
         id=uuid4(),
-        tool_name="delete_task",
+        tool_name="telos_delete_task",
         title="Удалить задачу",
         arguments={"task_id": 7, "expected_updated_at": "2026-09-21T10:00:00Z"},
         status="pending",
@@ -56,7 +67,7 @@ async def test_destructive_mcp_action_uses_elicitation_and_stored_arguments(tool
         return_value=SimpleNamespace(action="accept", data=pt.ActionApproval(approve=accepted))
     )
     result = await pt.execute_project_tool(
-        context, "PROJ", "delete_task", run.arguments, request_id
+        context, "PROJ", "telos_delete_task", run.arguments, request_id
     )
     assert result["action"]["status"] == ("completed" if accepted else "rejected")
     assert services.actions.execute.await_args.kwargs["context"].request_id == request_id

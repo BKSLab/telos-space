@@ -1,4 +1,4 @@
-"""Прежний CLI экспорта MCP: обновляет единый каталог API/MCP справки.
+"""CLI экспорта MCP: обновляет единый каталог API/MCP справки.
 
 Основная команда — ``python -m src.integration_docs``. Дубликаты каталога
 в docs и frontend больше не создаются.
@@ -8,7 +8,7 @@ import json
 
 
 def render() -> str:
-    """Сохраняет прежний программный формат сокращённого перечня tt_* инструментов."""
+    """Возвращает сокращённый программный перечень инструментов telos_*."""
     from src.mcp_server.registry import tool_catalog
     from src.mcp_server.server import mcp_server  # noqa: F401
 

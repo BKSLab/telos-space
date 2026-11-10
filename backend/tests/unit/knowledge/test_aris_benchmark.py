@@ -42,7 +42,7 @@ def test_claimed_creation_does_not_pass_without_a_real_task_and_matching_fields(
     answer = {
         "status": "completed",
         "content": "Создал.",
-        "actions": [{"tool_name": "create_task", "status": "completed"}],
+        "actions": [{"tool_name": "telos_create_task", "status": "completed"}],
     }
     result = checks(case, answer, [original], [original], {})
     assert not result["exactly_one_task"] and not result["requested_task"]
@@ -51,7 +51,7 @@ def test_claimed_creation_does_not_pass_without_a_real_task_and_matching_fields(
     assert all(checks(case, answer, [original], [original, created], {}).values())
     result = checks(case, answer, [original], [{**original, "priority": "HIGH"}, created], {})
     assert not result["existing_tasks_unchanged"]
-    answer["actions"].append({"tool_name": "update_project", "status": "completed"})
+    answer["actions"].append({"tool_name": "telos_update_project", "status": "completed"})
     result = checks(case, answer, [original], [original, created], {})
     assert not result["only_requested_action"]
 
@@ -62,13 +62,13 @@ def test_verified_action_card_can_be_the_entire_reply_but_an_empty_reply_cannot(
         "status": "completed",
         "content": "",
         "sources": [],
-        "actions": [{"tool_name": "create_task", "status": "completed"}],
+        "actions": [{"tool_name": "telos_create_task", "status": "completed"}],
     }
     assert all(checks({"kind": "create"}, answer, [], [created], {}).values())
     answer["actions"] = []
     assert not checks({"kind": "create"}, answer, [], [], {})["nonempty"]
     answer["actions"] = [
-        {"tool_name": "delete_task", "status": "pending", "arguments": {"task_id": 2}}
+        {"tool_name": "telos_delete_task", "status": "pending", "arguments": {"task_id": 2}}
     ]
     assert all(
         checks({"kind": "delete_pending"}, answer, [created], [created], {"future_id": 2}).values()
@@ -81,7 +81,7 @@ def test_read_and_pending_checks_detect_mutation_and_unapproved_deletion():
     result = checks({"kind": "smalltalk", "id": "hello"}, answer, [task], [], {})
     assert not result["tasks_unchanged"]
 
-    pending = {"tool_name": "delete_task", "status": "pending", "arguments": {"task_id": 2}}
+    pending = {"tool_name": "telos_delete_task", "status": "pending", "arguments": {"task_id": 2}}
     answer["actions"] = [pending]
     assert all(
         checks({"kind": "delete_pending"}, answer, [task], [task], {"future_id": 2}).values()

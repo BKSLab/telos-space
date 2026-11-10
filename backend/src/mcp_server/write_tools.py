@@ -3,7 +3,7 @@
 Каждый вызывает те же сервисы, что и HTTP-эндпоинты: история задачи,
 сквозная нумерация и постановка в очередь индексации знаний работают
 одинаково независимо от канала. Право ключа на инструмент объявлено в
-``tt_tool`` и проверяется в ``tool_context``; необязательный параметр
+``telos_tool`` и проверяется в ``tool_context``; необязательный параметр
 ``actor`` может указывать только логин владельца ключа.
 """
 
@@ -28,7 +28,7 @@ from src.mcp_server.context import (
     resolve_task,
     tool_context,
 )
-from src.mcp_server.registry import tt_tool
+from src.mcp_server.registry import telos_tool
 from src.mcp_server.server import TaskKey, domain_message, links_of, parse_date, with_task_url
 from src.schemas.enums import TaskPriority
 from src.schemas.task_moves import TaskMoveTargetSchema
@@ -44,8 +44,8 @@ Actor = Annotated[str | None, Field(description="Логин текущего п�
 # ── Задачи ─────────────────────────────────────────────────────────────────
 
 
-@tt_tool(
-    name="tt_create_task",
+@telos_tool(
+    name="telos_create_task",
     title="Создать задачу",
     description=(
         "Создаёт задачу в проекте. Без указания стадии задача попадает в начальную "
@@ -124,7 +124,7 @@ async def create_task(
         try:
             if request_id is not None:
                 result = await repeatable_write(
-                    tools, project_id=project_id, name="create_task",
+                    tools, project_id=project_id, name="telos_create_task",
                     arguments=payload, request_id=request_id,
                 )
                 created = result["task"]
@@ -149,14 +149,14 @@ async def create_task(
         )
 
 
-@tt_tool(
-    name="tt_update_task",
+@telos_tool(
+    name="telos_update_task",
     title="Изменить задачу",
     description=(
         "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, "
-        "приоритет, исполнитель, сроки. Стадия — tt_move_task, чек-лист — "
-        "tt_set_checklist, наблюдатели — tt_set_watchers. Передавайте expected_revision "
-        "из tt_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется "
+        "приоритет, исполнитель, сроки. Стадия — telos_move_task, чек-лист — "
+        "telos_set_checklist, наблюдатели — telos_set_watchers. Передавайте expected_revision "
+        "из telos_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется "
         "прежнее поведение без защиты от затирания чужой правки."
     ),
     scope=SCOPE_TASKS_WRITE,
@@ -189,7 +189,7 @@ async def update_task(
     actor: Actor = None,
     expected_revision: Annotated[
         int | None,
-        Field(ge=1, strict=True, description="Ожидаемая revision из tt_get_task; устаревшая версия даёт конфликт."),
+        Field(ge=1, strict=True, description="Ожидаемая revision из telos_get_task; устаревшая версия даёт конфликт."),
     ] = None,
 ) -> dict:
     """Изменяет переданные поля задачи."""
@@ -233,8 +233,8 @@ async def update_task(
         )
 
 
-@tt_tool(
-    name="tt_move_task",
+@telos_tool(
+    name="telos_move_task",
     title="Перевести задачу в другую стадию",
     description=(
         "Переводит задачу в стадию с указанным названием и ставит её в конец стадии. "
@@ -267,8 +267,8 @@ async def move_task(
         )
 
 
-@tt_tool(
-    name="tt_transfer_task",
+@telos_tool(
+    name="telos_transfer_task",
     title="Перенести задачу в другой проект",
     description=(
         "Переносит задачу в другой проект: у задачи будет новый ключ, связи с задачами "
@@ -322,12 +322,12 @@ async def transfer_task(
         )
 
 
-@tt_tool(
-    name="tt_set_task_dates",
+@telos_tool(
+    name="telos_set_task_dates",
     title="Изменить плановые даты задачи",
     description=(
         "Изменяет start_date и/или due_date задачи через доменный сервис и историю. "
-        "Пустая строка снимает дату. expected_revision из tt_get_task защищает "
+        "Пустая строка снимает дату. expected_revision из telos_get_task защищает "
         "от изменения поверх устаревшей версии; без него действует прежнее поведение."
     ),
     scope=SCOPE_TASKS_WRITE,
@@ -346,7 +346,7 @@ async def set_task_dates(
     actor: Actor = None,
     expected_revision: Annotated[
         int | None,
-        Field(ge=1, strict=True, description="Ожидаемая revision общих полей из tt_get_task."),
+        Field(ge=1, strict=True, description="Ожидаемая revision общих полей из telos_get_task."),
     ] = None,
 ) -> dict:
     """Меняет только явно переданные календарные поля задачи."""
@@ -379,8 +379,8 @@ async def set_task_dates(
         }
 
 
-@tt_tool(
-    name="tt_delete_task",
+@telos_tool(
+    name="telos_delete_task",
     title="Удалить задачу",
     description=(
         "Безвозвратно удаляет задачу вместе с её комментариями и файлами. "
@@ -421,8 +421,8 @@ async def delete_task(
 # ── Комментарии ────────────────────────────────────────────────────────────
 
 
-@tt_tool(
-    name="tt_add_comment",
+@telos_tool(
+    name="telos_add_comment",
     title="Добавить комментарий к задаче",
     description=(
         "Добавляет комментарий к задаче от имени проверенного пользователя запроса "
@@ -452,7 +452,7 @@ async def add_comment(
         try:
             if request_id is not None:
                 result = await repeatable_write(
-                    tools, project_id=resolved.project_id, name="add_comment",
+                    tools, project_id=resolved.project_id, name="telos_add_comment",
                     arguments={"task_id": resolved.task_id, "body_md": body},
                     request_id=request_id,
                 )
@@ -482,12 +482,12 @@ async def add_comment(
         )
 
 
-@tt_tool(
-    name="tt_update_comment",
+@telos_tool(
+    name="telos_update_comment",
     title="Исправить комментарий",
     description=(
         "Заменяет текст комментария. Править можно свой комментарий; чужой — только "
-        "владельцу проекта. comment_id — из tt_list_comments."
+        "владельцу проекта. comment_id — из telos_list_comments."
     ),
     scope=SCOPE_COMMENTS_WRITE,
 )
@@ -510,8 +510,8 @@ async def update_comment(
         return {"comment_id": updated.id, "updated": True}
 
 
-@tt_tool(
-    name="tt_delete_comment",
+@telos_tool(
+    name="telos_delete_comment",
     title="Удалить комментарий",
     description=(
         "Удаляет комментарий. Удалить можно свой; чужой — только владельцу проекта. "
@@ -540,8 +540,8 @@ async def delete_comment(
 # ── Вехи ───────────────────────────────────────────────────────────────────
 
 
-@tt_tool(
-    name="tt_create_milestone",
+@telos_tool(
+    name="telos_create_milestone",
     title="Создать проектную веху",
     description="Создаёт простую календарную веху проекта без отдельного workflow.",
     scope=SCOPE_TASKS_WRITE,
@@ -603,7 +603,7 @@ async def repeatable_write(
         project_id: Текущий проект операции.
         name: Создание задачи или добавление комментария из общего каталога.
         arguments: Нормализованные доменные аргументы.
-        request_id: Стабильный ключ вызова, общий для основных и прежних имён.
+        request_id: Стабильный ключ вызова канонического действия.
     Returns:
         Сохранённый результат доменного действия.
     Raises:
@@ -619,7 +619,7 @@ async def repeatable_write(
         name=name, arguments=arguments,
     )
     result = response["action"]["result"]
-    task_id = result["task"]["id"] if name == "create_task" else arguments["task_id"]
+    task_id = result["task"]["id"] if name == "telos_create_task" else arguments["task_id"]
     # Квитанция не даёт доступ к задаче, перенесённой в другой проект или удалённой.
     grant = await tools.services.access.ensure_task_access(
         task_id=task_id, user_id=tools.principal.user_id,

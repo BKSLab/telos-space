@@ -240,7 +240,7 @@ async function installPersonalHistory(page: Page) {
         if (path.endsWith("/agent/conversations/17/messages")) return reply({ items: [{ id: 170, conversation_id: 17, request_id: "history", role: "assistant", content: "Сохранённый план проверки проекта", sources: [], files: [], actions: [], status: "completed", error: null, created_at: stamp }], next_before_id: null });
         if (path.endsWith("/knowledge/reindex")) { state.reindexCalls += 1; return reply({ queued: true }); }
         if (path.endsWith("/knowledge/status")) return reply({ enabled: true, ready: true, points_count: 23, pending_jobs: 0, processing_jobs: 0, failed_jobs: 1, last_error: null, obsolete_points: 0, coverage: [{ entity_type: "document", total: 2, indexed: 1, missing: 1, stale: 0 }], file_issues: [{ source_id: "attachment:9", title: "План.pdf", status: "failed", detail: "Текст файла недоступен" }] });
-        if (path.endsWith(`/agent/pending/${LEGACY_CONFIRM}`)) return reply({ id: LEGACY_CONFIRM, tool_name: "delete_task", title: "Удалить задачу", status: "pending", arguments: { task_id: 42 }, preview: {}, result: {}, project: { id: 1, key: "DEMO", name: "Портал заказов" }, created_at: stamp, expires_at: "2026-10-01T10:00:00Z" });
+        if (path.endsWith(`/agent/pending/${LEGACY_CONFIRM}`)) return reply({ id: LEGACY_CONFIRM, tool_name: "telos_delete_task", title: "Удалить задачу", status: "pending", arguments: { task_id: 42 }, preview: {}, result: {}, project: { id: 1, key: "DEMO", name: "Портал заказов" }, created_at: stamp, expires_at: "2026-10-01T10:00:00Z" });
         return reply([]);
     });
     return state;

@@ -84,7 +84,7 @@ test("карточка задачи показывает поля и фирме�
     control.answer = "";
     control.sources = [{ source_id: "task:42", entity_type: "task", entity_id: 42, title: "DEMO-42 · Проверить оплату", task_id: 42, document_slug: null, score: null, excerpt: null,
         card: { key: "DEMO-42", status: "В работе", priority: "HIGH", assignee: "Анна Иванова", due_date: "2026-10-01", summary: "Проверить оплату картой и возврат средств." } }];
-    control.action = { id: "create-42", tool_name: "create_task", title: "Создать задачу", arguments: { title: "Проверить оплату" }, status: "completed", result: { source_id: "task:42", task: { id: 42, key: "DEMO-42", title: "Проверить оплату" } }, created_at: "2026-09-22T10:00:00Z" };
+    control.action = { id: "create-42", tool_name: "telos_create_task", title: "Создать задачу", arguments: { title: "Проверить оплату" }, status: "completed", result: { source_id: "task:42", task: { id: 42, key: "DEMO-42", title: "Проверить оплату" } }, created_at: "2026-09-22T10:00:00Z" };
     await page.goto("/projects/DEMO/team");
     await openPersonalWindow(page);
     await page.getByRole("textbox", { name: "Вопрос Арису", exact: true }).fill("Создай задачу на проверку оплаты");
@@ -285,7 +285,7 @@ test("ошибка ответа сохраняется и повтор не ду
 for (const decision of ["approve", "reject"] as const) {
     test(`карточка действия восстанавливается и сохраняет решение ${decision}`, async ({ page }) => {
         const control = await installProjectApi(page);
-        control.action = { id: "5eea642e-3196-45c0-ac85-1286b0d3a81c", tool_name: "delete_task", title: "Удалить задачу",
+        control.action = { id: "5eea642e-3196-45c0-ac85-1286b0d3a81c", tool_name: "telos_delete_task", title: "Удалить задачу",
             arguments: { task_id: 42, expected_updated_at: "2026-09-21T10:00:00Z" }, status: "pending",
             result: { preview: { task: { key: "DEMO-42", title: "Проверка окна заказа" } } }, created_at: "2026-09-21T10:00:00Z" };
         await page.goto("/projects/DEMO/chat?view=personal");

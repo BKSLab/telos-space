@@ -14,7 +14,7 @@ from src.services.agent_tool_scope import AgentProjectToolScopeFactory
 from src.utils.api_scopes import SCOPE_PROJECTS_WRITE
 from src.utils.request_actor import reset_request_actor, set_request_actor
 
-CREATE_PROJECT_TOOL = "create_project"
+CREATE_PROJECT_TOOL = "telos_create_project"
 
 
 class ProjectCreationService:

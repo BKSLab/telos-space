@@ -110,7 +110,7 @@ def test_summary_selects_document_but_original_tail_remains_readable():
     assert "25 октября" not in json.dumps(result, ensure_ascii=False)
     offset = result["matched_locations"][0]["offset"]
     original = read_catalog(
-        catalog, KnowledgeReadRequest(name="read_source", source_id="document:9", offset=offset)
+        catalog, KnowledgeReadRequest(name="telos_read_source", source_id="document:9", offset=offset)
     )
     assert "25 октября" in original["text"]
     assert original["next_offset"] is None

@@ -182,21 +182,19 @@ async def build_catalog(app) -> dict:
     schema = app.openapi()
     tools = []
     for tool in sorted(await mcp_server.list_tools(), key=lambda item: item.name):
-        canonical = tool.name if tool.name in TOOL_REGISTRY else f"tt_{tool.name}"
-        spec = TOOL_REGISTRY[canonical]
+        spec = TOOL_REGISTRY[tool.name]
         raw = tool.model_dump(mode="json", by_alias=True, exclude_none=True)
         tools.append(
             {
                 "id": _id("mcp", tool.name),
                 "kind": "mcp",
                 "name": tool.name,
-                "group": "legacy-aliases" if canonical != tool.name else _group(tool.name),
+                "group": _group(tool.name),
                 "summary": spec.title,
                 "description": tool.description or spec.description,
                 "scopes": [spec.scope],
                 "legacy": ["WRITE"] if spec.write else ["READ", "WRITE"],
                 "write": spec.write,
-                "aliasFor": canonical if canonical != tool.name else None,
                 "inputSchema": raw["inputSchema"],
                 "outputSchema": raw.get("outputSchema"),
             }
