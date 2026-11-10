@@ -35067,6 +35067,294 @@
     },
     {
       "aliasFor": null,
+      "description": "Создаёт проект вне контекста другого проекта: паспорт, команду, стадии и начальную свободную доску одной транзакцией. Владелец — текущий пользователь. description_sections имеет приоритет перед description_md, как в REST. Для безопасного повтора после потери ответа сохраните UUID request_id и все аргументы: повтор возвращает исходный результат; другой payload с тем же UUID даёт конфликт. Ключ проекта должен быть свободен, участники — существующими активными пользователями. Права ключа и доступ проверяются заново при повторе. После создания используйте project_key для tt_get_project и tt_create_task. Требует право projects:write.",
+      "group": "projects",
+      "id": "mcp-6bcba79d721f0dfe",
+      "inputSchema": {
+        "$defs": {
+          "ProjectDescriptionSchema": {
+            "additionalProperties": false,
+            "description": "Логические блоки единого описания проекта.",
+            "properties": {
+              "additional": {
+                "default": "",
+                "description": "Дополнительные сведения и договорённости.",
+                "title": "Additional",
+                "type": "string"
+              },
+              "expected_result": {
+                "default": "",
+                "description": "Что будет готово и как проверить завершение.",
+                "title": "Expected Result",
+                "type": "string"
+              },
+              "goal": {
+                "default": "",
+                "description": "Что должно измениться благодаря проекту.",
+                "title": "Goal",
+                "type": "string"
+              },
+              "problem": {
+                "default": "",
+                "description": "Какую проблему решает проект.",
+                "title": "Problem",
+                "type": "string"
+              }
+            },
+            "title": "ProjectDescriptionSchema",
+            "type": "object"
+          },
+          "ProjectStatus": {
+            "description": "Жизненный статус проекта.",
+            "enum": [
+              "PLANNING",
+              "ACTIVE",
+              "PAUSED",
+              "COMPLETED",
+              "ARCHIVED"
+            ],
+            "title": "ProjectStatus",
+            "type": "string"
+          },
+          "StageCreateSchema": {
+            "description": "Тело запроса для создания стадии проекта.",
+            "example": {
+              "color": "#a371f7",
+              "name": "Ревью"
+            },
+            "properties": {
+              "color": {
+                "default": "#7d8793",
+                "description": "HEX-цвет стадии.",
+                "examples": [
+                  "#a371f7"
+                ],
+                "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+                "title": "Color",
+                "type": "string"
+              },
+              "is_done_stage": {
+                "default": false,
+                "description": "Признак завершающей стадии.",
+                "examples": [
+                  false
+                ],
+                "title": "Is Done Stage",
+                "type": "boolean"
+              },
+              "name": {
+                "description": "Название стадии.",
+                "examples": [
+                  "Ревью"
+                ],
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "title": "StageCreateSchema",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Только логин владельца ключа; владелец проекта определяется сервером.",
+            "title": "Actor"
+          },
+          "color": {
+            "default": "#58a6ff",
+            "description": "HEX-цвет проекта.",
+            "examples": [
+              "#58a6ff"
+            ],
+            "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+            "title": "Color",
+            "type": "string"
+          },
+          "description_md": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Описание проекта в Markdown.",
+            "examples": [
+              "Персональный ассистент для подбора работы."
+            ],
+            "title": "Description Md"
+          },
+          "description_sections": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ProjectDescriptionSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Блоки problem, goal, expected_result, additional. Имеют приоритет перед description_md."
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Плановая дата завершения.",
+            "examples": [
+              "2026-12-20"
+            ],
+            "title": "Due Date"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Эмодзи-иконка проекта.",
+            "examples": [
+              "🚀"
+            ],
+            "title": "Icon"
+          },
+          "key": {
+            "description": "Короткий код проекта: латиница и цифры, от 2 до 10 символов.",
+            "examples": [
+              "PROJ"
+            ],
+            "pattern": "^[A-Za-z][A-Za-z0-9]{1,9}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "member_usernames": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Точные логины участников; владелец включается автоматически.",
+            "title": "Member Usernames"
+          },
+          "name": {
+            "description": "Название проекта.",
+            "examples": [
+              "TELOS SPACE"
+            ],
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "Стабильный UUID создания; повторяйте его и исходные аргументы при сетевом сбое.",
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "stages": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/$defs/StageCreateSchema"
+                },
+                "maxItems": 30,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Стадии в порядке колонок. При отсутствии используется стандартный набор.",
+            "title": "Stages"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Плановая дата начала.",
+            "examples": [
+              "2026-09-01"
+            ],
+            "title": "Start Date"
+          },
+          "status": {
+            "$ref": "#/$defs/ProjectStatus",
+            "default": "PLANNING",
+            "description": "Начальный статус проекта.",
+            "examples": [
+              "PLANNING"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "request_id"
+        ],
+        "title": "create_projectArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "legacy": [
+        "WRITE"
+      ],
+      "name": "tt_create_project",
+      "outputSchema": null,
+      "scopes": [
+        "projects:write"
+      ],
+      "summary": "Создать проект",
+      "write": true
+    },
+    {
+      "aliasFor": null,
       "description": "Создаёт риск только после явного подтверждения пользователем предложенных полей. risk_level вычисляет сервер. Требует право tasks:write.",
       "group": "risks",
       "id": "mcp-196602daccc4114b",
@@ -49442,6 +49730,15 @@
     "ProjectFileDetailSchema": {
       "description": "Одна страница извлечённого текста вместе с метаданными.",
       "properties": {
+        "can_edit": {
+          "default": false,
+          "description": "Текущий пользователь и его учётные данные допускают изменение файла.",
+          "examples": [
+            true
+          ],
+          "title": "Can Edit",
+          "type": "boolean"
+        },
         "caption": {
           "anyOf": [
             {
@@ -49699,6 +49996,21 @@
           ],
           "title": "Text Total Chars",
           "type": "integer"
+        },
+        "uploaded_by_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Имя автора загрузки либо null, если автор недоступен.",
+          "examples": [
+            "Иванов Иван"
+          ],
+          "title": "Uploaded By Name"
         },
         "uploaded_by_user_id": {
           "anyOf": [
@@ -49960,6 +50272,21 @@
             null
           ],
           "title": "Summary"
+        },
+        "uploaded_by_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Имя автора загрузки либо null, если автор недоступен.",
+          "examples": [
+            "Иванов Иван"
+          ],
+          "title": "Uploaded By Name"
         },
         "uploaded_by_user_id": {
           "anyOf": [

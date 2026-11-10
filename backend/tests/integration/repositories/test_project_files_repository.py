@@ -97,6 +97,9 @@ async def test_original_and_outbox_are_committed_or_rolled_back_together(
     assert stored is not None
     assert stored["storage_key"] == original["storage_key"]
     assert stored["text"] == "" and stored["text_total_chars"] == 0
+    assert stored["uploaded_by_name"] == " ".join(
+        part for part in (user.last_name, user.first_name, user.middle_name) if part
+    )
     job = (
         await db_session.execute(
             select(KnowledgeIndexJob).where(KnowledgeIndexJob.project_id == project.id)
@@ -105,6 +108,23 @@ async def test_original_and_outbox_are_committed_or_rolled_back_together(
     assert job.status == KnowledgeIndexStatus.PENDING
     assert job.operation == KnowledgeIndexOperation.REINDEX_PROJECT
     assert job.transaction_id is not None
+
+
+async def test_file_metadata_returns_author_name_or_null_without_losing_files(
+    db_session: AsyncSession, project: Project, user: User,
+) -> None:
+    files = ProjectFilesRepository(db_session)
+    await files.save(original_data(project.id, user.id, "known.txt"))
+    missing_author = await files.save({
+        **original_data(project.id, user.id, "unknown.txt"), "uploaded_by_user_id": None,
+    })
+    rows = await files.get_for_project(project_id=project.id, ids=None, limit=100, offset=0)
+    assert len(rows) == 2
+    assert next(row for row in rows if row["original_name"] == "known.txt")["uploaded_by_name"]
+    row = await files.get_by_id(project_id=project.id, file_id=missing_author["id"])
+    assert row is not None
+    assert row["uploaded_by_name"] is None
+    assert row["uploaded_by_user_id"] is None
 
 
 async def test_extracted_file_is_searchable_readable_and_isolated_by_project(

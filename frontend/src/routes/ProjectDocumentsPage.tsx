@@ -5,7 +5,7 @@ import { FileText, Plus, Search } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import type { DocumentDetail, DocumentListItem, FileSearchPage, FileSearchScope, Task } from "@/lib/types";
 import { mergeFileDrafts, type FileUploadDraft } from "@/lib/files";
-import { formatRelative } from "@/lib/dates";
+import { formatFullDate } from "@/lib/dates";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
 import { useProjectFiles } from "@/lib/useProjectFiles";
 import { MAX_PROJECT_FILE_BATCH, MAX_PROJECT_FILE_SIZE, PROJECT_FILE_ACCEPT, projectFileId } from "@/lib/projectFiles";
@@ -13,8 +13,8 @@ import { FileUploadControl } from "@/components/files/FileUploadControl";
 import { ProjectFilesSection } from "@/components/files/ProjectFilesSection";
 import { FileUploadDialog } from "@/components/files/FileUploadDialog";
 import { FileSearchResults } from "@/components/files/FileSearchResults";
+import { FileTypeIcon } from "@/components/files/FileTypeIcon";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { SearchHighlight } from "@/components/ui/SearchHighlight";
@@ -141,7 +141,6 @@ export function ProjectDocumentsPage() {
                     </>}
                 </section>}
 
-                <div hidden={searchActive}>
                 <ProjectFilesSection
                     projectId={project.id}
                     model={projectFiles}
@@ -149,8 +148,8 @@ export function ProjectDocumentsPage() {
                     selectedFileId={selectedFileId}
                     onOpenFile={(id) => selectFile(id)}
                     onCloseFile={() => selectFile(null)}
+                    hidden={searchActive}
                 />
-                </div>
 
                 {!searchActive && <>
                 <h2 className="text-sm font-semibold text-primary">Документы</h2>
@@ -190,29 +189,21 @@ export function ProjectDocumentsPage() {
                     />
                 )}
 
-                <div className="flex flex-col gap-2">
+                <div className="min-w-0 divide-y divide-line-subtle overflow-hidden rounded-[var(--radius-card)] border border-line-subtle bg-surface/30">
                     {documentsQuery.data?.map((document) => (
-                        <Card key={document.id} interactive>
                             <Link
+                                key={document.id}
                                 to={`/projects/${project.key}/docs/${document.slug}`}
-                                className="flex min-w-0 flex-col gap-1 px-4 py-3"
+                                className="flex min-h-14 min-w-0 items-center gap-3 px-3 py-2 hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                             >
-                                <div className="flex min-w-0 items-center gap-2">
-                                    <FileText size={14} className="shrink-0 text-muted" aria-hidden="true" />
-                                    <span className="min-w-0 truncate text-[14px] font-medium text-primary">
+                                <FileTypeIcon file={{ name: "document.md", mime: "text/markdown" }} className="h-9 w-9" />
+                                <span className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
+                                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-primary">
                                         <SearchHighlight text={document.search_title ?? document.title} />
                                     </span>
-                                </div>
-                                {document.search_excerpt && (
-                                    <p className="line-clamp-2 text-[12px] text-muted">
-                                        <SearchHighlight text={document.search_excerpt} />
-                                    </p>
-                                )}
-                                <p className="text-[11px] text-disabled">
-                                    Изменён {formatRelative(document.updated_at)}
-                                </p>
+                                    <span className="flex shrink-0 items-center gap-3 text-[11px] text-muted"><span className="w-10">MD</span><span className="sm:w-36">{formatFullDate(document.updated_at)}</span></span>
+                                </span>
                             </Link>
-                        </Card>
                     ))}
                 </div>
                 </>}

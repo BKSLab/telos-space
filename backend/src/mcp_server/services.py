@@ -50,6 +50,7 @@ from src.services.db_scope import ProjectQueryScope
 from src.services.knowledge_events import KnowledgeEvents
 from src.services.knowledge_search import KnowledgeSearchService
 from src.services.milestones import MilestonesService
+from src.services.project_creation import ProjectCreationService
 from src.services.project_members import ProjectMembersService
 from src.services.project_query import ProjectQueryService
 from src.services.project_risks import ProjectRiskService
@@ -90,6 +91,7 @@ class ToolServices:
     dependencies: TaskDependenciesService | None = None
     moves: TaskMovesService | None = None
     requests: AgentRequestsService | None = None
+    project_creation: ProjectCreationService | None = None
 
 
 def build_project_query_scope(
@@ -343,6 +345,11 @@ def build_tool_services(
         dependencies=build_dependencies_service(session),
         moves=build_moves_service(session, settings),
         requests=AgentRequestsService(scope=build_agent_conversation_scope(session_factory=session_factory), links=RequestLinks(settings.app.app_public_url)),
+        project_creation=ProjectCreationService(
+            scope=build_agent_project_tool_scope(
+                session_factory=session_factory, settings=settings
+            ),
+        ),
         actions=AgentActionsService(
             scope=build_agent_project_tool_scope(
                 session_factory=session_factory, settings=settings

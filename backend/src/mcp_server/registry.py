@@ -85,6 +85,7 @@ def tt_tool(
     description: str,
     scope: str,
     write: bool | None = None,
+    strict_arguments: bool = False,
 ) -> Callable:
     """Регистрирует инструмент на сервере вместе с его правом.
 
@@ -94,6 +95,7 @@ def tt_tool(
         description: Описание для агента.
         scope: Требуемое право из ``api_scopes``.
         write: Меняет ли данные; по умолчанию — если право пишущее.
+        strict_arguments: Запретить неизвестные параметры в схеме и при вызове.
 
     Raises:
         ValueError: Ошибка объявления — без префикса, с неизвестным правом,
@@ -151,6 +153,12 @@ def tt_tool(
 
         TOOL_REGISTRY[name] = spec
         mcp_server.tool(name=name, title=title, description=description)(wrapper)
+        if strict_arguments:
+            registered = mcp_server._tool_manager.get_tool(name)
+            arguments_model = registered.fn_metadata.arg_model
+            arguments_model.model_config = {**arguments_model.model_config, "extra": "forbid"}
+            arguments_model.model_rebuild(force=True)
+            registered.parameters = arguments_model.model_json_schema(by_alias=True)
         legacy_name = name.removeprefix("tt_")
         legacy_names = {
             "list_project_tools", "execute_project_tool", "list_project_risks", "get_project_risk",

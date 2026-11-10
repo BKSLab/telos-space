@@ -13,7 +13,7 @@ from uuid import UUID
 import pytest
 
 from src.db.models.api_tokens import ApiTokenScope
-from src.exceptions.access import ResourceNotAvailableError
+from src.exceptions.access import ResourceNotAvailableError, ResourceWriteRequiredError
 from src.exceptions.api_keys import ApiKeyScopeError
 from src.exceptions.auth import NotAuthenticatedError
 from src.exceptions.project_files import (
@@ -28,7 +28,7 @@ from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
 from src.repositories.project_files import ProjectFilesRepository
 from src.repositories.unit_of_work import UnitOfWork
-from src.services.access import AccessService
+from src.services.access import AccessGrant, AccessService
 from src.services.auth import ApiKeyGrant, AuthService, Principal
 from src.services.project_files import ProjectFilesScope, ProjectFilesService
 from src.storage.task_attachments import TaskAttachmentStorage
@@ -299,3 +299,30 @@ async def test_detail_reports_text_pagination_and_disabled_index_without_disk_re
     assert caught.value.status_code == 404
     assert events.count("open") == events.count("closed") == 4
     service.storage.resolve.assert_not_called()
+
+
+async def test_detail_exposes_author_and_current_write_access_without_allowing_readonly_mutations() -> None:
+    service, db, _ = create_service()
+    db.files.get_by_id.return_value = file_row(
+        text="Текст", text_total_chars=5, uploaded_by_name="Иванов Иван Петрович"
+    )
+    db.access.require_write.side_effect = AccessService.require_write
+    for allowed in (True, False):
+        db.access.ensure_project_access.return_value = AccessGrant(
+            project_id=2, resource_id=2, is_owner=False, can_write=allowed
+        )
+        result = await service.get_file(
+            project_id=2, file_id=7, user_id=1, offset=0, max_chars=8000
+        )
+        assert result.uploaded_by_name == "Иванов Иван Петрович"
+        assert result.can_edit is allowed
+    db.files.reset_mock()
+    for mutation in (
+        lambda: service.update_caption(project_id=2, file_id=7, user_id=1, caption="Текст"),
+        lambda: service.retry(project_id=2, file_id=7, user_id=1),
+        lambda: service.delete_file(project_id=2, file_id=7, user_id=1),
+    ):
+        with pytest.raises(ResourceWriteRequiredError):
+            await mutation()
+    db.files.get_by_id.assert_not_awaited()
+    db.unit_of_work.commit.assert_not_awaited()

@@ -13,12 +13,12 @@ for (const width of [1440, 390]) {
         ];
         state.searchResults = sources;
         await page.goto("/projects/DEMO/docs");
-        await expect(page.getByText("Согласованный вариант", { exact: true })).toBeVisible();
-        const preview = page.getByRole("button", { name: "Открыть изображение Схема.png" });
-        await expect.poll(() => preview.locator("img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+        const preview = page.getByRole("button", { name: "Открыть файл Схема.png" });
         await preview.click();
         const modal = page.getByRole("dialog", { name: "Схема.png", exact: true });
-        await expect(modal.getByRole("link", { name: "Скачать", exact: true })).toHaveAttribute("href", /\/files\/5\/content$/);
+        await expect(modal.getByText("Согласованный вариант", { exact: true })).toBeVisible();
+        await expect.poll(() => modal.locator("img").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+        await expect(modal.getByRole("link", { name: "Скачать оригинал", exact: true })).toHaveAttribute("href", /\/files\/5\/content$/);
         await page.keyboard.press("Escape");
         await expect(modal).toHaveCount(0);
         await expect(preview).toBeFocused();

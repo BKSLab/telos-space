@@ -402,6 +402,12 @@ def build_agent_project_tool_scope(
                             task_rows=tasks,
                             activity_rows=activity,
                             api_keys=ApiKeysRepository(session),
+                            auth=AuthService(
+                                users_repository=users,
+                                tokens_repository=ApiTokensRepository(session),
+                                api_keys_repository=ApiKeysRepository(session),
+                                invite_code=settings.auth.registration_invite_code.get_secret_value(),
+                            ),
                         )
                     finally:
                         if not unit_of_work.committed:

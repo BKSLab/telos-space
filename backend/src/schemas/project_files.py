@@ -17,6 +17,10 @@ class ProjectFileSchema(BaseModel):
     id: int = Field(description="Идентификатор файла.", examples=[5])
     project_id: int = Field(description="Проект-владелец файла.", examples=[2])
     uploaded_by_user_id: int | None = Field(description="Автор загрузки.", examples=[1])
+    uploaded_by_name: str | None = Field(
+        None, description="Имя автора загрузки либо null, если автор недоступен.",
+        examples=["Иванов Иван"],
+    )
     caption: str | None = Field(
         None, description="Пользовательская подпись оригинала.", examples=[None]
     )
@@ -57,6 +61,11 @@ class ProjectFileSchema(BaseModel):
 
 class ProjectFileDetailSchema(ProjectFileSchema):
     """Одна страница извлечённого текста вместе с метаданными."""
+
+    can_edit: bool = Field(
+        False, description="Текущий пользователь и его учётные данные допускают изменение файла.",
+        examples=[True],
+    )
 
     text: str = Field(description="Фрагмент извлечённого текста.", examples=["Цель проекта…"])
     text_total_chars: int = Field(description="Полная длина извлечённого текста.", examples=[12000])

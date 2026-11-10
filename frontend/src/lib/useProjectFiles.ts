@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, endpoints, queryKeys } from "./api";
 import { PROJECT_FILE_PAGE_SIZE, projectFilesPollInterval } from "./projectFiles";
-import type { ProjectFile } from "./types";
+import type { ProjectFile, ProjectFileDetail } from "./types";
 import type { FileUploadDraft } from "./files";
 
 export function useProjectFiles(projectId: number, search: string) {
@@ -50,7 +50,11 @@ export function useProjectFiles(projectId: number, search: string) {
     const caption = useMutation({
         mutationFn: ({ fileId, caption }: { fileId: number; caption: string | null }) =>
             api.patch<ProjectFile>(endpoints.projectFile(projectId, fileId), { caption }),
-        onSuccess: refresh,
+        onSuccess: (file) => {
+            queryClient.setQueriesData<ProjectFileDetail>({ queryKey: ["projects", projectId, "files", "detail", file.id] },
+                current => current ? { ...current, ...file } : current);
+            refresh();
+        },
     });
     const retry = useMutation({
         mutationFn: (fileId: number) => api.post<ProjectFile>(endpoints.projectFileRetry(projectId, fileId)),

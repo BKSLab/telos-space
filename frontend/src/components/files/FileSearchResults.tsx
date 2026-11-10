@@ -27,15 +27,16 @@ export function FileSearchResults({ items, projectKey, onOpenProjectFile }: {
                     size: null, mime: item.content_type, caption: item.caption, previewable: Boolean(item.preview_url), previewUrl: item.preview_url && url ? apiUrl(url.replace(/\/content$/, "/preview")) : null };
                 return <li key={descriptor.key}>
                     <FileTile file={descriptor} className="w-full" onPreview={setPreview}
-                        onOpen={item.document_slug && projectKey ? () => navigate(`/projects/${projectKey}/docs/${item.document_slug}`) : undefined}
-                        openLabel={item.source_type === "document" ? `Открыть документ ${item.title}` : undefined}>
+                        onOpen={item.source_type === "project_file" && onOpenProjectFile ? () => onOpenProjectFile(item.source_id)
+                            : item.document_slug && projectKey ? () => navigate(`/projects/${projectKey}/docs/${item.document_slug}`) : undefined}
+                        openLabel={item.source_type === "project_file" && onOpenProjectFile ? `Открыть файл ${item.title}`
+                            : item.source_type === "document" ? `Открыть документ ${item.title}` : undefined}>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
                             <span>{item.source_type === "project_file" ? "Файл проекта" : item.source_type === "document" ? "Документ" : "Файл задачи"}</span>
                             {item.task_id !== null && <button type="button" className="touch-target max-w-full truncate rounded text-left text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent"
                                 onClick={() => setSelectedTaskId(item.task_id!)} title={item.task_title ?? undefined}>
                                 {item.task_key ?? `Задача №${item.task_id}`}{item.task_title ? ` · ${item.task_title}` : ""}
                             </button>}
-                            {item.source_type === "project_file" && onOpenProjectFile && <button type="button" className="touch-target rounded text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent" onClick={() => onOpenProjectFile(item.source_id)}>Текст и сведения</button>}
                         </div>
                         {item.excerpt && <p className="line-clamp-3 break-words text-[12px] leading-relaxed text-secondary [overflow-wrap:anywhere]"><SearchHighlight text={item.excerpt} /></p>}
                     </FileTile>

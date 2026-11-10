@@ -17,6 +17,7 @@ from src.repositories.unit_of_work import AgentToolUnitOfWork
 from src.repositories.users import UsersRepository
 from src.services.access import AccessService
 from src.services.analytics import AnalyticsReportReader
+from src.services.auth import AuthService
 from src.services.board_shapes import BoardShapesService
 from src.services.calendar import CalendarService
 from src.services.calendar_scenarios import CalendarScenarioService
@@ -74,6 +75,7 @@ class AgentProjectToolScope:
     activity_rows: TaskActivityRepository | None = None
     reports: TaskReportsService | None = None
     api_keys: ApiKeysRepository | None = None
+    auth: AuthService | None = None
 
 
 AgentProjectToolScopeFactory = Callable[[], AbstractAsyncContextManager[AgentProjectToolScope]]

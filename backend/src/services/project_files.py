@@ -283,7 +283,7 @@ class ProjectFilesService:
         """
         try:
             async with self.scope() as db:
-                await db.access.ensure_project_access(project_id=project_id, user_id=user_id)
+                grant = await db.access.ensure_project_access(project_id=project_id, user_id=user_id)
                 row = await db.files.get_by_id(
                     project_id=project_id, file_id=file_id, offset=offset, max_chars=max_chars
                 )
@@ -292,6 +292,7 @@ class ProjectFilesService:
                 end = offset + len(row["text"])
                 return ProjectFileDetailSchema(
                     **self._schema(row).model_dump(),
+                    can_edit=bool(grant.can_write),
                     text=row["text"],
                     text_total_chars=row["text_total_chars"],
                     text_offset=offset,
@@ -316,7 +317,8 @@ class ProjectFilesService:
         """
         try:
             async with self.scope() as db:
-                await db.access.ensure_project_access(project_id=project_id, user_id=user_id)
+                grant = await db.access.ensure_project_access(project_id=project_id, user_id=user_id)
+                db.access.require_write(grant)
                 if await db.files.get_by_id(project_id=project_id, file_id=file_id) is None:
                     raise ProjectFileNotFoundError(str(file_id))
                 await db.files.mark_deleted(project_id=project_id, file_id=file_id)
@@ -340,7 +342,8 @@ class ProjectFilesService:
         """
         try:
             async with self.scope() as db:
-                await db.access.ensure_project_access(project_id=project_id, user_id=user_id)
+                grant = await db.access.ensure_project_access(project_id=project_id, user_id=user_id)
+                db.access.require_write(grant)
                 row = await db.files.get_by_id(project_id=project_id, file_id=file_id)
                 if row is None:
                     raise ProjectFileNotFoundError(str(file_id))

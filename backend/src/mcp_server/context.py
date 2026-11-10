@@ -229,6 +229,11 @@ def _authorization_header(context: Context) -> str | None:
     return None
 
 
+def bearer_secret_of(context: Context) -> str | None:
+    """Возвращает credentials транспорта для повторной проверки после ожидания lock."""
+    return _header(context, "x-api-key") or extract_bearer_secret(_authorization_header(context))
+
+
 def _header(context: Context, name: str) -> str | None:
     for key, value in (context.headers or {}).items():
         if key.lower() == name:

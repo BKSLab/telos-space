@@ -25,6 +25,7 @@ from starlette.applications import Starlette
 from src.core.settings import Settings
 from src.exceptions.base import ApplicationError
 from src.knowledge.catalog import SourceType
+from src.mcp_server.catalog import CatalogDiagnostics, build_version
 from src.mcp_server.context import ToolContext, resolve_project, resolve_task, tool_context
 from src.mcp_server.links import LINKS_HINT, build_links, put_url
 from src.mcp_server.presenters import (
@@ -65,7 +66,8 @@ mcp_server = MCPServer(
     name="telos-space",
     title="TELOS SPACE",
     instructions=INSTRUCTIONS,
-    version="2.0.0",
+    version=build_version(),
+    middleware=[CatalogDiagnostics(build_version())],
 )
 
 ProjectKey = Annotated[str, Field(description="Ключ проекта, например PROJ.")]

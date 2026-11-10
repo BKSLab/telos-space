@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock
+from uuid import UUID
 
 import pytest
 from httpx import AsyncClient
@@ -24,7 +25,7 @@ from src.exceptions.project_files import (
 )
 from src.schemas.project_files import ProjectFileDetailSchema, ProjectFileSchema
 from src.services.attachment_download import AttachmentDownload
-from src.services.auth import Principal
+from src.services.auth import ApiKeyGrant, Principal
 from src.services.project_files import ProjectFilesService
 
 
@@ -56,7 +57,7 @@ def files_service() -> AsyncMock:
     service.upload.return_value = file_schema()
     service.list_files.return_value = [file_schema()]
     service.get_file.return_value = ProjectFileDetailSchema(
-        **file_schema().model_dump(), text="", text_total_chars=0, text_offset=0, next_offset=None
+        **file_schema().model_dump(), can_edit=True, text="", text_total_chars=0, text_offset=0, next_offset=None
     )
     service.retry.return_value = file_schema()
     app.dependency_overrides[get_project_files_service] = lambda: service
@@ -97,6 +98,7 @@ async def test_file_routes_return_pending_upload_text_page_and_retry_status(
     assert detail.json()["text"] == ""
     assert detail.json()["text_total_chars"] == 0
     assert detail.json()["next_offset"] is None
+    assert detail.json()["can_edit"] is True
     files_service.get_file.assert_awaited_once_with(
         project_id=2, file_id=7, user_id=1, offset=0, max_chars=4
     )
@@ -161,6 +163,7 @@ async def test_read_token_reads_files_but_cannot_upload_retry_or_delete(
     )
     for url in ["/api/v1/projects/2/files", "/api/v1/projects/2/files/7"]:
         assert (await api_client.get(url)).status_code == 200
+    assert (await api_client.get("/api/v1/projects/2/files/7")).json()["can_edit"] is False
 
     # Upload performs auth inside its short service scope; the transport forwards the refusal.
     files_service.upload.side_effect = ApiKeyScopeError("projects:write", [])
@@ -197,6 +200,22 @@ async def test_invalid_path_pagination_and_missing_multipart_never_reach_service
     files_service.list_files.assert_not_awaited()
     files_service.get_file.assert_not_awaited()
     files_service.upload.assert_not_awaited()
+
+
+async def test_detail_edit_capability_combines_api_key_scopes_and_current_domain_grant(
+    api_client: AsyncClient, files_service: AsyncMock, current_principal: Principal,
+) -> None:
+    for writable_scope, domain_write, expected in ((False, True, False), (True, False, False), (True, True, True)):
+        scopes = {"projects:read", "projects:write"} if writable_scope else {"projects:read"}
+        key = ApiKeyGrant(
+            key_id=UUID(int=1), label="Проверка", key_prefix="ttk_test", owner_user_id=1,
+            scopes=frozenset(scopes),
+        )
+        app.dependency_overrides[get_principal] = lambda key=key: replace(current_principal, api_key=key)
+        files_service.get_file.return_value.can_edit = domain_write
+        response = await api_client.get("/api/v1/projects/2/files/7")
+        assert response.status_code == 200
+        assert response.json()["can_edit"] is expected
 
 
 async def test_download_returns_attachment_with_private_headers_and_safe_errors(

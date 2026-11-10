@@ -9,6 +9,7 @@ from src.db.models.file_processing_jobs import FileProcessingJob
 from src.db.models.knowledge_project_file_texts import KnowledgeProjectFileText
 from src.db.models.knowledge_source_summaries import KnowledgeSourceSummary
 from src.db.models.project_files import ProjectFile
+from src.db.models.users import User
 from src.exceptions.project_files import ProjectFilesRepositoryError
 from src.repositories.file_processing_state import fts_state_columns
 
@@ -18,6 +19,10 @@ def _metadata_query() -> Select:
     return (
         select(
             *ProjectFile.__table__.c,
+            func.coalesce(
+                func.nullif(func.trim(func.concat_ws(" ", User.last_name, User.first_name, User.middle_name)), ""),
+                User.username,
+            ).label("uploaded_by_name"),
             cached.status.label("extraction_status"),
             cached.detail.label("extraction_detail"),
             cached.index_status,
@@ -26,6 +31,7 @@ def _metadata_query() -> Select:
             *fts_state_columns(FileProcessingJob.status, cached.status, FileProcessingJob.detail),
             KnowledgeSourceSummary.summary,
         )
+        .outerjoin(User, User.id == ProjectFile.uploaded_by_user_id)
         .outerjoin(cached, cached.project_file_id == ProjectFile.id)
         .outerjoin(FileProcessingJob, FileProcessingJob.project_file_id == ProjectFile.id)
         .outerjoin(KnowledgeSourceSummary, KnowledgeSourceSummary.project_file_id == ProjectFile.id)

@@ -1,25 +1,99 @@
 """Полный каталог действий через общие сценарии проектного чата."""
 
 import json
+from datetime import date
 from typing import Annotated, Any
 from uuid import UUID
 
 from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.shared.exceptions import MCPError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from src.agent.action_catalog import PROJECT_ACTIONS
 from src.agent.action_scopes import ACTION_SCOPES
-from src.agent.tools import AgentToolContext
+from src.agent.tools import AgentToolContext, describe_validation_error
 from src.exceptions.agent_tools import AgentToolsServiceError
-from src.mcp_server.context import resolve_project, tool_context
+from src.exceptions.base import ApplicationError
+from src.mcp_server.context import bearer_secret_of, resolve_project, tool_context
+from src.mcp_server.links import build_links, put_url
 from src.mcp_server.registry import tt_tool
-from src.utils.api_scopes import SCOPE_PROJECTS_READ
+from src.schemas.project_stages import StageCreateSchema
+from src.schemas.projects import ProjectCreateSchema, ProjectDescriptionSchema, ProjectStatus
+from src.utils.api_scopes import SCOPE_PROJECTS_READ, SCOPE_PROJECTS_WRITE
 
 ACTION_CLOSED_FOR_KEYS = (
     "Это действие недоступно по сервисному API-ключу: его выполняют люди из интерфейса."
 )
+
+
+@tt_tool(
+    name="tt_create_project",
+    scope=SCOPE_PROJECTS_WRITE,
+    title="Создать проект",
+    strict_arguments=True,
+    description=(
+        "Создаёт проект вне контекста другого проекта: паспорт, команду, стадии и "
+        "начальную свободную доску одной транзакцией. Владелец — текущий пользователь. "
+        "description_sections имеет приоритет перед description_md, как в REST. "
+        "Для безопасного повтора после потери ответа сохраните UUID request_id и все "
+        "аргументы: повтор возвращает исходный результат; другой payload с тем же UUID "
+        "даёт конфликт. Ключ проекта должен быть свободен, участники — существующими "
+        "активными пользователями. Права ключа и доступ проверяются заново при повторе. "
+        "После создания используйте project_key для tt_get_project и tt_create_task."
+    ),
+)
+async def create_project(
+    context: Context,
+    key: Annotated[str, ProjectCreateSchema.model_fields["key"]],
+    name: Annotated[str, ProjectCreateSchema.model_fields["name"]],
+    request_id: Annotated[
+        UUID, Field(description="Стабильный UUID создания; повторяйте его и исходные аргументы при сетевом сбое.")
+    ],
+    description_sections: Annotated[
+        ProjectDescriptionSchema | None,
+        Field(description="Блоки problem, goal, expected_result, additional. Имеют приоритет перед description_md."),
+    ] = None,
+    description_md: Annotated[str | None, ProjectCreateSchema.model_fields["description_md"]] = None,
+    member_usernames: Annotated[
+        list[str] | None,
+        Field(max_length=100, description="Точные логины участников; владелец включается автоматически."),
+    ] = None,
+    stages: Annotated[list[StageCreateSchema] | None, ProjectCreateSchema.model_fields["stages"]] = None,
+    status: Annotated[ProjectStatus, ProjectCreateSchema.model_fields["status"]] = ProjectStatus.PLANNING,
+    color: Annotated[str, ProjectCreateSchema.model_fields["color"]] = "#58a6ff",
+    icon: Annotated[str | None, ProjectCreateSchema.model_fields["icon"]] = None,
+    start_date: Annotated[date | None, ProjectCreateSchema.model_fields["start_date"]] = None,
+    due_date: Annotated[date | None, ProjectCreateSchema.model_fields["due_date"]] = None,
+    actor: Annotated[
+        str | None, Field(description="Только логин владельца ключа; владелец проекта определяется сервером.")
+    ] = None,
+) -> dict:
+    """Применяет общий с REST сценарий создания и возвращает durable-результат."""
+    try:
+        data = ProjectCreateSchema.model_validate({
+            "key": key, "name": name,
+            "description_sections": description_sections, "description_md": description_md,
+            "member_usernames": member_usernames or [], "stages": stages, "status": status,
+            "color": color, "icon": icon, "start_date": start_date, "due_date": due_date,
+        })
+    except ValidationError as error:
+        raise ToolError(describe_validation_error(error, ProjectCreateSchema)) from error
+    async with tool_context(context, require_write=True) as tools:
+        creation = tools.services.project_creation
+        user_id = tools.principal.user_id
+        links = build_links(tools.settings.app.app_public_url)
+    try:
+        result = await creation.create(
+            actor_user_id=user_id, bearer_secret=bearer_secret_of(context),
+            data=data, request_id=request_id,
+        )
+    except ApplicationError as error:
+        raise ToolError(error.detail) from error
+    return put_url(
+        {field: value for field, value in result.items() if field != "project_id"},
+        links.project(result["project_key"]),
+    )
 
 
 def action_allowed(principal, name: str) -> bool:

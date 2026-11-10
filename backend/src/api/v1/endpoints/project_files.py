@@ -25,6 +25,7 @@ from src.schemas.file_metadata import FileCaptionUpdateSchema
 from src.schemas.project_files import ProjectFileDetailSchema, ProjectFileSchema
 from src.services.file_metadata import FILE_PREVIEW_ERRORS
 from src.services.project_files import PROJECT_FILE_DOWNLOAD_ERRORS
+from src.utils.api_scopes import SCOPE_PROJECTS_WRITE
 from src.utils.api_tokens import extract_bearer_secret
 
 logger = logging.getLogger(__name__)
@@ -197,6 +198,7 @@ async def get_project_file(
             offset=offset,
             max_chars=max_chars,
         )
+        result.can_edit = result.can_edit and principal.allows(SCOPE_PROJECTS_WRITE)
         logger.info("✅ Файл %s прочитан.", file_id)
         return result
     except FILE_ERRORS as error:

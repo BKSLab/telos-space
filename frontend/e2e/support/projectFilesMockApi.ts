@@ -3,7 +3,7 @@ import type { FileSearchItem, ProjectFile } from "../../src/lib/types";
 import { installMockApi as installBaseApi, mockState, stamp } from "./mockApi";
 
 export function projectFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
-    return { id: 5, project_id: 1, uploaded_by_user_id: 1, original_name: "plan.pdf", content_type: "application/pdf", size: 1024, created_at: stamp, content_url: "/api/v1/projects/1/files/5/content", extraction_status: "ready", extraction_detail: null, index_status: "ready", index_detail: null, indexed_at: stamp, summary: "План запуска проекта", ...overrides };
+    return { id: 5, project_id: 1, uploaded_by_user_id: 1, uploaded_by_name: "Тестов Тест", original_name: "plan.pdf", content_type: "application/pdf", size: 1024, created_at: stamp, content_url: "/api/v1/projects/1/files/5/content", extraction_status: "ready", extraction_detail: null, index_status: "ready", index_detail: null, indexed_at: stamp, summary: "План запуска проекта", ...overrides };
 }
 
 export async function installProjectFilesApi(page: Page, initialFiles: ProjectFile[] = []) {
@@ -11,6 +11,12 @@ export async function installProjectFilesApi(page: Page, initialFiles: ProjectFi
     const state = {
         files: initialFiles,
         texts: new Map<number, string>([[5, "Первый фрагмент\n".padEnd(8000, "а") + "Второй фрагмент\nСогласовать запуск."]]),
+        originals: new Map<number, string>(),
+        canEdit: true,
+        captionError: false,
+        originalError: false,
+        previewError: false,
+        document: { id: 91, project_id: 1, slug: "decisions", title: "Решения проекта", content_md: "# Решения\n\nИсходный документ.", created_at: stamp, updated_at: stamp, search_title: null, search_excerpt: null, search_match_source: null },
         listError: false,
         detailError: false,
         retryError: false,
@@ -30,8 +36,14 @@ export async function installProjectFilesApi(page: Page, initialFiles: ProjectFi
         const headers = { "access-control-allow-origin": request.headers()["origin"] ?? "http://127.0.0.1:4179", "access-control-allow-credentials": "true" };
         const reply = (json: unknown, status = 200) => route.fulfill({ status, headers, ...(status === 204 ? {} : { json }) });
         if (url.pathname === "/api/v1/projects/1/documents") {
-            return reply([{ id: 91, project_id: 1, slug: "decisions", title: "Решения проекта", content_md: "# Решения", created_at: stamp, updated_at: stamp, search_title: null, search_excerpt: null, search_match_source: null }]);
+            if (method === "POST") { Object.assign(state.document, request.postDataJSON()); return reply(state.document, 201); }
+            return reply([state.document]);
         }
+        if (url.pathname === "/api/v1/documents/91") {
+            if (method === "PATCH") Object.assign(state.document, request.postDataJSON());
+            return reply(state.document);
+        }
+        if (url.pathname === "/api/v1/documents/91/links") return reply([]);
         if (url.pathname === "/api/v1/projects/1/files/search") {
             state.requests.push({ method, url, body: request.postData(), contentType: request.headers()["content-type"] });
             const q = url.searchParams.get("q")?.toLocaleLowerCase("ru-RU") ?? "";
@@ -68,26 +80,34 @@ export async function installProjectFilesApi(page: Page, initialFiles: ProjectFi
         const file = state.files.find((item) => item.id === id);
         if (!file) return reply({ detail: "Файл не найден" }, 404);
         if (match[2] === "retry") {
+            if (!state.canEdit) return reply({ detail: "Изменение недоступно" }, 403);
             if (state.retryError) return reply({ detail: "Обработка временно недоступна" }, 503);
             Object.assign(file, { extraction_status: "pending", extraction_detail: null, index_status: "pending", index_detail: null });
             return reply(file, 202);
         }
         if (match[2] === "content") {
+            if (state.originalError) return reply({ detail: "Оригинал временно недоступен" }, 503);
             const filename = encodeURIComponent(file.original_name).replace(/['()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
-            return route.fulfill({ status: 200, headers: { ...headers, "content-type": file.content_type, "content-disposition": `attachment; filename*=UTF-8''${filename}` }, body: "%PDF-1.4 mock original" });
+            return route.fulfill({ status: 200, headers: { ...headers, "content-type": file.content_type, "content-disposition": `attachment; filename*=UTF-8''${filename}` }, body: state.originals.get(file.id) ?? "%PDF-1.4 mock original" });
         }
+        if (match[2] === "preview" && state.previewError) return reply({ detail: "Изображение недоступно" }, 503);
         if (match[2] === "preview") return route.fulfill({ status: 200, headers: { ...headers, "content-type": "image/svg+xml" }, body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80"><rect width="100" height="80" fill="#5798c7"/><path d="M10 60 40 20 60 45 80 15" fill="none" stroke="white" stroke-width="4"/></svg>' });
-        if (method === "PATCH") { Object.assign(file, request.postDataJSON()); return reply(file); }
+        if (method === "PATCH") {
+            if (!state.canEdit) return reply({ detail: "Изменение недоступно" }, 403);
+            if (state.captionError) return reply({ detail: "Не удалось сохранить комментарий" }, 503);
+            Object.assign(file, request.postDataJSON()); return reply(file);
+        }
         if (method === "DELETE") {
+            if (!state.canEdit) return reply({ detail: "Изменение недоступно" }, 403);
             if (state.deleteError) return reply({ detail: "Не удалось удалить оригинал" }, 503);
             state.files = state.files.filter((item) => item.id !== id);
             return reply(null, 204);
         }
         if (state.detailError) return reply({ detail: "Ошибка чтения текста" }, 503);
-        const text = file.extraction_status === "ready" ? state.texts.get(id) ?? "" : "";
+        const chars = Array.from(file.extraction_status === "ready" ? state.texts.get(id) ?? "" : "");
         const offset = Number(url.searchParams.get("offset") ?? 0);
         const size = Number(url.searchParams.get("max_chars") ?? 8000);
-        return reply({ ...file, text: text.slice(offset, offset + size), text_total_chars: text.length, text_offset: offset, next_offset: offset + size < text.length ? offset + size : null });
+        return reply({ ...file, can_edit: state.canEdit, text: chars.slice(offset, offset + size).join(""), text_total_chars: chars.length, text_offset: offset, next_offset: offset + size < chars.length ? offset + size : null });
     });
     return state;
 }

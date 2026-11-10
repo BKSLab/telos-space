@@ -583,6 +583,7 @@ export interface ProjectFile {
     id: number;
     project_id: number;
     uploaded_by_user_id: number | null;
+    uploaded_by_name?: string | null;
     original_name: string;
     content_type: string;
     size: number;
@@ -627,6 +628,7 @@ export interface FileSearchPage {
 }
 
 export interface ProjectFileDetail extends ProjectFile {
+    can_edit?: boolean;
     text: string;
     text_total_chars: number;
     text_offset: number;

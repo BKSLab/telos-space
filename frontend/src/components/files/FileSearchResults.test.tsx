@@ -31,3 +31,13 @@ it("переходит к документу по серверному slug бе
     expect(screen.getByLabelText("Адрес").textContent).toBe("/projects/DEMO/docs/decisions");
     expect(fetch).not.toHaveBeenCalled();
 });
+
+it("результат поиска файла проекта открывает ту же карточку, включая изображение", async () => {
+    const openFile = vi.fn();
+    const user = userEvent.setup();
+    render(<MemoryRouter><FileSearchResults items={[{ ...item, source_type: "project_file", source_id: 7,
+        title: "Фото.png", content_type: "image/png", preview_url: "/api/v1/projects/1/files/7/preview" }]} onOpenProjectFile={openFile} /></MemoryRouter>);
+    await user.click(screen.getByRole("button", { name: "Открыть файл Фото.png" }));
+    expect(openFile).toHaveBeenCalledWith(7);
+    expect(screen.queryByRole("dialog")).toBeNull();
+});
