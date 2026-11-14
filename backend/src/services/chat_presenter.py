@@ -37,7 +37,7 @@ def entity_view(row) -> ChatEntityView:
     base = f"/projects/{key}"
     href = {
         "TASK": f"{base}/tasks?task={entity_id}",
-        "DOCUMENT": f"{base}/docs/{quote(extra or '', safe='')}",
+        "DOCUMENT": f"{base}/docs/{quote(row.get('document_ref') or '', safe='')}",
         "RISK": f"{base}/risks?risk={entity_id}",
         "MILESTONE": f"{base}/calendar?anchor={extra or ''}&milestone={entity_id}",
         "WBS_NODE": f"{base}/structure?wbs={entity_id}",
@@ -45,6 +45,7 @@ def entity_view(row) -> ChatEntityView:
     return ChatEntityView(
         entity_type=kind,
         entity_id=entity_id,
+        document_ref=row.get("document_ref"),
         title=row["title"],
         status=row["status"],
         subtitle=f"{row['project_key']}-{extra}"
@@ -105,7 +106,7 @@ class ChatPresenter:
         users = {
             row["id"]: public_user(row) for row in await db.participants.get_users(list(user_ids))
         }
-        ref_keys = list({(row.entity_type, row.entity_id) for row in refs})
+        ref_keys = list({(row.entity_type, row.document_ref if row.entity_type == "DOCUMENT" else row.entity_id) for row in refs})
         entity_rows = (
             await db.entity_lookup.find(
                 rows[0].project_id, refs=ref_keys, limit=max(len(ref_keys), 1)
@@ -113,7 +114,7 @@ class ChatPresenter:
             if ref_keys
             else []
         )
-        entities = {(row["entity_type"], row["entity_id"]): entity_view(row) for row in entity_rows}
+        entities = {(row["entity_type"], row.get("document_ref") if row["entity_type"] == "DOCUMENT" else row["entity_id"]): entity_view(row) for row in entity_rows}
         refs_by_message, mentions_by_message, files_by_message, reactions_by_message = (
             defaultdict(list),
             defaultdict(list),
@@ -122,10 +123,11 @@ class ChatPresenter:
         )
         for row in refs:
             refs_by_message[row.message_id].append(
-                entities.get((row.entity_type, row.entity_id))
+                entities.get((row.entity_type, row.document_ref if row.entity_type == "DOCUMENT" else row.entity_id))
                 or ChatEntityView(
                     entity_type=row.entity_type,
                     entity_id=row.entity_id,
+                    document_ref=row.document_ref,
                     title="Объект больше недоступен",
                     available=False,
                 )

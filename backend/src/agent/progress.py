@@ -103,10 +103,8 @@ PHRASES: dict[str, str] = {
     "telos_delete_document": "Готовлю удаление документа — спрошу подтверждение…",
     "telos_link_document": "Связываю документ с задачей…",
     "telos_unlink_document": "Отвязываю документ…",
-    "telos_list_attachments": "Смотрю вложения{task}…",
-    "telos_copy_attachment": "Копирую вложение…",
-    "telos_create_text_attachment": "Прикладываю файл{task}…",
-    "telos_delete_attachment": "Готовлю удаление вложения — спрошу подтверждение…",
+    "telos_copy_document": "Копирую документ…",
+    "telos_create_text_attachment": "Создаю документ{task}…",
     # Этапы, вехи, зависимости, календарь.
     "telos_list_stages": "Смотрю этапы доски…",
     "telos_create_stage": "Добавляю этап…",

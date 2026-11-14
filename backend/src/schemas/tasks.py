@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -288,10 +289,10 @@ class TaskRephraseRequestSchema(BaseModel):
         gt=0,
         description="Существующая задача, если запрос выполняется из её карточки.",
     )
-    document_ids: list[int] = Field(
+    document_refs: list[Annotated[str, Field(min_length=7, max_length=110)]] = Field(
         default_factory=list,
         max_length=50,
-        description="Документы этого проекта, выбранные как дополнительный контекст.",
+        description="Стабильные ссылки документов этого проекта для дополнительного контекста.",
     )
 
 
@@ -448,9 +449,7 @@ class TaskContextSchema(BaseModel):
     id: int = Field(..., description="Идентификатор проекта.", examples=[3])
     key: str = Field(..., description="Ключ проекта.", examples=["ДОСТ"])
     name: str = Field(..., description="Название.", examples=["Заявки на доступы"])
-    color: str | None = Field(
-        None, description="Цвет проекта (#RRGGBB).", examples=["#8a1538"]
-    )
+    color: str | None = Field(None, description="Цвет проекта (#RRGGBB).", examples=["#8a1538"])
     icon: str | None = Field(
         None,
         description="Иконка проекта: `lucide:<имя>` или эмодзи.",
@@ -465,9 +464,7 @@ class TaskContextSchema(BaseModel):
 class MyTaskSchema(TaskSchema):
     """Задача в списке «Мои задачи»: общий вид для задач всех видов."""
 
-    context: TaskContextSchema | None = Field(
-        None, description="Проект задачи; null у разовой."
-    )
+    context: TaskContextSchema | None = Field(None, description="Проект задачи; null у разовой.")
     state: TaskStatus = Field(
         ...,
         description=(

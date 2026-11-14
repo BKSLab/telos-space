@@ -84,7 +84,8 @@ class ApiTokensRepository:
         """
         try:
             result: Result = await self.db_session.execute(
-                select(ApiToken).where(
+                select(ApiToken)
+                .where(
                     ApiToken.token_hash == token_hash,
                     ApiToken.revoked_at.is_(None),
                     or_(
@@ -92,11 +93,29 @@ class ApiTokensRepository:
                         ApiToken.expires_at > datetime.now(UTC),
                     ),
                 )
+                .execution_options(populate_existing=True)
             )
             return result.scalar_one_or_none()
         except SQLAlchemyError as error:
             await self.db_session.rollback()
             logger.error("❌ Не удалось проверить токен доступа.", exc_info=True)
+            raise ApiTokensRepositoryError(str(error)) from error
+
+    async def get_active_by_id(self, token_id: int) -> ApiToken | None:
+        """Server-only повторная проверка identity без секрета и audit-commit."""
+        try:
+            result = await self.db_session.execute(
+                select(ApiToken)
+                .where(
+                    ApiToken.id == token_id,
+                    ApiToken.revoked_at.is_(None),
+                    or_(ApiToken.expires_at.is_(None), ApiToken.expires_at > datetime.now(UTC)),
+                )
+                .execution_options(populate_existing=True)
+            )
+            return result.scalar_one_or_none()
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
             raise ApiTokensRepositoryError(str(error)) from error
 
     async def get_by_user(self, user_id: int) -> list[ApiToken]:

@@ -1,8 +1,8 @@
 import { expect, test, type Locator, type Page, type WebSocketRoute } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import type { ChatAgentState, ChatAttachment, ChatEntity, ChatEvent, ChatMessage, ChatMessageCreate } from "../src/lib/projectChat";
-import type { DocumentDetail, KnowledgeSource, ProjectFileDetail, Task } from "../src/lib/types";
+import type { DocumentDetail, KnowledgeSource, Task } from "../src/lib/types";
 
 test.setTimeout(60_000);
 
@@ -80,7 +80,7 @@ function chatServer() {
     const sockets = new Map<WebSocketRoute, number>();
     const reads = new Map<number, number>();
     const files = new Map<string, ChatAttachment>();
-    const entity: ChatEntity = { entity_type: "DOCUMENT", entity_id: 1, title: "План тестирования", available: true, status: null, subtitle: null, href: "/projects/DEMO/docs/testing" };
+    const entity: ChatEntity = { entity_type: "DOCUMENT", entity_id: null, document_ref: "d1_ZG9jdW1lbnQ6MQ", title: "План тестирования", available: true, status: null, subtitle: null, href: "/projects/DEMO/docs/d1_ZG9jdW1lbnQ6MQ" };
     const tasks = new Map<number, Task>([42, 43].map((id): [number, Task] => [id, {
         id, revision: 1, project_id: 1, stage_id: 1, number: id, key: `DEMO-${id}`,
         title: id === 42 ? "Проверить форму заказа" : "Согласовать мобильную версию",
@@ -90,13 +90,29 @@ function chatServer() {
         completed_at: null, position: id, created_at: stamp, updated_at: stamp, comments_count: 0,
         last_comment: null, search_match_source: null, search_title: null, search_excerpt: null, wbs_node_id: null,
     }]));
-    const document: DocumentDetail = { id: 1, project_id: 1, slug: "testing", title: entity.title, content_md: "Критерии готовности интерфейса.", created_at: stamp, updated_at: stamp, search_match_source: null, search_title: null, search_excerpt: null };
+    const makeDocument = (ref: string, title: string, source_kind: "text" | "upload" = "text"): DocumentDetail => ({
+        ref, title, source_kind, caption: null, author: { id: 1, name: "Анна Иванова" },
+        ownership: { kind: "project", project_id: 1, owner_task_id: null }, tasks: [], created_at: stamp, updated_at: stamp,
+        revision: 1, format: source_kind === "text" ? "md" : "txt", original: null,
+        text: { available: true, total_chars: 0, rendition: source_kind === "text" ? "markdown" : "extracted_text", content_hash: "", url: `/api/v1/documents/${ref}/text` },
+        states: { extraction: { status: "ready", detail: null }, fts: { status: "ready", detail: null }, semantic: { status: "ready", detail: null } },
+        capabilities: { can_read: true, can_edit: false, can_delete: false, can_retry: false, can_link: false, can_detach: false },
+    });
+    const document = { ...makeDocument(entity.document_ref!, entity.title), content_md: "Критерии готовности интерфейса." };
     const projectFileText = "Согласованный бюджет проекта — 742000 рублей.";
-    const projectFile: ProjectFileDetail = { id: 9, project_id: 1, uploaded_by_user_id: 1, original_name: "Бюджет.txt", content_type: "text/plain", size: new TextEncoder().encode(projectFileText).length, created_at: stamp, content_url: "/api/v1/projects/1/files/9/content", extraction_status: "ready", extraction_detail: null, index_status: "ready", index_detail: null, indexed_at: stamp, summary: "Согласованный бюджет", text: projectFileText, text_total_chars: projectFileText.length, text_offset: 0, next_offset: null };
+    const projectFile = { ...makeDocument("d1_cHJvamVjdF9maWxlOjk", "Бюджет.txt", "upload"), rawText: projectFileText };
+    const attachment = { ...makeDocument("d1_YXR0YWNobWVudDox", "Требования.md", "upload"), rawText: "😀 Начало.\n\n" + "Общий контекст. ".repeat(700) + "Согласованное условие: оплата после приёмки." };
+    attachment.ownership = { kind: "task", project_id: 1, owner_task_id: 42 };
+    const textHash = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
     const taskEntity = (id: number): ChatEntity => ({ entity_type: "TASK", entity_id: id, title: tasks.get(id)!.title, available: true, status: "В работе", subtitle: `DEMO-${id}`, href: null });
-    const taskSource = (id: number): KnowledgeSource => ({ source_id: `task:${id}`, entity_type: "task", entity_id: id, title: `DEMO-${id} · ${tasks.get(id)!.title}`, excerpt: null, score: null, task_id: id, document_slug: null });
-    const documentSource: KnowledgeSource = { source_id: "document:1", entity_type: "document", entity_id: 1, title: document.title, excerpt: null, score: null, task_id: null, document_slug: document.slug };
-    const fileSource: KnowledgeSource = { source_id: "project_file:9", entity_type: "project_file", entity_id: 9, title: projectFile.original_name, excerpt: null, score: null, task_id: null, document_slug: null };
+    const taskSource = (id: number): KnowledgeSource => ({ source_id: `task:${id}`, entity_type: "task", entity_id: id, title: `DEMO-${id} · ${tasks.get(id)!.title}`, excerpt: null, score: null, task_id: id });
+    const documentSource: KnowledgeSource = { source_id: "document:1", entity_type: "document", entity_id: 1, title: document.title, excerpt: null, score: null, task_id: null, document_ref: document.ref };
+    const fileSource: KnowledgeSource = { source_id: "project_file:9", entity_type: "project_file", entity_id: 9, title: projectFile.title, excerpt: null, score: null, task_id: null, document_ref: projectFile.ref,
+        reference: { document_ref: projectFile.ref, rendition: "extracted_text", content_hash: textHash(projectFile.rawText), start: 0, end: Array.from(projectFile.rawText).length, quote: projectFile.rawText, offset_unit: "unicode_codepoints" } };
+    const attachmentQuote = "Согласованное условие: оплата после приёмки.";
+    const attachmentStart = Array.from(attachment.rawText).length - Array.from(attachmentQuote).length;
+    const attachmentSource: KnowledgeSource = { source_id: "attachment:1", entity_type: "attachment", entity_id: 1, title: attachment.title, excerpt: null, score: null, task_id: 42, document_ref: attachment.ref,
+        reference: { document_ref: attachment.ref, rendition: "extracted_text", content_hash: textHash(attachment.rawText), start: attachmentStart, end: attachmentStart + Array.from(attachmentQuote).length, quote: attachmentQuote, offset_unit: "unicode_codepoints" } };
     let seq = 0;
     let messageId = 0;
     const control = { dropNextAck: false, connections: 0, messageGets: 0, blocked: false, sourceStatus: new Map<string, number>(), commands: [] as { type: string; data: Record<string, unknown> }[] };
@@ -146,10 +162,7 @@ function chatServer() {
             }
             if (/^\/api\/v1\/tasks\/\d+\/attention$/.test(path)) return reply({ revision: 1, deadline_revision: 1, overdue: false });
             if (path === "/api/v1/projects/1/wbs") return reply({ nodes: [], tasks: [], task_edges: [], revision: 0 });
-            if (path === "/api/v1/projects/1/files/9") {
-                const status = control.sourceStatus.get("project_file:9") ?? 200;
-                return status === 200 ? reply(projectFile) : reply({ detail: "Объект недоступен" }, status);
-            }
+            if (path === "/api/v1/documents") return reply({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
             if (path.endsWith("/chat")) return control.blocked ? reply({ detail: "Чат недоступен" }, 404) : reply({ id: 1, project_id: 1, event_cursor: seq, last_read_seq: reads.get(userId) ?? 0, unread_count: rows.filter((row) => row.author?.id !== userId && row.seq > (reads.get(userId) ?? 0) && !row.deleted_at).length, members });
             if (path.endsWith("/chat/events")) {
                 const after = Number(url.searchParams.get("after") ?? 0);
@@ -168,17 +181,28 @@ function chatServer() {
             if (path.endsWith("/chat/search")) return reply({ messages: rows.filter((row) => !row.deleted_at && row.content.toLowerCase().includes((url.searchParams.get("q") ?? "").toLowerCase())).slice(-30), has_more: false, event_cursor: seq });
             if (path.endsWith("/chat/entities")) return reply([entity]);
             if (path.endsWith("/chat/entities/resolve")) {
-                const refs = route.request().postDataJSON() as { entity_type: string; entity_id: number }[];
-                return reply(refs.flatMap(ref => ref.entity_type === "TASK" && tasks.has(ref.entity_id) ? [taskEntity(ref.entity_id)] : ref.entity_type === "DOCUMENT" && ref.entity_id === entity.entity_id ? [entity] : []));
+                const refs = route.request().postDataJSON() as { entity_type: string; entity_id: number; document_ref?: string }[];
+                return reply(refs.flatMap(ref => ref.entity_type === "TASK" && tasks.has(ref.entity_id) ? [taskEntity(ref.entity_id)] : ref.entity_type === "DOCUMENT" && ref.document_ref === entity.document_ref ? [entity] : []));
             }
             if (path.endsWith("/chat/attachments") && method === "POST") {
                 const file: ChatAttachment = { id: randomUUID(), original_name: "acceptance.txt", size_bytes: 12, content_type: "text/plain", message_id: null, created_at: stamp };
                 files.set(file.id, file); return reply(file, 201);
             }
             if (path.includes("/chat/attachments/") && method === "DELETE") return route.fulfill({ status: 204, headers });
-            if (path.includes("/documents/") || path.includes("/docs/")) {
-                const status = control.sourceStatus.get("document:testing") ?? 200;
-                return status === 200 ? reply(document) : reply({ detail: "Объект недоступен" }, status);
+            const documentPath = path.match(/^\/api\/v1\/documents\/([^/]+)(\/text)?$/);
+            if (documentPath) {
+                const ref = decodeURIComponent(documentPath[1]);
+                const item = ref === document.ref ? document : ref === projectFile.ref ? projectFile : ref === attachment.ref ? attachment : null;
+                const sourceKey = ref === document.ref ? "document:testing" : ref === projectFile.ref ? "project_file:9" : "attachment:1";
+                const status = control.sourceStatus.get(sourceKey) ?? (item ? 200 : 404);
+                if (status !== 200 || !item) return reply({ detail: "Объект недоступен" }, status);
+                const raw = "content_md" in item ? item.content_md : item.rawText;
+                const points = Array.from(raw); const content_hash = textHash(raw);
+                if (documentPath[2]) {
+                    const offset = Number(url.searchParams.get("offset") ?? 0); const end = Math.min(points.length, offset + Number(url.searchParams.get("max_chars") ?? 8000));
+                    return reply({ ref, text: points.slice(offset, end).join(""), rendition: item.text.rendition, content_hash, offset, next_offset: end < points.length ? end : null, total_chars: points.length, offset_unit: "unicode_codepoints" });
+                }
+                return reply({ ...item, content_md: undefined, rawText: undefined, text: { ...item.text, total_chars: points.length, content_hash } });
             }
             return reply([]);
         });
@@ -221,7 +245,7 @@ function chatServer() {
             });
         });
     };
-    return { attach, add, addAris, emit, rows, entity, sockets, control, tasks, taskEntity, taskSource, documentSource, fileSource, document, projectFile };
+    return { attach, add, addAris, emit, rows, entity, sockets, control, tasks, taskEntity, taskSource, documentSource, fileSource, attachmentSource, document, projectFile, attachment };
 }
 
 const PENDING_CONFIRM = "0f1e2d3c-0000-4000-8000-000000000001";
@@ -463,7 +487,7 @@ test("источники Ариса открываются рядом, авто-
     for (const [label, body] of [
         [`Задача: ${server.taskSource(42).title}`, server.tasks.get(42)!.description_md!],
         [`Документ: ${server.documentSource.title}`, server.document.content_md],
-        [`Файл проекта: ${server.fileSource.title}`, server.projectFile.text],
+        [`Документ: ${server.fileSource.title}`, server.projectFile.rawText],
     ]) {
         const sourceCard = history.getByRole("button", { name: label, exact: true });
         const restingPaint = await sourceCard.evaluate(element => getComputedStyle(element).backgroundImage);
@@ -482,7 +506,7 @@ test("источники Ариса открываются рядом, авто-
         await expect(panel.getByText(body, { exact: true })).toBeVisible();
         if (label === `Документ: ${server.documentSource.title}`) {
             server.document.content_md = "Обновлённые критерии готовности интерфейса согласованы.";
-            server.emit("entity.updated", { entity_type: "DOCUMENT", entity_id: 1 });
+            server.emit("entity.updated", { entity_type: "DOCUMENT", document_ref: server.document.ref });
             await expect(panel.getByText(server.document.content_md, { exact: true })).toBeVisible();
             server.document.content_md = "Повторно выбранный документ содержит свежие критерии.";
             await history.getByRole("button", { name: label, exact: true }).click();
@@ -498,7 +522,7 @@ test("источники Ариса открываются рядом, авто-
     }
     const pending = server.addAris("", "processing", [server.taskSource(43)]);
     await expect(history.getByText("Арис думает…", { exact: true })).toBeVisible();
-    await expect(panel.getByText(server.projectFile.text, { exact: true })).toBeVisible();
+    await expect(panel.getByText(server.projectFile.rawText, { exact: true })).toBeVisible();
     await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
     Object.assign(pending, { revision: 2, content: "Мобильная задача готова к обсуждению", agent: { ...pending.agent!, status: "completed" } });
     server.emit("message.updated", { message_id: pending.id, message: pending });
@@ -510,6 +534,30 @@ test("источники Ариса открываются рядом, авто-
     await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
     await expect(input).toHaveValue("Продолжаю обсуждать источники");
 });
+
+for (const width of [1440, 390]) {
+    test(`основной документ задачи открывает проверенный фрагмент из нескольких источников, ${width}px`, async ({ page }, info) => {
+        watchBrowserErrors(page);
+        await page.setViewportSize({ width, height: 900 });
+        const server = chatServer();
+        server.addAris("Условия приёмки указаны в документе задачи.", "completed", [server.fileSource, { ...server.attachmentSource, is_primary: true }], false);
+        await server.attach(page); await openChat(page);
+        if (width < 1280) await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
+        const panel = width < 1280 ? page.getByRole("dialog", { name: "Контекст чата", exact: true }) : page.getByRole("complementary", { name: "Контекст чата", exact: true });
+        await expect(panel.getByRole("heading", { name: server.attachment.title, exact: true })).toBeVisible();
+        await expect(panel.locator("mark")).toHaveText(server.attachmentSource.reference!.quote);
+        await expect(panel.locator("mark")).toBeInViewport();
+        await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
+        await expect(page).toHaveURL(/\/projects\/DEMO\/chat$/);
+        await page.screenshot({ path: info.outputPath(`document-fragment-${width}.png`), animations: "disabled" });
+        server.attachment.rawText = "Новая версия документа. Условия изменены.";
+        server.emit("entity.updated", { entity_type: "DOCUMENT", document_ref: server.attachment.ref });
+        await expect(panel.getByText(/Документ изменился или фрагмент недоступен/)).toBeVisible();
+        await expect(panel.locator("mark")).toHaveCount(0);
+        await expect(panel.getByLabel("Извлечённый текст", { exact: true })).toHaveText(server.attachment.rawText);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+}
 
 test("на телефоне карточка открывает задачу, контекст сохраняется без лишнего Drawer", async ({ page }, info) => {
     watchBrowserErrors(page);
@@ -577,14 +625,14 @@ test("недоступный источник 403 или 404 очищает пр
     await input.fill("Обсуждение продолжается без источника");
     for (const [key, status, label] of [
         ["document:testing", 403, `Документ: ${server.documentSource.title}`],
-        ["project_file:9", 404, `Файл проекта: ${server.fileSource.title}`],
+        ["project_file:9", 404, `Документ: ${server.fileSource.title}`],
     ] as const) {
         server.control.sourceStatus.set(key, status);
         await history.getByRole("button", { name: label, exact: true }).click();
         await expect(panel.getByText(/недоступен|не найден|нет доступа/i).first()).toBeVisible();
         await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toHaveCount(0);
         await expect(panel.getByText(server.document.content_md, { exact: true })).toHaveCount(0);
-        await expect(panel.getByText(server.projectFile.text, { exact: true })).toHaveCount(0);
+        await expect(panel.getByText(server.projectFile.rawText, { exact: true })).toHaveCount(0);
         await expect(input).toHaveValue("Обсуждение продолжается без источника");
         await expect(input).toBeEditable();
         await expect(page).toHaveURL(/\/projects\/DEMO\/chat$/);
@@ -676,7 +724,7 @@ test("окно команды и вкладка разделяют сокет, �
     await page.getByRole("button", { name: "Сохранить", exact: true }).click();
     await expect(page.getByText("Проверено из двух представлений", { exact: true })).toBeVisible();
     await page.getByRole("navigation", { name: "Основная навигация" }).getByRole("link", { name: "Портфель", exact: true }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL(/\/(?:\?view=projects)?$/);
     await expect(page.getByRole("dialog", { name: "Чаты", exact: true })).toBeVisible();
     await expect(page.getByText("Проверено из двух представлений", { exact: true })).toBeVisible();
     expect(server.control.connections).toBe(connections);
@@ -744,7 +792,7 @@ test("упоминания, ссылки и файлы используют об
     await expect(row.getByRole("link", { name: /acceptance.txt/ })).toBeVisible();
     expect(server.rows[0].mentions.map((user) => user.id)).toEqual([2]);
     server.entity.title = "План тестирования — согласован";
-    server.emit("entity.updated", { entity_type: "DOCUMENT", entity_id: 1 });
+    server.emit("entity.updated", { entity_type: "DOCUMENT", document_ref: server.document.ref });
     await expect(row.getByRole("button", { name: "Документ: План тестирования — согласован" })).toBeVisible();
 });
 

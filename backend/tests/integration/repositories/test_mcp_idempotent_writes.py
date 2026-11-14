@@ -398,11 +398,12 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
             }))["result"]["tools"]
             names = {tool["name"] for tool in listing}
-            assert len(names) == 46 and all(name.startswith("telos_") for name in names)
+            assert len(names) == 45 and all(name.startswith("telos_") for name in names)
             removed_names = {"tt_" + name.removeprefix("telos_") for name in names}
             removed_names -= {"tt_ask_aris", "tt_get_aris_result"}
             removed_names |= {"tt_projects_ask", "tt_projects_result"}
             removed_names |= {
+                "telos_list_attachments",
                 "list_project_tools", "execute_project_tool", "list_project_risks", "get_project_risk",
                 "create_project_risk", "update_project_risk", "list_projects", "get_project", "list_tasks",
                 "get_task", "list_comments", "search_tasks", "search_project_knowledge", "read_project_knowledge",

@@ -260,7 +260,7 @@ export function ProjectSettingsPage() {
                         <div className="flex min-w-0 flex-col gap-0.5">
                             <p className="text-[13px] font-medium text-secondary">Удалить проект</p>
                             <p className="text-[12px] text-muted">
-                                Вместе с проектом удаляются его задачи, структура, документы и файлы.
+                                Вместе с проектом удаляются его задачи, структура, документы.
                             </p>
                         </div>
                         <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
@@ -272,7 +272,7 @@ export function ProjectSettingsPage() {
 
             <Modal
                 title={`Удалить проект «${project.name}»?`}
-                description="Действие необратимо. Задачи, структура ИСР, документы и файлы будут удалены."
+                description="Действие необратимо. Задачи, структура ИСР, документы будут удалены."
                 isOpen={isDeleteOpen}
                 onOpenChange={(open) => {
                     if (!open) {

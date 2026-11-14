@@ -138,7 +138,7 @@ class ProjectChatService:
             await self.require(db, project_id, user_id)
             rows = await db.entity_lookup.find(
                 project_id,
-                refs=[(ref.entity_type, ref.entity_id) for ref in refs],
+                refs=[ref.identity for ref in refs],
                 limit=max(len(refs), 1),
             )
             return [entity_view(row) for row in rows]
@@ -355,7 +355,7 @@ class ProjectChatService:
         members = {row["id"] for row in await db.participants.get_members(chat.project_id)}
         if not set(data.mentions).issubset(members):
             raise ChatValidationError("Упоминать можно только участников проекта.")
-        refs = [(ref.entity_type, ref.entity_id) for ref in data.entities]
+        refs = [ref.identity for ref in data.entities]
         if refs:
             found = await db.entity_lookup.find(chat.project_id, refs=refs, limit=len(refs))
             if len(found) != len(refs):
@@ -379,6 +379,7 @@ class ProjectChatService:
                         message_id=message_id,
                         entity_type=ref.entity_type,
                         entity_id=ref.entity_id,
+                        document_ref=ref.document_ref,
                         position=index,
                     )
                     for index, ref in enumerate(data.entities)

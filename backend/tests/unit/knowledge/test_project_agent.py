@@ -616,7 +616,6 @@ async def test_hybrid_context_merges_lexical_and_vector_candidates() -> None:
                 "entity_type": "document",
                 "entity_id": "5",
                 "title": "Реестр рисков",
-                "document_slug": "risk-register",
                 "text": "Семантический фрагмент реестра.",
             },
         ),

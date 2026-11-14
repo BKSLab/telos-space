@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { installMockApi, mockState } from "./support/taskMockApi";
+import { documentFixture, documentTextFixture } from "../src/components/documents/documentFixtures.test-utils";
 
 declare global {
     interface Window { textareaResizeErrors?: string[] }
@@ -128,18 +129,26 @@ test("очень длинное описание в мобильном диал�
 test("редактор документа с большим rows ограничивается высотой небольшого экрана", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 600 });
     const state = await installForms(page);
-    const document = { id: 5, project_id: 1, slug: "notes", title: "Заметки", content_md: `${lines}\n`.repeat(10), created_at: "2026-11-06T10:00:00Z", updated_at: "2026-11-06T10:00:00Z" };
-    await page.route("**/api/v1/projects/1/documents", route => route.fulfill({ json: [document], headers }));
-    await page.route("**/api/v1/documents/5", route => route.fulfill({ json: document, headers }));
-    await page.goto("/projects/DEMO/docs/notes");
-    await page.getByRole("button", { name: "Редактировать документ", exact: true }).click();
+    const content = `${lines}\n`.repeat(10);
+    const document = documentFixture({ ref: "opaque-notes", title: "Заметки" });
+    document.text.total_chars = Array.from(content).length;
+    await page.route("**/api/v1/documents/opaque-notes", route => route.fulfill({ json: document, headers }));
+    await page.route("**/api/v1/documents/opaque-notes/text?**", route => {
+        const url = new URL(route.request().url());
+        const offset = Number(url.searchParams.get("offset") ?? 0);
+        const limit = Number(url.searchParams.get("max_chars") ?? 8000);
+        const points = Array.from(content);
+        return route.fulfill({ json: documentTextFixture({ ref: document.ref, text: points.slice(offset, offset + limit).join(""), offset, total_chars: points.length, next_offset: offset + limit < points.length ? offset + limit : null }), headers });
+    });
+    await page.goto(`/projects/DEMO/docs/${document.ref}`);
+    await page.getByRole("button", { name: "Редактировать", exact: true }).click();
     const field = page.getByLabel("Содержимое документа в Markdown", { exact: true });
-    await expect(field).toHaveValue(document.content_md);
+    await expect(field).toHaveValue(content);
     await expect.poll(async () => (await metrics(field)).height).toBeLessThanOrEqual(361);
     const size = await metrics(field);
     expect(size.scroll).toBeGreaterThan(size.client);
     expect(size.overflow).toBe("auto");
-    await page.getByRole("button", { name: "Сохранить", exact: true }).scrollIntoViewIfNeeded();
-    await expect(page.getByRole("button", { name: "Сохранить", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Сохранить документ", exact: true }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole("button", { name: "Сохранить документ", exact: true })).toBeVisible();
     expect(state.errors).toEqual([]);
 });

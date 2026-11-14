@@ -15,11 +15,10 @@ from httpx import AsyncClient
 
 from main import app
 from src.db.models.api_tokens import ApiTokenScope
+from src.dependencies.document_catalog import get_document_catalog_service
 from src.dependencies.file_comments import (
     get_file_comments_service,
-    get_task_file_mutations_service,
 )
-from src.dependencies.scopes import get_project_files_service
 from src.dependencies.services import (
     get_project_agent_service,
     get_users_service,
@@ -28,10 +27,9 @@ from src.dependencies.services import (
 from src.schemas.knowledge import KnowledgeAnswerSchema
 from src.schemas.wbs_suggestion import WbsSuggestionSchema
 from src.services.auth import AuthService
+from src.services.document_catalog import DocumentCatalogService
 from src.services.file_comments import FileCommentsService
-from src.services.file_metadata import TaskFileMutationsService
 from src.services.project_agent import ProjectAgentService
-from src.services.project_files import ProjectFilesService
 from src.services.users import UsersService
 from src.services.wbs_suggestion import WbsSuggestionService
 from src.storage.task_attachments import TaskAttachmentStorage
@@ -68,11 +66,6 @@ MUTATION_SAMPLES = [
     ("PATCH", "/api/v1/projects/1/wbs/nodes/1", {"json": {"title": "Другой"}}),
     ("DELETE", "/api/v1/projects/1/wbs/nodes/1", {}),
     ("POST", "/api/v1/projects/1/wbs/suggestion/apply", {"json": {"nodes": [], "placements": []}}),
-    ("POST", "/api/v1/projects/1/documents", {"json": {"title": "Документ", "content_md": "x"}}),
-    ("PATCH", "/api/v1/documents/1", {"json": {"title": "Другой"}}),
-    ("DELETE", "/api/v1/documents/1", {}),
-    ("POST", "/api/v1/document-links", {"json": {"document_id": 1, "task_id": 1}}),
-    ("DELETE", "/api/v1/document-links/1", {}),
     (
         "POST",
         "/api/v1/projects/1/milestones",
@@ -91,9 +84,6 @@ MUTATION_SAMPLES = [
     ("DELETE", "/api/v1/projects/1/boards/3/stickers/1?revision=1", {}),
     ("POST", "/api/v1/projects/1/calendar/scenarios/apply", {"json": {"changes": []}}),
     ("POST", "/api/v1/projects/1/knowledge/reindex", {}),
-    ("POST", "/api/v1/tasks/1/attachments", {"files": {"file": ("a.txt", b"x", "text/plain")}}),
-    ("PATCH", "/api/v1/tasks/1/attachments/1", {"json": {"caption": "Новая подпись"}}),
-    ("POST", "/api/v1/tasks/1/attachments/1/retry", {}),
     (
         "POST",
         "/api/v1/tasks/1/comments/with-files",
@@ -102,21 +92,39 @@ MUTATION_SAMPLES = [
                 "request_id": "00000000-0000-4000-8000-000000000001",
                 "body_md": "Текст",
                 "captions": '["Подпись"]',
-                "attachment_ids": "[1]",
+                "document_refs": '["d1_ZG9jdW1lbnQ6MQ"]',
             },
             "files": {"files": ("a.txt", b"x", "text/plain")},
         },
     ),
-    ("POST", "/api/v1/projects/1/files", {"files": {"file": ("a.txt", b"x", "text/plain")}}),
-    ("PATCH", "/api/v1/projects/1/files/1", {"json": {"caption": "Новая подпись"}}),
-    ("POST", "/api/v1/projects/1/files/1/retry", {}),
-    ("DELETE", "/api/v1/projects/1/files/1", {}),
-    ("DELETE", "/api/v1/tasks/1/attachments/1", {}),
     (
         "POST",
-        "/api/v1/tasks/1/documents/import",
-        {"files": {"file": ("a.txt", b"x", "text/plain")}},
+        "/api/v1/documents",
+        {
+            "json": {
+                "request_id": "00000000-0000-4000-8000-000000000001",
+                "project_id": 1,
+                "title": "Документ",
+            }
+        },
     ),
+    (
+        "PATCH",
+        "/api/v1/documents/d1_ZG9jdW1lbnQ6MQ",
+        {"json": {"expected_revision": 1, "title": "Другая версия"}},
+    ),
+    ("DELETE", "/api/v1/documents/d1_ZG9jdW1lbnQ6MQ", {}),
+    (
+        "POST",
+        "/api/v1/documents/upload",
+        {
+            "data": {"request_id": "00000000-0000-4000-8000-000000000001", "project_id": "1"},
+            "files": {"file": ("a.txt", b"x", "text/plain")},
+        },
+    ),
+    ("POST", "/api/v1/documents/d1_ZG9jdW1lbnQ6MQ/retry", {}),
+    ("POST", "/api/v1/documents/d1_ZG9jdW1lbnQ6MQ/tasks/1", {}),
+    ("DELETE", "/api/v1/documents/d1_ZG9jdW1lbnQ6MQ/tasks/1", {}),
 ]
 
 # Логически read-only POST: токену на чтение они доступны.
@@ -150,13 +158,13 @@ def bearer_token(anonymous_app) -> Callable[[ApiTokenScope], AsyncMock]:
             yield SimpleNamespace(auth=auth)
 
         storage = AsyncMock(spec=TaskAttachmentStorage)
-        task_files = TaskFileMutationsService(scope=file_scope, storage=storage)
         comments = FileCommentsService(scope=file_scope, storage=storage, knowledge_enabled=False)
-        project_files = ProjectFilesService(
+        catalog = DocumentCatalogService(
             scope=file_scope,
             storage=storage,
-            max_file_size=10 * 1024 * 1024,
+            max_file_size=10000,
             knowledge_enabled=False,
+            embedding_signature="synthetic",
         )
 
         users_service = AsyncMock(spec=UsersService)
@@ -174,9 +182,8 @@ def bearer_token(anonymous_app) -> Callable[[ApiTokenScope], AsyncMock]:
                 get_users_service: lambda: users_service,
                 get_wbs_suggestion_service: lambda: suggestion_service,
                 get_project_agent_service: lambda: agent_service,
-                get_task_file_mutations_service: lambda: task_files,
                 get_file_comments_service: lambda: comments,
-                get_project_files_service: lambda: project_files,
+                get_document_catalog_service: lambda: catalog,
             }
         )
         return storage

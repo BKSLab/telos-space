@@ -25,6 +25,8 @@ BEGIN
             SELECT (item->>'id')::integer WHERE TG_ARGV[0] = 'self'
             UNION SELECT (item->>'project_id')::integer WHERE TG_ARGV[0] = 'project'
             UNION SELECT project_id FROM tasks WHERE TG_ARGV[0] = 'task' AND id = (item->>'task_id')::integer
+            UNION SELECT (item->>'project_id')::integer WHERE TG_ARGV[0] = 'document'
+            UNION SELECT project_id FROM tasks WHERE TG_ARGV[0] = 'document' AND id = (item->>'owner_task_id')::integer
             UNION SELECT project_id FROM project_members WHERE TG_ARGV[0] = 'user' AND user_id = (item->>'id')::integer
         LOOP
             IF pid IS NOT NULL THEN

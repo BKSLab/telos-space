@@ -63,7 +63,8 @@ async def test_upload_attachment_saves_safe_name_and_metadata() -> None:
     )
 
     assert result.original_name == "report.pdf"
-    assert result.content_url.endswith("/tasks/7/attachments/3/content")
+    assert result.document_ref == "d1_YXR0YWNobWVudDoz"
+    assert result.content_url == f"/api/v1/documents/{result.document_ref}/content"
     assert result.previewable is False
     storage.save.assert_awaited_once_with(task_id=7, extension=".pdf", content=b"pdf")
     attachments_repository.save.assert_awaited_once()

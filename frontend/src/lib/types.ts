@@ -478,27 +478,7 @@ export interface TaskComment {
     author_name: string | null;
     body_md: string;
     created_at: string;
-    attachments?: TaskAttachment[];
-}
-
-export interface TaskAttachment {
-    id: number;
-    task_id: number;
-    original_name: string;
-    content_type: string;
-    size: number;
-    created_at: string;
-    content_url: string;
-    previewable: boolean;
-    preview_url?: string | null;
-    caption?: string | null;
-    uploaded_by_user_id?: number | null;
-    extraction_status?: FileExtractionStatus;
-    extraction_detail?: string | null;
-    fts_status?: "pending" | "ready" | "failed";
-    fts_detail?: string | null;
-    index_status?: FileIndexStatus;
-    index_detail?: string | null;
+    document_refs?: string[];
 }
 
 export interface TaskRephraseResult {
@@ -561,104 +541,57 @@ export interface WbsSuggestionApplyResult {
 }
 
 export interface DocumentListItem {
-    id: number;
-    project_id: number;
-    slug: string;
-    title: string;
-    updated_at: string;
-    search_match_source: SearchMatchSource;
-    search_title: string | null;
-    search_excerpt: string | null;
-}
-
-export interface DocumentDetail extends DocumentListItem {
-    content_md: string;
-    created_at: string;
-}
-
-export type FileExtractionStatus = "pending" | "processing" | "ready" | "empty" | "unsupported" | "failed" | "disabled";
-export type FileIndexStatus = "pending" | "processing" | "ready" | "failed" | "disabled";
-
-export interface ProjectFile {
-    id: number;
-    project_id: number;
-    uploaded_by_user_id: number | null;
-    uploaded_by_name?: string | null;
-    original_name: string;
-    content_type: string;
-    size: number;
-    created_at: string;
-    content_url: string;
-    extraction_status: FileExtractionStatus;
-    extraction_detail: string | null;
-    index_status: FileIndexStatus;
-    index_detail: string | null;
-    indexed_at: string | null;
-    summary: string | null;
-    caption?: string | null;
-    previewable?: boolean;
-    preview_url?: string | null;
-    fts_status?: "pending" | "ready" | "failed";
-    fts_detail?: string | null;
-}
-
-export type FileSearchScope = "all" | "project_files" | "task_files" | "documents";
-
-export interface FileSearchItem {
-    source_type: "project_file" | "task_attachment" | "document";
-    source_id: number;
-    project_id: number | null;
-    task_id: number | null;
-    task_key: string | null;
-    task_title: string | null;
-    document_slug: string | null;
+    ref: string;
+    source_kind: "text" | "upload";
     title: string;
     caption: string | null;
-    content_type: string | null;
-    preview_url: string | null;
-    excerpt: string;
-    rank: number;
+    author: { id: number; name: string } | null;
+    ownership: { kind: "project" | "task"; project_id: number | null; owner_task_id: number | null };
+    tasks: { id: number; key: string; title: string; relation: "owner" | "linked" }[];
+    created_at: string;
+    updated_at: string;
+    revision: number;
+    format: string;
+    states: { extraction: DocumentProcessingState; fts: DocumentProcessingState; semantic: DocumentProcessingState };
+    original: { filename: string; content_type: string; size: number; content_url: string; preview_url: string | null } | null;
+    text: { available: boolean; total_chars: number; url: string; rendition: "markdown" | "extracted_text"; content_hash: string | null };
+    capabilities: { can_read: boolean; can_edit: boolean; can_delete: boolean; can_retry: boolean; can_link: boolean; can_detach: boolean };
 }
 
-export interface FileSearchPage {
-    items: FileSearchItem[];
+export interface DocumentProcessingState {
+    status: string;
+    detail: string | null;
+}
+
+export type DocumentDetail = DocumentListItem;
+
+export interface DocumentPage {
+    items: DocumentListItem[];
     total: number;
     limit: number;
     offset: number;
-}
-
-export interface ProjectFileDetail extends ProjectFile {
-    can_edit?: boolean;
-    text: string;
-    text_total_chars: number;
-    text_offset: number;
     next_offset: number | null;
 }
 
-export interface LinkedDocument {
-    link_id: number;
-    document_id: number;
-    slug: string;
-    title: string;
+export interface DocumentTextPage {
+    ref: string;
+    text: string;
+    rendition: "markdown" | "extracted_text";
+    content_hash: string;
+    offset: number;
+    next_offset: number | null;
+    total_chars: number;
+    offset_unit: "unicode_codepoints";
 }
 
-export interface DocumentLink {
-    id: number;
-    document_id: number;
-    task_id: number;
-}
-
-export interface TaskDocumentImport {
-    attachment: TaskAttachment;
-    document: DocumentDetail;
-    link: DocumentLink;
-}
-
-export interface LinkedTask {
-    link_id: number;
-    task_id: number;
-    key: string;
-    title: string;
+export interface DocumentFragment {
+    document_ref: string;
+    rendition: "markdown" | "extracted_text";
+    content_hash: string;
+    start: number;
+    end: number;
+    offset_unit: "unicode_codepoints";
+    quote: string;
 }
 
 export type KnowledgeEntityType =
@@ -679,6 +612,9 @@ export type KnowledgeEntityType =
     | "analytics_report" | "wbs_node";
 
 export interface KnowledgeSource {
+    document_ref?: string | null;
+    reference?: DocumentFragment | null;
+    is_primary?: boolean;
     card?: { key?: string | null; status?: string | null; priority?: string | null; assignee?: string | null; due_date?: string | null; summary?: string | null; login?: string | null; avatar_url?: string | null; role?: string | null } | null;
     source_id: string;
     entity_type: KnowledgeEntityType;
@@ -687,7 +623,6 @@ export interface KnowledgeSource {
     excerpt: string | null;
     score: number | null;
     task_id: number | null;
-    document_slug: string | null;
     related_source_ids?: string[];
 }
 

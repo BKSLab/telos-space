@@ -51,6 +51,7 @@ export async function installMockApi(page: Page, state: MockState) {
         const body=()=>{try{return request.postDataJSON();}catch{return {};}};
         if(method!=="GET")state.writes.push({method,path,body:body()});
         if(path==="/auth/me")return reply(state.me);
+        if(path==="/documents")return reply({items:[],total:0,limit:Number(url.searchParams.get("limit")??20),offset:Number(url.searchParams.get("offset")??0),next_offset:null});
         if(path.startsWith("/aris/conversations")){const result=handleAris(state,path,method,body);return reply(result.json,result.status??200);}
         const taskMatch=/^\/tasks\/(\d+)(\/.*)?$/.exec(path);
         if(taskMatch){

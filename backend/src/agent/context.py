@@ -465,6 +465,8 @@ class AgentContextBudget:
         keys = {
             "source_id",
             "source_handle",
+            "fragment_handle",
+            "document_ref",
             "title",
             "entity_type",
             "offset",

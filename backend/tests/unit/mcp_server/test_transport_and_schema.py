@@ -51,9 +51,9 @@ def test_registration_rejects_noncanonical_tool_names(name: str) -> None:
 
 
 async def test_transport_catalog_matches_the_single_rights_registry() -> None:
-    """Защищённый реестр и публикуемые инструменты содержат одни и те же 46 имён."""
+    """Защищённый реестр и публикуемые инструменты содержат одни и те же 45 имён."""
     actual = {tool.name for tool in await mcp_server.list_tools()}
-    assert len(actual) == 46
+    assert len(actual) == 45
     assert actual == set(TOOL_REGISTRY)
     assert all(name.startswith("telos_") for name in actual)
 

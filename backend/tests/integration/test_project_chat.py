@@ -17,6 +17,9 @@ from src.db.models import (
     Task,
     User,
 )
+from src.db.models.documents import Document
+from src.db.models.project_files import ProjectFile
+from src.db.models.task_attachments import TaskAttachment
 from src.dependencies.scopes import build_chat_scope
 from src.exceptions.project_chats import (
     ChatConflictError,
@@ -27,6 +30,7 @@ from src.exceptions.project_chats import (
 from src.schemas.project_chats import ChatMessageCreate, ChatMessageEdit
 from src.services.chat_presenter import ChatPresenter
 from src.services.project_chats import ProjectChatService
+from src.utils.document_refs import encode_document_ref
 
 
 def message(content="Проверим создание заказа", **kwargs):
@@ -206,6 +210,43 @@ async def test_entity_cards_follow_changes_and_reject_other_project(chat_env):
         await db.commit()
     deleted = (await chat.history(1, 2)).messages[0].entities[0]
     assert deleted.available is False and deleted.href is None
+
+
+async def test_document_cards_keep_opaque_identity_across_storage_and_current_task_project(chat_env):
+    async with chat_env.factory() as db:
+        db.add_all([ProjectStage(id=i, project_id=i, name="В работе", color="#334455") for i in (1, 2)])
+        await db.flush()
+        db.add(Task(id=1, project_id=1, stage_id=1, number=1, title="Задача документа"))
+        await db.flush()
+        db.add_all([
+            Document(id=1, project_id=1, title="Общий Markdown", slug="shared", content_md="Текст"),
+            Document(id=2, project_id=2, title="Чужой Markdown", slug="foreign", content_md="Чужой текст"),
+            Document(id=3, owner_task_id=1, title="Markdown задачи", slug="task", content_md="Условия"),
+            ProjectFile(id=1, project_id=1, original_name="План.pdf", storage_key="projects/1/plan.pdf", content_type="application/pdf", size=20, content_hash="a" * 64),
+            TaskAttachment(id=1, task_id=1, original_name="Условия.md", storage_key="tasks/1/spec.md", content_type="text/markdown", size=15),
+        ])
+        await db.commit()
+    refs = [encode_document_ref(kind, identifier) for kind, identifier in [("document", 1), ("document", 3), ("project_file", 1), ("attachment", 1)]]
+    body = [{"entity_type": "DOCUMENT", "document_ref": ref} for ref in refs]
+    sent = await chat_env.service.send(1, 1, message(entities=body))
+    assert [item.document_ref for item in sent.entities] == refs
+    assert all(item.entity_id is None and item.href.endswith(item.document_ref) for item in sent.entities)
+    with pytest.raises(ChatValidationError):
+        await chat_env.service.send(1, 1, message(entities=[{"entity_type": "DOCUMENT", "document_ref": encode_document_ref("document", 2)}]))
+    found = await chat_env.service.lookup_entities(1, 2)
+    assert {item.document_ref for item in found if item.entity_type == "DOCUMENT"} == set(refs)
+    cursor = (await chat_env.service.get_chat(1, 1)).event_cursor
+    async with chat_env.factory() as db:
+        await db.execute(update(ProjectFile).where(ProjectFile.id == 1).values(display_title="Уточнённый план"))
+        await db.commit()
+    changes = (await chat_env.service.events(1, 2, cursor)).events
+    assert any(item.data.get("document_ref") == refs[2] and "entity_id" not in item.data for item in changes)
+    async with chat_env.factory() as db:
+        await db.execute(update(Task).where(Task.id == 1).values(project_id=2, stage_id=2))
+        await db.commit()
+    current = (await chat_env.service.history(1, 2)).messages[0].entities
+    assert [item.document_ref for item in current] == refs
+    assert [item.available for item in current] == [True, False, True, False]
 
 
 async def test_cleanup_removes_expired_drafts_and_orphans_but_keeps_sent_files(chat_env):

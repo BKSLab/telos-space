@@ -2,7 +2,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from src.schemas.task_attachments import TaskAttachmentSchema
 from src.schemas.users import UserSummarySchema
 
 
@@ -52,8 +51,10 @@ class CommentSchema(BaseModel):
         description="Дата создания комментария.",
         examples=["2026-08-02T12:00:00Z"],
     )
-    attachments: list[TaskAttachmentSchema] = Field(
-        default_factory=list, description="Связанные оригиналы той же задачи.", examples=[[]]
+    document_refs: list[str] = Field(
+        default_factory=list,
+        description="Стабильные ссылки на документы комментария.",
+        examples=[[]],
     )
 
 

@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Computed, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Computed,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +31,7 @@ class Document(Base, TimestampMixin):
         index=True,
     )
     __table_args__ = (
+        CheckConstraint("num_nonnulls(project_id, owner_task_id) = 1", name="ck_documents_owner"),
         UniqueConstraint("project_id", "slug", name="uq_documents_project_slug"),
         Index("ix_documents_search_vector", "search_vector", postgresql_using="gin"),
     )
@@ -31,12 +41,34 @@ class Document(Base, TimestampMixin):
         doc="Идентификатор документа.",
         comment="Уникальный идентификатор документа.",
     )
-    project_id: Mapped[int] = mapped_column(
+    project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
         doc="Проект, которому принадлежит документ.",
         comment="Идентификатор проекта-владельца документа.",
+    )
+    owner_task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        index=True,
+        doc="Задача-владелец текста.",
+        comment="Задача-владелец; её текущий доступ определяет доступ к тексту.",
+    )
+    authored_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        doc="Автор документа.",
+        comment="Локальный автор; у прежних документов может отсутствовать.",
+    )
+    caption: Mapped[str | None] = mapped_column(
+        Text,
+        doc="Примечание документа.",
+        comment="Необязательное примечание пользователя.",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        server_default="1",
+        doc="Версия записи.",
+        comment="Монотонная версия редактируемых полей документа.",
     )
     slug: Mapped[str] = mapped_column(
         String(length=255),
@@ -61,6 +93,7 @@ class Document(Base, TimestampMixin):
         TSVECTOR,
         Computed(
             "setweight(to_tsvector('russian', coalesce(title, '')), 'A') || "
+            "setweight(to_tsvector('russian', coalesce(caption, '')), 'B') || "
             "setweight(to_tsvector('russian', coalesce(content_md, '')), 'B')",
             persisted=True,
         ),
@@ -69,7 +102,7 @@ class Document(Base, TimestampMixin):
         comment="Взвешенный FTS-вектор заголовка и содержимого документа.",
     )
 
-    project: Mapped[Project] = relationship("Project", back_populates="documents")
+    project: Mapped[Project | None] = relationship("Project", back_populates="documents")
 
     def __repr__(self) -> str:
         return f"<Document(id={self.id}, project_id={self.project_id}, slug={self.slug!r})>"

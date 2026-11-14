@@ -42,6 +42,7 @@ async def _execute(
             request_id=request_id,
             mode=ArisMode.WIDGET_PROJECT if project_id is not None else ArisMode.WIDGET_PERSONAL,
             allowed_tools=frozenset({selected}),
+            principal=tools.principal,
         )
         actions = tools.services.actions
     try:

@@ -7,7 +7,49 @@ from typing import Any
 from src.clients.qdrant import KnowledgeSearchHit
 from src.knowledge.catalog import ProjectCatalog, ProjectSource, SourceType
 from src.knowledge.retrieval import reciprocal_rank_fusion
+from src.schemas.document_references import DocumentFragmentSchema
 from src.schemas.knowledge import KnowledgeReadRequest, KnowledgeSourceSchema
+from src.utils.document_refs import document_text_hash, encode_document_ref
+
+DOCUMENT_SOURCE_TYPES = {SourceType.DOCUMENT, SourceType.ATTACHMENT, SourceType.PROJECT_FILE}
+DOCUMENT_FRAGMENT_MAX_CHARS = 800
+
+
+def document_fragment(
+    source: ProjectSource, *, start: int, end: int
+) -> DocumentFragmentSchema | None:
+    """Создаёт цитату только из raw текста того же представления, что читает UI."""
+    text = source.document_text
+    if (
+        source.kind not in DOCUMENT_SOURCE_TYPES
+        or text is None
+        or source.document_rendition not in {"markdown", "extracted_text"}
+        or start < 0
+        or end <= start
+        or end > len(text)
+    ):
+        return None
+    return DocumentFragmentSchema(
+        document_ref=encode_document_ref(source.kind.value, source.entity_id),
+        rendition=source.document_rendition,
+        content_hash=document_text_hash(text),
+        start=start,
+        end=end,
+        quote=text[start:end],
+    )
+
+
+def _view_fragment(source: ProjectSource, *, offset: int, end: int) -> dict | None:
+    """Переводит пересечение страницы каталога с raw текстом в его координаты."""
+    if source.document_text is None:
+        return None
+    base = source.document_text_start
+    start = max(offset - base, 0)
+    fragment = document_fragment(
+        source, start=start,
+        end=min(end - base, len(source.document_text), start + DOCUMENT_FRAGMENT_MAX_CHARS)
+    )
+    return fragment.model_dump(mode="json") if fragment else None
 
 
 def _bounded(value: Any) -> Any:
@@ -23,7 +65,7 @@ def _bounded(value: Any) -> Any:
 def source_view(source: ProjectSource, *, offset: int = 0, max_chars: int = 1200) -> dict:
     payload = source.payload()
     end = min(len(source.text), offset + max_chars)
-    return {
+    result = {
         "source_id": source.source_id,
         "entity_type": source.kind.value,
         "entity_id": source.entity_id,
@@ -38,6 +80,12 @@ def source_view(source: ProjectSource, *, offset: int = 0, max_chars: int = 1200
         "total_chars": len(source.text),
         "next_offset": end if end < len(source.text) else None,
     }
+    if source.kind in DOCUMENT_SOURCE_TYPES:
+        result["document_ref"] = encode_document_ref(source.kind.value, source.entity_id)
+        fragment = _view_fragment(source, offset=offset, end=end)
+        if fragment:
+            result["reference"] = fragment
+    return result
 
 
 def source_brief(source: ProjectSource, *, offset: int = 0) -> dict:
@@ -97,6 +145,12 @@ def source_brief(source: ProjectSource, *, offset: int = 0) -> dict:
     if not source.summary:
         result["offset"] = offset
         result["next_offset"] = offset + 400 if offset + 400 < len(source.text) else None
+    if source.kind in DOCUMENT_SOURCE_TYPES:
+        result["document_ref"] = encode_document_ref(source.kind.value, source.entity_id)
+        if not source.summary:
+            fragment = _view_fragment(source, offset=offset, end=min(offset + 400, len(source.text)))
+            if fragment:
+                result["reference"] = fragment
     return result
 
 
@@ -112,7 +166,8 @@ def citation(
         excerpt=excerpt[:500],
         score=score,
         task_id=int(payload["task_id"]) if payload["task_id"] else None,
-        document_slug=payload["document_slug"],
+        document_ref=encode_document_ref(source.kind.value, source.entity_id)
+        if source.kind in DOCUMENT_SOURCE_TYPES else None,
         related_source_ids=payload["related_source_ids"][:30],
     )
 
@@ -253,6 +308,13 @@ def retrieve(
                     item["next_offset"] = end if end < len(source.text) else None
         if verified:
             item["matched_locations"] = verified
+        if not source.summary and source.kind in DOCUMENT_SOURCE_TYPES:
+            item.pop("reference", None)
+            fragment = _view_fragment(
+                source, offset=item.get("offset", 0), end=item.get("offset", 0) + len(item["text"])
+            )
+            if fragment:
+                item["reference"] = fragment
         result.append(item)
     return result
 

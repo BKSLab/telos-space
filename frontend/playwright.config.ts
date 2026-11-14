@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
+const preview = process.env.PLAYWRIGHT_PREVIEW === "1";
+
 export default defineConfig({
     testDir: "./e2e",
     fullyParallel: true,
@@ -14,7 +16,7 @@ export default defineConfig({
         trace: "retain-on-failure",
     },
     webServer: {
-        command: "npm run dev -- --host 127.0.0.1 --port 4179 --strictPort",
+        command: `npm run ${preview ? "preview" : "dev"} -- --host 127.0.0.1 --port 4179 --strictPort`,
         url: "http://127.0.0.1:4179",
         reuseExistingServer: false,
     },

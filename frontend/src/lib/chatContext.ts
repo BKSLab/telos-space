@@ -1,31 +1,30 @@
 import { createContext, useContext } from "react";
 import type { ChatEntity, ChatMessage } from "./projectChat";
-import type { KnowledgeSource } from "./types";
+import type { DocumentFragment, KnowledgeSource } from "./types";
 
-export interface ChatContextTarget {
-    type: "task" | "document" | "project_file";
-    id: number;
-    title: string;
-    excerpt?: string | null;
-    documentSlug?: string | null;
-}
+export type ChatContextTarget =
+    | { type: "task"; id: number; title: string; excerpt?: string | null }
+    | { type: "document"; documentRef: string; title: string; fragment?: DocumentFragment | null };
 
-export const CHAT_CONTEXT_LABELS = { task: "Задача", document: "Документ", project_file: "Файл проекта" };
-export const chatContextKey = (target: ChatContextTarget) => `${target.type}:${target.id}`;
-const validId = (id: number) => Number.isSafeInteger(id) && id > 0;
+export const CHAT_CONTEXT_LABELS = { task: "Задача", document: "Документ" };
+export const chatContextKey = (target: ChatContextTarget) => `${target.type}:${target.type === "document" ? target.documentRef : target.id}`;
+const validId = (id: number | null) => id !== null && Number.isSafeInteger(id) && id > 0;
 
 /** IDs come from server-hydrated cards, never from generated prose. */
 export function sourceContextTarget(source: KnowledgeSource): ChatContextTarget | null {
-    if (!["task", "document", "project_file"].includes(source.entity_type)) return null;
+    if (!["task", "document", "project_file", "attachment"].includes(source.entity_type)) return null;
     const id = source.entity_type === "task" ? source.task_id ?? source.entity_id : source.entity_id;
     if (!validId(id)) return null;
-    return { type: source.entity_type as ChatContextTarget["type"], id, title: source.title, excerpt: source.excerpt, documentSlug: source.document_slug };
+    if (source.entity_type === "task") return { type: "task", id, title: source.title, excerpt: source.excerpt };
+    if (!source.document_ref) return null;
+    return { type: "document", title: source.title, documentRef: source.document_ref, fragment: source.reference };
 }
 
 export function entityContextTarget(entity: ChatEntity): ChatContextTarget | null {
-    if (!entity.available || !validId(entity.entity_id)) return null;
+    if (!entity.available) return null;
     if (entity.entity_type !== "TASK" && entity.entity_type !== "DOCUMENT") return null;
-    return { type: entity.entity_type === "TASK" ? "task" : "document", id: entity.entity_id, title: entity.title };
+    if (entity.entity_type === "DOCUMENT") return entity.document_ref ? { type: "document", title: entity.title, documentRef: entity.document_ref } : null;
+    return validId(entity.entity_id) ? { type: "task", id: entity.entity_id!, title: entity.title } : null;
 }
 
 function messageTargets(message: ChatMessage): ChatContextTarget[] {
@@ -53,6 +52,8 @@ export function suggestedChatContext(messages: ChatMessage[]): { key: string; ta
     for (const message of [...messages].reverse()) {
         if (message.deleted_at || message.delivery || message.agent?.status !== "completed") continue;
         const targets = new Map<string, ChatContextTarget>();
+        const primary = message.agent.sources.filter((source) => source.is_primary).map(sourceContextTarget).filter((target): target is ChatContextTarget => target !== null);
+        if (primary.length === 1) return { key: `${message.id}:${message.revision}`, target: primary[0] };
         for (const source of message.agent.sources) {
             const target = sourceContextTarget(source);
             if (target) targets.set(chatContextKey(target), target);

@@ -6,7 +6,10 @@
 """
 
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
@@ -19,6 +22,10 @@ from src.db.models.projects import Project
 from src.db.models.tasks import Task
 from src.db.models.users import User
 from src.dependencies.auth import get_principal
+from src.dependencies.document_catalog import (
+    get_document_catalog_principal,
+    get_document_catalog_service,
+)
 from src.dependencies.repositories import (
     get_api_tokens_repository,
     get_documents_repository,
@@ -27,7 +34,8 @@ from src.dependencies.repositories import (
     get_tasks_repository,
     get_users_repository,
 )
-from src.services.auth import Principal
+from src.services.auth import AuthService, Principal
+from src.services.document_catalog import DocumentCatalogService
 from src.utils.api_tokens import hash_token_secret
 
 OWNER_ID = 1
@@ -266,10 +274,29 @@ def _principal() -> Principal:
 
 
 @pytest.fixture
-def foreign_objects(anonymous: None) -> None:
+async def foreign_objects(anonymous: None) -> None:
     """Все объекты существуют, но принадлежат проекту без участия пользователя."""
+    catalog_repo = AsyncMock()
+    catalog_repo.get.return_value = None
+    auth = AsyncMock(spec=AuthService)
+    auth.resolve_principal.return_value = _principal()
+
+    @asynccontextmanager
+    async def scope():
+        yield SimpleNamespace(catalog=catalog_repo, auth=auth)
+
+    catalog = DocumentCatalogService(
+        scope=scope,
+        storage=None,
+        max_file_size=10000,
+        knowledge_enabled=False,
+        embedding_signature="synthetic",
+    )
+    await catalog.resolve_principal(session_token="synthetic-session", bearer_secret=None)
     app.dependency_overrides.update(
         {
+            get_document_catalog_service: lambda: catalog,
+            get_document_catalog_principal: lambda: _principal(),
             get_principal: lambda: _principal(),
             get_project_members_repository: lambda: FakeMembersRepository(set()),
             get_projects_repository: lambda: FakeProjectsRepository(),
@@ -282,7 +309,7 @@ def foreign_objects(anonymous: None) -> None:
 FOREIGN_PATHS = (
     f"/api/v1/projects/{OTHER_PROJECT_ID}",
     "/api/v1/tasks/7",
-    "/api/v1/documents/7",
+    "/api/v1/documents/d1_ZG9jdW1lbnQ6Nw",
 )
 
 
@@ -302,6 +329,15 @@ async def test_foreign_object_is_not_found(
         answers[path] = (response.status_code, response.json())
 
     expected = (404, {"detail": "Объект не найден."})
-    unexpected = {path: answer for path, answer in answers.items() if answer != expected}
+    unexpected = {
+        path: answer
+        for path, answer in answers.items()
+        if answer
+        != (
+            (404, {"detail": "Документ недоступен или не найден."})
+            if "/documents/" in path
+            else expected
+        )
+    }
 
     assert not unexpected, f"Чужой объект отличим от несуществующего: {unexpected}"

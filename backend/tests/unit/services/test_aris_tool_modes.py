@@ -35,7 +35,8 @@ def test_chat_mode_has_no_personal_or_cross_project_tools_and_personal_mode_no_r
     assert {"telos_list_tasks", "telos_read_source", "telos_get_tool_schemas"} <= chat
     assert personal_actions | {"telos_run_project_action", "telos_attach_uploaded_file", "telos_list_tasks"} <= widget
     assert personal_actions | {"telos_run_project_action", "telos_get_tool_schemas"} <= personal
-    assert not personal & {"telos_list_tasks", "telos_read_source", "telos_search_sources", "telos_attach_uploaded_file"}
+    assert {"telos_list_documents", "telos_get_document", "telos_create_document", "telos_update_document", "telos_copy_document", "telos_attach_uploaded_file"} <= personal
+    assert not personal & {"telos_list_tasks", "telos_read_source", "telos_search_sources", "telos_link_document", "telos_unlink_document"}
 
 
 async def test_executor_refuses_tool_outside_mode_even_if_model_asks():

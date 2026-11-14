@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -51,6 +52,25 @@ class TaskAttachment(Base):
     )
     caption: Mapped[str | None] = mapped_column(
         Text, doc="Подпись пользователя.", comment="Необязательная подпись к оригиналу файла."
+    )
+    display_title: Mapped[str | None] = mapped_column(
+        String(255),
+        doc="Название документа.",
+        comment="Редактируемое название без изменения оригинала.",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        server_default="1",
+        doc="Версия записи.",
+        comment="Монотонная версия метаданных оригинала задачи.",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+        doc="Время изменения.",
+        comment="Версия пользовательских метаданных оригинала.",
     )
     uploaded_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),

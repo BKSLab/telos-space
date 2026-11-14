@@ -616,6 +616,7 @@ async def repeatable_write(
             project_id=project_id, user_id=tools.principal.user_id,
             can_write=tools.principal.can_write, request_id=request_id,
             allowed_tools=frozenset({name}),
+            principal=tools.principal,
         ),
         name=name, arguments=arguments,
     )

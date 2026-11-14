@@ -14,10 +14,12 @@ import pytest
 from httpx import AsyncClient
 
 from main import app
+from src.dependencies.document_catalog import (
+    get_document_catalog_principal,
+    get_document_catalog_service,
+)
 from src.dependencies.services import (
     get_dashboard_service,
-    get_document_links_service,
-    get_documents_service,
     get_project_stages_service,
     get_projects_service,
     get_task_activity_service,
@@ -26,12 +28,11 @@ from src.dependencies.services import (
     get_wbs_nodes_service,
 )
 from src.exceptions.dashboard import DashboardServiceError
-from src.exceptions.document_links import (
-    DocumentLinkAlreadyExistsError,
-    DocumentLinkProjectMismatchError,
-    DocumentLinksServiceError,
+from src.exceptions.document_catalog import (
+    CatalogDocumentConflictError,
+    CatalogDocumentValidationError,
+    DocumentCatalogServiceError,
 )
-from src.exceptions.documents import DocumentSlugConflictError, DocumentsServiceError
 from src.exceptions.project_stages import (
     ProjectLastStageDeleteError,
     ProjectStageHasTasksError,
@@ -52,8 +53,7 @@ from src.exceptions.wbs_nodes import (
     WbsNodesServiceError,
 )
 from src.services.dashboard import DashboardService
-from src.services.document_links import DocumentLinksService
-from src.services.documents import DocumentsService
+from src.services.document_catalog import DocumentCatalogService
 from src.services.project_stages import ProjectStagesService
 from src.services.projects import ProjectsService
 from src.services.task_activity import TaskActivityService
@@ -168,34 +168,35 @@ DOMAIN_MAPPINGS = (
         status=409,
     ),
     Mapping(
-        dependency=get_documents_service,
-        service=DocumentsService,
-        method="create_document",
-        error=DocumentSlugConflictError(slug="roadmap"),
-        request=("post", "/api/v1/projects/1/documents"),
-        payload={"slug": "roadmap", "title": "Roadmap", "content_md": "Текст"},
+        dependency=get_document_catalog_service,
+        service=DocumentCatalogService,
+        method="create",
+        error=CatalogDocumentConflictError(),
+        request=("post", "/api/v1/documents"),
+        payload={
+            "request_id": "00000000-0000-4000-8000-000000000001",
+            "project_id": 1,
+            "title": "Требования",
+        },
         status=409,
-        detail="roadmap",
     ),
     Mapping(
-        dependency=get_document_links_service,
-        service=DocumentLinksService,
-        method="create_link",
-        error=DocumentLinkAlreadyExistsError(document_id=1),
-        request=("post", "/api/v1/document-links"),
-        payload={"document_id": 1, "task_id": 2},
+        dependency=get_document_catalog_service,
+        service=DocumentCatalogService,
+        method="update",
+        error=CatalogDocumentConflictError(),
+        request=("patch", "/api/v1/documents/d1_ZG9jdW1lbnQ6MQ"),
+        payload={"expected_revision": 1, "title": "Требования"},
         status=409,
-        detail="уже существует",
     ),
     Mapping(
-        dependency=get_document_links_service,
-        service=DocumentLinksService,
-        method="create_link",
-        error=DocumentLinkProjectMismatchError(document_id=1, task_id=2),
-        request=("post", "/api/v1/document-links"),
-        payload={"document_id": 1, "task_id": 2},
-        status=409,
-        detail="одного проекта",
+        dependency=get_document_catalog_service,
+        service=DocumentCatalogService,
+        method="link",
+        error=CatalogDocumentValidationError("Нужен документ того же проекта."),
+        request=("post", "/api/v1/documents/d1_ZG9jdW1lbnQ6MQ/tasks/2"),
+        payload=None,
+        status=422,
     ),
 )
 
@@ -243,19 +244,21 @@ SERVICE_FAILURE_MAPPINGS = (
         status=500,
     ),
     Mapping(
-        dependency=get_documents_service,
-        service=DocumentsService,
-        method="get_document_list",
-        error=DocumentsServiceError("Ошибка сценария"),
-        request=("get", "/api/v1/projects/1/documents"),
+        dependency=get_document_catalog_service,
+        service=DocumentCatalogService,
+        method="list",
+        error=DocumentCatalogServiceError("Ошибка сценария"),
+        request=("get", "/api/v1/documents?project_id=1"),
+        payload=None,
         status=500,
     ),
     Mapping(
-        dependency=get_document_links_service,
-        service=DocumentLinksService,
-        method="delete_link",
-        error=DocumentLinksServiceError("Ошибка сценария"),
-        request=("delete", "/api/v1/document-links/1"),
+        dependency=get_document_catalog_service,
+        service=DocumentCatalogService,
+        method="unlink",
+        error=DocumentCatalogServiceError("Ошибка сценария"),
+        request=("delete", "/api/v1/documents/d1_ZG9jdW1lbnQ6MQ/tasks/2"),
+        payload=None,
         status=500,
     ),
     Mapping(
@@ -277,8 +280,9 @@ SERVICE_FAILURE_MAPPINGS = (
 )
 
 
-async def check(api_client: AsyncClient, mapping: Mapping) -> str | None:
+async def check(api_client: AsyncClient, mapping: Mapping, current_principal) -> str | None:
     """Проверяет одну строку спецификации и возвращает расхождение."""
+    app.dependency_overrides[get_document_catalog_principal] = lambda: current_principal
     service = AsyncMock(spec=mapping.service)
     getattr(service, mapping.method).side_effect = mapping.error
     app.dependency_overrides[mapping.dependency] = lambda: service
@@ -301,24 +305,27 @@ async def check(api_client: AsyncClient, mapping: Mapping) -> str | None:
 @pytest.mark.asyncio
 async def test_domain_errors_map_to_their_documented_responses(
     api_client: AsyncClient,
+    current_principal,
 ) -> None:
     """Каждая доменная ошибка отдаёт свой статус и сохраняет формулировку."""
     problems = [
         problem
         for mapping in DOMAIN_MAPPINGS
-        if (problem := await check(api_client, mapping)) is not None
+        if (problem := await check(api_client, mapping, current_principal)) is not None
     ]
 
     assert not problems, "Доменные ошибки отображены иначе:\n  " + "\n  ".join(problems)
 
 
 @pytest.mark.asyncio
-async def test_unforeseen_service_failure_maps_to_500(api_client: AsyncClient) -> None:
+async def test_unforeseen_service_failure_maps_to_500(
+    api_client: AsyncClient, current_principal
+) -> None:
     """Сбой сервиса, не перечисленный эндпоинтом, уходит наружу как 500."""
     problems = [
         problem
         for mapping in SERVICE_FAILURE_MAPPINGS
-        if (problem := await check(api_client, mapping)) is not None
+        if (problem := await check(api_client, mapping, current_principal)) is not None
     ]
 
     assert not problems, "Сбой сервиса отображён иначе:\n  " + "\n  ".join(problems)

@@ -19,6 +19,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Base
+from src.db.models.document_index_states import DocumentIndexState
 from src.db.models.documents import Document
 from src.db.models.file_search_chunks import FileSearchChunk
 from src.db.models.knowledge_attachment_texts import KnowledgeAttachmentText
@@ -39,6 +40,10 @@ def _select_rows(rule: SourcePolicy, project_id: int, *, include_deleted: bool =
         condition = table.c.id == project_id
     elif rule.scope == "project":
         condition = table.c.project_id == project_id
+    elif rule.scope == "document":
+        tasks = tables["tasks"]
+        from_clause = table.outerjoin(tasks, table.c.owner_task_id == tasks.c.id)
+        condition = (table.c.project_id == project_id) | (tasks.c.project_id == project_id)
     elif rule.scope == "task":
         tasks = tables["tasks"]
         from_clause = table.join(tasks, table.c.task_id == tasks.c.id)
@@ -193,7 +198,12 @@ class KnowledgeSourcesRepository:
                     literal(SourceType.DOCUMENT.value).label("entity_type"),
                     cast(Document.id, Text).label("entity_id"),
                     func.ts_rank_cd(Document.search_vector, terms).label("rank"),
-                ).where(Document.project_id == project_id, Document.search_vector.op("@@")(terms))
+                )
+                .outerjoin(Task, Task.id == Document.owner_task_id)
+                .where(
+                    (Document.project_id == project_id) | (Task.project_id == project_id),
+                    Document.search_vector.op("@@")(terms),
+                )
             )
         matched = union_all(*branches).subquery("matched_knowledge_sources")
         rank = func.max(matched.c.rank)
@@ -399,3 +409,34 @@ class KnowledgeSourcesRepository:
             raise KnowledgeIndexJobsRepositoryError(
                 "Не удалось сохранить состояние индекса файла."
             ) from error
+
+    async def save_document_index_state(self, data: dict) -> None:
+        """Записывает квитанцию только живой версии текста в текущем проекте.
+
+        Производная квитанция не восстанавливает удалённый документ и не
+        становится актуальной для нового проекта перенесённой задачи.
+        """
+        kind, identifier = data["source_id"].split(":", 1)
+        identifier = int(identifier)
+        if kind == "document":
+            original = Document
+            raw_text = original.content_md
+            parent_project = select(Task.project_id).where(Task.id == original.owner_task_id).scalar_subquery()
+            current_project = func.coalesce(original.project_id, parent_project)
+            query = select(*(literal(value) for value in data.values())).select_from(original)
+        else:
+            original = TaskAttachment if kind == "attachment" else ProjectFile
+            cached = KnowledgeAttachmentText if kind == "attachment" else KnowledgeProjectFileText
+            cached_key = cached.attachment_id if kind == "attachment" else cached.project_file_id
+            raw_text = func.coalesce(cached.text, "")
+            current_project = select(Task.project_id).where(Task.id == original.task_id).scalar_subquery() if kind == "attachment" else original.project_id
+            query = select(*(literal(value) for value in data.values())).select_from(original).outerjoin(cached, cached_key == original.id)
+            if kind == "project_file":
+                query = query.where(original.deleted_at.is_(None))
+        query = query.where(original.id == identifier, original.version == data["source_version"], current_project == data["project_id"], func.encode(func.sha256(func.convert_to(raw_text, "UTF8")), "hex") == data["text_hash"])
+        statement = insert(DocumentIndexState).from_select(list(data), query, include_defaults=False)
+        try:
+            await self.db_session.execute(statement.on_conflict_do_update(index_elements=[DocumentIndexState.project_id, DocumentIndexState.source_id], set_={**data, "indexed_at": func.now()}))
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise KnowledgeIndexJobsRepositoryError("Не удалось сохранить состояние документа.") from error

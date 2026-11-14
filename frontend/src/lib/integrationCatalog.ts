@@ -37,6 +37,7 @@ export interface CatalogEntry {
     operationId?: string;
     access?: "public" | "subscription" | "session" | "authenticated";
     scopes: string[] | null;
+    scopeRule?: string;
     tokens: string[];
     write?: boolean;
     requiresConfirmation?: boolean;
@@ -63,13 +64,13 @@ const GROUPS: Record<string, string> = {
     tasks: "Задачи", "task-comments": "Комментарии", comments: "Комментарии",
     "task-reports": "Итоговые отчёты", reports: "Итоговые отчёты",
     "task-activity": "История задач", "task-attention": "Персональное внимание",
-    "task-attachments": "Файлы задач", "task-documents": "Файлы задач",
+    "task-attachments": "Документы задач", "task-documents": "Документы задач",
     "task-dependencies": "Зависимости", milestones: "Вехи",
     calendar: "Календарь и вехи", "calendar-scenarios": "Перепланирование",
     "project-risks": "Риски", risks: "Риски", wbs: "Структура работ", structure: "Структура работ",
     boards: "Доски",
     documents: "Документы", "document-links": "Связи документов",
-    "project-files": "Файлы проекта", "file-search": "Поиск файлов",
+    "project-files": "Документы проекта", "file-search": "Поиск документов",
     "project-knowledge": "Знания проекта", knowledge: "Знания проекта",
     "project-chat": "Общий чат проекта", "project-aris": "Приватные диалоги проекта",
     aris: "Арис",

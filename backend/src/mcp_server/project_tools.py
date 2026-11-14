@@ -1,6 +1,7 @@
 """Полный каталог действий через общие сценарии проектного чата."""
 
 import json
+from dataclasses import replace
 from datetime import date
 from typing import Annotated, Any
 from uuid import UUID
@@ -11,7 +12,7 @@ from mcp.shared.exceptions import MCPError
 from pydantic import BaseModel, Field, ValidationError
 
 from src.agent.action_catalog import PROJECT_ACTIONS
-from src.agent.action_scopes import ACTION_SCOPES
+from src.agent.action_scopes import action_scope_options
 from src.agent.tools import AgentToolContext, describe_validation_error
 from src.exceptions.agent_tools import AgentToolsServiceError
 from src.exceptions.base import ApplicationError
@@ -98,10 +99,9 @@ async def create_project(
 
 def action_allowed(principal, name: str) -> bool:
     """Открыто ли действие каталога предъявленным учётным данным."""
-    scope = ACTION_SCOPES.get(name)
     if principal.api_key is None:
         return True
-    return scope is not None and principal.allows(scope)
+    return any(principal.allows(scope) for scope in action_scope_options(name))
 
 
 class ActionApproval(BaseModel):
@@ -140,6 +140,7 @@ async def get_latest_project_summary(
         actions = tools.services.actions
         actor = AgentToolContext(
             project_id=project_id, user_id=tools.principal.user_id, can_write=False,
+            principal=tools.principal,
         )
     try:
         return await actions.execute(
@@ -230,6 +231,7 @@ async def execute_project_tool(
             user_id=tools.principal.user_id,
             can_write=tools.principal.can_write,
             request_id=request_id,
+            principal=tools.principal,
         )
         actions = tools.services.actions
     try:
@@ -261,6 +263,7 @@ async def execute_project_tool(
                     raise ToolError("Пользователь вызова изменился.")
                 if not action_allowed(current.principal, name):
                     raise ToolError(ACTION_CLOSED_FOR_KEYS)
+                actor = replace(actor, principal=current.principal, can_write=current.principal.can_write)
             decided = await actions.decide(
                 context=actor, action_id=UUID(action["id"]), decision=decision
             )

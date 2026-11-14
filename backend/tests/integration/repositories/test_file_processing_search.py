@@ -714,6 +714,8 @@ async def test_task_caption_and_worker_persist_lock_task_before_attachment_witho
     settings = SimpleNamespace(
         auth=SimpleNamespace(registration_invite_code=SecretStr("synthetic-invite")),
         knowledge=SimpleNamespace(knowledge_enabled=False),
+        app=SimpleNamespace(project_file_max_size=10 * 1024 * 1024),
+        embedding=SimpleNamespace(embedding_model="synthetic-embeddings", embedding_dim=3),
     )
     caption_scope = build_file_comments_scope(
         session_factory=world.sessions, settings=settings, storage=world.storage

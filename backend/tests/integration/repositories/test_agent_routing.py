@@ -149,7 +149,8 @@ async def ask(
             conversation_id=conversation,
             page_context=page_context,
         ),
-        key_scopes=list(scopes),
+        # Без ключа этот тестовый клиент представляет cookie-сессию.
+        key_scopes=list(scopes) if key is not None else None,
     )
 
 

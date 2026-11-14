@@ -115,6 +115,14 @@ class ArisAnswer(BaseModel):
         max_length=20,
         description="Непрозрачные source_handle из результатов, подтверждающие ответ.",
     )
+    primary_reference: str | None = Field(
+        default=None,
+        max_length=128,
+        description=(
+            "fragment_handle прочитанного фрагмента, который нужно показать рядом с ответом. "
+            "Если фрагмента нет — source_handle одного документа. Только handle из текущих результатов."
+        ),
+    )
 
 
 ResultHook = Callable[[AgentTool, dict[str, Any]], Awaitable[None]]

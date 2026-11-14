@@ -70,9 +70,9 @@ POLICIES = (
         "project_files",
         "project",
         SourceType.PROJECT_FILE,
-        "Файл проекта",
-        "id project_id uploaded_by_user_id original_name caption storage_key content_type size content_hash retry_requested_at deleted_at created_at updated_at",
-        "caption",
+        "Документ",
+        "id project_id uploaded_by_user_id original_name display_title caption version storage_key content_type size content_hash retry_requested_at deleted_at created_at updated_at",
+        "display_title caption",
         "original_name",
     ),
     policy(
@@ -110,11 +110,11 @@ POLICIES = (
     ),
     policy(
         "documents",
-        "project",
+        "document",
         SourceType.DOCUMENT,
         "Документ",
-        "id project_id slug title content_md origin_attachment_id created_at updated_at",
-        "content_md",
+        "id project_id owner_task_id authored_by_user_id slug title caption content_md version origin_attachment_id created_at updated_at",
+        "content_md caption",
     ),
     policy(
         "task_comments",
@@ -129,9 +129,9 @@ POLICIES = (
         "task_attachments",
         "task",
         SourceType.ATTACHMENT,
-        "Вложение",
-        "id task_id uploaded_by_user_id original_name caption storage_key content_type size created_at",
-        "caption",
+        "Документ",
+        "id task_id uploaded_by_user_id original_name display_title caption version storage_key content_type size created_at updated_at",
+        "display_title caption",
         "original_name",
     ),
     policy(
@@ -211,10 +211,14 @@ POLICIES = (
         "created_at",
     ),
     # Связи входят в граф обоих концов; голые идентификаторы не образуют embeddings.
-    policy("document_links", "task", None, "Документ задачи", "id document_id task_id"),
+    policy("document_links", "task", None, "Документ задачи", "id document_id project_file_id task_id"),
     policy(
         "task_comment_attachments", "task", None, "Вложение комментария",
         "comment_id attachment_id task_id",
+    ),
+    policy(
+        "task_comment_documents", "task", None, "Документ комментария",
+        "id comment_id task_id document_id project_file_id document_link_id",
     ),
     policy("project_sticker_task_links", "task", None, "Стикер задачи", "sticker_id task_id"),
     policy(
@@ -260,6 +264,8 @@ POLICIES = (
 POLICY_BY_TABLE = {item.table: item for item in POLICIES}
 POLICY_BY_TYPE = {item.kind: item for item in POLICIES if item.kind}
 EXCLUDED_TABLES = {
+    "document_submissions": "Квитанции повторов; документы индексируются по исходной сущности.",
+    "document_index_states": "Производное состояние обработки документов, не самостоятельные знания.",
     "api_keys": "Учётные данные локальных пользователей.",
     "api_key_usage": "Технический журнал доступа.",
     "project_boards": "Сцена доски доступна через доменные инструменты.",
@@ -375,6 +381,9 @@ class ProjectSource:
     parent_source_id: str | None
     relations: list[dict] = field(default_factory=list)
     summary: str | None = None
+    document_text: str | None = None
+    document_rendition: str | None = None
+    document_text_start: int = 0
 
     @property
     def summary_hash(self) -> str:
@@ -400,7 +409,9 @@ class ProjectSource:
         if self.kind is SourceType.TASK:
             task_ids.add(self.entity_id)
         owner_task_id = (
-            self.properties.get("task_id")
+            self.properties.get("owner_task_id")
+            if self.kind is SourceType.DOCUMENT
+            else self.properties.get("task_id")
             if self.kind in {SourceType.COMMENT, SourceType.ATTACHMENT, SourceType.ACTIVITY}
             else None
         )
@@ -419,7 +430,6 @@ class ProjectSource:
             "task_id": str(owner_task_id or self.entity_id)
             if owner_task_id or self.kind is SourceType.TASK
             else None,
-            "document_slug": self.properties.get("slug"),
             "properties": {
                 key: value
                 for key, value in self.properties.items()
@@ -521,6 +531,8 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
                 if key not in {"storage_key", "extracted_text", "retry_requested_at", "deleted_at"}
             }
             title = str(row.get(rule.title_field) or rule.label).strip()
+            if rule.kind in {SourceType.ATTACHMENT, SourceType.PROJECT_FILE}:
+                title = str(row.get("display_title") or row.get(rule.title_field) or rule.label).strip()
             if rule.title_field in rule.semantic:
                 # Стикер/комментарий уже входит в текст целиком; коротко только название.
                 title = title[:200]
@@ -533,6 +545,9 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             elif rule.kind is SourceType.RISK:
                 title = f"RISK-{row['id']} · {title}"
             text_parts = [f"Тип: {rule.label}", f"Проект: {project['key']}", f"# {title}"]
+            document_text = None
+            document_rendition = None
+            document_text_start = 0
             if row.get("task_id") in task_keys:
                 text_parts.append(f"Задача: {task_keys[row['task_id']]}")
             for name in rule.semantic:
@@ -547,7 +562,12 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
                         if isinstance(value, (dict, list))
                         else str(value)
                     )
-                    text_parts.append(f"## {FIELD_LABELS.get(name, name)}\n{rendered}")
+                    heading = f"## {FIELD_LABELS.get(name, name)}\n"
+                    if rule.kind is SourceType.DOCUMENT and name == "content_md":
+                        document_text = rendered
+                        document_rendition = "markdown"
+                        document_text_start = len("\n\n".join(text_parts)) + 2 + len(heading)
+                    text_parts.append(f"{heading}{rendered}")
             if rule.kind is SourceType.MEMBER:
                 user = users.get(row["user_id"], {})
                 properties["user"] = user
@@ -565,6 +585,9 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
                     if key in {"status", "detail", "original_chars", "content_hash"}
                 }
                 if extracted.get("text"):
+                    document_text = extracted["text"]
+                    document_rendition = "extracted_text"
+                    document_text_start = len("\n\n".join(text_parts)) + 2 + len("## Содержимое файла\n")
                     text_parts.append(f"## Содержимое файла\n{extracted['text']}")
                 else:
                     properties["extraction"].setdefault("status", "pending")
@@ -576,10 +599,15 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             parent = None if rule.kind is SourceType.PROJECT else f"project:{project_id}"
             if rule.scope == "task":
                 parent = f"task:{row['task_id']}"
+            elif rule.kind is SourceType.DOCUMENT and row.get("owner_task_id"):
+                parent = f"task:{row['owner_task_id']}"
             if rule.kind is SourceType.WBS_NODE and row.get("parent_id"):
                 parent = f"wbs_node:{row['parent_id']}"
             source = ProjectSource(
-                project_id, rule.kind, row["id"], title, "\n\n".join(text_parts), properties, parent
+                project_id, rule.kind, row["id"], title, "\n\n".join(text_parts), properties, parent,
+                document_text=document_text,
+                document_rendition=document_rendition,
+                document_text_start=document_text_start,
             )
             cached = summaries.get(source.source_id)
             if cached and cached["content_hash"] == source.summary_hash:
@@ -599,8 +627,12 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             if member["user_id"] == row.get("owner_user_id"):
                 catalog.link(f"risk:{row['id']}", f"member:{member['id']}", "owned_by", "owns_risk")
     for row in rows.get("document_links", []):
+        document_source_id = (
+            f"document:{row['document_id']}" if row.get("document_id")
+            else f"project_file:{row.get('project_file_id')}"
+        )
         catalog.link(
-            f"document:{row['document_id']}",
+            document_source_id,
             f"task:{row['task_id']}",
             "document_of",
             "has_document",
@@ -646,6 +678,11 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             f"attachment:{row['attachment_id']}",
             "attached_file",
             "attached_to_comment",
+        )
+    for row in rows.get("task_comment_documents", []):
+        target = f"document:{row['document_id']}" if row.get("document_id") else f"project_file:{row.get('project_file_id')}"
+        catalog.link(
+            f"comment:{row['comment_id']}", target, "attached_document", "attached_to_comment"
         )
     for member in rows.get("project_members", []):
         if member["user_id"] == project["owner_id"]:

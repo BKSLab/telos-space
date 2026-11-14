@@ -13,7 +13,7 @@ from src.schemas.board_stickers import (
     BoardStickerUpdateSchema,
 )
 from src.schemas.calendar_scenarios import ScenarioApplyChangeSchema, ScenarioChangeInputSchema
-from src.schemas.documents import DocumentCreateSchema, DocumentUpdateSchema
+from src.schemas.document_catalog import DocumentUpdateRequestSchema
 from src.schemas.enums import TaskStatus
 from src.schemas.milestones import MilestoneCreateSchema, MilestoneUpdateSchema
 from src.schemas.project_risks import (
@@ -266,12 +266,28 @@ class StickerDeleteInput(StickerInput):
     revision: int = Field(ge=1, description="Текущая revision стикера.")
 
 
-class DocumentCreateInput(DocumentCreateSchema, ToolInput):
-    """Новый документ проекта."""
+class DocumentListInput(PageInput):
+    """Документы проекта и его задач с общими фильтрами каталога."""
+
+    q: str | None = Field(None, max_length=200, description="Название, примечание или содержимое.")
+    scope: Literal["all", "project", "tasks"] = Field("all", description="Все, без задач или связанные с задачами.")
+    task_id: int | None = Field(None, gt=0, description="Документы конкретной задачи текущего проекта.")
+    source_kind: Literal["text", "upload"] | None = Field(None, description="Созданный текст или загруженный оригинал.")
+    format: str | None = Field(None, max_length=20, description="Формат без точки, например md или pdf.")
+    processing: Literal["all", "pending", "ready", "failed"] = Field("all", description="Состояние обработки документа.")
+
+
+class DocumentCreateInput(ToolInput):
+    """Новый Markdown в области проекта или принадлежащей ему задачи."""
+
+    title: str = Field(min_length=1, max_length=255, description="Название документа.")
+    content_md: str = Field(default="", max_length=50_000, description="Текст Markdown.")
+    caption: str | None = Field(None, max_length=2000, description="Примечание документа.")
+    owner_task_id: int | None = Field(None, gt=0, description="Задача-владелец текущего проекта; без значения владелец — проект.")
 
 
 class DocumentInput(ToolInput):
-    document_id: int = Field(gt=0, description="ID документа текущего проекта.")
+    document_ref: str = Field(min_length=7, max_length=110, description="Стабильная ссылка ref из каталога документов текущего проекта.")
 
 
 class DocumentReadInput(DocumentInput):
@@ -281,7 +297,7 @@ class DocumentReadInput(DocumentInput):
     )
 
 
-class DocumentChangesInput(DocumentUpdateSchema, ToolInput):
+class DocumentChangesInput(DocumentUpdateRequestSchema, ToolInput):
     """Название и содержимое документа."""
 
 
@@ -293,17 +309,9 @@ class DocumentLinkInput(DocumentInput):
     task_id: int = Field(gt=0, description="Задача того же проекта.")
 
 
-class LinkInput(ToolInput):
-    link_id: int = Field(gt=0, description="ID связи документа с задачей текущего проекта.")
-
-
-class AttachmentInput(TaskInput):
-    attachment_id: int = Field(gt=0, description="ID файла указанной задачи.")
-
-
-class AttachmentCopyInput(AttachmentInput):
+class DocumentCopyInput(DocumentInput):
     target_task_id: int = Field(
-        gt=0, description="Задача текущего проекта, к которой прикрепить копию файла."
+        gt=0, description="Задача текущего проекта, для которой создать самостоятельную копию документа."
     )
 
 

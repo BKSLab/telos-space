@@ -32,6 +32,8 @@ class ProjectAction:
     """False — личное действие Ариса вне проекта (мои задачи, разовые)."""
     modes: frozenset[ArisMode] = PROJECT_MODES
     """Режимы Ариса, в которых действие доступно модели; MCP режимы не проверяет."""
+    project_optional: bool = False
+    """Один документный сценарий работает и в личной задаче, сохраняя текущий контекст."""
 
     def __post_init__(self) -> None:
         require_canonical_tool_name(self.name)

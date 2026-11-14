@@ -59,6 +59,7 @@ async function mockProjects(page: Page, initial = baseProject) {
         }
         if (path === "/api/v1/projects") return reply([state.project]);
         if (path === "/api/v1/projects/1") return reply(state.project);
+        if (path === "/api/v1/documents") return reply({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
         return reply([]);
     });
     return state;

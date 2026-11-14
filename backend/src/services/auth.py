@@ -80,6 +80,7 @@ class Principal:
     scope: ApiTokenScope
     via_api_token: bool
     api_key: ApiKeyGrant | None = None
+    api_token_id: int | None = None
 
     @property
     def login(self) -> str:
@@ -151,6 +152,7 @@ class AuthService:
         *,
         session_token: str | None,
         bearer_secret: str | None,
+        record_usage: bool = True,
     ) -> Principal:
         """Определяет пользователя запроса по API-токену либо по сессии.
 
@@ -164,6 +166,8 @@ class AuthService:
         Args:
             session_token: Значение cookie сессии, если оно предъявлено.
             bearer_secret: Секрет из заголовка ``Authorization``.
+            record_usage: Отмечать использование отдельным commit; повторная
+                проверка внутри доменной транзакции передаёт False.
 
         Returns:
             Принципал запроса вместе с его правами.
@@ -177,9 +181,13 @@ class AuthService:
         """
         if bearer_secret is not None:
             if is_api_key(bearer_secret):
-                return await self._principal_from_api_key(secret=bearer_secret)
+                return await self._principal_from_api_key(
+                    secret=bearer_secret, record_usage=record_usage
+                )
             if bearer_secret.startswith(TOKEN_PREFIX):
-                return await self._principal_from_token(secret=bearer_secret)
+                return await self._principal_from_token(
+                    secret=bearer_secret, record_usage=record_usage
+                )
             raise NotAuthenticatedError()
         if not session_token:
             raise NotAuthenticatedError()
@@ -189,7 +197,66 @@ class AuthService:
         user = await self._load_active_user(user_id)
         return _to_principal(user, scope=ApiTokenScope.WRITE, via_api_token=False)
 
-    async def _principal_from_token(self, *, secret: str) -> Principal:
+    async def refresh_principal(self, principal: Principal) -> Principal:
+        """Повторно проверяет server-only identity фонового действия без хранения секрета.
+
+        Scopes не расширяются относительно аутентифицированного снимка. Публичный
+        HTTP/MCP transport по-прежнему обязан сначала проверить сами credentials.
+        """
+        user = await self._load_active_user(principal.user_id)
+        if principal.api_key is None:
+            if principal.via_api_token:
+                if principal.api_token_id is None:
+                    raise NotAuthenticatedError()
+                try:
+                    token = await self.tokens_repository.get_active_by_id(principal.api_token_id)
+                except ApiTokensRepositoryError as error:
+                    raise AuthServiceError(str(error)) from error
+                if token is None or token.user_id != principal.user_id:
+                    raise NotAuthenticatedError()
+                scope = (
+                    ApiTokenScope.READ
+                    if ApiTokenScope.READ in {principal.scope, token.scope}
+                    else ApiTokenScope.WRITE
+                )
+                return replace(
+                    _to_principal(user, scope=scope, via_api_token=True), api_token_id=token.id
+                )
+            return _to_principal(user, scope=principal.scope, via_api_token=principal.via_api_token)
+        if self.api_keys_repository is None:
+            raise ApiKeyInvalidError()
+        try:
+            key = await self.api_keys_repository.get_by_id(principal.api_key.key_id)
+        except ApiKeysRepositoryError as error:
+            raise AuthServiceError(str(error)) from error
+        if (
+            key is None
+            or key.owner_user_id != principal.user_id
+            or key.kind not in {"personal", "service"}
+            or not key.is_active
+            or key.revoked_at is not None
+            or (key.expires_at is not None and key.expires_at <= datetime.now(UTC))
+        ):
+            raise ApiKeyInvalidError()
+        scopes = frozenset(key.scopes) & principal.api_key.scopes & API_SCOPES.keys()
+        current = _to_principal(
+            user,
+            scope=ApiTokenScope.WRITE if scopes & WRITE_SCOPES else ApiTokenScope.READ,
+            via_api_token=True,
+        )
+        return replace(
+            current,
+            api_key=ApiKeyGrant(
+                key_id=key.id,
+                label=key.label,
+                key_prefix=key.key_prefix,
+                scopes=frozenset(scopes),
+                owner_user_id=user.id,
+                kind=key.kind,
+            ),
+        )
+
+    async def _principal_from_token(self, *, secret: str, record_usage: bool = True) -> Principal:
         """Проверяет предъявленный секрет и собирает принципала."""
         try:
             token = await self.tokens_repository.get_active_by_hash(hash_token_secret(secret))
@@ -201,14 +268,17 @@ class AuthService:
             raise NotAuthenticatedError()
 
         user = await self._load_active_user(token.user_id)
-        try:
-            await self.tokens_repository.touch_last_used(token, commit=True)
-        except ApiTokensRepositoryError:
-            # Отметка использования — диагностика, а не условие доступа.
-            logger.warning("⚠️ Не удалось отметить использование токена id=%s.", token.id)
-        return _to_principal(user, scope=token.scope, via_api_token=True)
+        if record_usage:
+            try:
+                await self.tokens_repository.touch_last_used(token, commit=True)
+            except ApiTokensRepositoryError:
+                # Отметка использования — диагностика, а не условие доступа.
+                logger.warning("⚠️ Не удалось отметить использование токена id=%s.", token.id)
+        return replace(
+            _to_principal(user, scope=token.scope, via_api_token=True), api_token_id=token.id
+        )
 
-    async def _principal_from_api_key(self, *, secret: str) -> Principal:
+    async def _principal_from_api_key(self, *, secret: str, record_usage: bool = True) -> Principal:
         prefix = key_prefix_of(secret)
         if prefix is None or self.api_keys_repository is None:
             raise ApiKeyInvalidError()
@@ -235,10 +305,11 @@ class AuthService:
                 owner_user_id=user.id,
                 kind=key.kind,
             )
-            try:
-                await self.api_keys_repository.touch_last_used(key, commit=True)
-            except ApiKeysRepositoryError:
-                logger.warning("Не удалось отметить использование API-ключа id=%s.", key.id)
+            if record_usage:
+                try:
+                    await self.api_keys_repository.touch_last_used(key, commit=True)
+                except ApiKeysRepositoryError:
+                    logger.warning("Не удалось отметить использование API-ключа id=%s.", key.id)
             return replace(principal, api_key=grant)
         except ApiKeysRepositoryError as error:
             raise AuthServiceError(str(error)) from error

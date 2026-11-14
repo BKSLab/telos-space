@@ -127,6 +127,7 @@ async def ask_aris(
                 api_key_id=principal_key_id(principal),
                 data=data,
                 key_scopes=principal_key_scopes(principal),
+                api_token_id=principal.api_token_id,
             )
         except (AgentConversationsServiceError, AuthServiceError) as error:
             raise ToolError(error.detail) from error

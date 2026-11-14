@@ -29,7 +29,7 @@ async function setup(page: Page) {
         if (rest === "/events") return reply({ events: [], has_more: false, cursor: 45 });
         if (rest === "/search") return reply({ messages: rows.filter(row => row.content.includes(url.searchParams.get("q") ?? "")), has_more: false, event_cursor: 45 });
         if (rest === "/attachments") return reply(file);
-        if (rest.endsWith("/content")) return route.fulfill({ headers, contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jT1sAAAAASUVORK5CYII=", "base64") });
+        if (rest.endsWith("/content") || rest.endsWith("/preview")) return route.fulfill({ headers, contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jT1sAAAAASUVORK5CYII=", "base64") });
         if (route.request().method() === "DELETE") return route.fulfill({ status: 204, headers });
         return reply([]);
     });
@@ -139,7 +139,7 @@ test("поиск, ответ, реакции и длинные вложения 
     await remove.tap();
     await expect(remove).toHaveCount(0);
     await panel.getByLabel("История сообщений проекта").evaluate(element => { element.scrollTop = element.scrollHeight; });
-    await expect(panel.getByRole("button", { name: /Посмотреть изображение/ })).toBeInViewport();
+    await expect(panel.getByRole("button", { name: /Открыть изображение/ })).toBeInViewport();
     await noPageOverflow(page);
     await page.setViewportSize({ width: 844, height: 390 });
     const bounds = await panel.boundingBox();

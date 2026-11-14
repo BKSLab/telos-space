@@ -461,32 +461,6 @@ async def list_task_activity(
         ]
 
 
-@telos_tool(
-    name="telos_list_attachments",
-    title="Файлы задачи",
-    description="Возвращает файлы задачи: имя, тип, размер и дату загрузки.",
-    scope=SCOPE_TASKS_READ,
-)
-async def list_attachments(context: Context, task_key: TaskKey) -> list[dict]:
-    """Возвращает вложения задачи."""
-    async with tool_context(context) as tools:
-        resolved = await resolve_task(tools, task_key)
-        try:
-            files = await tools.services.attachments.get_attachments(resolved.task_id)
-        except ApplicationError as error:
-            raise ToolError("Не удалось получить файлы задачи.") from error
-        return [
-            {
-                "attachment_id": item.id,
-                "name": item.original_name,
-                "content_type": item.content_type,
-                "size": item.size,
-                "created_at": item.created_at.isoformat(),
-            }
-            for item in files
-        ]
-
-
 # ── База знаний ─────────────────────────────────────────────────────────────
 
 

@@ -34,6 +34,7 @@ from src.exceptions.file_comments import (
     FileCommentsRepositoryError,
     FileCommentsServiceError,
     FileCommentSubmissionConflictError,
+    FileCommentValidationError,
 )
 from src.exceptions.task_attachments import TaskAttachmentNotFoundError
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
@@ -43,6 +44,7 @@ from src.services.file_metadata import FilePreviewsService, TaskFileMutationsSer
 from src.services.project_files import ProjectFilesService
 from src.services.task_comments import TaskCommentsService
 from src.storage.task_attachments import TaskAttachmentStorage
+from src.utils.document_refs import decode_document_ref, encode_document_ref
 from tests.integration.repositories.test_agent_conversations_repository import (
     agent_env as _agent_env,
 )
@@ -117,6 +119,7 @@ async def submit(
     request_id=None,
     uploads=None,
     attachment_ids=None,
+    document_refs=None,
     body_md="Комментарий",
     user=1,
     task_id=None,
@@ -126,7 +129,10 @@ async def submit(
         request_id=request_id or uuid4(),
         body_md=body_md,
         uploads=uploads or [],
-        attachment_ids=attachment_ids or [],
+        document_refs=[
+            *(document_refs or []),
+            *(encode_document_ref("attachment", i) for i in attachment_ids or []),
+        ],
         session_token=f"user-{user}",
         bearer_secret=None,
     )
@@ -212,9 +218,12 @@ async def test_concurrent_same_uuid_has_one_comment_original_history_and_receipt
     first, second = await asyncio.wait_for(asyncio.gather(*operations), 10)
     env.storage.save = original_save
     assert first.model_dump() == second.model_dump()
-    assert first.body_md == "" and first.attachments[0].caption == "Проверка макета"
-    assert first.attachments[0].uploaded_by_user_id == 1
-    assert first.attachments[0].index_status == "disabled"
+    assert first.body_md == "" and len(first.document_refs) == 1
+    async with env.scope() as db:
+        document = await db.document_catalog.get(document_ref=first.document_refs[0], user_id=1)
+        assert document.caption == "Проверка макета"
+        assert document.author.id == 1
+        assert document.states.semantic.status == "disabled"
     assert (await counts(env))[:5] == (1, 1, 1, 1, 1)
     assert len(list(env.path.rglob("*.png"))) == len(list(env.path.rglob("*.preview.jpg"))) == 1
     replay = await submit(env, request_id=request_id, uploads=[image_upload()], body_md="")
@@ -236,8 +245,8 @@ async def test_same_task_constraint_cross_task_rejected_and_replay_checks_curren
     foreign = await submit(
         env, task_id=env.other_task_id, uploads=[CommentFileUpload("same.txt", b"file")]
     )
-    file_id = foreign.attachments[0].id
-    with pytest.raises(TaskAttachmentNotFoundError):
+    file_id = decode_document_ref(foreign.document_refs[0])[1]
+    with pytest.raises(FileCommentValidationError):
         await submit(env, attachment_ids=[file_id])
     text = await submit(env)
     async with env.scope() as db:
@@ -266,7 +275,7 @@ async def test_same_task_constraint_cross_task_rejected_and_replay_checks_curren
 async def test_delete_comment_retains_file_delete_file_unlinks_and_move_keeps_relation(file_env):
     env = file_env
     first = await submit(env, uploads=[CommentFileUpload("saved.txt", b"retained")])
-    file_id = first.attachments[0].id
+    file_id = decode_document_ref(first.document_refs[0])[1]
     second = await submit(env, attachment_ids=[file_id])
     async with env.scope() as db:
         comments = TaskCommentsService(
@@ -301,7 +310,7 @@ async def test_comments_batch_load_has_constant_queries_and_preview_rechecks_cur
 ):
     env = file_env
     first = await submit(env, uploads=[image_upload()])
-    file_id = first.attachments[0].id
+    file_id = decode_document_ref(first.document_refs[0])[1]
     for _ in range(3):
         await submit(env, attachment_ids=[file_id])
     queries = []
@@ -323,7 +332,9 @@ async def test_comments_batch_load_has_constant_queries_and_preview_rechecks_cur
             result = await comments.get_comments(env.task_id)
         finally:
             event.remove(env.engine.sync_engine, "before_cursor_execute", record)
-    assert len(result) == 4 and all(item.attachments[0].id == file_id for item in result)
+    assert len(result) == 4 and all(
+        item.document_refs == [encode_document_ref("attachment", file_id)] for item in result
+    )
     assert len(queries) == 4
     preview = await env.previews.prepare_task(
         task_id=env.task_id, attachment_id=file_id, session_token="user-2", bearer_secret=None
@@ -336,7 +347,9 @@ async def test_comments_batch_load_has_constant_queries_and_preview_rechecks_cur
         assert image.size == (1600, 900)
     async with env.factory() as db:
         _, moves = services(db, env.path)
-        await moves.move(task_id=env.task_id, target=TaskTransferTargetSchema(project_id=2), user_id=1)
+        await moves.move(
+            task_id=env.task_id, target=TaskTransferTargetSchema(project_id=2), user_id=1
+        )
     with pytest.raises(ResourceNotAvailableError):
         await env.previews.prepare_task(
             task_id=env.task_id, attachment_id=file_id, session_token="user-2", bearer_secret=None
@@ -407,6 +420,10 @@ async def test_caption_preserves_text_original_and_processing_generation_and_ret
             (
                 await db.execute(select(FileProcessingJob.id, FileProcessingJob.requested_version))
             ).all()
+        )
+        assert (
+            await db.scalar(select(TaskAttachment.task_id).where(TaskAttachment.id == uploaded.id))
+            == env.task_id
         )
     caption = await env.mutations.update_caption(
         task_id=env.task_id,
@@ -493,3 +510,87 @@ async def test_caption_preserves_text_original_and_processing_generation_and_ret
         await env.previews.prepare_project(
             project_id=2, file_id=project_file.id, session_token="user-2", bearer_secret=None
         )
+
+
+async def test_comment_uses_all_document_types_and_transfer_retains_only_owned_documents(file_env):
+    """Ссылки сохраняют один оригинал; detach/transfer не раскрывают старый контекст."""
+    from src.schemas.document_catalog import DocumentCreateRequestSchema
+
+    env = file_env
+    async with env.scope() as db:
+        shared = await db.document_catalog.create(
+            user_id=1,
+            data=DocumentCreateRequestSchema(
+                request_id=uuid4(),
+                project_id=1,
+                title="Общий Markdown",
+                content_md="Условия",
+            ),
+        )
+        owned = await db.document_catalog.create(
+            user_id=1,
+            data=DocumentCreateRequestSchema(
+                request_id=uuid4(),
+                owner_task_id=env.task_id,
+                title="Заметки задачи",
+                content_md="Результат",
+            ),
+        )
+        uploaded = await db.document_catalog.upload(
+            user_id=1,
+            request_id=uuid4(),
+            project_id=1,
+            file_name="brief.md",
+            content_type="text/markdown",
+            content=b"# Original",
+        )
+        for item in (shared, uploaded):
+            await db.document_catalog.link(document_ref=item.ref, task_id=env.task_id, user_id=1)
+        await db.unit_of_work.commit()
+    refs = [shared.ref, owned.ref, uploaded.ref]
+    request_id = uuid4()
+    comment = await submit(env, request_id=request_id, document_refs=refs)
+    assert set(comment.document_refs) == set(refs)
+    replay = await submit(env, request_id=request_id, document_refs=refs)
+    assert replay.model_dump() == comment.model_dump()
+    async with env.scope() as db:
+        await db.document_catalog.unlink(document_ref=shared.ref, task_id=env.task_id, user_id=1)
+        await db.unit_of_work.commit()
+        assert set((await db.comments.get_document_refs([comment.id]))[comment.id]) == {
+            owned.ref,
+            uploaded.ref,
+        }
+        assert (await db.document_catalog.get(document_ref=shared.ref, user_id=1)).ref == shared.ref
+    async with env.factory() as db:
+        _, moves = services(db, env.path)
+        await moves.move(
+            task_id=env.task_id, target=TaskTransferTargetSchema(project_id=2), user_id=1
+        )
+    async with env.scope() as db:
+        assert (await db.comments.get_document_refs([comment.id]))[comment.id] == [owned.ref]
+        moved = await db.document_catalog.get(document_ref=owned.ref, user_id=1)
+        assert moved.ownership.project_id == 2
+        original = await db.document_catalog.get(document_ref=uploaded.ref, user_id=1)
+        assert original.ownership.project_id == 1
+    assert len(list(env.path.rglob("*.md"))) == 1
+
+
+async def test_deleted_project_upload_disappears_from_comment_before_worker_cleanup(file_env):
+    env = file_env
+    async with env.scope() as db:
+        document = await db.document_catalog.upload(
+            user_id=1,
+            request_id=uuid4(),
+            project_id=1,
+            file_name="deleted.txt",
+            content_type="text/plain",
+            content=b"original",
+        )
+        await db.document_catalog.link(document_ref=document.ref, task_id=env.task_id, user_id=1)
+        await db.unit_of_work.commit()
+    comment = await submit(env, document_refs=[document.ref])
+    async with env.scope() as db:
+        await db.document_catalog.delete(document_ref=document.ref, user_id=1)
+        await db.unit_of_work.commit()
+        assert (await db.comments.get_document_refs([comment.id])).get(comment.id, []) == []
+    assert len(list(env.path.rglob("*.txt"))) == 1

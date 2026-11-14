@@ -161,10 +161,19 @@ class KnowledgeWorker:
             if action.catalog.rows.get("project_files"):
                 async with self.index_service() as persistence:
                     await persistence.persist_project_file_states(action)
+            if any(action.catalog.rows.get(table) for table in ("documents", "project_files", "task_attachments")):
+                async with self.index_service() as persistence:
+                    await persistence.persist_document_states(action)
             return JobExecutionResult(job=job, chunks_count=chunks_count)
         except asyncio.CancelledError:
             raise
         except Exception as error:
+            if action is not None and any(action.catalog.rows.get(table) for table in ("documents", "project_files", "task_attachments")):
+                try:
+                    async with self.index_service() as persistence:
+                        await persistence.persist_document_states(action)
+                except Exception:
+                    logger.warning("⚠️ Не удалось сохранить состояния документов проекта %s.", job.project_id, exc_info=True)
             if action is not None and action.catalog.rows.get("project_files"):
                 try:
                     async with self.index_service() as persistence:

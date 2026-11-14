@@ -10,6 +10,7 @@ from src.utils.api_scopes import (
     SCOPE_BOARDS_WRITE,
     SCOPE_COMMENTS_WRITE,
     SCOPE_PROJECTS_READ,
+    SCOPE_PROJECTS_WRITE,
     SCOPE_STRUCTURE_READ,
     SCOPE_STRUCTURE_WRITE,
     SCOPE_TASKS_DELETE,
@@ -62,7 +63,16 @@ ACTION_SCOPES: dict[str, str] = {
     "telos_get_task": SCOPE_TASKS_READ,
     "telos_list_comments": SCOPE_TASKS_READ,
     "telos_list_dependencies": SCOPE_TASKS_READ,
-    "telos_list_attachments": SCOPE_TASKS_READ,
+    "telos_list_documents": SCOPE_PROJECTS_READ,
+    "telos_get_document": SCOPE_PROJECTS_READ,
+    "telos_create_document": SCOPE_PROJECTS_WRITE,
+    "telos_update_document": SCOPE_PROJECTS_WRITE,
+    "telos_delete_document": SCOPE_PROJECTS_WRITE,
+    "telos_link_document": SCOPE_TASKS_WRITE,
+    "telos_unlink_document": SCOPE_TASKS_WRITE,
+    "telos_copy_document": SCOPE_TASKS_WRITE,
+    "telos_create_text_attachment": SCOPE_TASKS_WRITE,
+    "telos_attach_uploaded_file": SCOPE_TASKS_WRITE,
     "telos_create_task": SCOPE_TASKS_WRITE,
     "telos_update_task": SCOPE_TASKS_WRITE,
     "telos_move_task": SCOPE_TASKS_WRITE,
@@ -80,8 +90,25 @@ ACTION_SCOPES: dict[str, str] = {
     "telos_delete_comment": SCOPE_COMMENTS_WRITE,
 }
 
+DOCUMENT_ACTION_SCOPES = {
+    "telos_list_documents": frozenset({SCOPE_PROJECTS_READ, SCOPE_TASKS_READ}),
+    "telos_get_document": frozenset({SCOPE_PROJECTS_READ, SCOPE_TASKS_READ}),
+    **{name: frozenset({SCOPE_PROJECTS_WRITE, SCOPE_TASKS_WRITE}) for name in (
+        "telos_create_document", "telos_update_document", "telos_delete_document",
+        "telos_link_document", "telos_unlink_document",
+    )},
+}
+
+
+def action_scope_options(name: str) -> frozenset[str]:
+    """Предварительный допуск; точные права определяются владельцем документа."""
+    if name in DOCUMENT_ACTION_SCOPES:
+        return DOCUMENT_ACTION_SCOPES[name]
+    scope = ACTION_SCOPES.get(name)
+    return frozenset({scope}) if scope else frozenset()
+
 
 def tools_for_scopes(scopes: list[str] | frozenset[str]) -> frozenset[str]:
     """Действия каталога, которые открывают выданные ключу права."""
     granted = set(scopes)
-    return frozenset(name for name, scope in ACTION_SCOPES.items() if scope in granted)
+    return frozenset(name for name in ACTION_SCOPES if action_scope_options(name) & granted)

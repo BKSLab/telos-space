@@ -78,14 +78,14 @@ test("на телефоне разделы прокручиваются, вло�
     expect(Math.abs(box!.height - 844)).toBeLessThanOrEqual(2);
     await card.getByRole("tab", { name: "История", exact: true }).click();
     await expect(card.getByRole("tabpanel", { name: "История", exact: true })).toBeVisible();
-    await card.getByRole("tab", { name: "Файлы", exact: true }).click();
+    await card.getByRole("tab", { name: "Документы", exact: true }).click();
     const move = card.getByRole("button", { name: "Переместить…", exact: true });
     await move.click();
     const transfer = page.getByRole("dialog", { name: "Переместить задачу", exact: true });
     await transfer.getByRole("button", { name: "Отмена", exact: true }).click();
     await expect(transfer).toHaveCount(0);
     await expect(move).toBeFocused();
-    await expect(card.getByRole("tab", { name: "Файлы", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(card.getByRole("tab", { name: "Документы", exact: true })).toHaveAttribute("aria-selected", "true");
     await expect.poll(() => card.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await card.getByRole("tab", { name: "Основное", exact: true }).click();
     await expect(card.getByRole("tab", { name: "Основное", exact: true })).toHaveAttribute("aria-selected", "true");

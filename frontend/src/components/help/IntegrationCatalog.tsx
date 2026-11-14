@@ -62,7 +62,7 @@ function Operation({ entry, initialOpen }: { entry: CatalogEntry; initialOpen: b
             <section aria-label={`Доступ ${entry.name}`} className="space-y-2 rounded-md border border-line-subtle bg-control p-3 text-[12px] leading-6 text-secondary">
                 <p className="font-semibold text-primary">Доступ</p>
                 {entry.access === "public" ? <p>Без авторизации.</p> : entry.access === "subscription" ? <p>По секретной ссылке ICS-подписки.</p> : entry.access === "session" ? <p>Только сессия интерфейса. Внешние ключи и токены не принимаются.</p> : <>
-                    <p>{entry.scopes?.length ? <>API-ключ telos_key_: {entry.scopes.map(scope => <code key={scope} title={integrationCatalog.scopes[scope]} className="mr-1 inline-block rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] break-all">{scope}</code>)}{entry.scopes.length > 1 && <span>Нужны все перечисленные права.</span>}</> : "API-ключам telos_key_ недоступно."}</p>
+                    <p>{entry.scopes?.length ? <>API-ключ telos_key_: {entry.scopes.map(scope => <code key={scope} title={integrationCatalog.scopes[scope]} className="mr-1 inline-block rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] break-all">{scope}</code>)}{entry.scopeRule ? <span>{entry.scopeRule}</span> : entry.scopes.length > 1 && <span>Нужны все перечисленные права.</span>}</> : "API-ключам telos_key_ недоступно."}</p>
                     {entry.tokens.length > 0 && <p>Токен telos_token_: {entry.tokens.includes("READ") ? "READ или WRITE" : "WRITE"}.</p>}
                     <p>Действует текущий доступ владельца к объекту.</p>
                 </>}

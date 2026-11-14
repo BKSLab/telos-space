@@ -1,7 +1,7 @@
 """Полный перечень проектных инструментов и их правил исполнения."""
 
 from src.agent.actions import ProjectAction
-from src.agent.aris import WIDGET_MODES, ArisMode
+from src.agent.aris import ALL_MODES, WIDGET_MODES
 from src.schemas import board_diagrams as diagrams
 from src.schemas import project_tool_inputs as p
 from src.services import agent_board_actions as boards
@@ -72,7 +72,8 @@ PROJECT_ACTIONS = (
         p.UploadedAttachmentInput,
         documents.attach_uploaded_file,
         # Файлы приходят только в личном виджете; в общем чате загрузок Арису нет.
-        modes=frozenset({ArisMode.WIDGET_PROJECT}),
+        modes=WIDGET_MODES,
+        project_optional=True,
     ),
     ProjectAction(
         "telos_get_project",
@@ -295,18 +296,22 @@ PROJECT_ACTIONS = (
     ProjectAction(
         "telos_list_documents",
         "Найти документы",
-        "Постраничный перечень документов проекта.",
-        p.PageInput,
+        "Постраничный каталог всех документов проекта и задач с поиском и фильтрами.",
+        p.DocumentListInput,
         documents.list_documents,
         mutating=False,
+        modes=ALL_MODES,
+        project_optional=True,
     ),
     ProjectAction(
         "telos_get_document",
         "Прочитать документ",
-        "Страница оригинального текста и связи с задачами; next_offset указывает продолжение.",
+        "Страница текста документа по document_ref; next_offset указывает продолжение, фрагмент доступен для цитирования.",
         p.DocumentReadInput,
         documents.get_document,
         mutating=False,
+        modes=ALL_MODES,
+        project_optional=True,
     ),
     ProjectAction(
         "telos_create_document",
@@ -314,6 +319,8 @@ PROJECT_ACTIONS = (
         "Документ проекта в Markdown.",
         p.DocumentCreateInput,
         documents.create_document,
+        modes=ALL_MODES,
+        project_optional=True,
     ),
     ProjectAction(
         "telos_update_document",
@@ -321,6 +328,8 @@ PROJECT_ACTIONS = (
         "Название или содержимое документа.",
         p.DocumentUpdateInput,
         documents.update_document,
+        modes=ALL_MODES,
+        project_optional=True,
     ),
     ProjectAction(
         "telos_delete_document",
@@ -329,6 +338,8 @@ PROJECT_ACTIONS = (
         p.DocumentInput,
         documents.delete_document,
         requires_confirmation=True,
+        modes=ALL_MODES,
+        project_optional=True,
     ),
     ProjectAction(
         "telos_link_document",
@@ -341,23 +352,17 @@ PROJECT_ACTIONS = (
         "telos_unlink_document",
         "Открепить документ",
         "Удаляет связь документа с задачей; сам документ сохраняется.",
-        p.LinkInput,
+        p.DocumentLinkInput,
         documents.unlink_document,
     ),
     ProjectAction(
-        "telos_list_attachments",
-        "Прочитать список файлов",
-        "Метаданные и ссылки файлов задачи.",
-        p.TaskInput,
-        documents.list_attachments,
-        mutating=False,
-    ),
-    ProjectAction(
-        "telos_copy_attachment",
-        "Прикрепить существующий файл",
-        "Копирует файл одной задачи к другой внутри проекта, сохраняя исходный файл.",
-        p.AttachmentCopyInput,
-        documents.copy_attachment,
+        "telos_copy_document",
+        "Копировать документ в задачу",
+        "Создаёт отдельную копию текстового документа или исходного оригинала в задаче текущего проекта. Для связи без копии используй telos_link_document.",
+        p.DocumentCopyInput,
+        documents.copy_document,
+        modes=ALL_MODES,
+        project_optional=True,
     ),
     ProjectAction(
         "telos_create_text_attachment",
@@ -365,14 +370,8 @@ PROJECT_ACTIONS = (
         "Прикрепляет к задаче сформированный TXT, Markdown, CSV, JSON или LOG.",
         p.TextAttachmentInput,
         documents.create_text_attachment,
-    ),
-    ProjectAction(
-        "telos_delete_attachment",
-        "Удалить файл",
-        "Удаляет выбранный файл задачи после решения участника.",
-        p.AttachmentInput,
-        documents.delete_attachment,
-        requires_confirmation=True,
+        modes=ALL_MODES,
+        project_optional=True,
     ),
     ProjectAction(
         "telos_list_stages",

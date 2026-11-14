@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { TaskChecklist } from "../src/lib/checklists";
+import { documentFixture } from "../src/components/documents/documentFixtures.test-utils";
 
 const timestamp = "2026-09-06T10:00:00Z";
 const user = { id: 1, username: "vera", first_name: "Вера", last_name: "Иванова", middle_name: null, is_active: true, has_avatar: false };
@@ -30,6 +31,13 @@ async function mockProject(page: Page, initial: TaskChecklist | null = checklist
         const reply = (json: unknown, status = 200) => route.fulfill({ status, json, headers });
         if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
         if (path.endsWith("/auth/me")) return reply(user);
+        if (path === "/api/v1/documents") return reply({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
+        if (path === "/api/v1/documents/upload" && method === "POST") return reply(documentFixture({
+            ref: "opaque-checklist-upload", title: "contract.txt", source_kind: "upload", format: "txt",
+            ownership: { kind: "task", project_id: 1, owner_task_id: state.task.id },
+            tasks: [{ id: state.task.id, key: state.task.key, title: state.task.title, relation: "owner" }],
+            original: { filename: "contract.txt", content_type: "text/plain", size: 20, content_url: "/api/v1/documents/opaque-checklist-upload/content", preview_url: null },
+        }), 201);
         if (path === "/api/v1/projects") return reply([project]);
         if (path.endsWith("/stats")) return reply({ project_id: 1, total_tasks: 1, done_tasks: 0, in_progress_tasks: 1, overdue_tasks: 0, due_soon_tasks: 0, unassigned_tasks: 0, completion_rate: 0, next_due_date: null, stage_breakdown: [] });
         if (path.endsWith("/members")) return reply([{ id: 1, project_id: 1, role: "OWNER", user, created_at: timestamp }]);
@@ -93,7 +101,11 @@ test("AI при создании использует поля и файл; пр
     const modal = page.getByRole("dialog", { name: "Новая задача", exact: true });
     await modal.getByLabel("Название", { exact: true }).fill("Проверить API");
     await modal.locator("#new-task-description").fill("Описание с критериями");
-    await modal.locator('input[type="file"]').setInputFiles({ name: "contract.txt", mimeType: "text/plain", buffer: Buffer.from("Версия контракта 2") });
+    await modal.getByRole("button", { name: "Добавить документ", exact: true }).click();
+    const documents = page.getByRole("dialog", { name: "Добавить документ", exact: true });
+    await documents.getByRole("tab", { name: "Загрузить", exact: true }).click();
+    await documents.getByLabel("Выбрать документы", { exact: true }).setInputFiles({ name: "contract.txt", mimeType: "text/plain", buffer: Buffer.from("Версия контракта 2") });
+    await documents.getByRole("button", { name: "Добавить в задачу", exact: true }).click();
     await modal.getByRole("button", { name: "Сформировать чек-лист", exact: true }).click();
     const proposal = modal.getByRole("region", { name: "Предложение AI" });
     await expect(proposal.getByText("Файл «scan.pdf» передан ограниченным фрагментом.")).toBeVisible();

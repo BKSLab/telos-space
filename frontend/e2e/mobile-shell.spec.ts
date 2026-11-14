@@ -90,10 +90,11 @@ test("основные экраны доступны в узком и гориз
         await page.setViewportSize(viewport);
         for (const [path, heading] of [["/", "Портфель"], ["/projects/new", "Новый проект"], ["/profile", "Профиль"], ["/profile?tab=keys", "Профиль"], ["/help/mcp", "MCP"], ["/projects/DEMO/team", "Команда"], ["/projects/DEMO/settings", "О проекте"], ["/projects/DEMO/docs", "Документы"]]) {
             await page.goto(path);
-            const content = path.endsWith("/docs") ? page.getByRole("textbox", { name: "Поиск документов проекта" }) : page.getByRole("heading", { name: heading, exact: true }).first();
+            const content = page.getByRole("heading", { name: heading, exact: true }).first();
             await expect(content).toBeVisible();
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-            await page.screenshot({ path: info.outputPath(`${path.replaceAll("/", "_") || "portfolio"}-${viewport.width}.png`) });
+            const screenshotName = path.replace(/[\\/:*?"<>|]/g, "_") || "portfolio";
+            await page.screenshot({ path: info.outputPath(`${screenshotName}-${viewport.width}.png`) });
         }
     }
     expect(state.errors).toEqual([]);

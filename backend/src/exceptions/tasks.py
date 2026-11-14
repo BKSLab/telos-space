@@ -162,9 +162,9 @@ class TaskContextDocumentError(TasksServiceError):
     status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     detail = "Для контекста можно использовать только документы текущего проекта."
 
-    def __init__(self, document_id: int) -> None:
-        self.document_id = document_id
-        super().__init__(error_details=f"Документ id={document_id} не принадлежит проекту.")
+    def __init__(self, document_ref: str | None = None) -> None:
+        self.document_ref = document_ref
+        super().__init__(error_details="Выбранный документ недоступен в текущем проекте.")
 
 
 class TaskContextFileError(TasksServiceError):

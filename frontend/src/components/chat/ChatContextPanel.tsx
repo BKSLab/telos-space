@@ -1,10 +1,10 @@
-import { FileText, ListTodo, PanelRight, Paperclip, Pin, PinOff, X } from "lucide-react";
+import { FileText, ListTodo, PanelRight, Pin, PinOff, X } from "lucide-react";
 import { CHAT_CONTEXT_LABELS, chatContextKey, useChatContext } from "@/lib/chatContext";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { ChatContextDetails } from "./ChatContextDetails";
 
-const ICONS = { task: ListTodo, document: FileText, project_file: Paperclip };
+const ICONS = { task: ListTodo, document: FileText };
 
 export function ChatContextToggle({ obscured, onShow }: { obscured: boolean; onShow: () => void }) {
     const context = useChatContext();
@@ -33,7 +33,7 @@ export function ChatContextPanel({ hidden }: { hidden: boolean }) {
             onOpenFull={() => { if (!context.desktop) context.close(); }} /> : <div className="py-3">
             <p className="text-sm font-medium text-primary">Задача или источник рядом с чатом</p>
             <p className="mt-2 text-[13px] leading-relaxed text-secondary">Выберите карточку в переписке, чтобы прочитать детали и продолжить обсуждение.</p>
-            <p className="mt-2 text-[12px] leading-relaxed text-muted">Один источник в новом ответе Ариса появится здесь автоматически. Нужный объект можно закрепить.</p>
+            <p className="mt-2 text-[12px] leading-relaxed text-muted">Основной документ или единственный источник ответа Ариса появится здесь автоматически. Нужный объект можно закрепить.</p>
         </div>}
         {context.recent.length > 0 && <section aria-label="Объекты из переписки" className="border-t border-line-subtle pt-4">
             <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-muted uppercase">Объекты из переписки</h3>

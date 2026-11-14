@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.utils.document_refs import encode_document_ref
 from src.utils.file_previews import is_raster_previewable
 
 
@@ -12,6 +13,7 @@ class TaskAttachmentSchema(BaseModel):
 
     id: int = Field(..., description="Уникальный идентификатор файла.", examples=[4])
     task_id: int = Field(..., description="Идентификатор задачи.", examples=[12])
+    document_ref: str = Field("", description="Каноническая стабильная ссылка документа.")
     caption: str | None = Field(
         None, description="Пользовательская подпись файла.", examples=[None]
     )
@@ -69,10 +71,11 @@ class TaskAttachmentSchema(BaseModel):
     @model_validator(mode="after")
     def protected_urls(self) -> "TaskAttachmentSchema":
         """Дополняет и вложенные ORM-файлы тем же защищённым контрактом."""
-        self.content_url = f"/api/v1/tasks/{self.task_id}/attachments/{self.id}/content"
+        self.document_ref = encode_document_ref("attachment", self.id)
+        self.content_url = f"/api/v1/documents/{self.document_ref}/content"
         self.previewable = is_raster_previewable(self.original_name, self.content_type)
         self.preview_url = (
-            f"/api/v1/tasks/{self.task_id}/attachments/{self.id}/preview"
+            f"/api/v1/documents/{self.document_ref}/preview"
             if self.previewable
             else None
         )

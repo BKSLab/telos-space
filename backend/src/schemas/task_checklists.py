@@ -1,5 +1,6 @@
 """Контракты единственного чек-листа задачи и его AI-черновика."""
 
+from typing import Annotated
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -85,11 +86,11 @@ class ChecklistSuggestionRequestSchema(BaseModel):
     task_id: int | None = Field(
         None, gt=0, description="Существующая задача; null для создания.", examples=[12]
     )
-    document_ids: list[int] = Field(
+    document_refs: list[Annotated[str, Field(min_length=7, max_length=110)]] = Field(
         default_factory=list,
         max_length=50,
-        description="Документы проекта, выбранные в форме.",
-        examples=[[1, 3]],
+        description="Стабильные ссылки документов проекта, выбранных в форме.",
+        examples=[["d1_ZG9jdW1lbnQ6MQ"]],
     )
     checklist: TaskChecklistSchema | None = Field(
         None, description="Текущий черновик чек-листа, если есть."

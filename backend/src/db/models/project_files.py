@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, String, Text
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin
@@ -33,6 +33,17 @@ class ProjectFile(Base, TimestampMixin):
     )
     caption: Mapped[str | None] = mapped_column(
         Text, doc="Подпись пользователя.", comment="Необязательная подпись к оригиналу файла."
+    )
+    display_title: Mapped[str | None] = mapped_column(
+        String(255),
+        doc="Название документа.",
+        comment="Редактируемое название, не меняющее имя оригинала.",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        server_default="1",
+        doc="Версия записи.",
+        comment="Монотонная версия метаданных файлового документа.",
     )
     content_type: Mapped[str] = mapped_column(
         String(255), doc="MIME-тип.", comment="MIME-тип, определённый сервером."

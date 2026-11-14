@@ -84,8 +84,13 @@ class AgentMessage(Base):
     )
     key_scopes: Mapped[list | None] = mapped_column(
         JSONB,
-        doc="Права сервисного ключа на момент вопроса; None — вопрос из интерфейса.",
-        comment="Права сервисного ключа на момент вопроса; NULL — вопрос из интерфейса.",
+        doc="Снимок прав внешних credentials; None — вопрос из интерфейса.",
+        comment="Права внешнего ключа или READ/WRITE-токена на момент вопроса; NULL — сессия интерфейса.",
+    )
+    api_token_id: Mapped[int | None] = mapped_column(
+        ForeignKey("api_tokens.id", ondelete="SET NULL", name="fk_agent_messages_api_token"),
+        doc="Токен вопроса для повторной проверки прав.",
+        comment="Локальный READ/WRITE-токен вопроса для повторной проверки доступа worker-ом.",
     )
     project_id: Mapped[int | None] = mapped_column(
         ForeignKey("projects.id", ondelete="SET NULL"),

@@ -22,6 +22,7 @@ from src.repositories.project_files import ProjectFilesRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.services.source_summaries import SourceSummariesService
 from src.storage.task_attachments import TaskAttachmentStorage
+from src.utils.document_refs import document_text_hash
 
 
 @dataclass(slots=True)
@@ -283,6 +284,50 @@ class KnowledgeIndexService:
 
     def _embedding_signature(self) -> str:
         return digest([self.embedding_client.model, self.qdrant_client.vector_dim])
+
+    async def persist_document_states(self, action: PreparedIndexAction) -> None:
+        """Подтверждает все виды документов после фактического результата Qdrant."""
+        current = build_catalog(
+            action.project_id, await self.sources_repository.get_project_rows(action.project_id)
+        )
+        try:
+            for source in action.catalog.sources.values():
+                if source.kind not in {
+                    SourceType.DOCUMENT,
+                    SourceType.PROJECT_FILE,
+                    SourceType.ATTACHMENT,
+                }:
+                    continue
+                latest = current.sources.get(source.source_id)
+                if latest is None:
+                    continue
+                extraction_status = source.properties.get("extraction", {}).get("status", "ready")
+                status = "ready" if action.index_completed else "failed"
+                if latest.source_hash != source.source_hash or extraction_status in {
+                    "pending",
+                    "processing",
+                }:
+                    status = "pending"
+                elif extraction_status in {"empty", "unsupported", "disabled"}:
+                    status = "skipped"
+                await self.sources_repository.save_document_index_state(
+                    {
+                        "project_id": action.project_id,
+                        "source_id": source.source_id,
+                        "source_hash": source.source_hash,
+                        "source_version": source.properties.get("version", 1),
+                        "text_hash": document_text_hash(source.document_text or ""),
+                        "embedding_signature": self._embedding_signature(),
+                        "status": status,
+                        "detail": None
+                        if status in {"ready", "skipped"}
+                        else "Индекс знаний ожидает актуальную версию документа.",
+                    }
+                )
+            await self.unit_of_work.commit()
+        except Exception:
+            await self.unit_of_work.rollback()
+            raise
 
     async def _extract_attachment(self, attachment: dict) -> dict:
         result = {

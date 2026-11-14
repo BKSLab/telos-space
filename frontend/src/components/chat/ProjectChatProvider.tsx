@@ -5,7 +5,7 @@ import { MessageSquare, X } from "lucide-react";
 import { api, apiUrl, ApiError, queryKeys } from "@/lib/api";
 import { useCurrentUser } from "@/lib/useAuth";
 import { ProjectChatContext, type ProjectChatContextValue } from "@/lib/useProjectChat";
-import { applyChatMessage, chatAuthorName, chatKeys, chatPath, isAgentThinking, isTaskMove, taskMoveText, type ChatAck, type ChatConnectionState, type ChatEntity, type ChatEvent, type ChatEventPage, type ChatHistory, type ChatMessage, type ChatMessagePage, type ChatTaskMoveNotice, type ProjectChat } from "@/lib/projectChat";
+import { applyChatMessage, chatAuthorName, chatEntityKey, chatKeys, chatPath, isAgentThinking, isTaskMove, taskMoveText, type ChatAck, type ChatConnectionState, type ChatEntity, type ChatEntityRef, type ChatEvent, type ChatEventPage, type ChatHistory, type ChatMessage, type ChatMessagePage, type ChatTaskMoveNotice, type ProjectChat } from "@/lib/projectChat";
 import { ProjectChatTransport } from "@/lib/projectChatTransport";
 import { IconButton } from "@/components/ui/Button";
 
@@ -42,10 +42,10 @@ export function ProjectChatProvider({ projectId, projectKey, children, chatVisib
         let infoTimer: ReturnType<typeof setTimeout> | undefined;
         let entityTimer: ReturnType<typeof setTimeout> | undefined;
         let searchChanged = false;
-        const changedEntities = new Map<string, { entity_type: ChatEntity["entity_type"]; entity_id: number }>();
+        const changedEntities = new Map<string, ChatEntityRef>();
         const collectVisibleEntities = () => {
             for (const [, history] of client.getQueriesData<ChatHistory>({ queryKey: chatKeys.messages(projectId, userId) })) {
-                for (const message of history?.messages ?? []) for (const ref of message.entities) changedEntities.set(`${ref.entity_type}:${ref.entity_id}`, { entity_type: ref.entity_type, entity_id: ref.entity_id });
+                for (const message of history?.messages ?? []) for (const ref of message.entities) changedEntities.set(chatEntityKey(ref), ref.entity_type === "DOCUMENT" ? { entity_type: "DOCUMENT", entity_id: null, document_ref: ref.document_ref } : { entity_type: ref.entity_type, entity_id: ref.entity_id });
             }
         };
         const refreshInfo = () => {
@@ -59,15 +59,15 @@ export function ProjectChatProvider({ projectId, projectKey, children, chatVisib
             clearTimeout(entityTimer);
             entityTimer = setTimeout(async () => {
                 const refs = [...changedEntities.values()].slice(0, 100);
-                for (const ref of refs) changedEntities.delete(`${ref.entity_type}:${ref.entity_id}`);
+                for (const ref of refs) changedEntities.delete(chatEntityKey(ref));
                 if (!refs.length) return;
                 try {
                     const values = await api.post<ChatEntity[]>(`${chatPath(projectId)}/entities/resolve`, refs);
                     if (!alive) return;
-                    const wanted = new Set(refs.map((ref) => `${ref.entity_type}:${ref.entity_id}`));
-                    const updates = new Map(values.map((row) => [`${row.entity_type}:${row.entity_id}`, row]));
+                    const wanted = new Set(refs.map(chatEntityKey));
+                    const updates = new Map(values.map((row) => [chatEntityKey(row), row]));
                     client.setQueriesData<ChatHistory>({ queryKey: chatKeys.messages(projectId, userId) }, (old) => old && ({ ...old, messages: old.messages.map((message) => ({ ...message, entities: message.entities.map((ref) => {
-                        const key = `${ref.entity_type}:${ref.entity_id}`;
+                        const key = chatEntityKey(ref);
                         return wanted.has(key) ? updates.get(key) ?? { ...ref, available: false, title: "Объект больше недоступен", href: null, status: null } : ref;
                     }) })) }));
                     void client.invalidateQueries({ queryKey: chatKeys.entities(projectId, userId) });
@@ -89,11 +89,17 @@ export function ProjectChatProvider({ projectId, projectKey, children, chatVisib
                 }
                 if (!replay && event.type === "message.created" && !message.deleted_at && !isAgentThinking(message) && message.author?.id !== userId && (!visible.current || document.hidden || !document.hasFocus())) setNotification(message);
             }
-            if (event.type === "entity.updated" && event.data.entity_type && event.data.entity_id) {
-                const ref = { entity_type: event.data.entity_type, entity_id: event.data.entity_id };
-                if (ref.entity_type === "TASK") void client.invalidateQueries({ queryKey: queryKeys.task(ref.entity_id) });
-                if (ref.entity_type === "DOCUMENT") void client.invalidateQueries({ queryKey: queryKeys.document(ref.entity_id) });
-                changedEntities.set(`${ref.entity_type}:${ref.entity_id}`, ref);
+            if (event.type === "entity.updated" && event.data.entity_type && (event.data.entity_id || event.data.document_ref)) {
+                const ref: ChatEntityRef = event.data.entity_type === "DOCUMENT"
+                    ? { entity_type: "DOCUMENT", entity_id: null, document_ref: event.data.document_ref }
+                    : { entity_type: event.data.entity_type, entity_id: event.data.entity_id! };
+                if (ref.entity_type === "TASK" && ref.entity_id !== null) void client.invalidateQueries({ queryKey: queryKeys.task(ref.entity_id) });
+                if (ref.entity_type === "DOCUMENT" && ref.document_ref) {
+                    void client.invalidateQueries({ queryKey: queryKeys.document(ref.document_ref) });
+                    void client.invalidateQueries({ queryKey: ["documents", "text", ref.document_ref] });
+                    void client.invalidateQueries({ queryKey: ["documents", "list"] });
+                }
+                changedEntities.set(chatEntityKey(ref), ref);
                 refreshEntities();
             }
             if (event.type === "entities.refresh") { collectVisibleEntities(); refreshEntities(); }
@@ -103,7 +109,7 @@ export function ProjectChatProvider({ projectId, projectKey, children, chatVisib
                 // Reconnect может повторить событие; в чате остаются последние пять переносов.
                 setMoveNotices((old) => ({ projectId, userId, items: [...(old.projectId === projectId && old.userId === userId ? old.items : []).filter((row) => row.seq !== notice.seq), notice].slice(-5) }));
                 // Общий префикс проектов включает доски, WBS, календарь и зависимости.
-                for (const key of [queryKeys.projects, queryKeys.myTasks, queryKeys.dashboard, queryKeys.task(move.task_id), queryKeys.taskActivity(move.task_id)]) void client.invalidateQueries({ queryKey: key });
+                for (const key of [queryKeys.projects, queryKeys.myTasks, queryKeys.dashboard, queryKeys.task(move.task_id), queryKeys.taskActivity(move.task_id), ["documents"]]) void client.invalidateQueries({ queryKey: key });
                 changedEntities.set(`TASK:${move.task_id}`, { entity_type: "TASK", entity_id: move.task_id });
                 refreshEntities();
             }

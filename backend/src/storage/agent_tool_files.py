@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from src.exceptions.storage import TaskAttachmentStorageError
 from src.storage.task_attachments import TaskAttachmentStorage
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def read_local_file(path: Path, *, limit: int) -> bytes:
     """Читает ограниченный объём локального файла вне event loop."""
+
     def read() -> bytes:
         with path.open("rb") as stream:
             content = stream.read(limit + 1)
@@ -43,6 +44,12 @@ class AgentToolFileStorage(TaskAttachmentStorage):
     async def read(self, storage_key: str, *, limit: int) -> bytes:
         """Читает приватную загрузку только внутри локального корня."""
         return await read_local_file(self.resolve(storage_key), limit=limit)
+
+    async def save_in(self, directory: PurePosixPath, extension: str, content: bytes) -> str:
+        """Компенсирует также новый оригинал проекта при откате инструмента."""
+        key = await super().save_in(directory, extension, content)
+        self.created.append(key)
+        return key
 
     async def delete(self, storage_key: str) -> None:
         """Откладывает физическое удаление до commit внешней транзакции."""

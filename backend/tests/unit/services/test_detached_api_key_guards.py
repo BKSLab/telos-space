@@ -64,7 +64,7 @@ async def test_scoped_keys_cannot_enter_unlisted_detached_routes(scenario):
             scope=scope,
             llm_client=llm,
             vision=None,
-            storage=None,
+            document_catalog=AsyncMock(),
             file_context_limit=1000,
             max_file_size=1000,
         )

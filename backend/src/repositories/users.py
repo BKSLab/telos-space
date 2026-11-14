@@ -35,7 +35,9 @@ class UsersRepository:
             UsersRepositoryError: Если запрос к БД завершился ошибкой.
         """
         try:
-            result: Result = await self.db_session.execute(select(User).where(User.id == user_id))
+            result: Result = await self.db_session.execute(
+                select(User).where(User.id == user_id).execution_options(populate_existing=True)
+            )
             return result.scalar_one_or_none()
         except (SQLAlchemyError, Exception) as error:
             await self.db_session.rollback()
@@ -185,10 +187,25 @@ class UsersRepository:
 
     async def search(self, *, query: str | None, limit: int = 20) -> list[User]:
         """Search active local users without exposing private profile fields."""
-        statement = select(User).where(User.is_active.is_(True)).order_by(User.last_name, User.first_name, User.id).limit(limit)
+        statement = (
+            select(User)
+            .where(User.is_active.is_(True))
+            .order_by(User.last_name, User.first_name, User.id)
+            .limit(limit)
+        )
         if query and query.strip():
-            value = "%" + query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-            statement = statement.where(or_(User.username.ilike(value), User.last_name.ilike(value), User.first_name.ilike(value)))
+            value = (
+                "%"
+                + query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                + "%"
+            )
+            statement = statement.where(
+                or_(
+                    User.username.ilike(value),
+                    User.last_name.ilike(value),
+                    User.first_name.ilike(value),
+                )
+            )
         try:
             result = await self.db_session.execute(statement)
             return list(result.scalars())

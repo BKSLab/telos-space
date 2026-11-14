@@ -74,6 +74,7 @@ async def create_aris_request(
             api_key_id=principal_key_id(principal),
             data=data,
             key_scopes=principal_key_scopes(principal),
+            api_token_id=principal.api_token_id,
         )
         result = await service.wait_external_result(
             user_id=principal.user_id,

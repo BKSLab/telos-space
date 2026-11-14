@@ -128,7 +128,7 @@ function ProtectedApp() {
                                     }
                                 />
                                 <Route path="docs" element={<ProjectDocumentsPage />} />
-                                <Route path="docs/:slug" element={<DocumentDetailPage />} />
+                                <Route path="docs/:documentRef" element={<DocumentDetailPage />} />
                                 <Route path="chat" element={<ProjectChatPage />} />
                                 <Route path="conversations" element={<ProjectConversationsPage />} />
                                 <Route path="knowledge" element={<ProjectKnowledgePage />} />

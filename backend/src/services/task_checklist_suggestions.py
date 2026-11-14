@@ -1,6 +1,5 @@
 """AI-черновик чек-листа с короткой авторизованной фазой чтения."""
 
-import asyncio
 import json
 import logging
 from collections.abc import Callable
@@ -14,8 +13,8 @@ from src.exceptions.ai import AiProviderError
 from src.exceptions.api_keys import ApiKeyRouteNotAllowedError
 from src.exceptions.base import RepositoryError
 from src.exceptions.clients import ClientError
+from src.exceptions.document_catalog import DocumentCatalogServiceError
 from src.exceptions.projects import ProjectNotFoundError
-from src.exceptions.storage import TaskAttachmentStorageError
 from src.exceptions.tasks import (
     TaskChecklistGenerationError,
     TaskContextDocumentError,
@@ -25,10 +24,7 @@ from src.exceptions.tasks import (
 )
 from src.knowledge.extract import INDEXABLE_EXTENSIONS, extract_indexable_text
 from src.prompts.task_checklist import TASK_CHECKLIST_PROMPT
-from src.repositories.document_links import DocumentLinksRepository
-from src.repositories.documents import DocumentsRepository
 from src.repositories.projects import ProjectsRepository
-from src.repositories.task_attachments import TaskAttachmentsRepository
 from src.repositories.tasks import TasksRepository
 from src.schemas.task_checklists import (
     ChecklistItemSchema,
@@ -40,7 +36,7 @@ from src.schemas.task_checklists import (
 from src.schemas.tasks import TaskRephraseFile
 from src.services.access import AccessService
 from src.services.auth import AuthService
-from src.storage.task_attachments import TaskAttachmentStorage
+from src.services.document_catalog import DocumentCatalogService
 from src.utils.checklists import checklist_context
 
 logger = logging.getLogger(__name__)
@@ -56,9 +52,6 @@ class ChecklistSuggestionScope:
     access: AccessService
     projects: ProjectsRepository
     tasks: TasksRepository
-    documents: DocumentsRepository
-    links: DocumentLinksRepository
-    attachments: TaskAttachmentsRepository
 
 
 ChecklistSuggestionScopeFactory = Callable[
@@ -74,8 +67,8 @@ class TaskChecklistSuggestionService:
         *,
         scope: ChecklistSuggestionScopeFactory,
         llm_client: LlmClient,
+        document_catalog: DocumentCatalogService,
         vision: VisionCapability,
-        storage: TaskAttachmentStorage,
         file_context_limit: int,
         max_file_size: int,
     ) -> None:
@@ -85,14 +78,14 @@ class TaskChecklistSuggestionService:
             scope: Короткая область проверки доступа и чтения.
             llm_client: Клиент генерации.
             vision: Распознавание поддерживаемых изображений.
-            storage: Хранилище существующих вложений.
+            document_catalog: Единое защищённое чтение уже обработанных документов.
             file_context_limit: Максимум символов на извлечённый файл.
             max_file_size: Максимум байт одного файла.
         """
         self.scope = scope
         self.llm_client = llm_client
+        self.document_catalog = document_catalog
         self.vision = vision
-        self.storage = storage
         self.file_context_limit = file_context_limit
         self.max_file_size = max_file_size
 
@@ -135,7 +128,7 @@ class TaskChecklistSuggestionService:
                     session_token=session_token, bearer_secret=bearer_secret
                 )
                 if getattr(principal, "api_key", None) is not None:
-                    raise ApiKeyRouteNotAllowedError('checklist suggestions')
+                    raise ApiKeyRouteNotAllowedError("checklist suggestions")
                 await db.access.ensure_project_access(
                     project_id=project_id, user_id=principal.user_id
                 )
@@ -145,15 +138,6 @@ class TaskChecklistSuggestionService:
                 task = await db.tasks.get_by_id(data.task_id) if data.task_id is not None else None
                 if data.task_id is not None and (task is None or task.project_id != project_id):
                     raise TaskNotFoundError(data.task_id)
-                links = await db.links.get_for_task(data.task_id) if task is not None else []
-                document_ids = set(data.document_ids) | {link.document_id for link in links}
-                documents = await db.documents.get_by_ids(document_ids)
-                by_id = {document.id: document for document in documents}
-                for document_id in document_ids:
-                    if document_id not in by_id or by_id[document_id].project_id != project_id:
-                        raise TaskContextDocumentError(document_id=document_id)
-                attachments = await db.attachments.get_for_task(task.id) if task is not None else []
-                existing_files = [(item.original_name, item.storage_key) for item in attachments]
                 value = (
                     data.checklist
                     if "checklist" in data.model_fields_set
@@ -171,16 +155,9 @@ class TaskChecklistSuggestionService:
                         "description": description[:20_000],
                         "checklist": checklist_context(value, chars=200),
                     },
-                    "documents": [
-                        {"title": document.title, "content": document.content_md[:3000]}
-                        for document in sorted(documents, key=lambda item: item.id)[:20]
-                    ],
+                    "documents": [],
                     "files": [],
                 }
-                if len(documents) > 20 or any(len(item.content_md) > 3000 for item in documents):
-                    warnings.append(
-                        "Документы переданы ограниченными фрагментами, не более 20 документов."
-                    )
                 if len(description) > 20_000:
                     warnings.append("Описание задачи передано фрагментом до 20 000 символов.")
                 if value and any(
@@ -194,21 +171,40 @@ class TaskChecklistSuggestionService:
             logger.error("❌ Не удалось собрать контекст чек-листа.", exc_info=True)
             raise TasksServiceError(str(error)) from error
 
+        # Сохранённые документы читаются из готового текста без повторного OCR.
+        try:
+            references = list(dict.fromkeys(data.document_refs))
+            if task is not None:
+                task_documents = await self.document_catalog.list(
+                    user_id=principal.user_id,
+                    project_id=project_id,
+                    task_id=task.id,
+                    limit=100,
+                )
+                references = list(
+                    dict.fromkeys(references + [item.ref for item in task_documents.items])
+                )
+                if task_documents.next_offset is not None:
+                    warnings.append("Использована первая страница документов задачи.")
+            document_context = await self.document_catalog.read_context(
+                document_refs=references[:20],
+                user_id=principal.user_id,
+                project_id=project_id,
+                max_chars=16_000,
+            )
+        except DocumentCatalogServiceError as error:
+            if error.status_code in {403, 404, 422}:
+                raise TaskContextDocumentError() from error
+            raise TasksServiceError(str(error)) from error
+        if document_context:
+            payload["documents"] = [{"content": document_context}]
+        if len(references) > 20 or len(document_context) >= 16_000:
+            warnings.append("Документы переданы ограниченными фрагментами, не более 20 документов.")
+
         if len(files) > MAX_FILES or any(len(file.content) > self.max_file_size for file in files):
             raise TaskContextFileError(file_name="превышены ограничения файлов контекста")
-        # Чтение диска и распознавание начинаются только после закрытия DB-сессии.
+        # Только ещё не сохранённые файлы формы требуют разбора в этом запросе.
         selected_files = list(files)
-        for name, storage_key in existing_files[: max(0, MAX_FILES - len(files))]:
-            try:
-                path = self.storage.resolve(storage_key)
-                content = await asyncio.to_thread(_read_bounded, path, self.max_file_size)
-                selected_files.append(TaskRephraseFile(name=name, content=content))
-            except (TaskAttachmentStorageError, OSError, ValueError):
-                warnings.append(f"Файл «{name}» недоступен или превышает ограничение размера.")
-        if len(files) + len(existing_files) > MAX_FILES:
-            warnings.append(
-                f"Использованы только первые {MAX_FILES} файлов, начиная с выбранных в форме."
-            )
         for file in selected_files:
             if Path(file.name).suffix.lower() not in INDEXABLE_EXTENSIONS:
                 warnings.append(f"Файл «{file.name}»: формат не поддерживается.")
@@ -268,12 +264,3 @@ class TaskChecklistSuggestionService:
             ),
             warnings=warnings,
         )
-
-
-def _read_bounded(path: Path, limit: int) -> bytes:
-    """Читает сохранённое вложение с независимой проверкой размера."""
-    with path.open("rb") as stream:
-        content = stream.read(limit + 1)
-    if len(content) > limit:
-        raise ValueError("Файл слишком большой.")
-    return content

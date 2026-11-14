@@ -7,13 +7,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.clients.vision import DisabledVisionCapability
+from src.exceptions.document_catalog import CatalogDocumentNotFoundError
 from src.exceptions.tasks import TaskContextDocumentError, TaskDescriptionRewriteError
-from src.repositories.documents import DocumentsRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.tasks import TasksRepository
 from src.schemas.tasks import TaskRephraseFile, TaskRephraseRequestSchema, TaskRephraseResultSchema
 from src.services.db_scope import TaskDescriptionScope
+from src.services.document_catalog import DocumentCatalogService
 from src.services.task_descriptions import TaskDescriptionService
+from src.utils.document_refs import encode_document_ref
 
 
 def build_service(*, file_context_limit: int = 5000):
@@ -34,15 +36,13 @@ def build_service(*, file_context_limit: int = 5000):
             updated_at=datetime.now(UTC),
         )
     ]
-    documents = AsyncMock(spec=DocumentsRepository)
-    documents.get_by_ids.return_value = [
-        SimpleNamespace(id=5, project_id=1, title="Требования", content_md="Данные документа")
-    ]
+    documents = AsyncMock(spec=DocumentCatalogService)
+    documents.read_context.return_value = "Документ: Требования\nДанные документа"
     llm = AsyncMock()
     llm.get_structured_response.return_value = TaskRephraseResultSchema(
         description_md="Понятное описание задачи."
     )
-    db = TaskDescriptionScope(projects=projects, tasks=tasks, documents=documents)
+    db = TaskDescriptionScope(projects=projects, tasks=tasks)
 
     @asynccontextmanager
     async def scope():
@@ -52,6 +52,7 @@ def build_service(*, file_context_limit: int = 5000):
         scope=scope,
         llm_client=llm,
         vision=DisabledVisionCapability(),
+        document_catalog=documents,
         file_context_limit=file_context_limit,
         max_file_size=10 * 1024 * 1024,
     )
@@ -68,10 +69,11 @@ async def test_rephrase_uses_project_tasks_documents_and_limited_file_text() -> 
 
     result = await service.rephrase(
         project_id=1,
+        user_id=7,
         data=TaskRephraseRequestSchema(
             title="Новая задача",
             description_md="сделать форму понятнее",
-            document_ids=[5],
+            document_refs=[encode_document_ref("document", 5)],
             checklist={"title": "Новые проверки", "items": [{"text": "Проверить фокус"}]},
         ),
         files=[TaskRephraseFile(name="brief.txt", content=b"abcdefghij")],
@@ -81,7 +83,7 @@ async def test_rephrase_uses_project_tasks_documents_and_limited_file_text() -> 
     prompt = json.loads(llm.get_structured_response.await_args.kwargs["content"])
     assert prompt["project"]["name"] == "TELOS SPACE"
     assert prompt["related_task_wording"][0]["key"] == "TELOS-7"
-    assert prompt["selected_documents"][0]["title"] == "Требования"
+    assert "Документ: Требования" in prompt["selected_documents"]
     assert prompt["new_files"][0]["content"] == "abcde"
     assert prompt["task"]["checklist"]["items"] == [
         {"text": "Проверить фокус", "is_completed": False}
@@ -94,14 +96,15 @@ async def test_rephrase_rejects_foreign_document_and_overgrown_result() -> None:
     """Документ чужого проекта и чрезмерно раздутый ответ модели отклоняются."""
 
     service, _, _, documents, llm = build_service()
-    documents.get_by_ids.return_value = [
-        SimpleNamespace(id=5, project_id=9, title="Чужой", content_md="секрет")
-    ]
+    documents.read_context.side_effect = CatalogDocumentNotFoundError()
 
     with pytest.raises(TaskContextDocumentError):
         await service.rephrase(
             project_id=1,
-            data=TaskRephraseRequestSchema(description_md="Черновик", document_ids=[5]),
+            user_id=7,
+            data=TaskRephraseRequestSchema(
+                description_md="Черновик", document_refs=[encode_document_ref("document", 5)]
+            ),
             files=[],
         )
 
@@ -113,6 +116,7 @@ async def test_rephrase_rejects_foreign_document_and_overgrown_result() -> None:
     with pytest.raises(TaskDescriptionRewriteError):
         await service.rephrase(
             project_id=1,
+            user_id=7,
             data=TaskRephraseRequestSchema(description_md="Короткий черновик"),
             files=[],
         )

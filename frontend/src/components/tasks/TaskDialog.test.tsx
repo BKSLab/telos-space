@@ -53,7 +53,8 @@ function setup(initial = task) {
             { id: 2, project_id: 1, role: "MEMBER", user: executor, created_at: stamp },
         ]);
         if (path === "/api/v1/projects/1/risks") return json({ total: 0, items: [] });
-        if (["/api/v1/tasks/5/comments", "/api/v1/tasks/5/activity", "/api/v1/tasks/5/attachments", "/api/v1/tasks/5/links", "/api/v1/projects/1/documents"].includes(path)) return json([]);
+        if (path === "/api/v1/documents") return json({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
+        if (["/api/v1/tasks/5/comments", "/api/v1/tasks/5/activity"].includes(path)) return json([]);
         throw new Error(`Unexpected request: ${method} ${path}`);
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
@@ -83,7 +84,7 @@ it("сохраняет описание с версией открытия, уд
     fireEvent.change(field, { target: { value: "Мой черновик" } });
     await updateCache({ revision: 3, description_md: "Чужое описание" });
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
-    await screen.findByText(/Задача уже изменена/);
+    await screen.findAllByText(/Задача уже изменена/);
     await waitFor(() => expect(client.getQueryData<Task>(queryKeys.task(5))?.revision).toBe(3));
     expect(patches().map(call => call.body)).toEqual([{ description_md: "Мой черновик", expected_revision: 1 }]);
     expect((field as HTMLTextAreaElement).value).toBe("Мой черновик");
@@ -112,7 +113,7 @@ it("переименование сохраняет исходную верси�
     // Настоящее фоновое перечитывание того же query не открывает новый черновик.
     await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.task(5) }); });
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
-    await screen.findByRole("alert");
+    await screen.findAllByText(/Задача уже изменена/);
     expect(patches()[0].body).toEqual({ title: "Моё название", expected_revision: 1 });
     expect((field as HTMLInputElement).value).toBe("Моё название");
     expect(state.task.title).toBe("Чужое название");

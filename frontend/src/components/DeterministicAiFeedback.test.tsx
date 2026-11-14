@@ -90,7 +90,6 @@ it("переформулирование снимает ожидание при 
     mount(<CreateTaskDialog projectId={1} stages={[]} isOpen onClose={vi.fn()} />, client => {
         client.setQueryData(queryKeys.currentUser, { id: 1, username: "user" });
         client.setQueryData(queryKeys.projectMembers(1), []);
-        client.setQueryData(queryKeys.documents(1), []);
     });
     fireEvent.change(screen.getByLabelText("Название", { exact: true }), { target: { value: "Контракт API" } });
     const description = screen.getByLabelText(/Описание/) as HTMLTextAreaElement;

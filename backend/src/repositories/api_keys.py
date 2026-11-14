@@ -31,7 +31,7 @@ class ApiKeysRepository:
             ApiKeysRepositoryError: Если запрос к БД завершился ошибкой.
         """
         try:
-            return await self.db_session.get(ApiKey, key_id)
+            return await self.db_session.get(ApiKey, key_id, populate_existing=True)
         except SQLAlchemyError as error:
             await self.db_session.rollback()
             logger.error("❌ Не удалось получить API-ключ id=%s.", key_id, exc_info=True)
@@ -48,10 +48,12 @@ class ApiKeysRepository:
         """
         try:
             result: Result = await self.db_session.execute(
-                select(ApiKey).where(
+                select(ApiKey)
+                .where(
                     ApiKey.key_prefix == key_prefix,
                     ApiKey.is_active.is_(True),
                 )
+                .execution_options(populate_existing=True)
             )
             return result.scalar_one_or_none()
         except SQLAlchemyError as error:

@@ -12,11 +12,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from httpx import AsyncClient
 
-from main import app
 from src.clients.vision import DisabledVisionCapability
-from src.dependencies.services import get_task_document_import_service
 from src.exceptions.documents import DocumentsServiceError
 from src.exceptions.task_attachments import TaskAttachmentTooLargeError
 from src.exceptions.task_documents import (
@@ -30,7 +27,6 @@ from src.repositories.unit_of_work import UnitOfWork
 from src.schemas.document_links import DocumentLinkSchema
 from src.schemas.documents import DocumentDetailSchema
 from src.schemas.task_attachments import TaskAttachmentSchema
-from src.schemas.task_documents import TaskDocumentImportSchema
 from src.services.db_scope import TaskDocumentImportScope
 from src.services.document_links import DocumentLinksService
 from src.services.documents import DocumentsService
@@ -76,53 +72,6 @@ def _link() -> DocumentLinkSchema:
     return DocumentLinkSchema(id=12, document_id=11, task_id=8)
 
 
-class FakeImportService:
-    """Верхний сервис импорта с заданным результатом."""
-
-    def __init__(self, *, result=None, error=None) -> None:
-        self.result = result
-        self.error = error
-        self.max_file_size = 10 * 1024 * 1024
-
-    async def import_file(self, **kwargs) -> TaskDocumentImportSchema:
-        if self.error is not None:
-            raise self.error
-        assert self.result is not None
-        return self.result
-
-
-def _install(service: FakeImportService) -> None:
-    """Ставит двойник сервиса импорта в граф зависимостей."""
-    app.dependency_overrides[get_task_document_import_service] = lambda: service
-
-
-async def test_successful_import_returns_all_three_entities(
-    api_client: AsyncClient,
-) -> None:
-    """Успешный импорт отвечает 201 и отдаёт оригинал, документ и связь."""
-    _install(
-        FakeImportService(
-            result=TaskDocumentImportSchema(
-                attachment=_attachment(),
-                document=_document(),
-                link=_link(),
-            )
-        )
-    )
-
-    response = await api_client.post(
-        IMPORT_PATH,
-        files={"file": ("brief.txt", b"hello", "text/plain")},
-    )
-
-    assert response.status_code == 201
-    body = response.json()
-    assert set(body) == {"attachment", "document", "link"}
-    assert body["attachment"]["id"] == 10
-    assert body["document"]["id"] == 11
-    assert body["link"] == {"id": 12, "document_id": 11, "task_id": 8}
-
-
 FAILED_IMPORTS = (
     (
         TaskDocumentUnsupportedFormatError("Этот формат нельзя преобразовать в документ проекта."),
@@ -140,28 +89,6 @@ FAILED_IMPORTS = (
         DocumentsServiceError("сбой создания документа").detail,
     ),
 )
-
-
-async def test_failed_import_keeps_status_and_detail(api_client: AsyncClient) -> None:
-    """Отказ импорта отвечает прежним статусом и прежней формулировкой.
-
-    Внутренние типы ошибок сменились на собственную иерархию верхнего
-    сервиса, но клиент этого видеть не должен: статус и текст те же.
-    """
-    problems: list[str] = []
-    for error, expected_status, expected_detail in FAILED_IMPORTS:
-        _install(FakeImportService(error=error))
-
-        response = await api_client.post(
-            IMPORT_PATH,
-            files={"file": ("brief.txt", b"hello", "text/plain")},
-        )
-
-        answer = (response.status_code, response.json())
-        if answer != (expected_status, {"detail": expected_detail}):
-            problems.append(f"{type(error).__name__}: {answer}")
-
-    assert not problems, "Контракт отказа импорта изменился: " + "; ".join(problems)
 
 
 def test_nested_failure_keeps_the_cause_visible_to_the_client() -> None:

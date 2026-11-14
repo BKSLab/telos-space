@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.core.settings import Settings
 from src.db.session import async_session_factory
+from src.dependencies.document_catalog import build_bound_document_catalog_service
 from src.dependencies.settings import SettingsDep
 from src.dependencies.storage import TaskAttachmentStorageDep
 from src.repositories.api_keys import ApiKeysRepository
@@ -84,6 +85,9 @@ def build_file_comments_scope(
                 ),
                 tasks=tasks,
                 files=files,
+                document_catalog=build_bound_document_catalog_service(
+                    session=session, settings=settings, storage=storage, unit_of_work=unit_of_work
+                ),
                 project_files=ProjectFilesRepository(session),
                 processing_jobs=FileProcessingJobsRepository(session),
                 attachments=TaskAttachmentsService(

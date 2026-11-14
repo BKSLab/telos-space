@@ -1,12 +1,21 @@
 import type { AgentToolRun, KnowledgeEntityType, KnowledgeSource } from "@/lib/types";
 
-const KINDS: Record<string, KnowledgeEntityType> = { task: "task", document: "document", project_file: "project_file", risk: "risk", milestone: "milestone", node: "wbs_node", stage: "stage", project: "project", sticker: "sticker", member: "member", attachment: "attachment", comment: "comment" };
+const KINDS: Record<string, KnowledgeEntityType> = { task: "task", risk: "risk", milestone: "milestone", node: "wbs_node", stage: "stage", project: "project", sticker: "sticker", member: "member", comment: "comment" };
 const text = (value: unknown): string | null => typeof value === "string" && value.trim() ? value : null;
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 /** Извлекает карточки сущностей из результата или предварительного описания действия. */
 export function actionSources(action: AgentToolRun): KnowledgeSource[] {
     const result = action.status === "pending" || action.status === "rejected" ? record(action.result.preview) : action.result;
+    const document = record(result.document);
+    const documentRef = text(document.ref) ?? text(result.document_ref);
+    const sourceId = text(result.source_id);
+    const match = sourceId?.match(/^(document|project_file|attachment):([1-9]\d*)$/);
+    if (documentRef && match && text(document.title)) {
+        return [{ source_id: sourceId!, entity_type: match[1] as KnowledgeEntityType, entity_id: Number(match[2]),
+            title: text(document.title)!, document_ref: documentRef, reference: null, excerpt: null,
+            score: null, task_id: null, card: { summary: text(document.caption) } }];
+    }
     return Object.entries(KINDS).flatMap(([key, kind]) => {
         const data = record(result[key]);
         const id = Number(data.id ?? action.arguments[`${key}_id`]);
@@ -17,7 +26,7 @@ export function actionSources(action: AgentToolRun): KnowledgeSource[] {
         const taskId = kind === "task" ? id : Number(data.task_id) || null;
         const stage = record(data.stage);
         return [{ source_id: `${kind}:${id}`, entity_type: kind, entity_id: id, title, excerpt: null, score: null,
-            task_id: taskId, document_slug: text(data.slug),
+            task_id: taskId,
             card: { key: text(data.key) ?? (kind === "risk" ? `RISK-${id}` : null), status: text(data.stage_name) ?? text(stage.name) ?? text(data.status), priority: text(data.priority), assignee: text(data.assignee), due_date: text(data.due_date), summary: text(data.description_md)?.slice(0, 240) ?? null },
         }];
     });

@@ -339,50 +339,142 @@ async def test_documents_links_and_binary_attachment_copy(actions_env):
     document = result(
         await invoke(env, "telos_create_document", {"title": "Приёмка", "content_md": "Исходный план"})
     )["document"]
-    document_id = document["id"]
+    document_ref = document["ref"]
     await invoke(
         env,
         "telos_update_document",
-        {"document_id": document_id, "changes": {"content_md": "Проверить форму заказа"}},
+        {"document_ref": document_ref, "changes": {"content_md": "Проверить форму заказа", "expected_revision": document["revision"]}},
     )
     assert (await invoke(env, "telos_list_documents"))["total"] == 1
-    link = result(
-        await invoke(env, "telos_link_document", {"document_id": document_id, "task_id": first["id"]})
-    )["link"]
-    read = await invoke(env, "telos_get_document", {"document_id": document_id})
-    assert read["document"]["content_md"] == "Проверить форму заказа" and len(read["tasks"]) == 1
-    await invoke(env, "telos_unlink_document", {"link_id": link["id"]})
-    assert not (await invoke(env, "telos_get_document", {"document_id": document_id}))["tasks"]
+    await invoke(env, "telos_link_document", {"document_ref": document_ref, "task_id": first["id"]})
+    read = await invoke(env, "telos_get_document", {"document_ref": document_ref})
+    assert read["text"] == "Проверить форму заказа" and len(read["document"]["tasks"]) == 1
+    await invoke(env, "telos_unlink_document", {"document_ref": document_ref, "task_id": first["id"]})
+    assert not (await invoke(env, "telos_get_document", {"document_ref": document_ref}))["document"]["tasks"]
     attached = result(
         await invoke(
             env,
             "telos_create_text_attachment",
             {"task_id": first["id"], "file_name": "plan.md", "content": "Проверить форму заказа"},
         )
-    )["attachment"]
+    )["document"]
     copied = result(
         await invoke(
             env,
-            "telos_copy_attachment",
+            "telos_copy_document",
             {
-                "task_id": first["id"],
-                "attachment_id": attached["id"],
+                "document_ref": attached["ref"],
                 "target_task_id": second["id"],
             },
         )
-    )["attachment"]
-    assert copied["id"] != attached["id"] and copied["size"] == attached["size"]
-    assert len((await invoke(env, "telos_list_attachments", {"task_id": second["id"]}))["items"]) == 1
+    )["document"]
+    assert copied["ref"] != attached["ref"] and copied["original"]["size"] == attached["original"]["size"]
+    assert len((await invoke(env, "telos_list_documents", {"task_id": second["id"], "source_kind": "upload"}))["items"]) == 1
     await approve(
         env,
         await invoke(
-            env, "telos_delete_attachment", {"task_id": first["id"], "attachment_id": attached["id"]}
+            env, "telos_delete_document", {"document_ref": attached["ref"]}
         ),
     )
-    assert not (await invoke(env, "telos_list_attachments", {"task_id": first["id"]}))["items"]
+    assert not (await invoke(env, "telos_list_documents", {"task_id": first["id"], "source_kind": "upload"}))["items"]
     assert len(list(env.files.rglob("*.md"))) == 1
-    await approve(env, await invoke(env, "telos_delete_document", {"document_id": document_id}))
-    assert not (await invoke(env, "telos_list_documents"))["items"]
+    await approve(env, await invoke(env, "telos_delete_document", {"document_ref": document_ref}))
+    assert [item["ref"] for item in (await invoke(env, "telos_list_documents"))["items"]] == [copied["ref"]]
+
+
+async def test_document_actions_keep_owner_scopes_and_recheck_completed_receipts(actions_env):
+    from sqlalchemy import update
+
+    from src.db.models.api_keys import ApiKey
+    from src.utils.api_keys import generate_api_key, hash_api_key
+
+    env = actions_env
+    owner_task = await task(env)
+    project_doc = result(await invoke(env, "telos_create_document", {"title": "Проектный документ", "content_md": "Исходный текст"}))["document"]
+    task_doc = result(await invoke(env, "telos_create_document", {"title": "Документ задачи", "owner_task_id": owner_task["id"], "content_md": "Текст задачи"}))["document"]
+
+    async def actor(scopes):
+        raw, prefix = generate_api_key()
+        async with env.factory() as db:
+            key = ApiKey(label="Synthetic action key", key_hash=hash_api_key(raw), key_prefix=prefix, kind="personal", owner_user_id=1, scopes=list(scopes))
+            db.add(key)
+            await db.flush()
+            key_id = key.id
+            await db.commit()
+        async with env.actions.scope() as db:
+            principal = await db.auth.resolve_principal(session_token=None, bearer_secret=raw)
+        return replace(env.context, principal=principal), key_id
+
+    project_writer, _ = await actor({"projects:read", "projects:write"})
+    task_writer, task_key_id = await actor({"projects:read", "tasks:write"})
+    def change(document):
+        return {"document_ref": document["ref"], "changes": {"expected_revision": document["revision"], "content_md": "Проверено"}}
+    with pytest.raises(AgentToolOperationError):
+        await invoke(env, "telos_update_document", change(task_doc), context=project_writer)
+    with pytest.raises(AgentToolOperationError):
+        await invoke(env, "telos_update_document", change(project_doc), context=task_writer)
+    for context in (project_writer, task_writer):
+        with pytest.raises(AgentToolOperationError):
+            await invoke(env, "telos_link_document", {"document_ref": project_doc["ref"], "task_id": owner_task["id"]}, context=context)
+    request_id = uuid4()
+    changed = await invoke(env, "telos_update_document", change(task_doc), context=task_writer, request_id=request_id)
+    assert result(changed)["document"]["revision"] > task_doc["revision"]
+    assert await invoke(env, "telos_update_document", change(task_doc), context=task_writer, request_id=request_id) == changed
+    copied = result(await invoke(env, "telos_copy_document", {"document_ref": project_doc["ref"], "target_task_id": owner_task["id"]}, context=task_writer))["document"]
+    assert copied["source_kind"] == "text" and copied["ownership"]["owner_task_id"] == owner_task["id"]
+    async with env.factory() as db:
+        await db.execute(update(ApiKey).where(ApiKey.id == task_key_id).values(scopes=["projects:read"]))
+        await db.commit()
+    with pytest.raises(AgentToolAccessError):
+        await invoke(env, "telos_update_document", change(task_doc), context=task_writer, request_id=request_id)
+    assert (await invoke(env, "telos_get_document", {"document_ref": project_doc["ref"]}))["text"] == "Исходный текст"
+
+
+async def test_personal_document_actions_keep_personal_and_shared_project_contexts_separate(actions_env):
+    import json
+    from unittest.mock import AsyncMock
+
+    from src.agent.action_catalog import PERSONAL_ACTIONS
+    from src.agent.aris import ArisMode
+    from src.agent.tools import AgentToolRequest
+    from src.dependencies.services import build_project_tool_executor
+    from src.services.project_query import ProjectQueryService
+    from tests.unit.knowledge.agent_models import LegacyOutput
+    from tests.unit.knowledge.test_project_agent import build_service
+
+    env = actions_env
+    env.actions = AgentActionsService(scope=env.actions.scope, actions=PROJECT_ACTIONS + PERSONAL_ACTIONS)
+    personal = replace(env.context, project_id=None, mode=ArisMode.WIDGET_PERSONAL)
+    personal_task = result(await invoke(env, "telos_create_personal_task", {"title": "Личная задача"}, context=personal))["task"]
+    project_doc = result(await invoke(env, "telos_create_document", {"title": "Проектный текст", "content_md": "Командные данные"}))["document"]
+    private_doc = result(await invoke(env, "telos_create_document", {"title": "Личный текст", "owner_task_id": personal_task["id"], "content_md": "Приватные условия"}, context=personal))["document"]
+    private_ref = private_doc["ref"]
+    page = await invoke(env, "telos_list_documents", context=personal)
+    assert page["total"] == 1 and [item["ref"] for item in page["items"]] == [private_ref]
+    assert (await invoke(env, "telos_get_document", {"document_ref": private_ref}, context=personal))["text"] == "Приватные условия"
+    with pytest.raises(AgentToolAccessError):
+        await invoke(env, "telos_get_document", {"document_ref": project_doc["ref"]}, context=personal)
+    with pytest.raises(AgentToolAccessError):
+        await invoke(env, "telos_get_document", {"document_ref": private_ref}, context=replace(env.context, mode=ArisMode.PROJECT_CHAT))
+    with pytest.raises(AgentToolConflictError):
+        await invoke(env, "telos_create_document", {"title": "Нет личной задачи"}, context=personal)
+    service, _, clients, source_db = build_service()
+    service.tools = build_project_tool_executor(AsyncMock(spec=ProjectQueryService), env.actions)
+
+    async def respond(*, content, **_kwargs):
+        payload = json.loads(content)
+        if not payload.get("read_results"):
+            return LegacyOutput(tool_calls=[AgentToolRequest(name="telos_get_document", arguments={"document_ref": private_ref})])
+        page = payload["read_results"][0]["result"]
+        return LegacyOutput(answer="Личные условия проверены.", source_ids=[page["source_handle"]], primary_reference=page["fragment_handle"])
+
+    clients.llm_client.get_structured_response.side_effect = respond
+    answer = await service.ask_personal(question="Что сказано в личном документе?", history=[], memory="", actor={"user_id": 1}, execution=replace(personal, can_write=False))
+    assert len(answer.sources) == 1 and answer.sources[0].document_ref == private_ref
+    assert answer.sources[0].is_primary and answer.sources[0].reference.quote == "Приватные условия"
+    source_db.sources.get_project_rows.assert_not_awaited()
+    clients.embedding_client.get_embedding.assert_not_awaited()
+    clients.qdrant_client.search.assert_not_awaited()
 
 
 async def test_wbs_milestones_dependencies_calendar_and_stages(actions_env):

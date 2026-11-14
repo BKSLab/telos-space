@@ -6,8 +6,10 @@
 
 Сюда попадают только эндпоинты, которые получают принципала через
 ``get_principal``: там и проверяется право. Эндпоинты с собственной короткой
-областью аутентификации (стриминг, LLM-подсказки, чат) ключам закрыты —
-это проверяет тест ``test_api_key_routes``.
+областью аутентификации проверяют scopes в доменном сервисе. Для единого
+каталога документов они зависят от владельца (проект / задача); составной
+комментарий также требует tasks:write при наличии документов. AI-сценарии
+и чат явно ограничивают допустимые учётные данные своим сервисом.
 
 Операции MCP — в ``src/mcp_server/registry.py``; права — ``src/utils/api_scopes.py``.
 """
@@ -33,15 +35,6 @@ _P = "/api/v1"
 
 #: (HTTP-метод, шаблон маршрута) → требуемое право.
 API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
-    ("GET", f"{_P}/projects/{{project_id}}/files"): SCOPE_PROJECTS_READ,
-    ("GET", f"{_P}/projects/{{project_id}}/files/search"): SCOPE_PROJECTS_READ,
-    ("GET", f"{_P}/projects/{{project_id}}/files/{{file_id}}"): SCOPE_PROJECTS_READ,
-    ("GET", f"{_P}/projects/{{project_id}}/files/{{file_id}}/content"): SCOPE_PROJECTS_READ,
-    ("GET", f"{_P}/projects/{{project_id}}/files/{{file_id}}/preview"): SCOPE_PROJECTS_READ,
-    ("POST", f"{_P}/projects/{{project_id}}/files"): SCOPE_PROJECTS_WRITE,
-    ("PATCH", f"{_P}/projects/{{project_id}}/files/{{file_id}}"): SCOPE_PROJECTS_WRITE,
-    ("POST", f"{_P}/projects/{{project_id}}/files/{{file_id}}/retry"): SCOPE_PROJECTS_WRITE,
-    ("DELETE", f"{_P}/projects/{{project_id}}/files/{{file_id}}"): SCOPE_PROJECTS_WRITE,
     # ── Проекты: карточка, стадии, команда, вехи, календарь, риски ──────────
     ("GET", f"{_P}/projects"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}"): SCOPE_PROJECTS_READ,
@@ -61,18 +54,11 @@ API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
     ("GET", f"{_P}/projects/{{project_id}}/tasks"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/tasks/by-key/{{task_key}}"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/tasks/{{task_id}}"): SCOPE_TASKS_READ,
-    ("GET", f"{_P}/tasks/{{task_id}}/links"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/tasks/{{task_id}}/comments"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/tasks/{{task_id}}/activity"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/tasks/{{task_id}}/report"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/task-reports"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/tasks/{{task_id}}/report/history"): SCOPE_TASKS_READ,
-    ("GET", f"{_P}/tasks/{{task_id}}/attachments"): SCOPE_TASKS_READ,
-    ("GET", f"{_P}/tasks/{{task_id}}/files/search"): SCOPE_TASKS_READ,
-    ("GET", f"{_P}/tasks/{{task_id}}/attachments/{{attachment_id}}/preview"): SCOPE_TASKS_READ,
-    ("POST", f"{_P}/tasks/{{task_id}}/attachments"): SCOPE_TASKS_WRITE,
-    ("PATCH", f"{_P}/tasks/{{task_id}}/attachments/{{attachment_id}}"): SCOPE_TASKS_WRITE,
-    ("POST", f"{_P}/tasks/{{task_id}}/attachments/{{attachment_id}}/retry"): SCOPE_TASKS_WRITE,
     ("GET", f"{_P}/tasks/{{task_id}}/transfer/preview"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/task-dependencies"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/users/me/tasks"): SCOPE_TASKS_READ,

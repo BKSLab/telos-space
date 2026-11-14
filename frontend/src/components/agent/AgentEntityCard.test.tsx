@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { KnowledgeSource } from "@/lib/types";
 import { AgentEntityCard } from "./AgentEntityCard";
+import { useUiStore } from "@/stores/ui";
+
+vi.mock("@/components/documents/DocumentView", () => ({ DocumentDialog: ({ documentRef }: { documentRef: string }) => <output role="dialog">{documentRef}</output> }));
 
 afterEach(cleanup);
 function Location() { const where = useLocation(); return <output aria-label="Адрес">{where.pathname + where.search}</output>; }
-const source: KnowledgeSource = { source_id: "wbs_node:8", entity_type: "wbs_node", entity_id: 8, title: "Раздел ИСР", excerpt: null, score: null, task_id: null, document_slug: null };
+const source: KnowledgeSource = { source_id: "wbs_node:8", entity_type: "wbs_node", entity_id: 8, title: "Раздел ИСР", excerpt: null, score: null, task_id: null };
 
 it("сохраняет переход к разделу ИСР", () => {
     render(<MemoryRouter><AgentEntityCard source={source} project={{ id: 1, key: "TASK" }} /><Location /></MemoryRouter>);
@@ -27,8 +30,11 @@ it("открывает опубликованный отчёт на вкладк
     expect(screen.getByLabelText("Адрес").textContent).toBe("/my-tasks?task=5&task_tab=report");
 });
 
-it("открывает самостоятельный файл проекта по его ID", () => {
-    render(<MemoryRouter><AgentEntityCard source={{ ...source, source_id: "project_file:42", entity_type: "project_file", entity_id: 42, title: "План.pdf" }} project={{ id: 1, key: "TASK" }} /><Location /></MemoryRouter>);
-    fireEvent.click(screen.getByRole("button", { name: "Файл проекта: План.pdf" }));
-    expect(screen.getByLabelText("Адрес").textContent).toBe("/projects/TASK/docs?file=42");
+it.each(["document", "project_file", "attachment"] as const)("открывает %s по opaque ref общим просмотрщиком даже в личном чате", type => {
+    useUiStore.getState().setSelectedTaskId(null);
+    render(<MemoryRouter><AgentEntityCard source={{ ...source, source_id: `${type}:42`, entity_type: type, entity_id: 42, task_id: type === "attachment" ? 7 : null, document_ref: `opaque-${type}`, title: "План.pdf" }} project={null} /><Location /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Документ: План.pdf" }));
+    expect(screen.getByRole("dialog").textContent).toBe(`opaque-${type}`);
+    expect(screen.getByLabelText("Адрес").textContent).toBe("/");
+    expect(useUiStore.getState().selectedTaskId).toBeNull();
 });

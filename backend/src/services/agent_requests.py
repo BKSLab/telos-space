@@ -37,6 +37,7 @@ from src.schemas.agent_requests import (
 )
 from src.services.auth import Principal
 from src.services.db_scope import AgentConversationScope, AgentConversationScopeFactory
+from src.utils.api_scopes import API_SCOPES
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +63,14 @@ def principal_key_scopes(principal: Principal) -> list[str] | None:
     """Права, которыми ограничены изменения агента; None — без ограничения ключом.
 
     Сервисный ключ — ровно его права (ключ = права пользователя ∩ права ключа).
-    Личный токен на чтение изменений не разрешает. Вход через локальная сессия и токен на
-    запись ограничены только ролью пользователя в проекте.
+    Личный READ-токен изменений не разрешает; WRITE хранит полный снимок scopes.
+    Массив сохраняет признак внешних credentials после удаления токена. None
+    означает сессию интерфейса, ограниченную текущими правами пользователя.
     """
     if principal.api_key is not None:
         return sorted(principal.api_key.scopes)
+    if principal.via_api_token and principal.can_write:
+        return sorted(API_SCOPES)
     return None if principal.can_write else []
 
 
@@ -93,6 +97,7 @@ class AgentRequestsService:
         api_key_id: UUID | None,
         data: AgentAskSchema,
         key_scopes: list[str] | None,
+        api_token_id: int | None = None,
     ) -> UUID:
         """Ставит вопрос внешнего агента в очередь ответов (канал api).
 
@@ -105,6 +110,7 @@ class AgentRequestsService:
             api_key_id: Сервисный ключ; None — локальная сессия или личный токен.
             data: Пересказ, дословная реплика, ключ беседы и контекст экрана.
             key_scopes: Права ключа на момент вопроса; None — без ограничения ключом.
+            api_token_id: Внутренний ID аутентифицированного READ/WRITE-токена.
         Returns:
             ID вопроса для получения результата.
         Raises:
@@ -117,22 +123,36 @@ class AgentRequestsService:
             if user is None or not user.is_active:
                 raise AgentConversationNotFoundError("Пользователь недоступен.")
             await db.conversations.lock_external(user_id, api_key_id, f"request:{request_id}")
-            existing = await db.messages.get_answer_by_request(request_id, user_id=user_id, api_key_id=api_key_id)
+            existing = await db.messages.get_answer_by_request(
+                request_id, user_id=user_id, api_key_id=api_key_id
+            )
             if existing is not None:
                 previous = await db.conversations.get_by_id(existing.conversation_id)
-                if (previous is None or previous.user_id != user_id or previous.api_key_id != api_key_id
-                        or previous.channel != "api" or previous.external_key != data.conversation_id):
+                if (
+                    previous is None
+                    or previous.user_id != user_id
+                    or previous.api_key_id != api_key_id
+                    or previous.channel != "api"
+                    or previous.external_key != data.conversation_id
+                ):
                     raise AgentMessageConflictError("Ключ запроса уже использован.")
                 pair = await db.messages.get_request(previous.id, request_id)
                 question = next(item for item in pair if item.role == "user")
                 page = data.page_context.model_dump(mode="json") if data.page_context else None
-                if (question.content != data.text or question.verbatim != ((data.user_text or "").strip() or None)
-                        or question.page_context != page):
-                    raise AgentMessageConflictError("Ключ запроса использован с другими параметрами.")
+                if (
+                    question.content != data.text
+                    or question.verbatim != ((data.user_text or "").strip() or None)
+                    or question.page_context != page
+                ):
+                    raise AgentMessageConflictError(
+                        "Ключ запроса использован с другими параметрами."
+                    )
                 return request_id
             conversation = None
             if data.conversation_id is not None:
-                await db.conversations.lock_external(user_id, api_key_id, f"conversation:{data.conversation_id}")
+                await db.conversations.lock_external(
+                    user_id, api_key_id, f"conversation:{data.conversation_id}"
+                )
                 conversation = await db.conversations.get_external(
                     user_id=user_id,
                     api_key_id=api_key_id,
@@ -172,6 +192,7 @@ class AgentRequestsService:
                         "files": [],
                         "verbatim": verbatim,
                         "key_scopes": sorted(key_scopes) if key_scopes is not None else None,
+                        "api_token_id": api_token_id,
                         # Экран трекера у пользователя — подсказка «эта задача», не право.
                         "page_context": (
                             data.page_context.model_dump(mode="json") if data.page_context else None
@@ -185,6 +206,7 @@ class AgentRequestsService:
                         "files": [],
                         "verbatim": None,
                         "key_scopes": None,
+                        "api_token_id": None,
                         "page_context": None,
                     },
                 ]
@@ -218,7 +240,9 @@ class AgentRequestsService:
             AgentConversationsServiceError: При ошибке хранения.
         """
         async with self._scope() as db:
-            message = await db.messages.get_answer_by_request(request_id, user_id=user_id, api_key_id=api_key_id)
+            message = await db.messages.get_answer_by_request(
+                request_id, user_id=user_id, api_key_id=api_key_id
+            )
             conversation = (
                 await db.conversations.get_by_id(message.conversation_id) if message else None
             )

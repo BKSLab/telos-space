@@ -45,7 +45,7 @@ async def suggest_task_checklist(
     payload: Annotated[
         str,
         Form(
-            description="JSON с названием, описанием, task_id, document_ids и текущим чек-листом."
+            description="JSON с названием, описанием, task_id, document_refs и текущим чек-листом."
         ),
     ],
     service: ChecklistSuggestionServiceDep,

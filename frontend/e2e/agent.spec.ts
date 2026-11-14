@@ -82,7 +82,7 @@ test("карточка задачи показывает поля и фирме�
     page.on("pageerror", error => errors.push(error.message));
     const control = await installProjectApi(page);
     control.answer = "";
-    control.sources = [{ source_id: "task:42", entity_type: "task", entity_id: 42, title: "DEMO-42 · Проверить оплату", task_id: 42, document_slug: null, score: null, excerpt: null,
+    control.sources = [{ source_id: "task:42", entity_type: "task", entity_id: 42, title: "DEMO-42 · Проверить оплату", task_id: 42, score: null, excerpt: null,
         card: { key: "DEMO-42", status: "В работе", priority: "HIGH", assignee: "Анна Иванова", due_date: "2026-10-01", summary: "Проверить оплату картой и возврат средств." } }];
     control.action = { id: "create-42", tool_name: "telos_create_task", title: "Создать задачу", arguments: { title: "Проверить оплату" }, status: "completed", result: { source_id: "task:42", task: { id: 42, key: "DEMO-42", title: "Проверить оплату" } }, created_at: "2026-09-22T10:00:00Z" };
     await page.goto("/projects/DEMO/team");
@@ -149,6 +149,7 @@ async function installProjectApi(page: Page) {
         const reply = (json: unknown, status = 200) => route.fulfill({ status, json, headers });
         if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
         if (path.endsWith("/auth/me")) return reply(user);
+        if (path === "/api/v1/documents") return reply({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
         if (path.endsWith("/dashboard")) return reply({ totals: { total_projects: 1, total_tasks: 0, active_projects: 1, overdue_tasks: 0, in_progress_tasks: 0, done_tasks: 0 }, projects: [], attention_tasks: [], recent_tasks: [] });
         if (path === "/api/v1/projects") return reply(control.projects);
         const projectPath = path.match(/^\/api\/v1\/projects\/(\d+)$/);
@@ -193,7 +194,7 @@ async function installProjectApi(page: Page) {
                 if (assistant?.status === "queued" && !control.pending) {
                     Object.assign(assistant, control.fail ? { status: "failed", error: "Не удалось подготовить ответ. Можно повторить запрос." } : {
                         status: "completed", content: control.answer,
-                        sources: control.sources ?? [{ source_id: "member:1", entity_type: "member", entity_id: 1, title: "Анна Иванова", excerpt: "Роль: OWNER", score: null, task_id: null, document_slug: null, related_source_ids: ["project:1"] }],
+                        sources: control.sources ?? [{ source_id: "member:1", entity_type: "member", entity_id: 1, title: "Анна Иванова", excerpt: "Роль: OWNER", score: null, task_id: null, related_source_ids: ["project:1"] }],
                     });
                     if (control.action && !assistant.actions) assistant.actions = [structuredClone(control.action)];
                 }

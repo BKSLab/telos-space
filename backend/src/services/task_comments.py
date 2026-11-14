@@ -228,14 +228,7 @@ class TaskCommentsService:
 
     async def _schemas(self, comments: list) -> list[CommentSchema]:
         result = [CommentSchema.model_validate(comment) for comment in comments]
-        if not any(item.attachments for item in result):
-            return result
-        states = await self.comments_repository.get_attachment_states([item.id for item in result])
+        refs = await self.comments_repository.get_document_refs([item.id for item in result])
         for comment in result:
-            for attachment in comment.attachments:
-                state = states.get(attachment.id, {})
-                if not self.knowledge_enabled:
-                    state.update(index_status="disabled", index_detail=None)
-                for key, value in state.items():
-                    setattr(attachment, key, value)
+            comment.document_refs = refs.get(comment.id, [])
         return result

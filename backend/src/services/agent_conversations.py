@@ -19,6 +19,7 @@ from src.agent.wakeup import wake_agent_worker
 from src.clients.llm import LlmClient
 from src.db.models.agent_conversations import AgentConversation
 from src.db.models.agent_messages import AgentMessage
+from src.db.models.api_tokens import ApiTokenScope
 from src.exceptions.access import AccessServiceError, ResourceNotAvailableError
 from src.exceptions.agent_conversations import (
     AgentConversationBusyError,
@@ -26,6 +27,7 @@ from src.exceptions.agent_conversations import (
     AgentConversationsServiceError,
     AgentMessageConflictError,
 )
+from src.exceptions.auth import AuthServiceError
 from src.exceptions.base import RepositoryError
 from src.prompts.agent_memory import AGENT_MEMORY_PROMPT
 from src.schemas.agent_conversations import (
@@ -40,10 +42,12 @@ from src.schemas.agent_files import AgentFileSchema
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeChatMessageSchema
 from src.services.agent_routing import AgentRoutingAnswer, AgentRoutingService
+from src.services.auth import ApiKeyGrant, Principal
 from src.services.board_selection import checked_board_selection, normalize_board_selection
 from src.services.db_scope import AgentConversationScope, AgentConversationScopeFactory
 from src.services.project_agent import API_CHANNEL, ProjectAgentService
 from src.services.tasks import user_display_name
+from src.utils.api_scopes import WRITE_SCOPES
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +366,7 @@ class AgentConversationsService:
                 "name": user_display_name(user),
             }
             key_scopes = None
+            key = None
             if conversation.channel == API_CHANNEL and conversation.api_key_id is not None:
                 if db.api_keys is None:
                     raise AgentConversationsServiceError("Проверка API-ключа не подключена.")
@@ -385,10 +390,49 @@ class AgentConversationsService:
             question = next(item for item in pair if item.role == "user")
             if key_scopes is not None:
                 question.key_scopes = sorted(set(question.key_scopes or []) & key_scopes)
+            request_principal = None
+            if conversation.channel == API_CHANNEL:
+                scopes = frozenset(question.key_scopes or [])
+                request_principal = Principal(
+                    user_id=user.id,
+                    username=user.username,
+                    last_name=user.last_name,
+                    first_name=user.first_name,
+                    middle_name=user.middle_name,
+                    scope=ApiTokenScope.WRITE
+                    if question.key_scopes is None or scopes & WRITE_SCOPES
+                    else ApiTokenScope.READ,
+                    via_api_token=question.key_scopes is not None
+                    or question.api_token_id is not None,
+                    api_token_id=question.api_token_id,
+                    api_key=ApiKeyGrant(
+                        key_id=key.id,
+                        label=key.label,
+                        key_prefix=key.key_prefix,
+                        owner_user_id=user.id,
+                        scopes=scopes,
+                        kind=key.kind,
+                    )
+                    if key is not None
+                    else None,
+                )
+                if db.auth is None:
+                    raise AgentConversationsServiceError(
+                        "Проверка учётных данных worker-а не подключена."
+                    )
+                try:
+                    request_principal = await db.auth.refresh_principal(request_principal)
+                except AuthServiceError as error:
+                    raise AgentConversationNotFoundError(
+                        "Учётные данные больше недоступны. Повторите вопрос."
+                    ) from error
             page_context = dict(question.page_context or {})
             if conversation.channel == API_CHANNEL:
                 # Внешняя беседа: маршрутизатор выбирает проект и проверяет роль.
-                project_id, can_write = None, True
+                project_id, can_write = (
+                    None,
+                    bool(request_principal and request_principal.can_write),
+                )
             else:
                 # Проект страницы пересчитывается на каждый ответ и только в пределах
                 # прав пользователя: недоступный проект Арису не показывается вовсе.
@@ -435,6 +479,7 @@ class AgentConversationsService:
                 action_history=action_history,
                 pinned_project_id=current_actions[0].project_id if current_actions else None,
                 page_context=page_context,
+                principal=request_principal,
             )
             return result.answer, result.project_id
         on_progress = self._progress_sink(message)
@@ -456,6 +501,9 @@ class AgentConversationsService:
                 page_context=page_context,
                 conversation_id=f"conversation:{conversation.id}",
                 on_progress=on_progress,
+                uploaded_files=[
+                    file for item in [*reversed(recent), question] for file in item.files
+                ],
             )
             return answer, None
         answer = await self.agent.ask(
@@ -487,6 +535,7 @@ class AgentConversationsService:
         action_history: list[dict],
         pinned_project_id: int | None,
         page_context: dict,
+        principal: Principal | None = None,
     ) -> AgentRoutingAnswer:
         """Отвечает в беседе без проекта: маршрутизатор выбирает доступный контекст.
 
@@ -513,6 +562,7 @@ class AgentConversationsService:
                 message_id=message.id,
                 run_id=message.run_id,
                 allowed_tools=allowed,
+                principal=principal,
             ),
             action_history=action_history,
             pinned_project_id=pinned_project_id,

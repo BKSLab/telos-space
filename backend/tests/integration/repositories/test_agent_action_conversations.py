@@ -57,7 +57,7 @@ async def test_file_is_private_until_sent_then_attaches_original_bytes_once(acti
     request_id = uuid4()
     first = await invoke(env, "telos_attach_uploaded_file", call, request_id=request_id)
     assert first == await invoke(env, "telos_attach_uploaded_file", call, request_id=request_id)
-    assert result(first)["attachment"]["size"] == len(binary)
+    assert result(first)["document"]["original"]["size"] == len(binary)
     copied_files = list((env.files / "tasks").rglob("*.pdf"))
     assert len(copied_files) == 1 and copied_files[0].read_bytes() == binary
     with pytest.raises(AgentToolOperationError):

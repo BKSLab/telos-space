@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.knowledge import KnowledgeSourceSchema
+from src.utils.document_refs import decode_document_ref
 
 EntityType = Literal["TASK", "DOCUMENT", "RISK", "MILESTONE", "WBS_NODE"]
 Reaction = Literal["👍", "❤️", "👀", "✅", "🎉"]
@@ -24,7 +25,22 @@ class ChatEntityRef(ChatInput):
     """Структурированная ссылка текущего проекта."""
 
     entity_type: EntityType
-    entity_id: PositiveId
+    entity_id: PositiveId | None = None
+    document_ref: str | None = None
+
+    @model_validator(mode="after")
+    def validate_identity(self):
+        if self.entity_type == "DOCUMENT":
+            if self.entity_id is not None or self.document_ref is None:
+                raise ValueError("Для документа нужна только document_ref.")
+            decode_document_ref(self.document_ref)
+        elif self.entity_id is None or self.document_ref is not None:
+            raise ValueError("Для объекта нужен entity_id без document_ref.")
+        return self
+
+    @property
+    def identity(self) -> tuple[str, str | int]:
+        return self.entity_type, self.document_ref if self.entity_type == "DOCUMENT" else self.entity_id
 
 
 class ChatMessageBody(ChatInput):
@@ -44,7 +60,7 @@ class ChatMessageBody(ChatInput):
             self.attachment_ids
         ):
             raise ValueError("Повторяющиеся упоминания или файлы.")
-        refs = [(ref.entity_type, ref.entity_id) for ref in self.entities]
+        refs = [ref.identity for ref in self.entities]
         if len(set(refs)) != len(refs):
             raise ValueError("Повторяющиеся ссылки.")
         return self

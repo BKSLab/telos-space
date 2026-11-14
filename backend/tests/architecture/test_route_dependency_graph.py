@@ -59,11 +59,7 @@ READ_ONLY_POST_ROUTES = {
 # короткой области базы внутри сервиса, поэтому guard в графе маршрута
 # отсутствует намеренно, а request-scoped сессии там быть не должно.
 STREAMING_ROUTES = {
-    ("GET", "/api/v1/projects/{project_id}/files/{file_id}/content"),
     ("GET", "/api/v1/projects/{project_id}/chat/attachments/{file_id}/content"),
-    ("GET", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/content"),
-    ("GET", "/api/v1/projects/{project_id}/files/{file_id}/preview"),
-    ("GET", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/preview"),
     ("GET", "/api/v1/projects/{project_id}/chat/attachments/{file_id}/preview"),
     ("GET", "/api/v1/aris/conversations/{conversation_id}/files/{file_id}/content"),
     ("GET", "/api/v1/aris/conversations/{conversation_id}/files/{file_id}/preview"),
@@ -74,23 +70,36 @@ STREAMING_ROUTES = {
 # Авторизация мутаций выполняется перед IO и повторно перед атомарной записью.
 # READ/ttk и отзыв membership проверяют настоящие HTTP/PG сценарии файлов.
 DETACHED_WRITE_SERVICES = {
-    ("POST", "/api/v1/projects/{project_id}/files"): "get_project_files_service",
-    ("POST", "/api/v1/tasks/{task_id}/attachments"): "get_task_file_mutations_service",
-    ("PATCH", "/api/v1/tasks/{task_id}/attachments/{attachment_id}"): "get_task_file_mutations_service",
-    ("POST", "/api/v1/tasks/{task_id}/attachments/{attachment_id}/retry"): "get_task_file_mutations_service",
     ("POST", "/api/v1/tasks/{task_id}/comments/with-files"): "get_file_comments_service",
 }
 
+DOCUMENT_ROUTES = {
+    ("GET", "/api/v1/documents"),
+    ("POST", "/api/v1/documents"),
+    ("POST", "/api/v1/documents/upload"),
+    ("GET", "/api/v1/documents/{document_ref}"),
+    ("PATCH", "/api/v1/documents/{document_ref}"),
+    ("DELETE", "/api/v1/documents/{document_ref}"),
+    ("GET", "/api/v1/documents/{document_ref}/text"),
+    ("GET", "/api/v1/documents/{document_ref}/content"),
+    ("GET", "/api/v1/documents/{document_ref}/preview"),
+    ("POST", "/api/v1/documents/{document_ref}/retry"),
+    ("POST", "/api/v1/documents/{document_ref}/tasks/{task_id}"),
+    ("DELETE", "/api/v1/documents/{document_ref}/tasks/{task_id}"),
+}
+STREAMING_ROUTES |= {pair for pair in DOCUMENT_ROUTES if pair[1].endswith(("/content", "/preview"))}
+DETACHED_WRITE_SERVICES.update({pair: "get_document_catalog_service" for pair in DOCUMENT_ROUTES if pair[0] != "GET"})
+
 # Авторизация этого AI-сценария, как и выдачи файла, целиком выполняется
 # в короткой DB-фазе сервиса и проверяется его контрактными тестами.
-DETACHED_AUTH_ROUTES = STREAMING_ROUTES | DETACHED_WRITE_SERVICES.keys() | {
+DETACHED_AUTH_ROUTES = DOCUMENT_ROUTES | STREAMING_ROUTES | DETACHED_WRITE_SERVICES.keys() | {
     ("POST", "/api/v1/projects/{project_id}/risks/field-suggestion"),
     ("POST", "/api/v1/projects/{project_id}/tasks/checklist-suggestion"),
     ("POST", "/api/v1/projects/{project_id}/risks/suggestions"),
 }
 
-EXPECTED_NON_GET_TOTAL = 130
-EXPECTED_MUTATION_TOTAL = 109
+EXPECTED_NON_GET_TOTAL = 123
+EXPECTED_MUTATION_TOTAL = 102
 
 
 def route_dependencies(route: APIRoute) -> set[str]:

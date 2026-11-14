@@ -33,6 +33,7 @@ class LegacyOutput(BaseModel):
 
     answer: str = ""
     source_ids: list[str] = Field(default_factory=list)
+    primary_reference: str | None = None
     reads: list[KnowledgeReadRequest] = Field(default_factory=list)
     tool_calls: list[AgentToolRequest] = Field(default_factory=list)
 
@@ -72,11 +73,11 @@ def tool_results(messages: list[ModelMessage]) -> list[dict[str, Any]]:
     return results
 
 
-def final(answer: str = "", source_ids: list[str] | None = None) -> ModelResponse:
+def final(answer: str = "", source_ids: list[str] | None = None, primary_reference: str | None = None) -> ModelResponse:
     """Ответ модели инструментом окончательного ответа."""
     return ModelResponse(
         parts=[
-            ToolCallPart("telos_submit_answer", {"answer": answer, "source_ids": list(source_ids or [])})
+            ToolCallPart("telos_submit_answer", {"answer": answer, "source_ids": list(source_ids or []), "primary_reference": primary_reference})
         ]
     )
 
@@ -129,6 +130,6 @@ def legacy_model(llm_client) -> FunctionModel:
         ]
         if calls:
             return ModelResponse(parts=calls)
-        return final(output.answer, output.source_ids)
+        return final(output.answer, output.source_ids, output.primary_reference)
 
     return FunctionModel(respond)

@@ -66,11 +66,26 @@ $$ LANGUAGE plpgsql;
 """,
     """
 CREATE OR REPLACE FUNCTION chat_entity_changed() RETURNS trigger AS $$
-DECLARE item jsonb;
+DECLARE item jsonb; pid integer; source_kind text; document_reference text;
 BEGIN
     IF TG_OP = 'DELETE' THEN item := to_jsonb(OLD); ELSE item := to_jsonb(NEW); END IF;
-    PERFORM chat_emit((item->>'project_id')::integer, 'entity.updated',
-        jsonb_build_object('entity_type', TG_ARGV[0], 'entity_id', (item->>'id')::integer));
+    pid := (item->>'project_id')::integer;
+    IF TG_ARGV[0] = 'DOCUMENT' THEN
+        source_kind := CASE TG_TABLE_NAME WHEN 'documents' THEN 'document'
+            WHEN 'project_files' THEN 'project_file' ELSE 'attachment' END;
+        IF TG_TABLE_NAME = 'task_attachments' THEN
+            SELECT project_id INTO pid FROM tasks WHERE id = (item->>'task_id')::integer;
+        ELSIF TG_TABLE_NAME = 'documents' AND pid IS NULL THEN
+            SELECT project_id INTO pid FROM tasks WHERE id = (item->>'owner_task_id')::integer;
+        END IF;
+        document_reference := 'd1_' || rtrim(translate(encode(convert_to(
+            source_kind || ':' || (item->>'id'), 'UTF8'), 'base64'), '+/', '-_'), '=');
+        PERFORM chat_emit(pid, 'entity.updated', jsonb_build_object(
+            'entity_type', 'DOCUMENT', 'document_ref', document_reference));
+    ELSE
+        PERFORM chat_emit(pid, 'entity.updated',
+            jsonb_build_object('entity_type', TG_ARGV[0], 'entity_id', (item->>'id')::integer));
+    END IF;
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
@@ -100,6 +115,8 @@ CHAT_TRIGGERS = (
         for table, kind in (
             ("tasks", "TASK"),
             ("documents", "DOCUMENT"),
+            ("project_files", "DOCUMENT"),
+            ("task_attachments", "DOCUMENT"),
             ("project_risks", "RISK"),
             ("project_milestones", "MILESTONE"),
             ("wbs_nodes", "WBS_NODE"),

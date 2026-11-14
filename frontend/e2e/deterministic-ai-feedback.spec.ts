@@ -60,6 +60,7 @@ async function mockProject(page: Page, info: TestInfo) {
         if (method === "POST" && path === "/api/v1/tasks/7/view") return reply({ revision: 1, deadline_revision: 1, overdue: false });
         if (method !== "GET") state.writes.push(`${method} ${path}`);
         if (path.endsWith("/auth/me")) return reply(user);
+        if (path === "/api/v1/documents") return reply({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
         if (path === "/api/v1/projects") return reply([project]);
         if (path === "/api/v1/projects/1") return reply(project);
         if (path === "/api/v1/users/me/task-attention") return reply({ new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] });

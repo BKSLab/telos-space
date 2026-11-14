@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, WandSparkles } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
+import type { FileUploadDraft } from "@/lib/files";
 import { fileDraftKey } from "@/lib/files";
+import { newUuid } from "@/lib/uuid";
+import { createMarkdownDocument, uploadDocument, type MarkdownDocumentDraft } from "@/lib/documents";
 import type {
     DocumentListItem,
     ProjectMember,
     ProjectStage,
     Task,
-    TaskDocumentImport,
     TaskPriority,
     TaskRephraseResult,
 } from "@/lib/types";
@@ -41,6 +43,9 @@ interface CreateTaskDialogProps {
 interface CreateTaskResult {
     task: Task;
     documentWarnings: string[];
+    failedDocuments: DocumentListItem[];
+    failedFiles: FileUploadDraft[];
+    failedMarkdown: MarkdownDocumentDraft[];
 }
 
 export function CreateTaskDialog({
@@ -65,20 +70,18 @@ export function CreateTaskDialog({
     const [executorId, setExecutorId] = useState<number | null>(null);
     const [reporterId, setReporterId] = useState<number | null | undefined>(undefined);
     const [observerIds, setObserverIds] = useState<number[]>([]);
-    const [selectedDocumentIds, setSelectedDocumentIds] = useState<number[]>([]);
-    const [newDocumentFiles, setNewDocumentFiles] = useState<File[]>([]);
-    const [fileCaptions, setFileCaptions] = useState<Record<string, string>>({});
-    const [documentError, setDocumentError] = useState<string | null>(null);
+    const [selectedDocuments, setSelectedDocuments] = useState<DocumentListItem[]>([]);
+    const [newDocumentFiles, setNewDocumentFiles] = useState<FileUploadDraft[]>([]);
+    const [markdownDocuments, setMarkdownDocuments] = useState<MarkdownDocumentDraft[]>([]);
+    const [createdTask, setCreatedTask] = useState<Task | null>(null);
+    const [documentWarnings, setDocumentWarnings] = useState<string[]>([]);
+    const documentRequests = useRef(new Map<string, string>());
+    const selectedDocumentRefs = selectedDocuments.map(document => document.ref);
 
     const currentUserQuery = useCurrentUser();
     const membersQuery = useQuery({
         queryKey: queryKeys.projectMembers(projectId),
         queryFn: () => api.get<ProjectMember[]>(endpoints.projectMembers(projectId)),
-        enabled: isOpen,
-    });
-    const documentsQuery = useQuery({
-        queryKey: queryKeys.documents(projectId),
-        queryFn: () => api.get<DocumentListItem[]>(endpoints.projectDocuments(projectId)),
         enabled: isOpen,
     });
 
@@ -91,6 +94,11 @@ export function CreateTaskDialog({
         reporterId === undefined ? (currentMember?.user.id ?? null) : reporterId;
     const canChangeReporter = currentMember?.role === "OWNER";
 
+    function closeDialog() {
+        if (createdTask) { onCreated?.(createdTask); reset(); }
+        onClose();
+    }
+
     function reset() {
         setTitle("");
         setDescription("");
@@ -102,15 +110,17 @@ export function CreateTaskDialog({
         setExecutorId(null);
         setReporterId(undefined);
         setObserverIds([]);
-        setSelectedDocumentIds([]);
+        setSelectedDocuments([]);
         setNewDocumentFiles([]);
-        setFileCaptions({});
-        setDocumentError(null);
+        setMarkdownDocuments([]);
+        setCreatedTask(null);
+        setDocumentWarnings([]);
+        documentRequests.current.clear();
     }
 
     const createMutation = useMutation({
         mutationFn: async (): Promise<CreateTaskResult> => {
-            const task = await api.post<Task>(endpoints.projectTasks(projectId), {
+            const task = createdTask ?? await api.post<Task>(endpoints.projectTasks(projectId), {
                 title: title.trim(),
                 description_md: description.trim() || null,
                 checklist: checklistInput(checklist),
@@ -123,42 +133,52 @@ export function CreateTaskDialog({
                 reporter_id: selectedReporterId,
                 observer_ids: observerIds,
             });
-
+            setCreatedTask(task);
             const documentWarnings: string[] = [];
-            for (const documentId of selectedDocumentIds) {
+            const failedDocuments: DocumentListItem[] = [];
+            const failedFiles: FileUploadDraft[] = [];
+            const failedMarkdown: MarkdownDocumentDraft[] = [];
+            for (const document of selectedDocuments) {
                 try {
-                    await api.post(endpoints.links(), {
-                        document_id: documentId,
-                        task_id: task.id,
-                    });
+                    await api.post(endpoints.documentTask(document.ref, task.id));
                 } catch (error) {
                     documentWarnings.push((error as Error).message);
+                    failedDocuments.push(document);
                 }
             }
-            for (const file of newDocumentFiles) {
+            for (const draft of markdownDocuments) {
                 try {
-                    const body = new FormData();
-                    body.append("file", file);
-                    const caption = fileCaptions[fileDraftKey(file)]?.trim();
-                    if (caption) body.append("caption", caption);
-                    await api.postForm<TaskDocumentImport>(
-                        endpoints.taskDocumentImport(task.id),
-                        body,
-                    );
+                    await createMarkdownDocument({ taskId: task.id }, draft, draft.key);
                 } catch (error) {
-                    documentWarnings.push(`«${file.name}»: ${(error as Error).message}`);
+                    documentWarnings.push(`«${draft.title}»: ${(error as Error).message}`);
+                    failedMarkdown.push(draft);
                 }
             }
-            return { task, documentWarnings };
+            for (const draft of newDocumentFiles) {
+                try {
+                    const signature = `${fileDraftKey(draft.file)}:${draft.caption}`;
+                    if (!documentRequests.current.has(signature)) documentRequests.current.set(signature, newUuid());
+                    await uploadDocument({ taskId: task.id }, draft.file, draft.caption, documentRequests.current.get(signature));
+                } catch (error) {
+                    documentWarnings.push(`«${draft.file.name}»: ${(error as Error).message}`);
+                    failedFiles.push(draft);
+                }
+            }
+            return { task, documentWarnings, failedDocuments, failedFiles, failedMarkdown };
         },
-        onSuccess: ({ task, documentWarnings }) => {
+        onSuccess: ({ task, documentWarnings, failedDocuments, failedFiles, failedMarkdown }) => {
             queryClient.invalidateQueries({ queryKey: ["projects", projectId] });
             queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
-            queryClient.invalidateQueries({ queryKey: ["projects", projectId, "documents"] });
+            queryClient.invalidateQueries({ queryKey: ["documents"] });
             if (documentWarnings.length > 0) {
+                setDocumentWarnings(documentWarnings);
+                setSelectedDocuments(failedDocuments);
+                setNewDocumentFiles(failedFiles);
+                setMarkdownDocuments(failedMarkdown);
                 toast.error(
                     `Задача создана, но не все документы добавлены: ${documentWarnings.join(" ")}`,
                 );
+                return;
             } else {
                 toast.success("Задача создана");
             }
@@ -176,12 +196,15 @@ export function CreateTaskDialog({
                 JSON.stringify({
                     title: title.trim(),
                     description_md: description.trim(),
-                    document_ids: selectedDocumentIds,
+                    document_refs: selectedDocumentRefs,
                     ...(isChecklistValid(checklist) ? { checklist: checklistInput(checklist) } : {}),
                 }),
             );
-            for (const file of newDocumentFiles) {
-                body.append("files", file);
+            for (const draft of newDocumentFiles) {
+                body.append("files", draft.file);
+            }
+            for (const draft of markdownDocuments) {
+                body.append("files", new File([draft.content_md], `${draft.title}.md`, { type: "text/markdown" }));
             }
             return api.postForm<TaskRephraseResult>(endpoints.taskRephrase(projectId), body);
         },
@@ -200,13 +223,13 @@ export function CreateTaskDialog({
             isDismissable={!createMutation.isPending}
             onOpenChange={(open) => {
                 if (!open && !createMutation.isPending) {
-                    onClose();
+                    closeDialog();
                 }
             }}
             footer={
                 <>
-                    <Button disabled={createMutation.isPending} onClick={onClose}>
-                        Отмена
+                    <Button disabled={createMutation.isPending} onClick={closeDialog}>
+                        {createdTask ? "Закрыть" : "Отмена"}
                     </Button>
                     <Button
                         variant="primary"
@@ -219,12 +242,13 @@ export function CreateTaskDialog({
                         }
                         onClick={() => createMutation.mutate()}
                     >
-                        {createMutation.isPending ? "Создание…" : "Создать задачу"}
+                        {createMutation.isPending ? createdTask ? "Добавление документов…" : "Создание…" : createdTask ? "Повторить добавление документов" : "Создать задачу"}
                     </Button>
                 </>
             }
         >
             <div className="flex flex-col gap-4">
+                {documentWarnings.length > 0 && <ErrorMessage title={`Задача ${createdTask?.key ?? ""} создана; не все документы добавлены`} message={`${documentWarnings.join(" ")} Черновики сохранены. Повторная попытка добавит документы в ту же задачу.`} />}
                 {createMutation.error && (
                     <ErrorMessage
                         title="Не удалось создать задачу"
@@ -238,6 +262,7 @@ export function CreateTaskDialog({
                     />
                 )}
 
+                <fieldset disabled={createdTask !== null} className="contents">
                 <Field label="Название">
                     {(id) => (
                         <Input
@@ -357,7 +382,7 @@ export function CreateTaskDialog({
                 </div>
 
                 <TaskChecklistField projectId={projectId} title={title} description={description}
-                    documentIds={selectedDocumentIds} files={newDocumentFiles}
+                    documentRefs={selectedDocumentRefs} files={[...newDocumentFiles.map(draft => draft.file), ...markdownDocuments.map(draft => new File([draft.content_md], `${draft.title}.md`, { type: "text/markdown" }))]}
                     value={checklist} onChange={setChecklist} onBusyChange={setChecklistBusy}
                     disabled={createMutation.isPending || rephraseMutation.isPending} />
 
@@ -381,6 +406,7 @@ export function CreateTaskDialog({
                     />
                 </section>
 
+                </fieldset>
                 <section className="flex flex-col gap-3" aria-labelledby="task-documents-heading">
                     <p
                         id="task-documents-heading"
@@ -388,24 +414,15 @@ export function CreateTaskDialog({
                     >
                         Документы
                     </p>
-                    {documentsQuery.error && (
-                        <ErrorMessage
-                            title="Не удалось загрузить документы"
-                            message={(documentsQuery.error as Error).message}
-                        />
-                    )}
                     <TaskDocumentsField
-                        documents={documentsQuery.data ?? []}
-                        selectedDocumentIds={selectedDocumentIds}
+                        projectId={projectId}
+                        documents={selectedDocuments}
                         files={newDocumentFiles}
-                        captions={fileCaptions}
+                        markdown={markdownDocuments}
                         disabled={isBusy}
-                        loading={documentsQuery.isPending}
-                        error={documentError}
-                        onSelectedDocumentIdsChange={setSelectedDocumentIds}
+                        onDocumentsChange={setSelectedDocuments}
                         onFilesChange={setNewDocumentFiles}
-                        onCaptionsChange={setFileCaptions}
-                        onError={setDocumentError}
+                        onMarkdownChange={setMarkdownDocuments}
                     />
                 </section>
             </div>

@@ -101,8 +101,11 @@ async def uploaded_content(db, *, file_id: UUID, user_id: int) -> tuple[AgentFil
     row = await db.uploads.get(file_id)
     if row is None or row.message_id is None:
         raise AgentFileNotFoundError("Файл ещё не отправлен участником.")
-    if await db.conversations.get_owned(row.conversation_id, user_id) is None:
+    conversation = await db.conversations.get_owned(row.conversation_id, user_id)
+    if conversation is None:
         raise AgentFileNotFoundError("Файл принадлежит другому пользователю.")
+    if conversation.project_id is not None:
+        await db.access.ensure_project_access(project_id=conversation.project_id, user_id=user_id)
     try:
         # Ограничиваем и повторное чтение, если файл был изменён извне.
         content = await db.upload_storage.read(

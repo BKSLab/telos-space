@@ -19,6 +19,7 @@ from src.dependencies.file_comments import FileCommentsServiceDep
 from src.exceptions.access import AccessServiceError
 from src.exceptions.api_tokens import InsufficientTokenScopeError
 from src.exceptions.auth import AuthServiceError
+from src.exceptions.document_catalog import DocumentCatalogServiceError
 from src.exceptions.file_comments import FileCommentsServiceError
 from src.exceptions.task_attachments import TaskAttachmentsServiceError
 from src.exceptions.tasks import TasksServiceError
@@ -45,8 +46,8 @@ def _json_list(value: str | None, *, field: str) -> list:
 @router.post(
     "/tasks/{task_id}/comments/with-files",
     status_code=201,
-    summary="Отправить комментарий с файлами",
-    description="Одной транзакцией сохраняет комментарий и до десяти файлов (новые плюс существующие оригиналы той же задачи), каждый новый до 10 МиБ. Требуется comments:write, а при наличии файлов также tasks:write. Повтор request_id с прежними аргументами возвращает исходный результат.",
+    summary="Отправить комментарий с документами",
+    description="Одной транзакцией сохраняет комментарий и до десяти документов (загрузки и существующие документы задачи), каждый новый до 10 МиБ. Требуется comments:write, а при наличии документов также tasks:write. Повтор request_id с прежними аргументами возвращает исходный результат.",
     operation_id="createTaskCommentWithFiles",
     response_description="Сохранённый комментарий с метаданными его файлов.",
     response_model=CommentSchema,
@@ -81,8 +82,8 @@ async def create_task_comment_with_files(
     captions: Annotated[
         str | None, Form(description="JSON-массив подписей string/null в порядке новых files.")
     ] = None,
-    attachment_ids: Annotated[
-        str | None, Form(description="JSON-массив ID существующих оригиналов той же задачи.")
+    document_refs: Annotated[
+        str | None, Form(description="JSON-массив стабильных ссылок на документы той же задачи.")
     ] = None,
     session_cookie: SessionCookieDep = None,
     authorization: AuthorizationHeaderDep = None,
@@ -96,7 +97,7 @@ async def create_task_comment_with_files(
         body_md: Текст комментария.
         files: Новые оригиналы, поле multipart files повторяется для каждого файла.
         captions: Подписи новых оригиналов в JSON.
-        attachment_ids: ID уже существующих файлов задачи в JSON.
+        document_refs: Ссылки на существующие документы задачи в JSON.
         session_cookie: Cookie сессии.
         authorization: Bearer-токен с приоритетом перед cookie.
     Returns:
@@ -107,25 +108,23 @@ async def create_task_comment_with_files(
     logger.info("🚀 Отправка комментария с файлами задачи %s.", task_id)
     uploads = files or []
     try:
-        ids = _json_list(attachment_ids, field="attachment_ids")
+        refs = _json_list(document_refs, field="document_refs")
         labels = _json_list(captions, field="captions")
-        if len(uploads) + len(ids) > service.max_files:
-            raise HTTPException(422, "К комментарию можно добавить не более десяти файлов.")
+        if len(uploads) + len(refs) > service.max_files:
+            raise HTTPException(422, "К комментарию можно добавить не более десяти документов.")
         if captions is not None and (
             len(labels) != len(uploads)
             or any(item is not None and not isinstance(item, str) for item in labels)
         ):
             raise HTTPException(422, "Подписи должны соответствовать новым файлам.")
-        if any(type(item) is not int or item <= 0 for item in ids):
-            raise HTTPException(
-                422, "Идентификаторы файлов должны быть положительными целыми числами."
-            )
+        if any(not isinstance(item, str) for item in refs):
+            raise HTTPException(422, "Ссылки на документы должны быть строками.")
         read = await read_uploads(uploads, max_size=service.max_file_size)
         result = await service.submit(
             task_id=task_id,
             request_id=request_id,
             body_md=body_md,
-            attachment_ids=ids,
+            document_refs=refs,
             uploads=[
                 CommentFileUpload(
                     item.name,
@@ -142,11 +141,12 @@ async def create_task_comment_with_files(
             "✅ Комментарий %s задачи %s отправлен с %s файлами.",
             result.id,
             task_id,
-            len(result.attachments),
+            len(result.document_refs),
         )
         return result
     except (
         FileCommentsServiceError,
+        DocumentCatalogServiceError,
         TaskAttachmentsServiceError,
         TasksServiceError,
         AuthServiceError,

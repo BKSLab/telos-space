@@ -54,6 +54,7 @@ from src.repositories.unit_of_work import UnitOfWork
 from src.repositories.users import UsersRepository
 from src.repositories.wbs_nodes import WbsNodesRepository
 from src.services.access import AccessService
+from src.services.auth import AuthService
 from src.services.calendar import CalendarService
 from src.services.calendar_scenarios import CalendarScenarioService
 from src.services.document_links import DocumentLinksService
@@ -81,7 +82,6 @@ class TaskDescriptionScope:
 
     projects: ProjectsRepository
     tasks: TasksRepository
-    documents: DocumentsRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +209,7 @@ class AgentConversationScope:
     boards: BoardsRepository | None = None
     board_shapes: BoardShapesRepository | None = None
     board_stickers: BoardStickersRepository | None = None
+    auth: AuthService | None = None
 
 
 AgentConversationScopeFactory = Callable[[], AbstractAsyncContextManager[AgentConversationScope]]

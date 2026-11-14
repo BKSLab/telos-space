@@ -30,9 +30,7 @@ from src.api.v1.endpoints.calendar_feed import router as calendar_feed_router
 from src.api.v1.endpoints.calendar_scenarios import router as calendar_scenarios_router
 from src.api.v1.endpoints.calendar_workload import router as calendar_workload_router
 from src.api.v1.endpoints.dashboard import router as dashboard_router
-from src.api.v1.endpoints.document_links import router as document_links_router
-from src.api.v1.endpoints.documents import router as documents_router
-from src.api.v1.endpoints.file_search import router as file_search_router
+from src.api.v1.endpoints.document_catalog import router as document_catalog_router
 from src.api.v1.endpoints.free_boards import router as free_boards_router
 from src.api.v1.endpoints.knowledge import router as knowledge_router
 from src.api.v1.endpoints.milestones import router as milestones_router
@@ -41,7 +39,6 @@ from src.api.v1.endpoints.personal_api_keys import router as personal_api_keys_r
 from src.api.v1.endpoints.project_chat_ws import router as project_chat_ws_router
 from src.api.v1.endpoints.project_chats import download_router as chat_download_router
 from src.api.v1.endpoints.project_chats import router as project_chats_router
-from src.api.v1.endpoints.project_files import router as project_files_router
 from src.api.v1.endpoints.project_icons import router as project_icons_router
 from src.api.v1.endpoints.project_members import router as project_members_router
 from src.api.v1.endpoints.project_risks import router as project_risks_router
@@ -50,13 +47,11 @@ from src.api.v1.endpoints.projects import router as projects_router
 from src.api.v1.endpoints.risk_formulation import router as risk_formulation_router
 from src.api.v1.endpoints.risk_suggestions import router as risk_suggestions_router
 from src.api.v1.endpoints.task_activity import router as task_activity_router
-from src.api.v1.endpoints.task_attachments import router as task_attachments_router
 from src.api.v1.endpoints.task_attention import router as task_attention_router
 from src.api.v1.endpoints.task_attention_ws import router as task_attention_ws_router
 from src.api.v1.endpoints.task_checklists import router as task_checklists_router
 from src.api.v1.endpoints.task_comments import router as task_comments_router
 from src.api.v1.endpoints.task_dependencies import router as task_dependencies_router
-from src.api.v1.endpoints.task_documents import router as task_documents_router
 from src.api.v1.endpoints.task_file_comments import router as task_file_comments_router
 from src.api.v1.endpoints.task_reports import router as task_reports_router
 from src.api.v1.endpoints.task_transfers import router as task_transfers_router
@@ -282,16 +277,11 @@ for api_router in (
     project_stages_router,
     tasks_router,
     wbs_nodes_router,
-    documents_router,
-    file_search_router,
-    project_files_router,
-    document_links_router,
+    document_catalog_router,
     task_comments_router,
     task_file_comments_router,
     task_dependencies_router,
     task_activity_router,
-    task_attachments_router,
-    task_documents_router,
     knowledge_router,
     agent_conversations_router,
     agent_file_content_router,

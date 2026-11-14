@@ -3,7 +3,7 @@
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -11,6 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from src.agent.aris import ALL_MODES, ArisMode
 from src.exceptions.base import ServiceError
 from src.utils.tool_names import require_canonical_tool_name
+
+if TYPE_CHECKING:
+    from src.services.auth import Principal
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,7 @@ class AgentToolContext:
     # Изменяющие инструменты, открытые правами сервисного ключа; None — без
     # ограничения ключом (вопрос из интерфейса трекера).
     allowed_tools: frozenset[str] | None = None
+    principal: "Principal | None" = None
 
     def allows(self, name: str) -> bool:
         """Открыт ли изменяющий инструмент правами ключа этого вопроса."""

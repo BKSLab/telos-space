@@ -1,8 +1,14 @@
 """Явные зависимости одного короткого сценария инструмента проекта."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.services.document_catalog import DocumentCatalogService
 
 from src.repositories.agent_conversations import AgentConversationsRepository
 from src.repositories.agent_files import AgentFilesRepository
@@ -76,6 +82,7 @@ class AgentProjectToolScope:
     reports: TaskReportsService | None = None
     api_keys: ApiKeysRepository | None = None
     auth: AuthService | None = None
+    document_catalog: DocumentCatalogService | None = None
 
 
 AgentProjectToolScopeFactory = Callable[[], AbstractAsyncContextManager[AgentProjectToolScope]]

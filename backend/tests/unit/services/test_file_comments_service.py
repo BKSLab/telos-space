@@ -34,7 +34,7 @@ async def test_invalid_submission_never_opens_database_or_creates_original(tmp_p
                 request_id=uuid4(),
                 body_md=body,
                 uploads=uploads,
-                attachment_ids=ids,
+                document_refs=ids,
                 session_token=None,
                 bearer_secret=None,
             )
@@ -51,7 +51,7 @@ async def test_invalid_submission_never_opens_database_or_creates_original(tmp_p
                 request_id=uuid4(),
                 body_md="",
                 uploads=[file],
-                attachment_ids=[],
+                document_refs=[],
                 session_token=None,
                 bearer_secret=None,
             )

@@ -11,9 +11,12 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from pydantic import BaseModel, ValidationError
 
+from src.agent.action_scopes import action_scope_options
 from src.agent.actions import ProjectAction
+from src.agent.aris import ArisMode
 from src.agent.tools import AgentToolContext, describe_validation_error
 from src.agent.wakeup import wake_agent_worker
+from src.db.models.api_tokens import ApiTokenScope
 from src.exceptions.access import AccessServiceError
 from src.exceptions.agent_tools import (
     AgentToolAccessError,
@@ -32,9 +35,11 @@ from src.schemas.agent_tools import (
     AgentPendingProjectSchema,
     AgentToolRunSchema,
 )
-from src.services.agent_action_helpers import checked_document, checked_task
+from src.services.agent_action_helpers import checked_task
 from src.services.agent_tool_scope import AgentProjectToolScope, AgentProjectToolScopeFactory
+from src.services.auth import Principal
 from src.services.tasks import user_display_name
+from src.utils.document_refs import decode_document_ref
 from src.utils.request_actor import (
     RequestActor,
     current_request_actor,
@@ -91,7 +96,11 @@ class AgentActionsService:
         logger.info(
             "🚀 Инструмент %s, проект=%s, участник=%s.", name, context.project_id, context.user_id
         )
-        if definition.needs_project and context.project_id is None:
+        if (
+            definition.needs_project
+            and context.project_id is None
+            and (not definition.project_optional or context.mode == ArisMode.PROJECT_CHAT)
+        ):
             raise AgentToolConflictError(
                 "Действию нужен проект: укажи его ключ через telos_run_project_action."
             )
@@ -112,6 +121,9 @@ class AgentActionsService:
                         "Ключ вызова уже использован с другими аргументами."
                     )
                 if previous.status in {"completed", "pending", "rejected"}:
+                    await self._require_document_receipt(
+                        db, actor, definition, parameters, previous
+                    )
                     return self._result(previous)
             if definition.requires_confirmation:
                 result = {
@@ -149,10 +161,17 @@ class AgentActionsService:
     async def _invoke(definition, db, actor, parameters):
         """Рабочая очередь подписывает эффект проверенным инициатором операции."""
         current = current_request_actor()
-        token = set_request_actor(RequestActor(
-            user_id=actor.user_id, name=actor.display_name,
-            via_api_key_label=(current.via_api_key_label if current and current.user_id == actor.user_id else None),
-        ))
+        token = set_request_actor(
+            RequestActor(
+                user_id=actor.user_id,
+                name=actor.display_name,
+                via_api_key_label=(
+                    current.via_api_key_label
+                    if current and current.user_id == actor.user_id
+                    else None
+                ),
+            )
+        )
         try:
             return await definition.handler(db, actor, parameters)
         finally:
@@ -190,7 +209,15 @@ class AgentActionsService:
                 conversation = await db.conversations.get_owned(
                     conversation_id, context.user_id, channel=None, lock=True
                 )
-                if conversation is None or (conversation.channel != "web" and not allow_external) or (context.project_id is not None and conversation.project_id != context.project_id and not allow_external):
+                if (
+                    conversation is None
+                    or (conversation.channel != "web" and not allow_external)
+                    or (
+                        context.project_id is not None
+                        and conversation.project_id != context.project_id
+                        and not allow_external
+                    )
+                ):
                     raise AgentToolAccessError("Диалог недоступен.")
                 latest = await db.messages.get_page(conversation_id, before_id=None, limit=1)
                 if not latest:
@@ -295,11 +322,20 @@ class AgentActionsService:
         ``repeat_is_error`` — решение по ссылке: повтор уже принятого решения
         отвечает 409, а не прежним результатом.
         """
+        definition = self._definition(row.tool_name)
+        actor = await self._authorize(db, context, definition) if authorize else context
         if row.status in {"completed", "rejected"}:
             if repeat_is_error:
                 raise AgentToolDecidedError("Повторное решение по действию.")
             if (row.status == "completed") != (decision == "approve"):
                 raise AgentToolConflictError("По действию уже принято другое решение.")
+            try:
+                parameters = definition.parameters.model_validate(row.arguments)
+            except ValidationError as error:
+                raise AgentToolConflictError(
+                    "Схема действия обновилась; повтор недоступен."
+                ) from error
+            await self._require_document_receipt(db, actor, definition, parameters, row)
             return AgentToolRunSchema.model_validate(row)
         if row.status != "pending":
             raise AgentToolConflictError(
@@ -308,16 +344,20 @@ class AgentActionsService:
         # Отклонить можно и просроченное: это лишь закрывает предложение.
         if decision == "approve" and self._expired(row):
             raise AgentToolExpiredError("Срок подтверждения истёк.")
-        definition = self._definition(row.tool_name)
-        actor = await self._authorize(db, context, definition) if authorize else context
         if decision == "approve":
             try:
                 parameters = definition.parameters.model_validate(row.arguments)
             except ValidationError:
-                updated = await db.runs.update(row.id, {
-                    "status": "rejected",
-                    "result": {"participant_decision": "reject", "message": "Схема действия обновилась. Сформируйте предложение заново."},
-                })
+                updated = await db.runs.update(
+                    row.id,
+                    {
+                        "status": "rejected",
+                        "result": {
+                            "participant_decision": "reject",
+                            "message": "Схема действия обновилась. Сформируйте предложение заново.",
+                        },
+                    },
+                )
                 return AgentToolRunSchema.model_validate(updated)
             if await self._preview(db, actor, parameters) != row.result.get("preview", {}):
                 raise AgentToolConflictError(
@@ -346,6 +386,19 @@ class AgentActionsService:
         user = await db.users.get_by_id(context.user_id)
         if user is None or not user.is_active:
             raise AgentToolAccessError("Пользователь больше не активен.")
+        if context.principal is None and db.auth is not None:
+            context = replace(
+                context,
+                principal=Principal(
+                    user_id=user.id,
+                    username=user.username,
+                    last_name=user.last_name,
+                    first_name=user.first_name,
+                    middle_name=user.middle_name,
+                    scope=ApiTokenScope.WRITE if context.can_write else ApiTokenScope.READ,
+                    via_api_token=False,
+                ),
+            )
         return replace(context, username=user.username, display_name=user_display_name(user))
 
     async def get_pending(self, *, user_id: int, action_id: UUID) -> AgentPendingActionSchema:
@@ -473,20 +526,94 @@ class AgentActionsService:
     ) -> AgentToolContext:
         if context.user_id is None:
             raise AgentToolAccessError("Инструменту необходим аутентифицированный участник.")
+        if context.principal is not None:
+            if context.principal.user_id != context.user_id or db.auth is None:
+                raise AgentToolAccessError("Учётные данные действия недоступны.")
+            principal = await db.auth.refresh_principal(context.principal)
+            if definition.mutating and (
+                not principal.can_write
+                or (
+                    principal.api_key is not None
+                    and not any(
+                        principal.allows(scope) for scope in action_scope_options(definition.name)
+                    )
+                )
+            ):
+                raise AgentToolAccessError("Текущие права ключа не разрешают действие.")
+            context = replace(
+                context, principal=principal, can_write=context.can_write and principal.can_write
+            )
         if definition.needs_project:
             if context.project_id is None:
-                raise AgentToolAccessError("Действию нужен проект.")
-            grant = await db.access.ensure_project_access(
-                project_id=context.project_id, user_id=context.user_id
+                if not definition.project_optional or context.mode == ArisMode.PROJECT_CHAT:
+                    raise AgentToolAccessError("Действию нужен проект.")
+            else:
+                grant = await db.access.ensure_project_access(
+                    project_id=context.project_id, user_id=context.user_id
+                )
+                if definition.owner_only and not grant.is_owner:
+                    raise AgentToolAccessError("Действие доступно только владельцу проекта.")
+                if definition.mutating and not grant.can_write:
+                    raise AgentToolAccessError("Проект доступен только для чтения.")
+        return await AgentActionsService._active_user(db, context)
+
+    @staticmethod
+    async def _require_document_receipt(db, context, definition, parameters, receipt):
+        """Квитанция не заменяет текущие owner scopes и доступ к документу/задаче."""
+        if definition.name not in {
+            "telos_create_document",
+            "telos_update_document",
+            "telos_delete_document",
+            "telos_link_document",
+            "telos_unlink_document",
+            "telos_copy_document",
+            "telos_create_text_attachment",
+            "telos_attach_uploaded_file",
+        }:
+            return
+        if db.document_catalog is None:
+            raise AgentToolAccessError("Каталог документов недоступен.")
+        payload = parameters.model_dump(mode="json")
+        target_task = (
+            payload.get("target_task_id") or payload.get("owner_task_id") or payload.get("task_id")
+        )
+        if target_task:
+            if context.principal is not None:
+                context.principal.require("tasks:write")
+            await checked_task(db, context, target_task)
+        refs = {
+            value
+            for value in (
+                payload.get("document_ref"),
+                receipt.result.get("document_ref"),
+                receipt.result.get("document", {}).get("ref"),
             )
-            if definition.owner_only and not grant.is_owner:
-                raise AgentToolAccessError("Действие доступно только владельцу проекта.")
-            if definition.mutating and not grant.can_write:
-                raise AgentToolAccessError("Проект доступен только для чтения.")
-        user = await db.users.get_by_id(context.user_id)
-        if user is None or not user.is_active:
-            raise AgentToolAccessError("Пользователь больше не активен.")
-        return replace(context, username=user.username, display_name=user_display_name(user))
+            if value
+        }
+        deleted = receipt.status == "completed" and definition.name == "telos_delete_document"
+        for ref in refs:
+            if deleted:
+                owner = receipt.result.get("ownership") or {}
+                if not owner or owner.get("project_id") != context.project_id:
+                    raise AgentToolAccessError("Владелец удалённого документа недоступен.")
+                if owner.get("owner_task_id"):
+                    await checked_task(db, context, owner["owner_task_id"])
+                if context.principal is not None:
+                    context.principal.require(
+                        "tasks:write" if owner.get("owner_task_id") else "projects:write"
+                    )
+                continue
+            source_read = definition.name == "telos_copy_document" and ref == payload.get(
+                "document_ref"
+            )
+            item = await db.document_catalog.get(
+                document_ref=ref,
+                user_id=context.user_id,
+                principal=context.principal,
+                for_write=not source_read,
+            )
+            if item.ownership.project_id != context.project_id:
+                raise AgentToolAccessError("Документ находится вне проекта разговора.")
 
     @staticmethod
     async def _require_execution(db: AgentProjectToolScope, context: AgentToolContext) -> None:
@@ -540,14 +667,28 @@ class AgentActionsService:
                 and task.updated_at != parameters.expected_updated_at
             ):
                 raise AgentToolConflictError("Задача изменилась; получите свежую версию.")
-        if document_id := payload.get("document_id"):
-            await checked_document(db, context, document_id)
-            document = await db.documents.get_document(document_id)
-            targets["document"] = {
-                "id": document.id,
-                "title": document.title,
-                "updated_at": document.updated_at.isoformat(),
-            }
+        if document_ref := payload.get("document_ref"):
+            if db.document_catalog is None:
+                raise AgentToolConflictError("Каталог документов недоступен.")
+            if context.principal is not None and (
+                payload.get("task_id") or payload.get("target_task_id")
+            ):
+                context.principal.require("tasks:write")
+            document = await db.document_catalog.get(
+                document_ref=document_ref,
+                user_id=context.user_id,
+                principal=context.principal,
+                for_write="target_task_id" not in payload,
+            )
+            if document.ownership.project_id != context.project_id:
+                raise AgentToolAccessError("Документ находится вне проекта разговора.")
+            expected_revision = payload.get("changes", {}).get("expected_revision")
+            if expected_revision is not None and expected_revision != document.revision:
+                raise AgentToolConflictError("Документ изменился; получите свежую версию.")
+            targets["document"] = document.model_dump(mode="json")
+            targets["document_ref"] = document_ref
+            kind, identifier = decode_document_ref(document_ref)
+            targets["source_id"] = f"{kind}:{identifier}"
         if comment_id := payload.get("comment_id"):
             from_comment = await db.comments.get_comment(comment_id)
             await checked_task(db, context, from_comment.task_id)

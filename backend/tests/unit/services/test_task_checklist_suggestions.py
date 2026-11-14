@@ -9,6 +9,7 @@ from src.exceptions.access import ResourceNotAvailableError
 from src.exceptions.ai import AiProviderError
 from src.exceptions.auth import NotAuthenticatedError
 from src.exceptions.clients import ClientError
+from src.exceptions.document_catalog import CatalogDocumentNotFoundError
 from src.exceptions.tasks import (
     TaskChecklistGenerationError,
     TaskContextDocumentError,
@@ -19,12 +20,13 @@ from src.schemas.task_checklists import (
     ChecklistSuggestionRequestSchema,
 )
 from src.schemas.tasks import TaskRephraseFile
+from src.services.document_catalog import DocumentCatalogService
 from src.services.task_checklist_suggestions import (
     MAX_CONTEXT_CHARS,
     ChecklistSuggestionScope,
     TaskChecklistSuggestionService,
 )
-from src.storage.task_attachments import TaskAttachmentStorage
+from src.utils.document_refs import encode_document_ref
 from tests.unit.services.test_task_checklists import checklist
 
 
@@ -37,18 +39,15 @@ def setup_service(tmp_path):
                 "access",
                 "projects",
                 "tasks",
-                "documents",
-                "links",
-                "attachments",
             )
         }
     )
     db.auth.resolve_principal.return_value = SimpleNamespace(user_id=7)
     db.projects.get_by_id.return_value = SimpleNamespace(id=1, key="PROJ", name="Проект")
     db.tasks.get_by_id.return_value = SimpleNamespace(id=12, project_id=1, checklist=checklist())
-    db.documents.get_by_ids.return_value = []
-    db.links.get_for_task.return_value = []
-    db.attachments.get_for_task.return_value = []
+    catalog = AsyncMock(spec=DocumentCatalogService)
+    catalog.list.return_value = SimpleNamespace(items=[], next_offset=None)
+    catalog.read_context.return_value = ""
     state = {"active": False}
 
     @asynccontextmanager
@@ -67,7 +66,7 @@ def setup_service(tmp_path):
         scope=scope,
         llm_client=llm,
         vision=AsyncMock(),
-        storage=TaskAttachmentStorage(tmp_path),
+        document_catalog=catalog,
         file_context_limit=5000,
         max_file_size=10000,
     )
@@ -88,23 +87,17 @@ async def test_draft_and_existing_files_documents_and_checklist_are_read_without
     tmp_path, monkeypatch
 ):
     service, db, llm, state = setup_service(tmp_path)
-    (tmp_path / "stored.txt").write_text("Сохранённый файл: согласовать акт.", encoding="utf-8")
-    db.attachments.get_for_task.return_value = [
-        SimpleNamespace(original_name="Условия.txt", storage_key="stored.txt")
-    ]
-    db.links.get_for_task.return_value = [SimpleNamespace(document_id=3)]
-    db.documents.get_by_ids.return_value = [
-        SimpleNamespace(
-            id=3, project_id=1, title="Требования", content_md="Проверить безопасность."
-        )
-    ]
-    original_resolve = service.storage.resolve
+    image_ref = encode_document_ref("attachment", 4)
+    service.document_catalog.list.return_value = SimpleNamespace(
+        items=[SimpleNamespace(ref=image_ref)], next_offset=None
+    )
 
-    def resolve(key):
+    async def saved_context(**kwargs):
         assert not state["active"]
-        return original_resolve(key)
+        assert kwargs["document_refs"] == [image_ref]
+        return "Сохранённый текст изображения: согласовать акт.\nПроверить безопасность."
 
-    monkeypatch.setattr(service.storage, "resolve", resolve)
+    service.document_catalog.read_context.side_effect = saved_context
 
     async def answer(**kwargs):
         assert not state["active"]
@@ -113,9 +106,8 @@ async def test_draft_and_existing_files_documents_and_checklist_are_read_without
         assert payload["task"]["checklist"]["items"][0]["text"] == "Проверить результат"
         assert {item["content"] for item in payload["files"]} == {
             "Новый файл: подготовить резерв.",
-            "Сохранённый файл: согласовать акт.",
         }
-        assert payload["documents"][0]["content"] == "Проверить безопасность."
+        assert "Сохранённый текст изображения" in payload["documents"][0]["content"]
         return ChecklistSuggestionDraftSchema(
             items=["Согласовать условия", "Проверить результат", "Подписать акт"]
         )
@@ -138,7 +130,7 @@ async def test_draft_and_existing_files_documents_and_checklist_are_read_without
     assert not result.warnings
     db.tasks.update.assert_not_awaited()
     db.tasks.save.assert_not_awaited()
-    db.documents.save.assert_not_awaited()
+    service.vision.extract_image_text.assert_not_awaited()
 
 
 @pytest.mark.parametrize("denial", ["auth", "access"])
@@ -163,9 +155,9 @@ async def test_foreign_task_and_document_are_not_used(tmp_path):
     db.tasks.get_by_id.return_value.project_id = 2
     with pytest.raises(TaskNotFoundError):
         await suggest(service, task_id=12)
-    db.documents.get_by_ids.return_value = [SimpleNamespace(id=9, project_id=2)]
+    service.document_catalog.read_context.side_effect = CatalogDocumentNotFoundError()
     with pytest.raises(TaskContextDocumentError):
-        await suggest(service, document_ids=[9])
+        await suggest(service, document_refs=[encode_document_ref("project_file", 9)])
     llm.get_structured_response.assert_not_awaited()
 
 
@@ -181,11 +173,9 @@ async def test_invalid_model_draft_is_rejected(tmp_path, items):
 
 async def test_provider_failure_and_unreadable_file_limits_are_explicit(tmp_path):
     service, db, llm, _ = setup_service(tmp_path)
-    db.attachments.get_for_task.return_value = [
-        SimpleNamespace(original_name="Missing.pdf", storage_key="missing.pdf")
-    ]
+    service.document_catalog.list.return_value = SimpleNamespace(items=[], next_offset=100)
     result = await suggest(service, task_id=12)
-    assert "Missing.pdf" in result.warnings[0]
+    assert result.warnings
     assert "source_warnings" in json.loads(llm.get_structured_response.await_args.kwargs["content"])
     llm.get_structured_response.side_effect = ClientError("private provider details")
     with pytest.raises(AiProviderError):
@@ -194,10 +184,7 @@ async def test_provider_failure_and_unreadable_file_limits_are_explicit(tmp_path
 
 async def test_large_context_is_bounded_and_proposal_does_not_reuse_completion(tmp_path):
     service, db, llm, _ = setup_service(tmp_path)
-    db.documents.get_by_ids.return_value = [
-        SimpleNamespace(id=i, project_id=1, title=f"Документ {i}", content_md="Текст" * 10000)
-        for i in range(1, 21)
-    ]
+    service.document_catalog.read_context.return_value = "Текст" * 4000
     value = checklist()
     for item in value["items"]:
         item["is_completed"] = True
@@ -205,7 +192,7 @@ async def test_large_context_is_bounded_and_proposal_does_not_reuse_completion(t
         service,
         task_id=12,
         description_md="Контекст" * 6000,
-        document_ids=list(range(1, 21)),
+        document_refs=[encode_document_ref("document", i) for i in range(1, 21)],
         checklist=value,
     )
     assert len(llm.get_structured_response.await_args.kwargs["content"]) <= MAX_CONTEXT_CHARS

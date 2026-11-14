@@ -1,7 +1,7 @@
 import { ArisChatReply } from "@/components/chat/ArisChatReply";
 import { useRef, useState } from "react";
 import { Check, CornerUpLeft, MoreHorizontal, Pencil, Quote, RotateCw, SmilePlus, Trash2 } from "lucide-react";
-import { CHAT_REACTIONS, chatAuthorName, type ChatMessage as Message } from "@/lib/projectChat";
+import { CHAT_REACTIONS, chatAuthorName, chatEntityKey, type ChatMessage as Message } from "@/lib/projectChat";
 import { useProjectChat } from "@/lib/useProjectChat";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
@@ -52,7 +52,7 @@ export function ChatMessage({ message, highlighted, onReply, onQuote, onEdit, on
             {message.deleted_at ? <p className="text-xs italic text-muted">Сообщение удалено</p> : <>
                 <div ref={body} className="chat-content">{message.author_type === "AGENT" ? <ArisChatReply message={message} /> : <ChatText content={message.content} />}</div>
                 {!!message.mentions.length && <div className="mt-1 flex flex-wrap gap-1.5">{message.mentions.map((member) => <span key={member.id} className={cn("text-[11px]", member.id === userId ? "rounded bg-accent/10 px-1 text-accent" : "text-secondary")}>@{member.display_name}</span>)}</div>}
-                {!!message.entities.length && <div className="mt-3 flex flex-wrap gap-3">{message.entities.map((entity) => <ChatEntityCard key={`${entity.entity_type}:${entity.entity_id}`} entity={entity} projectId={projectId} />)}</div>}
+                {!!message.entities.length && <div className="mt-3 flex flex-wrap gap-3">{message.entities.map((entity) => <ChatEntityCard key={chatEntityKey(entity)} entity={entity} projectId={projectId} />)}</div>}
                 {!!message.attachments.length && <div className="mt-3 flex min-w-0 flex-wrap gap-3">{message.attachments.map((file) => <ChatAttachment key={file.id} file={file} projectId={projectId} />)}</div>}
                 {!!message.reactions.length && <div className="mt-3 flex flex-wrap gap-1.5">{message.reactions.map((reaction) => <button key={reaction.reaction} type="button" disabled={!canWrite || working || state !== "connected"} aria-label={`${reaction.reaction}: ${reaction.user_ids.length}`} aria-pressed={reaction.user_ids.includes(userId)} onClick={() => void run(() => command("reaction.set", { reaction: reaction.reaction, active: !reaction.user_ids.includes(userId) }, message.id))} className={cn("chat-quick-reaction rounded-md border px-2 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-accent", reaction.user_ids.includes(userId) ? "border-accent/30 bg-accent/10 text-accent" : "border-line bg-control text-secondary hover:bg-hover")}>{reaction.reaction} <span className="ml-0.5 text-[10px]">{reaction.user_ids.length}</span></button>)}</div>}
             </>}

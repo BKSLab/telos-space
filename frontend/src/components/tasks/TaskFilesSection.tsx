@@ -1,111 +1,46 @@
-import { useDeferredValue, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { api, endpoints, queryKeys } from "@/lib/api";
-import { attachmentDescriptor } from "@/lib/fileDescriptors";
-import { mergeFileDrafts, type FileDescriptor, type FileUploadDraft } from "@/lib/files";
-import type { FileSearchPage, LinkedDocument, TaskAttachment } from "@/lib/types";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Field";
-import { Modal } from "@/components/ui/Modal";
+import { useDeferredValue, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { Unlink } from "lucide-react";
+import { api, endpoints } from "@/lib/api";
+import { createMarkdownDocument, DOCUMENT_PAGE_SIZE, uploadDocument } from "@/lib/documents";
+import { useDocuments, useRefreshDocuments } from "@/lib/useDocuments";
+import { DocumentAddButton, DocumentComposeDialog } from "@/components/documents/DocumentComposeDialog";
+import { DocumentList } from "@/components/documents/DocumentList";
+import { DocumentPagination } from "@/components/documents/DocumentPagination";
+import { Button, IconButton } from "@/components/ui/Button";
+import { Input, Select } from "@/components/ui/Field";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
-import { FileList } from "@/components/files/FileList";
-import { FileUploadControl } from "@/components/files/FileUploadControl";
-import { FileUploadDialog } from "@/components/files/FileUploadDialog";
-import { FileSearchResults } from "@/components/files/FileSearchResults";
 
-export function TaskFilesSection({ taskId, attachments, linkedDocuments, projectKey, onChange, loading, error }: {
-    taskId: number;
-    attachments: TaskAttachment[];
-    linkedDocuments: LinkedDocument[];
-    projectKey?: string;
-    onChange: () => void;
-    loading: boolean;
-    error?: string;
-}) {
-    const client = useQueryClient();
-    const scopeRef = useRef<HTMLDivElement>(null);
-    const [drafts, setDrafts] = useState<FileUploadDraft[]>([]);
-    const [fileError, setFileError] = useState<string | null>(null);
+export function TaskFilesSection({ taskId, projectId, projectKey, onChange }: { taskId: number; projectId?: number; projectKey?: string; onChange: () => void }) {
+    const refreshDocuments = useRefreshDocuments();
     const [search, setSearch] = useState("");
+    const [kind, setKind] = useState<"" | "text" | "upload">("");
+    const [processing, setProcessing] = useState("");
     const [offset, setOffset] = useState(0);
-    const [captionFile, setCaptionFile] = useState<FileDescriptor | null>(null);
-    const [captionDraft, setCaptionDraft] = useState("");
-    const query = useDeferredValue(search.trim());
-    const results = useQuery({
-        queryKey: queryKeys.taskFilesSearch(taskId, query, offset),
-        queryFn: () => api.get<FileSearchPage>(`${endpoints.taskFilesSearch(taskId)}?${new URLSearchParams({ q: query, limit: "20", offset: String(offset) })}`),
-        enabled: Boolean(query), retry: false,
-    });
-    function refresh() {
-        void client.invalidateQueries({ queryKey: queryKeys.taskAttachments(taskId) });
-        void client.invalidateQueries({ queryKey: queryKeys.taskComments(taskId) });
-        void client.invalidateQueries({ queryKey: ["tasks", taskId, "files-search"] });
-        onChange();
-    }
-    const upload = useMutation({
-        mutationFn: async (files: FileUploadDraft[]) => {
-            const failed: FileUploadDraft[] = [];
-            const errors: string[] = [];
-            for (const draft of files) {
-                const body = new FormData();
-                body.append("file", draft.file);
-                if (draft.caption.trim()) body.append("caption", draft.caption.trim());
-                try { await api.postForm<TaskAttachment>(endpoints.taskAttachments(taskId), body); }
-                catch (error) { failed.push(draft); errors.push(`«${draft.file.name}»: ${(error as Error).message}`); }
-            }
-            return { failed, errors };
-        },
-        onSuccess: result => { setDrafts(result.failed); refresh(); },
-    });
-    const remove = useMutation({
-        mutationFn: (id: number) => api.delete(endpoints.taskAttachment(taskId, id)),
-        onSuccess: refresh,
-    });
-    const retry = useMutation({ mutationFn: (id: number) => api.post<TaskAttachment>(endpoints.taskAttachmentRetry(taskId, id)), onSuccess: refresh });
-    const caption = useMutation({
-        mutationFn: () => api.patch<TaskAttachment>(endpoints.taskAttachment(taskId, Number(captionFile!.key)), { caption: captionDraft.trim() || null }),
-        onSuccess: () => { setCaptionFile(null); refresh(); },
-    });
-    return <div ref={scopeRef} className="flex min-w-0 flex-col gap-3">
-        <Input aria-label="Поиск в файлах задачи" placeholder="Название, подпись или содержимое" value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} />
-        {error && <ErrorMessage message={error} action={<Button onClick={() => void client.invalidateQueries({ queryKey: queryKeys.taskAttachments(taskId) })}>Повторить загрузку файлов</Button>} />}
-        {fileError && <ErrorMessage message={fileError} />}
-        {remove.error && <ErrorMessage title="Не удалось удалить файл" message={remove.error.message} />}
-        {retry.error && <ErrorMessage title="Не удалось повторить обработку" message={retry.error.message} />}
-        {query ? <>
-            {results.isPending && <Skeleton className="h-24 w-full" />}
-            {results.error && <ErrorMessage title="Не удалось найти файлы" message={results.error.message} action={<Button onClick={() => void results.refetch()}>Повторить поиск</Button>} />}
-            {results.data && <>
-                <p role="status" className="text-[12px] text-muted">Найдено: {results.data.total}</p>
-                {results.data.items.length ? <FileSearchResults items={results.data.items} projectKey={projectKey} /> : <EmptyState title="Файлы не найдены" description="Измените поисковый запрос." />}
-                {results.data.total > 20 && <nav aria-label="Страницы файлов задачи" className="flex gap-2">
-                    <Button disabled={offset === 0 || results.isFetching} onClick={() => setOffset(value => Math.max(0, value - 20))}>Назад</Button>
-                    <Button disabled={offset + 20 >= results.data.total || results.isFetching} onClick={() => setOffset(value => value + 20)}>Далее</Button>
-                </nav>}
-            </>}
-        </> : <>
-            {loading && <Skeleton className="h-20 w-full" />}
-            {!loading && attachments.length === 0 && <p className="text-[13px] text-muted">Файлов пока нет.</p>}
-            <FileList files={attachments.map(attachmentDescriptor)} onRemove={file => remove.mutate(Number(file.key))} removeDisabled={remove.isPending || retry.isPending}
-                onRetry={file => retry.mutate(Number(file.key))} retryDisabled={retry.isPending || remove.isPending}
-                onEditCaption={file => { caption.reset(); setCaptionFile(file); setCaptionDraft(file.caption ?? ""); }} />
-            {projectKey && linkedDocuments.length > 0 && <div className="flex flex-col gap-1 text-[12px]">
-                <span className="text-muted">Связанные документы</span>
-                {linkedDocuments.map(doc => <Link key={doc.link_id} to={`/projects/${projectKey}/docs/${doc.slug}`} className="touch-target truncate rounded text-accent hover:underline">{doc.title}</Link>)}
-            </div>}
+    const [adding, setAdding] = useState(false);
+    const q = useDeferredValue(search.trim());
+    const documents = useDocuments({ task_id: taskId, q, source_kind: kind || undefined, processing, limit: DOCUMENT_PAGE_SIZE, offset });
+    function refresh() { refreshDocuments(); onChange(); }
+    const detach = useMutation({ mutationFn: (ref: string) => api.delete(endpoints.documentTask(ref, taskId)), onSuccess: refresh });
+    return <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-wrap gap-2">
+            <Input aria-label="Поиск документов задачи" placeholder="Название, подпись или содержимое" value={search} className="min-w-0 basis-full sm:flex-1 sm:basis-auto" onChange={event => { setSearch(event.target.value); setOffset(0); }} />
+            <DocumentAddButton onClick={() => setAdding(true)} />
+        </div>
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+            <Select aria-label="Тип документа задачи" value={kind} onChange={event => { setKind(event.target.value as typeof kind); setOffset(0); }}><option value="">Все типы</option><option value="text">Markdown</option><option value="upload">Загруженные</option></Select>
+            <Select aria-label="Обработка документов задачи" value={processing} onChange={event => { setProcessing(event.target.value); setOffset(0); }}><option value="">Любое состояние</option><option value="pending">Обрабатывается</option><option value="ready">Готово</option><option value="failed">Ошибка</option></Select>
+        </div>
+        {documents.isPending && <Skeleton className="h-24 w-full" />}
+        {documents.error && <ErrorMessage title="Не удалось загрузить документы задачи" message={documents.error.message} action={<Button onClick={() => void documents.refetch()}>Повторить загрузку</Button>} />}
+        {detach.error && <ErrorMessage title="Не удалось убрать связь с задачей" message={detach.error.message} />}
+        {documents.data && <>
+            {documents.data.items.length ? <DocumentList documents={documents.data.items} projectKey={projectKey} actions={document => document.capabilities.can_detach && document.tasks.some(task => task.id === taskId && task.relation === "linked") ? <IconButton label={`Убрать связь с документом ${document.title}`} disabled={detach.isPending} onClick={() => detach.mutate(document.ref)}><Unlink size={13} /></IconButton> : null} /> : <EmptyState title={q || kind || processing ? "Документы не найдены" : "Документов пока нет"} description={q || kind || processing ? "Измените запрос или фильтры." : "Создайте Markdown, загрузите документ или выберите из проекта."} />}
+            <DocumentPagination page={documents.data} busy={documents.isFetching} onOffsetChange={setOffset} />
         </>}
-        <FileUploadControl onFiles={files => { upload.reset(); setDrafts(current => mergeFileDrafts(current, files)); }} onError={setFileError}
-            currentCount={attachments.length + drafts.length} uploading={upload.isPending} scopeRef={scopeRef} />
-        <FileUploadDialog drafts={drafts} onChange={setDrafts} busy={upload.isPending} error={upload.data?.errors.join(" ")}
-            onClose={() => setDrafts([])} onUpload={() => upload.mutate(drafts)} />
-        <Modal title="Подпись к файлу" isOpen={captionFile !== null} isDismissable={!caption.isPending} onOpenChange={open => { if (!open && !caption.isPending) setCaptionFile(null); }}
-            footer={<><Button disabled={caption.isPending} onClick={() => setCaptionFile(null)}>Отмена</Button><Button variant="primary" disabled={caption.isPending} onClick={() => caption.mutate()}>Сохранить подпись</Button></>}>
-            <div className="flex flex-col gap-3">
-                <p className="break-words text-[13px] text-muted">{captionFile?.name}</p>
-                <Input aria-label="Подпись к файлу" maxLength={2000} value={captionDraft} disabled={caption.isPending} onChange={event => setCaptionDraft(event.target.value)} />
-                {caption.error && <ErrorMessage message={caption.error.message} />}
-            </div>
-        </Modal>
+        <DocumentComposeDialog projectId={projectId} selectedRefs={documents.data?.items.map(document => document.ref)} isOpen={adding} onClose={() => setAdding(false)}
+            onMarkdown={async (draft, id) => { await createMarkdownDocument({ taskId }, draft, id); refresh(); }}
+            onUpload={async (draft, id) => { await uploadDocument({ taskId }, draft.file, draft.caption, id); refresh(); }}
+            onExisting={projectId !== undefined ? async selected => { for (const document of selected) await api.post(endpoints.documentTask(document.ref, taskId)); refresh(); } : undefined} />
     </div>;
 }

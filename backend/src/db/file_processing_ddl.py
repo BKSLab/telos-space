@@ -30,11 +30,11 @@ BEGIN
         EXECUTE format('DELETE FROM file_search_chunks WHERE %I = $1', source_column) USING NEW.id;
     ELSE
         EXECUTE format('UPDATE file_search_chunks SET title = $2, caption = $3 WHERE %I = $1', source_column)
-            USING NEW.id, NEW.original_name, left(coalesce(NEW.caption, ''), 4000);
+            USING NEW.id, coalesce(NEW.display_title, NEW.original_name), left(coalesce(NEW.caption, ''), 4000);
         EXECUTE format('INSERT INTO file_search_chunks (%I, chunk_index, start_offset, end_offset, title, caption, body)
             VALUES ($1, 0, 0, 0, $2, $3, '''') ON CONFLICT (%I, chunk_index)
             WHERE %I IS NOT NULL DO NOTHING', source_column, source_column, source_column)
-            USING NEW.id, NEW.original_name, left(coalesce(NEW.caption, ''), 4000);
+            USING NEW.id, coalesce(NEW.display_title, NEW.original_name), left(coalesce(NEW.caption, ''), 4000);
     END IF;
     IF is_original_change OR is_retry THEN
         EXECUTE format('INSERT INTO file_processing_jobs (%I) VALUES ($1)
@@ -71,7 +71,7 @@ BEGIN
             least(start_offset + 12000, length($4::text)), $2, $3,
             substr($4::text, start_offset + 1, 12000)
         FROM generate_series(0, greatest(length($4::text) - 1, 0), 11744) AS offsets(start_offset)', source_column)
-        USING source_id, original->>'original_name', left(coalesce(original->>'caption', ''), 4000), coalesce(NEW.text, '');
+        USING source_id, coalesce(original->>'display_title', original->>'original_name'), left(coalesce(original->>'caption', ''), 4000), coalesce(NEW.text, '');
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
@@ -83,9 +83,9 @@ def file_processing_statements() -> list[str]:
     return [
         FILE_PROCESSING_FUNCTION,
         "DROP TRIGGER IF EXISTS file_original_changed ON task_attachments",
-        "CREATE TRIGGER file_original_changed AFTER INSERT OR UPDATE OF original_name, caption, storage_key, content_type, size ON task_attachments FOR EACH ROW EXECUTE FUNCTION file_original_changed()",
+        "CREATE TRIGGER file_original_changed AFTER INSERT OR UPDATE OF original_name, display_title, caption, storage_key, content_type, size ON task_attachments FOR EACH ROW EXECUTE FUNCTION file_original_changed()",
         "DROP TRIGGER IF EXISTS file_original_changed ON project_files",
-        "CREATE TRIGGER file_original_changed AFTER INSERT OR UPDATE OF original_name, caption, storage_key, content_type, size, content_hash, retry_requested_at, deleted_at ON project_files FOR EACH ROW EXECUTE FUNCTION file_original_changed()",
+        "CREATE TRIGGER file_original_changed AFTER INSERT OR UPDATE OF original_name, display_title, caption, storage_key, content_type, size, content_hash, retry_requested_at, deleted_at ON project_files FOR EACH ROW EXECUTE FUNCTION file_original_changed()",
         FILE_TEXT_SEARCH_FUNCTION,
         "DROP TRIGGER IF EXISTS file_text_search_changed ON knowledge_attachment_texts",
         "CREATE TRIGGER file_text_search_changed AFTER INSERT OR UPDATE OF text, status, content_hash ON knowledge_attachment_texts FOR EACH ROW EXECUTE FUNCTION file_text_search_changed()",

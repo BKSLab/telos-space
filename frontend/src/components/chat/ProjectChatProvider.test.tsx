@@ -52,15 +52,29 @@ describe("события переноса в общем чате", () => {
         const { client } = setup();
         const taskKey = [...queryKeys.task(42), "chat-preview", 1];
         client.setQueryData(taskKey, { title: "Прежнее описание" });
-        client.setQueryData(queryKeys.document(7), { title: "Прежний документ" });
+        client.setQueryData(queryKeys.document("opaque-document"), { title: "Прежний документ" });
+        client.setQueryData(queryKeys.documentText("opaque-document"), { text: "Прежний текст" });
         const event: ChatEvent = { type: "entity.updated", project_id: 99, data: { entity_type: "TASK", entity_id: 42 } };
         act(() => connections.at(-1)!.onEvent(event, false));
         expect(client.getQueryState(taskKey)?.isInvalidated).toBe(false);
         act(() => connections.at(-1)!.onEvent({ ...event, project_id: 1 }, false));
         expect(client.getQueryState(taskKey)?.isInvalidated).toBe(true);
-        expect(client.getQueryState(queryKeys.document(7))?.isInvalidated).toBe(false);
-        act(() => connections.at(-1)!.onEvent({ ...event, project_id: 1, data: { entity_type: "DOCUMENT", entity_id: 7 } }, false));
-        expect(client.getQueryState(queryKeys.document(7))?.isInvalidated).toBe(true);
+        expect(client.getQueryState(queryKeys.document("opaque-document"))?.isInvalidated).toBe(false);
+        act(() => connections.at(-1)!.onEvent({ ...event, project_id: 1, data: { entity_type: "DOCUMENT", document_ref: "opaque-document" } }, false));
+        expect(client.getQueryState(queryKeys.document("opaque-document"))?.isInvalidated).toBe(true);
+        expect(client.getQueryState(queryKeys.documentText("opaque-document"))?.isInvalidated).toBe(true);
+        client.clear();
+    });
+
+    it("сохраняет разные документные refs при hydration и удалении одной карточки", async () => {
+        const resolve = vi.spyOn(api, "post").mockResolvedValue([]);
+        const { client } = setup();
+        const document = (ref: string): ChatEntity => ({ entity_type: "DOCUMENT", entity_id: null, document_ref: ref, title: ref, available: true, href: `/projects/DEMO1/docs/${ref}`, subtitle: null, status: null });
+        client.setQueryData<ChatHistory>(chatKeys.messages(1, 1), { messages: [message({ entities: [document("opaque-file"), document("opaque-attachment")] })], initialized: true, event_cursor: 0, has_more: false });
+        act(() => connections.at(-1)!.onEvent({ type: "entity.updated", project_id: 1, data: { entity_type: "DOCUMENT", document_ref: "opaque-file" } }, false));
+        await waitFor(() => expect(resolve).toHaveBeenCalledWith("/api/v1/projects/1/chat/entities/resolve", [{ entity_type: "DOCUMENT", entity_id: null, document_ref: "opaque-file" }]));
+        await waitFor(() => expect(client.getQueryData<ChatHistory>(chatKeys.messages(1, 1))?.messages[0].entities[0].available).toBe(false));
+        expect(client.getQueryData<ChatHistory>(chatKeys.messages(1, 1))?.messages[0].entities[1].available).toBe(true);
         client.clear();
     });
 

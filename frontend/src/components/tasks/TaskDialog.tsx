@@ -1,18 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlignLeft, FileText, FolderInput, History, Link2, ListChecks, MessageSquare, Paperclip, Pencil, Trash2, Users } from "lucide-react";
+import { AlignLeft, FileText, FolderInput, History, Link2, ListChecks, MessageSquare, Paperclip, Pencil, Users } from "lucide-react";
 import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDateTime, toDateInputValue } from "@/lib/dates";
 import type {
-    DocumentListItem,
-    LinkedDocument,
     ProjectMember,
     ProjectStage,
     Task,
     TaskActivity,
-    TaskAttachment,
     TaskComment,
     TaskPriority,
     TaskStatus,
@@ -44,15 +41,15 @@ import { isClosedStatus, TASK_STATUS_LABELS, TASK_STATUS_ORDER, taskKind } from 
 import { transferDeniedHint } from "@/lib/taskTransfer";
 import { useTaskViewed } from "@/lib/useTaskViewed";
 import type { TaskViewToken } from "@/lib/taskAttention";
-import { taskFilesPollInterval } from "@/lib/projectFiles";
 import { useMediaQuery } from "@/lib/useCalendarView";
+import { useDocuments } from "@/lib/useDocuments";
 
 const SECTIONS = [
     { id: "overview", label: "Основное", icon: AlignLeft },
     { id: "people", label: "Участники", icon: Users },
     { id: "checklist", label: "Чек-лист", icon: ListChecks },
     { id: "links", label: "Связи", icon: Link2 },
-    { id: "files", label: "Файлы", icon: Paperclip },
+    { id: "files", label: "Документы", icon: Paperclip },
     { id: "comments", label: "Комментарии", icon: MessageSquare },
     { id: "report", label: "Отчёт", icon: FileText },
     { id: "history", label: "История", icon: History },
@@ -122,7 +119,6 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
     const reportTabRef = useRef<HTMLDivElement>(null);
     const [reportComment, setReportComment] = useState<TaskComment | null>(null);
     const [moveDialogOpen, setMoveDialogOpen] = useState(false);
-    const [documentToLink, setDocumentToLink] = useState("");
     const currentUserQuery = useCurrentUser();
 
     const taskQuery = useQuery({
@@ -164,28 +160,14 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
         queryKey: queryKeys.taskActivity(taskId),
         queryFn: () => api.get<TaskActivity[]>(endpoints.taskActivity(taskId)),
     });
-    const attachmentsQuery = useQuery({
-        queryKey: queryKeys.taskAttachments(taskId),
-        queryFn: () => api.get<TaskAttachment[]>(endpoints.taskAttachments(taskId)),
-        refetchInterval: query => taskFilesPollInterval(query.state.data, query.state.status === "error"),
-    });
-    const linksQuery = useQuery({
-        queryKey: queryKeys.taskLinks(taskId),
-        queryFn: () => api.get<LinkedDocument[]>(endpoints.taskLinks(taskId)),
-        enabled: projectId !== undefined,
-    });
-    const documentsQuery = useQuery({
-        queryKey: queryKeys.documents(projectId ?? 0),
-        queryFn: () => api.get<DocumentListItem[]>(endpoints.projectDocuments(projectId as number)),
-        enabled: projectId !== undefined,
-    });
+    const documentsQuery = useDocuments({ task_id: taskId, limit: 20, offset: 0 });
     const wbsQuery = useQuery({
         queryKey: queryKeys.wbs(projectId ?? 0),
         queryFn: () => api.get<WbsStructure>(endpoints.wbs(projectId as number)),
         enabled: projectId !== undefined && task?.wbs_node_id !== null,
     });
 
-    useTaskViewed(taskId, commentsQuery.isSuccess && !commentsQuery.isFetching && attachmentsQuery.isSuccess && !attachmentsQuery.isFetching && activityQuery.isSuccess && !activityQuery.isFetching ? task?.attention_view : undefined, visibleCardRef);
+    useTaskViewed(taskId, commentsQuery.isSuccess && !commentsQuery.isFetching && documentsQuery.isSuccess && !documentsQuery.isFetching && activityQuery.isSuccess && !activityQuery.isFetching ? task?.attention_view : undefined, visibleCardRef);
 
     /** После любого изменения задачи обновляем все её представления. */
     const invalidateTask = () => {
@@ -252,33 +234,10 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
         onSuccess: invalidateTask,
     });
 
-    const linkMutation = useMutation({
-        mutationFn: (documentId: number) =>
-            api.post(endpoints.links(), { document_id: documentId, task_id: taskId }),
-        onSuccess: () => {
-            setDocumentToLink("");
-            queryClient.invalidateQueries({ queryKey: queryKeys.taskLinks(taskId) });
-            invalidateTask();
-        },
-    });
-
-    const unlinkMutation = useMutation({
-        mutationFn: (linkId: number) => api.delete(endpoints.link(linkId)),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.taskLinks(taskId) });
-            invalidateTask();
-        },
-    });
-
-    const unlinkedDocuments = useMemo(() => {
-        const linkedIds = new Set((linksQuery.data ?? []).map((link) => link.document_id));
-        return (documentsQuery.data ?? []).filter((document) => !linkedIds.has(document.id));
-    }, [documentsQuery.data, linksQuery.data]);
-
     const stage = stagesQuery.data?.find((item) => item.id === task?.stage_id);
     const wbsNode = wbsQuery.data?.nodes.find((node) => node.id === task?.wbs_node_id);
     const sectionCounts: Partial<Record<TaskSection, number | string>> = {
-        files: attachmentsQuery.data?.length,
+        files: documentsQuery.data?.total,
         comments: commentsQuery.data?.length,
         history: activityQuery.data?.length,
         checklist: task?.checklist ? `${task.checklist.items.filter(item => item.is_completed).length}/${task.checklist.items.length}` : undefined,
@@ -290,9 +249,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
     const mutationError =
         statusMutation.error ??
         updateMutation.error ??
-        moveMutation.error ??
-        linkMutation.error ??
-        unlinkMutation.error;
+        moveMutation.error;
 
     const header = task ? (
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -541,69 +498,18 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                             <TabPanel id="links" shouldForceMount className={PANEL_CLASS}>
                                 <DrawerSection title="Раздел ИСР"><p className="text-[13px] text-secondary">{wbsNode ? wbsNode.title : "Не распределена"}</p></DrawerSection>
                                 {projectId !== undefined && <TaskRiskSection projectId={projectId} projectKey={task.key.slice(0, task.key.lastIndexOf("-"))} taskId={task.id} />}
-                                {projectId !== undefined && <DrawerSection title="Документы" count={linksQuery.data?.length ?? null}>
-                                    <div className="flex flex-col gap-2">
-                                        {linksQuery.data?.map((link) => (
-                                            <div
-                                                key={link.link_id}
-                                                className="flex items-center gap-2 rounded-[var(--radius-control)] bg-white/[0.03] px-2.5 py-1.5"
-                                            >
-                                                <Link2 size={13} className="shrink-0 text-muted" aria-hidden="true" />
-                                                <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">
-                                                    {link.title}
-                                                </span>
-                                                <IconButton
-                                                    label={`Отвязать документ ${link.title}`}
-                                                    size="sm"
-                                                    disabled={unlinkMutation.isPending}
-                                                    onClick={() => unlinkMutation.mutate(link.link_id)}
-                                                >
-                                                    <Trash2 size={12} aria-hidden="true" />
-                                                </IconButton>
-                                            </div>
-                                        ))}
-                                        {unlinkedDocuments.length > 0 && (
-                                            <div className="flex gap-2">
-                                                <Select
-                                                    aria-label="Документ для связи с задачей"
-                                                    value={documentToLink}
-                                                    onChange={(event) => setDocumentToLink(event.target.value)}
-                                                >
-                                                    <option value="">Связать документ…</option>
-                                                    {unlinkedDocuments.map((document) => (
-                                                        <option key={document.id} value={document.id}>
-                                                            {document.title}
-                                                        </option>
-                                                    ))}
-                                                </Select>
-                                                <Button
-                                                    size="sm"
-                                                    disabled={documentToLink === "" || linkMutation.isPending}
-                                                    onClick={() => linkMutation.mutate(Number(documentToLink))}
-                                                >
-                                                    Связать
-                                                </Button>
-                                            </div>
-                                        )}
-                                        {linksQuery.data?.length === 0 && unlinkedDocuments.length === 0 && (
-                                            <p className="text-[13px] text-muted">
-                                                В проекте пока нет документов для связи.
-                                            </p>
-                                        )}
-                                    </div>
-                                </DrawerSection>}
                             </TabPanel>
                             </>}
                             <TabPanel id="files" shouldForceMount className={PANEL_CLASS}>
-                                <DrawerSection title="Файлы" count={attachmentsQuery.data?.length ?? null}>
-                                    <TaskFilesSection taskId={taskId} attachments={attachmentsQuery.data ?? []} linkedDocuments={linksQuery.data ?? []}
+                                <DrawerSection title="Документы" count={documentsQuery.data?.total ?? null}>
+                                    <TaskFilesSection taskId={taskId} projectId={projectId}
                                         projectKey={projectId !== undefined ? task.key.slice(0, task.key.lastIndexOf("-")) : undefined}
-                                        onChange={invalidateTask} loading={attachmentsQuery.isPending} error={attachmentsQuery.error?.message} />
+                                        onChange={invalidateTask} />
                                 </DrawerSection>
                             </TabPanel>
                             <TabPanel id="comments" shouldForceMount className={PANEL_CLASS}>
                                 <DrawerSection title="Комментарии" count={commentsQuery.data?.length ?? null}>
-                                    <TaskCommentsSection taskId={taskId} comments={commentsQuery.data ?? []} attachments={attachmentsQuery.data ?? []}
+                                    <TaskCommentsSection taskId={taskId} comments={commentsQuery.data ?? []}
                                         currentUserId={currentUserQuery.data?.id} onChange={invalidateTask} loading={commentsQuery.isPending} error={commentsQuery.error?.message}
                                         onReport={comment => { setReportComment(comment); setSection("report"); requestAnimationFrame(() => reportTabRef.current?.focus()); }} />
                                 </DrawerSection>

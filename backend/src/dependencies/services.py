@@ -29,6 +29,7 @@ from src.dependencies.clients import (
     VisionCapabilityDep,
 )
 from src.dependencies.db_session import DbSessionDep
+from src.dependencies.document_catalog import DocumentCatalogServiceDep
 from src.dependencies.repositories import (
     ApiKeysRepositoryDep,
     ApiKeyUsageRepositoryDep,
@@ -985,7 +986,7 @@ def get_checklist_suggestion_service(
     scope: ChecklistSuggestionScopeDep,
     llm_client: LlmClientDep,
     vision: VisionCapabilityDep,
-    storage: TaskAttachmentStorageDep,
+    document_catalog: DocumentCatalogServiceDep,
     settings: SettingsDep,
 ) -> TaskChecklistSuggestionService:
     """Создаёт генерацию чек-листа с адаптерами файлов и модели."""
@@ -993,7 +994,7 @@ def get_checklist_suggestion_service(
         scope=scope,
         llm_client=llm_client,
         vision=vision,
-        storage=storage,
+        document_catalog=document_catalog,
         file_context_limit=settings.llm.task_rephrase_file_max_chars,
         max_file_size=TaskAttachmentsService.MAX_FILE_SIZE,
     )
@@ -1008,6 +1009,7 @@ def get_task_description_service(
     scope: TaskDescriptionScopeDep,
     llm_client: LlmClientDep,
     vision: VisionCapabilityDep,
+    document_catalog: DocumentCatalogServiceDep,
     settings: SettingsDep,
 ) -> TaskDescriptionService:
     """Создаёт сервис переформулирования черновика задачи.
@@ -1019,6 +1021,7 @@ def get_task_description_service(
         scope=scope,
         llm_client=llm_client,
         vision=vision,
+        document_catalog=document_catalog,
         file_context_limit=settings.llm.task_rephrase_file_max_chars,
         max_file_size=TaskAttachmentsService.MAX_FILE_SIZE,
     )
@@ -1238,8 +1241,6 @@ def get_calendar_feed_service(
 
 
 CalendarFeedServiceDep = Annotated[CalendarFeedService, Depends(get_calendar_feed_service)]
-
-
 
 
 def get_agent_requests_service(

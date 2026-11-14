@@ -147,7 +147,7 @@ test("файл уходит вместе с вопросом", async ({ page }) 
     await panel.getByRole("textbox", { name: "Вопрос Арису" }).fill("Посмотри файл");
     await panel.getByRole("textbox", { name: "Вопрос Арису" }).press("Enter");
     await expect(panel.getByRole("button", { name: "Убрать acceptance.md" })).toHaveCount(0);
-    await expect(panel.locator("p", { hasText: "acceptance.md" })).toBeVisible();
+    await expect(panel.getByRole("link", { name: "Скачать файл acceptance.md", exact: true })).toBeVisible();
     expect(state.aris.submissions[0].file_ids).toEqual(["f918d205-2ced-48eb-85f4-19b8e55ef361"]);
 });
 

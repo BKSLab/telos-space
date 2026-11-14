@@ -33,15 +33,6 @@ async def checked_task(
     return await db.tasks.get_task(task_id)
 
 
-async def checked_document(
-    db: AgentProjectToolScope, ctx: AgentToolContext, document_id: int
-) -> None:
-    """Ограничивает документ именно проектом разговора."""
-    grant = await db.access.ensure_document_access(document_id=document_id, user_id=ctx.user_id)
-    if grant.project_id != ctx.project_id:
-        raise AgentToolAccessError("Документ находится вне проекта разговора.")
-
-
 async def checked_comment(
     db: AgentProjectToolScope, ctx: AgentToolContext, comment_id: int
 ) -> None:

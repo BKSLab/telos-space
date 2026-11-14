@@ -8,7 +8,7 @@ from src.clients.llm import LlmClient
 from src.clients.vision import VisionCapability
 from src.exceptions.ai import AiProviderError
 from src.exceptions.clients import ClientError
-from src.exceptions.documents import DocumentsRepositoryError
+from src.exceptions.document_catalog import DocumentCatalogServiceError
 from src.exceptions.projects import ProjectNotFoundError, ProjectsRepositoryError
 from src.exceptions.tasks import (
     TaskContextDocumentError,
@@ -22,6 +22,7 @@ from src.knowledge.extract import INDEXABLE_EXTENSIONS, extract_indexable_text
 from src.prompts.task_description import TASK_DESCRIPTION_REPHRASE_PROMPT
 from src.schemas.tasks import TaskRephraseFile, TaskRephraseRequestSchema, TaskRephraseResultSchema
 from src.services.db_scope import TaskDescriptionScopeFactory
+from src.services.document_catalog import DocumentCatalogService
 from src.services.tasks import build_task_key
 from src.utils.checklists import checklist_context
 
@@ -42,6 +43,7 @@ class TaskDescriptionService:
         *,
         scope: TaskDescriptionScopeFactory,
         llm_client: LlmClient,
+        document_catalog: DocumentCatalogService,
         vision: VisionCapability,
         file_context_limit: int,
         max_file_size: int,
@@ -53,6 +55,7 @@ class TaskDescriptionService:
                 передаётся: она не должна оставаться открытой во время
                 вызова модели.
             llm_client: Клиент chat completions.
+            document_catalog: Проверенное чтение сохранённых документов без OCR.
             vision: Способность распознавать изображения.
             file_context_limit: Предел длины текста из приложенных файлов.
             max_file_size: Предел размера одного файла контекста. Значение
@@ -60,6 +63,7 @@ class TaskDescriptionService:
         """
         self.scope = scope
         self.llm_client = llm_client
+        self.document_catalog = document_catalog
         self.vision = vision
         self.file_context_limit = file_context_limit
         self.max_file_size = max_file_size
@@ -68,6 +72,7 @@ class TaskDescriptionService:
         self,
         *,
         project_id: int,
+        user_id: int,
         data: TaskRephraseRequestSchema,
         files: list[TaskRephraseFile],
     ) -> TaskRephraseResultSchema:
@@ -75,6 +80,7 @@ class TaskDescriptionService:
 
         Args:
             project_id: Проект, в контексте которого переписывается черновик.
+            user_id: Текущий пользователь для проверки доступа к документам.
             data: Черновик задачи и выбранные источники контекста.
             files: Приложенные к запросу файлы контекста.
 
@@ -90,10 +96,21 @@ class TaskDescriptionService:
             AiProviderError: Если LLM-сервис недоступен.
             TasksServiceError: Если собрать контекст задачи не удалось.
         """
-        project, current_task, selected_documents, related_tasks = await self._load_context(
+        project, current_task, related_tasks = await self._load_context(
             project_id=project_id,
             data=data,
         )
+        try:
+            selected_documents = await self.document_catalog.read_context(
+                document_refs=data.document_refs,
+                user_id=user_id,
+                project_id=project_id,
+                max_chars=DOCUMENT_CONTEXT_LIMIT * 4,
+            )
+        except DocumentCatalogServiceError as error:
+            if error.status_code in {403, 404, 422}:
+                raise TaskContextDocumentError() from error
+            raise TasksServiceError(str(error)) from error
         extracted_files = await self._extract_files(files)
 
         payload = {
@@ -128,13 +145,7 @@ class TaskDescriptionService:
                 }
                 for task in related_tasks[:RELATED_TASKS_LIMIT]
             ],
-            "selected_documents": [
-                {
-                    "title": document.title,
-                    "content": _clip(document.content_md, DOCUMENT_CONTEXT_LIMIT),
-                }
-                for document in selected_documents
-            ],
+            "selected_documents": selected_documents,
             "new_files": extracted_files,
             "length_guidance": _length_guidance(data.description_md),
         }
@@ -179,9 +190,8 @@ class TaskDescriptionService:
                     if data.task_id is not None
                     else None
                 )
-                documents = await db.documents.get_by_ids(set(dict.fromkeys(data.document_ids)))
                 related_tasks = await db.tasks.get_by_project(project_id=project_id)
-        except (ProjectsRepositoryError, TasksRepositoryError, DocumentsRepositoryError) as error:
+        except (ProjectsRepositoryError, TasksRepositoryError) as error:
             logger.error(
                 "❌ Не удалось собрать контекст задачи в проекте id=%s.",
                 project_id,
@@ -196,26 +206,9 @@ class TaskDescriptionService:
         ):
             raise TaskNotFoundError(task_id=data.task_id)
 
-        selected_documents = self._select_documents(
-            project_id=project_id,
-            document_ids=data.document_ids,
-            documents=documents,
-        )
         related_tasks = [task for task in related_tasks if task.id != data.task_id]
         related_tasks.sort(key=lambda task: task.updated_at, reverse=True)
-        return project, current_task, selected_documents, related_tasks
-
-    @staticmethod
-    def _select_documents(*, project_id: int, document_ids: list[int], documents: list) -> list:
-        """Проверяет, что каждый выбранный документ принадлежит проекту."""
-        by_id = {document.id: document for document in documents}
-        selected = []
-        for document_id in dict.fromkeys(document_ids):
-            document = by_id.get(document_id)
-            if document is None or document.project_id != project_id:
-                raise TaskContextDocumentError(document_id=document_id)
-            selected.append(document)
-        return selected
+        return project, current_task, related_tasks
 
     async def _extract_files(self, files: list[TaskRephraseFile]) -> list[dict[str, str]]:
         if len(files) > MAX_REPHRASE_FILES:

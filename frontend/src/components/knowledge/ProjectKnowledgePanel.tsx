@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 
 const SOURCE_LABELS: Record<KnowledgeEntityType, string> = {
-    project: "Паспорт", task: "Задачи и чек-листы", task_report: "Отчёты задач", document: "Документы", comment: "Комментарии",
-    attachment: "Вложения задач", project_file: "Файлы проекта", milestone: "Вехи", risk: "Риски", wbs_node: "Разделы ИСР",
+    project: "Паспорт", task: "Задачи и чек-листы", task_report: "Отчёты задач", document: "Текстовые документы", comment: "Комментарии",
+    attachment: "Загруженные документы задач", project_file: "Загруженные документы проекта", milestone: "Вехи", risk: "Риски", wbs_node: "Разделы ИСР",
     stage: "Стадии", sticker: "Стикеры", member: "Команда", activity: "История задач",
     deadline_change: "История сроков", analytics_report: "Сохранённые отчёты",
 };

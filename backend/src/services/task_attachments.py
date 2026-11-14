@@ -86,6 +86,7 @@ class TaskAttachmentsService:
             ".txt",
             ".webp",
             ".xls",
+            ".xlsm",
             ".xlsx",
             ".zip",
         }
@@ -419,9 +420,15 @@ class TaskAttachmentsService:
         file_name: str,
         content_type: str | None,
         content: bytes,
+        max_file_size: int | None = None,
     ) -> tuple[str, str, str]:
         """Проверяет загрузку до выбора задачи, используя общие ограничения файлов."""
-        return cls._validate_file(file_name=file_name, content_type=content_type, content=content)
+        return cls._validate_file(
+            file_name=file_name,
+            content_type=content_type,
+            content=content,
+            max_file_size=max_file_size,
+        )
 
     @classmethod
     def _validate_file(

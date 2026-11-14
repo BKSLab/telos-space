@@ -25,7 +25,7 @@ from src.agent.runtime import (
     WriteGate,
 )
 from src.agent.runtime import metrics as runtime_metrics
-from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor
+from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor, AgentToolRequest
 from src.clients.embedding import EmbeddingClient
 from src.clients.llm import LlmClient
 from src.clients.qdrant import KnowledgeSearchHit, ProjectQdrantClient
@@ -46,8 +46,10 @@ from src.exceptions.projects import ProjectNotFoundError
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
 from src.knowledge.catalog import build_catalog, digest
 from src.knowledge.context import (
+    DOCUMENT_SOURCE_TYPES,
     citation,
     coverage,
+    document_fragment,
     file_issues,
     retrieve,
 )
@@ -56,14 +58,18 @@ from src.prompts.project_agent import (
     PROJECT_AGENT_API_BASE_PROMPT,
     PROJECT_AGENT_WRITE_INTENT_PROMPT,
 )
+from src.schemas.document_catalog import DocumentCatalogItemSchema
+from src.schemas.document_references import DocumentFragmentSchema
 from src.schemas.knowledge import (
     KnowledgeAnswerSchema,
     KnowledgeChatMessageSchema,
+    KnowledgeSourceCardSchema,
     KnowledgeSourceSchema,
     KnowledgeStatusSchema,
 )
 from src.services.agent_cards import source_card
 from src.services.db_scope import ProjectAgentScope, ProjectAgentScopeFactory
+from src.utils.document_refs import decode_document_ref
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +114,7 @@ class _SourceRegistry:
         self.nonce = secrets.token_hex(8)
         self._by_handle: dict[str, KnowledgeSourceSchema] = {}
         self._handle_by_source_id: dict[str, str] = {}
+        self._fragments: dict[str, tuple[str, DocumentFragmentSchema]] = {}
 
     def register(self, source: KnowledgeSourceSchema) -> str:
         """Возвращает стабильный внутри запроса хэндл источника."""
@@ -135,6 +142,24 @@ class _SourceRegistry:
     def get_handle(self, source_id: str) -> str | None:
         """Возвращает выданный хэндл по внутреннему source_id."""
         return self._handle_by_source_id.get(source_id)
+
+    def register_fragment(self, source_id: str, fragment: DocumentFragmentSchema) -> str:
+        """Фрагмент неизменяем: другое чтение источника не подменяет его цитату."""
+        for handle, record in self._fragments.items():
+            if record == (source_id, fragment):
+                return handle
+        handle = f"FRAG_{self.nonce}_{len(self._fragments) + 1}"
+        self._fragments[handle] = source_id, fragment
+        return handle
+
+    def resolve_reference(self, handle: str | None) -> KnowledgeSourceSchema | None:
+        """Разрешает ссылку на источник или конкретный выданный сервером фрагмент."""
+        if handle in self._fragments:
+            source_id, fragment = self._fragments[handle]
+            source_handle = self.get_handle(source_id)
+            source = self.resolve(source_handle) if source_handle else None
+            return source.model_copy(update={"reference": fragment}) if source else None
+        return self.resolve(handle) if handle else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,7 +365,7 @@ class ProjectAgentService:
                     # Точные операции с задачами/досками читают SQL-инструментами.
                     # Embeddings нужны только для выбранной области поиска по знаниям.
                     if (
-                        group_id in {"sources", "documents", "attachments", "reports"}
+                        group_id in {"sources", "documents", "reports"}
                         and not state["semantic_loaded"]
                     ):
                         hits, available = await self._semantic_search(project_id, query, phases)
@@ -422,18 +447,26 @@ class ProjectAgentService:
                         "conversation_id": conversation_id,
                     },
                 )
-                if state["stale"]:
+                output = run.output or ArisAnswer()
+                requested_handles = [*output.source_ids]
+                if output.primary_reference:
+                    requested_handles.append(output.primary_reference)
+                needs_current_document = any(
+                    source and source.entity_type in DOCUMENT_SOURCE_TYPES
+                    for source in (registry.resolve_reference(handle) for handle in requested_handles)
+                )
+                if state["stale"] or needs_current_document:
                     async with self.scope() as db:
                         await self._require_project(db, project_id=project_id)
                         state["catalog"] = build_catalog(
                             project_id, await db.sources.get_project_rows(project_id)
                         )
                 catalog = state["catalog"]
-                output = run.output or ArisAnswer()
                 selected = []
                 seen_sources = set()
-                for handle in [*output.source_ids, *(member_handles if run.output else [])]:
-                    source = registry.resolve(handle)
+                primary = registry.resolve_reference(output.primary_reference)
+                for handle in [*requested_handles, *(member_handles if run.output else [])]:
+                    source = registry.resolve_reference(handle)
                     if (
                         source
                         and catalog is not None
@@ -441,11 +474,15 @@ class ProjectAgentService:
                         and source.source_id not in seen_sources
                     ):
                         current_source = catalog.sources[source.source_id]
+                        is_primary = bool(primary and primary.source_id == source.source_id)
+                        reference = primary.reference if is_primary else source.reference
                         selected.append(
                             source.model_copy(
                                 update={
                                     "title": current_source.title,
                                     "card": source_card(current_source, catalog),
+                                    "reference": reference,
+                                    "is_primary": is_primary,
                                 }
                             )
                         )
@@ -508,6 +545,7 @@ class ProjectAgentService:
         page_context: dict[str, Any] | None = None,
         conversation_id: str | None = None,
         on_progress: ProgressSink | None = None,
+        uploaded_files: list[dict[str, Any]] | None = None,
     ) -> KnowledgeAnswerSchema:
         """Ответ Ариса в личном виджете, когда страница не указывает на проект.
 
@@ -526,7 +564,7 @@ class ProjectAgentService:
             conversation_id: Идентификатор диалога для журнала выполнения.
             on_progress: Запись живого статуса ответа; сбой записи ответ не роняет.
         Returns:
-            Ответ без карточек источников: объекты названы ключами в тексте.
+            Ответ с проверенными карточками личных документов; без проектного RAG.
         Raises:
             AgentAnswerError: При ошибке чтения данных.
             AiProviderError: Если модель не смогла подготовить ответ.
@@ -546,6 +584,7 @@ class ProjectAgentService:
             "current_participant": actor,
             "writes_allowed": tool_context.can_write,
             "previous_actions": action_history or [],
+            "uploaded_files": uploaded_files or [],
         }
         system_prompt = ARIS_BASE_PROMPTS[mode]
         budget = AgentContextBudget(
@@ -571,6 +610,12 @@ class ProjectAgentService:
             else None,
             progress=ProgressReporter(on_progress),
         )
+        registry = _SourceRegistry()
+
+        async def register_personal(_tool, result):
+            self._register_personal_views(result, registry)
+
+        deps.on_result = register_personal
         run: ArisRunResult | None = None
         try:
             run = await self.runtime.run(
@@ -583,10 +628,35 @@ class ProjectAgentService:
             )
             if run.output is None:
                 return KnowledgeAnswerSchema(answer=INCOMPLETE_ANSWER, sources=[])
-            answer = run.output.answer.strip() or (
+            output = run.output
+            primary = registry.resolve_reference(output.primary_reference)
+            selected = []
+            seen_sources = set()
+            handles = [*output.source_ids, *([output.primary_reference] if output.primary_reference else [])]
+            for handle in handles:
+                source = registry.resolve_reference(handle)
+                if source is None or source.source_id in seen_sources or not source.document_ref:
+                    continue
+                current = await self.tools.execute(tool_context, AgentToolRequest(
+                    name="telos_get_document", arguments={"document_ref": source.document_ref, "max_chars": 500}
+                ))
+                try:
+                    document = DocumentCatalogItemSchema.model_validate(current.get("document"))
+                except ValueError:
+                    continue
+                if document.ownership.project_id is not None:
+                    continue
+                is_primary = bool(primary and primary.source_id == source.source_id)
+                selected.append(source.model_copy(update={
+                    "title": document.title,
+                    "is_primary": is_primary,
+                    "reference": primary.reference if is_primary else source.reference,
+                }))
+                seen_sources.add(source.source_id)
+            answer = output.answer.strip() or ("" if selected else (
                 "Не удалось завершить проверку данных. Уточните вопрос."
-            )
-            return KnowledgeAnswerSchema(answer=answer, sources=[])
+            ))
+            return KnowledgeAnswerSchema(answer=answer, sources=selected)
         except AgentRunError as error:
             raise AiProviderError(str(error)) from error
         except ClientError as error:
@@ -629,14 +699,69 @@ class ProjectAgentService:
                     "text", ""
                 )
                 record = citation(source, excerpt=excerpt, score=value.get("score"))
+                fragment_data = value.get("reference")
+                if isinstance(fragment_data, dict):
+                    try:
+                        fragment = DocumentFragmentSchema.model_validate(fragment_data)
+                    except ValueError:
+                        fragment = None
+                    if fragment:
+                        expected = document_fragment(source, start=fragment.start, end=fragment.end)
+                        if expected == fragment:
+                            record.reference = fragment
+                            record.excerpt = fragment.quote[:SOURCE_EXCERPT_LIMIT]
+                            value["fragment_handle"] = registry.register_fragment(source.source_id, fragment)
                 value["source_handle"] = registry.register(record)
-                registry.update(source.source_id, **record.model_dump(exclude={"source_id"}))
+                changes = record.model_dump(exclude={"source_id", "reference"})
+                if record.reference:
+                    changes["reference"] = record.reference
+                registry.update(source.source_id, **changes)
             for key, item in list(value.items()):
                 if key not in {"properties", "dialog_history"}:
                     ProjectAgentService._register_views(item, catalog, registry)
         elif isinstance(value, list):
             for item in value:
                 ProjectAgentService._register_views(item, catalog, registry)
+
+    @staticmethod
+    def _register_personal_views(value, registry) -> None:
+        """Личные документы подтверждает общий сервис; приватные загрузки не источники."""
+        if isinstance(value, dict):
+            data = value.get("document", value)
+            if value.get("source_id") and isinstance(data, dict) and data.get("ownership"):
+                try:
+                    document = DocumentCatalogItemSchema.model_validate(data)
+                    kind, identifier = decode_document_ref(document.ref)
+                except ValueError:
+                    document = None
+                if document and document.ownership.project_id is None and value["source_id"] == f"{kind}:{identifier}":
+                    record = KnowledgeSourceSchema(
+                        source_id=value["source_id"], entity_type=kind, entity_id=identifier,
+                        title=document.title, task_id=document.ownership.owner_task_id,
+                        card=KnowledgeSourceCardSchema(summary=document.caption),
+                    )
+                    try:
+                        fragment = DocumentFragmentSchema.model_validate(value.get("reference"))
+                    except ValueError:
+                        fragment = None
+                    text = value.get("text")
+                    if fragment and isinstance(text, str):
+                        start = fragment.start - value.get("offset", 0)
+                        if fragment.document_ref == document.ref and fragment.content_hash == value.get("content_hash") and start >= 0 and text[start:start + len(fragment.quote)] == fragment.quote:
+                            record.reference = fragment
+                            record.excerpt = fragment.quote[:SOURCE_EXCERPT_LIMIT]
+                            value["fragment_handle"] = registry.register_fragment(record.source_id, fragment)
+                    value["source_handle"] = registry.register(record)
+                    changes = record.model_dump(exclude={"source_id", "reference"})
+                    if record.reference:
+                        changes["reference"] = record.reference
+                    registry.update(record.source_id, **changes)
+            for key, item in list(value.items()):
+                if key not in {"properties", "dialog_history"}:
+                    ProjectAgentService._register_personal_views(item, registry)
+        elif isinstance(value, list):
+            for item in value:
+                ProjectAgentService._register_personal_views(item, registry)
 
     @staticmethod
     def _elapsed_ms(started_at: float) -> float:

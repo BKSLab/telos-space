@@ -51,7 +51,7 @@ interface TaskChecklistFieldProps {
     taskId?: number;
     title: string;
     description: string;
-    documentIds?: number[];
+    documentRefs?: string[];
     files?: File[];
     value: TaskChecklist | null;
     onChange: (value: TaskChecklist | null) => void;
@@ -64,7 +64,7 @@ interface TaskChecklistFieldProps {
     onBusyChange?: (busy: boolean) => void;
 }
 
-export function TaskChecklistField({ projectId, taskId, title, description, documentIds = [], files = [],
+export function TaskChecklistField({ projectId, taskId, title, description, documentRefs = [], files = [],
     value, onChange, onAccept, onRemove, revision, editing = true, onEdit, disabled = false, onBusyChange }: TaskChecklistFieldProps) {
     const [proposal, setProposal] = useState<(ChecklistSuggestion & { revision?: number }) | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
@@ -74,7 +74,7 @@ export function TaskChecklistField({ projectId, taskId, title, description, docu
         mutationFn: async () => {
             const body = new FormData();
             body.append("payload", JSON.stringify({ title: title.trim(), description_md: description, task_id: taskId ?? null,
-                document_ids: documentIds, ...(isChecklistValid(value) ? { checklist: checklistInput(value) } : {}) }));
+                document_refs: documentRefs, ...(isChecklistValid(value) ? { checklist: checklistInput(value) } : {}) }));
             for (const file of files) body.append("files", file);
             const result = await api.postForm<ChecklistSuggestion>(endpoints.taskChecklistSuggestion(projectId!), body);
             return { ...result, revision };

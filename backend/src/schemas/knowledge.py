@@ -1,8 +1,10 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.knowledge.catalog import SourceType
+from src.schemas.document_references import DocumentFragmentSchema
+from src.utils.document_refs import encode_document_ref
 
 
 class KnowledgeChatMessageSchema(BaseModel):
@@ -61,9 +63,20 @@ class KnowledgeSourceSchema(BaseModel):
     excerpt: str | None = None
     score: float | None = None
     task_id: int | None = None
-    document_slug: str | None = None
+    document_ref: str | None = None
+    reference: DocumentFragmentSchema | None = None
+    is_primary: bool = False
     related_source_ids: list[str] = Field(default_factory=list)
     card: KnowledgeSourceCardSchema | None = None
+
+    @model_validator(mode="after")
+    def canonical_document_reference(self):
+        """Стабильная ссылка — производное серверного identity, включая историю."""
+        if self.entity_type in {SourceType.DOCUMENT, SourceType.ATTACHMENT, SourceType.PROJECT_FILE}:
+            self.document_ref = encode_document_ref(self.entity_type.value, self.entity_id)
+            if self.reference and self.reference.document_ref != self.document_ref:
+                raise ValueError("Фрагмент принадлежит другому документу.")
+        return self
 
 
 class KnowledgeReadParameters(BaseModel):

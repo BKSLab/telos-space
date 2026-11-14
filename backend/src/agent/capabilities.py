@@ -42,7 +42,7 @@ WORKFLOWS = (
     ),
     Workflow(
         "documents",
-        "Документы проекта: найти, прочитать полный текст, создать, изменить и связать с задачей.",
+        "Документы текущего проекта или личных задач: найти, прочитать текст, создать и изменить.",
         frozenset(
             {
                 "telos_list_documents",
@@ -52,19 +52,8 @@ WORKFLOWS = (
                 "telos_delete_document",
                 "telos_link_document",
                 "telos_unlink_document",
-            }
-        ),
-    ),
-    Workflow(
-        "attachments",
-        "Вложения и загруженные пользователем файлы: прочитать перечень, прикрепить, "
-        "скопировать или создать текстовый файл.",
-        frozenset(
-            {
-                "telos_list_attachments",
-                "telos_copy_attachment",
+                "telos_copy_document",
                 "telos_create_text_attachment",
-                "telos_delete_attachment",
                 "telos_attach_uploaded_file",
             }
         ),

@@ -24,7 +24,6 @@ from src.exceptions.storage import TaskAttachmentStorageError
 from src.exceptions.task_activity import TaskActivityRepositoryError
 from src.exceptions.task_attachments import (
     TaskAttachmentLimitError,
-    TaskAttachmentNotFoundError,
     TaskAttachmentsRepositoryError,
 )
 from src.exceptions.task_comments import TaskCommentsRepositoryError
@@ -43,10 +42,12 @@ from src.schemas.file_metadata import normalize_caption
 from src.schemas.task_comments import CommentSchema
 from src.services.access import AccessService
 from src.services.auth import AuthService, Principal
+from src.services.document_catalog import DocumentCatalogService
 from src.services.knowledge_events import KnowledgeEvents
 from src.services.task_attachments import TaskAttachmentsService
 from src.storage.task_attachments import TaskAttachmentStorage
 from src.utils.api_scopes import SCOPE_COMMENTS_WRITE, SCOPE_TASKS_WRITE
+from src.utils.document_refs import decode_document_ref, encode_document_ref
 from src.utils.file_previews import is_raster_previewable
 from src.utils.request_actor import reset_request_actor, set_request_actor
 
@@ -90,6 +91,7 @@ class FileCommentsScope:
     access: AccessService
     tasks: TasksRepository
     files: TaskAttachmentsRepository
+    document_catalog: DocumentCatalogService
     project_files: ProjectFilesRepository
     processing_jobs: FileProcessingJobsRepository
     attachments: TaskAttachmentsService
@@ -112,6 +114,7 @@ async def authorize_task_write(
     bearer_secret: str | None,
     comment: bool,
     with_files: bool,
+    record_usage: bool = True,
 ) -> Principal:
     """Разрешает текущего автора и проверяет действующие доменные права.
 
@@ -122,6 +125,7 @@ async def authorize_task_write(
         bearer_secret: Секрет bearer-токена.
         comment: Требуется ли scope комментариев.
         with_files: Требуется ли право менять файлы задачи.
+        record_usage: Отметить использование при первой проверке без блокировок.
     Returns:
         Текущий активный принципал.
     Raises:
@@ -129,7 +133,7 @@ async def authorize_task_write(
         AccessServiceError: Задача недоступна для записи.
     """
     principal = await db.auth.resolve_principal(
-        session_token=session_token, bearer_secret=bearer_secret
+        session_token=session_token, bearer_secret=bearer_secret, record_usage=record_usage
     )
     if principal.api_key is None and not principal.can_write:
         raise InsufficientTokenScopeError()
@@ -166,7 +170,7 @@ class FileCommentsService:
         request_id: UUID,
         body_md: str,
         uploads: list[CommentFileUpload],
-        attachment_ids: list[int],
+        document_refs: list[str],
         session_token: str | None,
         bearer_secret: str | None,
     ) -> CommentSchema:
@@ -177,7 +181,7 @@ class FileCommentsService:
             request_id: Стабильный UUID клиента, сохраняемый при сетевом повторе.
             body_md: Текст, допускающий пустую строку при наличии файлов.
             uploads: До десяти новых ограниченных оригиналов с подписями.
-            attachment_ids: ID существующих оригиналов этой же задачи.
+            document_refs: Ссылки на принадлежащие или связанные с задачей документы.
             session_token: Cookie пользователя.
             bearer_secret: Bearer с приоритетом перед cookie.
         Returns:
@@ -190,9 +194,9 @@ class FileCommentsService:
             AccessServiceError: Текущая задача недоступна пользователю.
             FileCommentsServiceError: Составную запись выполнить не удалось.
         """
-        uploads = self._validate(body_md, uploads, attachment_ids)
+        uploads = self._validate(body_md, uploads, document_refs)
         arguments_hash = await asyncio.to_thread(
-            self._arguments_hash, task_id, body_md, uploads, attachment_ids
+            self._arguments_hash, task_id, body_md, uploads, document_refs
         )
         prepared: list[PreparedCommentFile] = []
         committed = False
@@ -205,7 +209,7 @@ class FileCommentsService:
                     session_token=session_token,
                     bearer_secret=bearer_secret,
                     comment=True,
-                    with_files=bool(uploads or attachment_ids),
+                    with_files=bool(uploads or document_refs),
                 )
                 previous = await db.submissions.get_by_request(
                     actor_user_id=principal.user_id, request_id=request_id
@@ -229,7 +233,7 @@ class FileCommentsService:
                     session_token=session_token,
                     bearer_secret=bearer_secret,
                     comment=True,
-                    with_files=bool(uploads or attachment_ids),
+                    with_files=bool(uploads or document_refs),
                 )
                 await db.submissions.lock_request(
                     actor_user_id=principal.user_id, request_id=request_id
@@ -244,24 +248,42 @@ class FileCommentsService:
                     session_token=session_token,
                     bearer_secret=bearer_secret,
                     comment=True,
-                    with_files=bool(uploads or attachment_ids),
+                    with_files=bool(uploads or document_refs),
+                    record_usage=False,
                 )
                 previous = await db.submissions.get_by_request(
                     actor_user_id=principal.user_id, request_id=request_id
                 )
                 if previous is not None:
                     return self._replay(previous, task_id, arguments_hash)
-                selected = (
-                    await db.files.get_many_for_task(task_id=task_id, attachment_ids=attachment_ids)
-                    if attachment_ids
-                    else []
+                attachment_ids = []
+                document_sources = []
+                for ref in document_refs:
+                    document = await db.document_catalog.get(
+                        document_ref=ref, user_id=principal.user_id, principal=principal
+                    )
+                    owned = document.ownership.owner_task_id == task_id
+                    if not owned and not any(item.id == task_id for item in document.tasks):
+                        raise FileCommentValidationError("Документ не связан с этой задачей.")
+                    kind, identifier = decode_document_ref(ref)
+                    if kind == "attachment":
+                        attachment_ids.append(identifier)
+                    else:
+                        document_sources.append((kind, identifier, owned))
+                shared_links = await db.links.get_document_links(
+                    task_id=task_id,
+                    sources=[
+                        (kind, identifier)
+                        for kind, identifier, owned in document_sources
+                        if not owned
+                    ],
                 )
-                found = {item.id for item in selected}
-                missing = next(
-                    (item_id for item_id in attachment_ids if item_id not in found), None
-                )
-                if missing is not None:
-                    raise TaskAttachmentNotFoundError(missing)
+                if any(
+                    (kind, identifier) not in shared_links
+                    for kind, identifier, owned in document_sources
+                    if not owned
+                ):
+                    raise FileCommentValidationError("Документ больше не связан с задачей.")
                 count = await db.files.get_count_for_task(task_id) if prepared else 0
                 if count + len(prepared) > TaskAttachmentsService.MAX_FILES_PER_TASK:
                     raise TaskAttachmentLimitError(TaskAttachmentsService.MAX_FILES_PER_TASK)
@@ -291,6 +313,14 @@ class FileCommentsService:
                     comment_id=comment.id,
                     attachment_ids=[*attachment_ids, *new_ids],
                 )
+                await db.links.save_documents(
+                    task_id=task_id,
+                    comment_id=comment.id,
+                    sources=[
+                        (kind, identifier, None if owned else shared_links[(kind, identifier)])
+                        for kind, identifier, owned in document_sources
+                    ],
+                )
                 actor_token = set_request_actor(principal.request_actor())
                 try:
                     await db.activity.save(
@@ -307,17 +337,8 @@ class FileCommentsService:
                     entity_id=comment.id,
                 )
                 result = CommentSchema.model_validate(await db.comments.get_by_id(comment.id))
-                states = (
-                    await db.comments.get_attachment_states([comment.id])
-                    if result.attachments
-                    else {}
-                )
-                for item in result.attachments:
-                    state = states.get(item.id, {})
-                    if not self.knowledge_enabled:
-                        state.update(index_status="disabled", index_detail=None)
-                    for key, value in state.items():
-                        setattr(item, key, value)
+                refs = await db.comments.get_document_refs([comment.id])
+                result.document_refs = refs.get(comment.id, [])
                 await db.submissions.save(
                     actor_user_id=principal.user_id,
                     task_id=task_id,
@@ -345,22 +366,25 @@ class FileCommentsService:
                         )
 
     def _validate(
-        self, body_md: str, uploads: list[CommentFileUpload], attachment_ids: list[int]
+        self, body_md: str, uploads: list[CommentFileUpload], document_refs: list[str]
     ) -> list[CommentFileUpload]:
         if len(body_md) > MAX_COMMENT_LENGTH or "\x00" in body_md:
             raise FileCommentValidationError(
                 "Текст комментария некорректен или длиннее 50000 символов."
             )
-        if len(uploads) + len(attachment_ids) > MAX_COMMENT_FILES:
-            raise FileCommentValidationError("К комментарию можно добавить не более десяти файлов.")
-        if any(type(item) is not int or item <= 0 for item in attachment_ids) or len(
-            set(attachment_ids)
-        ) != len(attachment_ids):
+        if len(uploads) + len(document_refs) > MAX_COMMENT_FILES:
             raise FileCommentValidationError(
-                "Идентификаторы файлов должны быть уникальными положительными целыми числами."
+                "К комментарию можно добавить не более десяти документов."
             )
-        if not body_md.strip() and not uploads and not attachment_ids:
-            raise FileCommentValidationError("Добавьте текст или файлы комментария.")
+        try:
+            for ref in document_refs:
+                decode_document_ref(ref)
+        except (ValueError, TypeError) as error:
+            raise FileCommentValidationError("Неверная ссылка на документ.") from error
+        if len(set(document_refs)) != len(document_refs):
+            raise FileCommentValidationError("Ссылки на документы должны быть уникальными.")
+        if not body_md.strip() and not uploads and not document_refs:
+            raise FileCommentValidationError("Добавьте текст или документы комментария.")
         result = []
         for upload in uploads:
             name, _, content_type = TaskAttachmentsService.validate_file(
@@ -375,12 +399,11 @@ class FileCommentsService:
 
     @staticmethod
     def _arguments_hash(
-        task_id: int, body_md: str, uploads: list[CommentFileUpload], attachment_ids: list[int]
+        task_id: int, body_md: str, uploads: list[CommentFileUpload], document_refs: list[str]
     ) -> str:
         payload = {
             "task_id": task_id,
             "body_md": body_md,
-            "attachment_ids": sorted(attachment_ids),
             "files": [
                 {
                     "name": item.name,
@@ -391,6 +414,12 @@ class FileCommentsService:
                 for item in uploads
             ],
         }
+        sources = [decode_document_ref(ref) for ref in document_refs]
+        # Сохранённые квитанции старых отправок остаются воспроизводимыми.
+        if all(kind == "attachment" for kind, _ in sources):
+            payload["attachment_ids"] = sorted(identifier for _, identifier in sources)
+        else:
+            payload["document_refs"] = sorted(document_refs)
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
@@ -399,4 +428,10 @@ class FileCommentsService:
     def _replay(previous, task_id: int, arguments_hash: str) -> CommentSchema:
         if previous.task_id != task_id or previous.arguments_hash != arguments_hash:
             raise FileCommentSubmissionConflictError()
-        return CommentSchema.model_validate(previous.result)
+        result = dict(previous.result)
+        if "document_refs" not in result:
+            result["document_refs"] = [
+                encode_document_ref("attachment", item["id"])
+                for item in result.get("attachments", [])
+            ]
+        return CommentSchema.model_validate(result)

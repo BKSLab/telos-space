@@ -59,13 +59,14 @@ async def test_summary_migration_preserves_documents_and_schedules_background_wo
             connection, opts={"include_object": include_object, "compare_server_default": True}
         )
         assert compare_metadata(context, Base.metadata) == []
+        # Следующие ревизии также ставят сверку: worker объединяет задания проекта.
         assert (
             connection.execute(
                 text(
                     "SELECT count(*) FROM knowledge_index_jobs WHERE project_id=1 AND status='PENDING'"
                 )
             ).scalar_one()
-            == 1
+            >= 1
         )
         assert (
             connection.execute(text("SELECT content_md FROM documents")).scalar_one()
@@ -88,7 +89,7 @@ async def test_summary_migration_preserves_documents_and_schedules_background_wo
                     "SELECT count(*) FROM knowledge_index_jobs WHERE project_id=1 AND status='PENDING'"
                 )
             ).scalar_one()
-            == 1
+            >= 1
         )
 
     try:

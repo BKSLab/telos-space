@@ -9,17 +9,11 @@ from starlette.datastructures import UploadFile
 
 from main import app
 from src.core.settings import get_settings
-from src.dependencies.file_comments import (
-    get_file_comments_service,
-    get_file_previews_service,
-    get_task_file_mutations_service,
-)
+from src.dependencies.file_comments import get_file_comments_service
 from src.exceptions.file_comments import FileCommentSubmissionConflictError
-from src.schemas.task_attachments import TaskAttachmentSchema
 from src.schemas.task_comments import CommentSchema
-from src.services.attachment_download import AttachmentDownload
 from src.services.file_comments import FileCommentsService
-from src.services.file_metadata import FilePreviewsService, TaskFileMutationsService
+from src.utils.document_refs import encode_document_ref
 
 
 @pytest.fixture
@@ -31,18 +25,7 @@ def comment_files_service():
         task_id=2,
         body_md="",
         created_at=datetime.now(UTC),
-        attachments=[
-            TaskAttachmentSchema(
-                id=4,
-                task_id=2,
-                original_name="screen.png",
-                caption="Макет",
-                uploaded_by_user_id=1,
-                content_type="image/png",
-                size=4,
-                created_at=datetime.now(UTC),
-            )
-        ],
+        document_refs=[encode_document_ref("attachment", 4)],
     )
     app.dependency_overrides[get_file_comments_service] = lambda: service
     return service
@@ -59,20 +42,17 @@ async def test_multipart_forwards_stable_uuid_files_captions_existing_ids_and_re
             "request_id": str(request_id),
             "body_md": "",
             "captions": '["Макет"]',
-            "attachment_ids": "[7]",
+            "document_refs": '["' + encode_document_ref("attachment", 7) + '"]',
         },
         files=[("files", ("screen.png", b"file", "image/png"))],
         headers={"Authorization": "Bearer synthetic-key"},
     )
     assert response.status_code == 201
-    attachment = response.json()["attachments"][0]
-    assert attachment["caption"] == "Макет" and attachment["uploaded_by_user_id"] == 1
-    assert (
-        attachment["previewable"]
-        and attachment["preview_url"] == "/api/v1/tasks/2/attachments/4/preview"
-    )
+    assert response.json()["document_refs"] == [encode_document_ref("attachment", 4)]
     args = comment_files_service.submit.await_args.kwargs
-    assert args["request_id"] == request_id and args["attachment_ids"] == [7]
+    assert args["request_id"] == request_id and args["document_refs"] == [
+        encode_document_ref("attachment", 7)
+    ]
     assert args["session_token"] == "synthetic-cookie" and args["bearer_secret"] == "synthetic-key"
     assert (args["uploads"][0].content, args["uploads"][0].caption) == (b"file", "Макет")
     comment_files_service.submit.side_effect = FileCommentSubmissionConflictError()
@@ -105,9 +85,9 @@ async def test_multipart_rejects_bad_json_misaligned_captions_ids_limit_and_clos
         {"captions": "{}"},
         {"captions": "[]"},
         {"captions": "[8]"},
-        {"attachment_ids": "[true]"},
-        {"attachment_ids": "[-1]"},
-        {"attachment_ids": str(list(range(1, 11)))},
+        {"document_refs": "[true]"},
+        {"document_refs": "[-1]"},
+        {"document_refs": str(list(range(1, 11)))},
     ):
         closed.clear()
         response = await api_client.post(
@@ -134,48 +114,3 @@ async def test_multipart_rejects_bad_json_misaligned_captions_ids_limit_and_clos
         )
     ).status_code == 422
     comment_files_service.submit.assert_not_awaited()
-
-
-async def test_task_caption_patch_distinguishes_null_and_omitted_and_preview_is_private(
-    api_client, tmp_path
-):
-    mutations = AsyncMock(spec=TaskFileMutationsService)
-    mutations.update_caption.return_value = TaskAttachmentSchema(
-        id=4,
-        task_id=2,
-        original_name="screen.png",
-        content_type="image/png",
-        size=4,
-        created_at=datetime.now(UTC),
-    )
-    app.dependency_overrides[get_task_file_mutations_service] = lambda: mutations
-    assert (await api_client.patch("/api/v1/tasks/2/attachments/4", json={})).status_code == 422
-    assert (
-        await api_client.patch("/api/v1/tasks/2/attachments/4", json={"caption": "x" * 4001})
-    ).status_code == 422
-    cleared = await api_client.patch("/api/v1/tasks/2/attachments/4", json={"caption": None})
-    assert cleared.status_code == 200 and cleared.json()["caption"] is None
-    mutations.update_caption.assert_awaited_once_with(
-        task_id=2, attachment_id=4, caption=None, session_token=None, bearer_secret=None
-    )
-    mutations.retry.return_value = mutations.update_caption.return_value
-    retried = await api_client.post("/api/v1/tasks/2/attachments/4/retry")
-    assert retried.status_code == 202 and retried.json()["id"] == 4
-    mutations.retry.assert_awaited_once_with(
-        task_id=2, attachment_id=4, session_token=None, bearer_secret=None
-    )
-    preview = tmp_path / "preview.jpg"
-    preview.write_bytes(b"synthetic bounded jpeg")
-    service = AsyncMock(spec=FilePreviewsService)
-    service.prepare_task.return_value = AttachmentDownload(
-        preview, "image/jpeg", "preview.jpg", True
-    )
-    service.prepare_project.return_value = service.prepare_task.return_value
-    app.dependency_overrides[get_file_previews_service] = lambda: service
-    for path in ("/api/v1/tasks/2/attachments/4/preview", "/api/v1/projects/2/files/4/preview"):
-        response = await api_client.get(path)
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("image/jpeg")
-        assert response.headers["content-disposition"].startswith("inline")
-        assert response.headers["cache-control"] == "private, no-store"
-        assert response.headers["x-content-type-options"] == "nosniff"

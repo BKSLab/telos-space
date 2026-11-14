@@ -74,6 +74,7 @@ async function mockProject(page: Page, risks: Risk[] = [{ ...baseRisk }]) {
         const reply = (json: unknown, status = 200) => route.fulfill({ status, json, headers });
         if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
         if (path.endsWith("/auth/me")) return reply(user);
+        if (path === "/api/v1/documents") return reply({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
         if (path === "/api/v1/projects") return reply([project]);
         if (path === "/api/v1/projects/1") return reply(project);
         if (path === "/api/v1/users/me/task-attention") return reply({ new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] });

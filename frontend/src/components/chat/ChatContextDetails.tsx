@@ -1,19 +1,14 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Circle, Download } from "lucide-react";
-import { api, ApiError, apiUrl, endpoints, queryKeys } from "@/lib/api";
-import type { ChatContextTarget } from "@/lib/chatContext";
-import { formatRelative } from "@/lib/dates";
-import { formatFileSize } from "@/lib/files";
-import { projectFileDescriptor } from "@/lib/fileDescriptors";
-import { FileList } from "@/components/files/FileList";
-import { EXTRACTION_LABELS, INDEX_LABELS, isProjectFileProcessing, PROJECT_FILE_TEXT_PAGE_SIZE, projectFilesPollInterval } from "@/lib/projectFiles";
-import type { DocumentDetail, ProjectFileDetail, ProjectStage, Task } from "@/lib/types";
+import { ArrowUpRight, CheckCircle2, Circle } from "lucide-react";
+import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
+import { chatContextKey, type ChatContextTarget } from "@/lib/chatContext";
+import type { ProjectStage, Task } from "@/lib/types";
 import { fullName } from "@/lib/types";
 import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 import { useUiStore } from "@/stores/ui";
 import { PriorityBadge } from "@/components/ui/Badge";
-import { Button, LinkButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
+import { DocumentView } from "@/components/documents/DocumentView";
 import { DueDate } from "@/components/ui/DueDate";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 
@@ -28,15 +23,14 @@ interface ChatContextDetailsProps {
 export function ChatContextDetails(props: ChatContextDetailsProps) {
     const { target, projectId } = props;
     return (
-        <div key={`${projectId}:${target.type}:${target.id}`} className="flex min-w-0 flex-col gap-4">
-            {target.type === "task" && <TaskContextDetails {...props} />}
-            {target.type === "document" && <DocumentContextDetails {...props} />}
-            {target.type === "project_file" && <FileContextDetails {...props} />}
+        <div key={`${projectId}:${chatContextKey(target)}`} className="flex min-w-0 flex-col gap-4">
+            {target.type === "task" && <TaskContextDetails {...props} target={target} />}
+            {target.type === "document" && <DocumentView documentRef={target.documentRef} fragment={target.fragment} projectKey={props.projectKey} expectedProjectId={projectId} compact />}
         </div>
     );
 }
 
-function TaskContextDetails({ target, projectId, onOpenFull }: ChatContextDetailsProps) {
+function TaskContextDetails({ target, projectId, onOpenFull }: ChatContextDetailsProps & { target: Extract<ChatContextTarget, { type: "task" }> }) {
     const detail = useQuery({
         queryKey: [...queryKeys.task(target.id), "chat-preview", projectId],
         queryFn: () => api.get<Task>(endpoints.task(target.id)),
@@ -100,92 +94,6 @@ function TaskContextDetails({ target, projectId, onOpenFull }: ChatContextDetail
             onOpenFull?.();
             useUiStore.getState().setSelectedTaskId(task.id);
         }}>Открыть карточку задачи</Button>
-    </>;
-}
-
-function DocumentContextDetails({ target, projectId, projectKey, onOpenFull }: ChatContextDetailsProps) {
-    const detail = useQuery({
-        queryKey: queryKeys.document(target.id),
-        queryFn: () => api.get<DocumentDetail>(endpoints.document(target.id)),
-        refetchOnMount: "always",
-        retry: false,
-    });
-
-    if (detail.error) return <ReadError error={detail.error} busy={detail.isFetching} retry={() => void detail.refetch()} />;
-    if (detail.isPending || !detail.data) return <LoadingDetails />;
-    const document = detail.data;
-    if (document.project_id !== projectId) return <WrongProject />;
-
-    return <>
-        <header className="flex min-w-0 flex-col gap-1.5">
-            <h3 className="text-[15px] font-semibold break-words text-primary [overflow-wrap:anywhere]">{document.title}</h3>
-            <p className="text-[12px] text-muted">Изменён {formatRelative(document.updated_at)}</p>
-        </header>
-        {document.content_md.trim() ? <Markdown markdown={document.content_md} /> : <p className="text-[13px] text-muted">Документ пока пуст.</p>}
-        <AnswerExcerpt excerpt={target.excerpt} />
-        <LinkButton className="self-start" icon={<ArrowUpRight size={14} />} to={`/projects/${projectKey}/docs/${encodeURIComponent(document.slug)}`} onClick={onOpenFull}>Открыть документ</LinkButton>
-    </>;
-}
-
-function FileContextDetails({ target, projectId, projectKey, onOpenFull }: ChatContextDetailsProps) {
-    const [offsets, setOffsets] = useState([0]);
-    const offset = offsets[offsets.length - 1];
-    const detail = useQuery({
-        queryKey: queryKeys.projectFile(projectId, target.id, offset),
-        queryFn: () => api.get<ProjectFileDetail>(`${endpoints.projectFile(projectId, target.id)}?offset=${offset}&max_chars=${PROJECT_FILE_TEXT_PAGE_SIZE}`),
-        refetchOnMount: "always",
-        retry: false,
-        refetchInterval: (query) => projectFilesPollInterval(
-            query.state.data?.project_id === projectId ? [query.state.data] : undefined,
-            query.state.status === "error",
-        ),
-    });
-
-    if (detail.error) return <ReadError error={detail.error} busy={detail.isFetching} retry={() => void detail.refetch()} />;
-    if (detail.isPending || !detail.data) return <LoadingDetails />;
-    const file = detail.data;
-    if (file.project_id !== projectId) return <WrongProject />;
-    const extractionDisabled = file.extraction_status === "disabled";
-
-    return <>
-        <header className="flex min-w-0 flex-col gap-1.5">
-            <h3 className="text-[15px] font-semibold break-words text-primary [overflow-wrap:anywhere]">{file.original_name}</h3>
-            <p className="text-[12px] text-muted">{formatFileSize(file.size)} · Загружен {formatRelative(file.created_at)}</p>
-        </header>
-        <FileList files={[projectFileDescriptor(file)]} />
-        <div className="flex flex-col gap-2 text-[13px]">
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
-                <span className={file.extraction_status === "failed" ? "text-danger" : "text-secondary"}>{EXTRACTION_LABELS[file.extraction_status]}</span>
-                <span className={file.index_status === "failed" ? "text-danger" : "text-muted"}>{INDEX_LABELS[file.index_status]}</span>
-            </div>
-            {file.extraction_detail && <p className="break-words text-secondary">{file.extraction_detail}</p>}
-            {file.index_detail && <p className="break-words text-secondary">{file.index_detail}</p>}
-        </div>
-        <section aria-label="Извлечённый текст файла" className="flex min-w-0 flex-col gap-3">
-            <h4 className="text-[13px] font-semibold text-secondary">Извлечённый текст</h4>
-            {file.text_total_chars > 0 ? <>
-                <nav aria-label="Страницы текста" className="flex flex-wrap items-center gap-2">
-                    <Button size="sm" icon={<ChevronLeft size={14} />} disabled={offsets.length === 1 || detail.isFetching} onClick={() => setOffsets((current) => current.slice(0, -1))}>Назад</Button>
-                    <span className="text-[12px] text-muted">{file.text_offset + 1}–{file.next_offset ?? file.text_total_chars} из {file.text_total_chars}</span>
-                    <Button size="sm" icon={<ChevronRight size={14} />} disabled={file.next_offset === null || detail.isFetching} onClick={() => {
-                        const next = file.next_offset;
-                        if (next !== null) setOffsets((current) => [...current, next]);
-                    }}>Далее</Button>
-                </nav>
-                <pre aria-label="Текст файла" tabIndex={0} className="whitespace-pre-wrap rounded-[var(--radius-control)] bg-app/60 px-3 py-3 font-sans text-[13px] leading-relaxed break-words text-primary [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-accent">{file.text}</pre>
-            </> : <p role="status" className="text-[13px] text-muted">
-                {extractionDisabled ? "Распознавание изображения отключено. Оригинал, название и подпись доступны."
-                    : isProjectFileProcessing(file) ? "Файл обрабатывается. Текст появится автоматически."
-                        : "Извлечённого текста нет. Оригинал доступен для скачивания."}
-            </p>}
-        </section>
-        <AnswerExcerpt excerpt={target.excerpt} />
-        <div className="flex flex-wrap items-center gap-2">
-            <a href={apiUrl(endpoints.projectFileContent(projectId, file.id))} download={file.original_name} className="touch-target material-metal inline-flex h-8 items-center justify-center gap-2 rounded-[var(--radius-control)] border border-line px-3 text-[13px] font-medium text-primary hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent">
-                <Download size={14} aria-hidden="true" />Скачать оригинал
-            </a>
-            <LinkButton icon={<ArrowUpRight size={14} />} to={`/projects/${projectKey}/docs?file=${file.id}`} onClick={onOpenFull}>Открыть в Документах</LinkButton>
-        </div>
     </>;
 }
 

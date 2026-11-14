@@ -21,7 +21,6 @@ from src.dependencies.access import (
 from src.dependencies.auth import PrincipalDep, require_write_scope
 from src.dependencies.services import (
     AccessServiceDep,
-    DocumentLinksServiceDep,
     ProjectQueryServiceDep,
     TaskDescriptionServiceDep,
     TasksServiceDep,
@@ -29,13 +28,11 @@ from src.dependencies.services import (
 from src.dependencies.task_attention import TaskAttentionServiceDep
 from src.exceptions.access import AccessServiceError
 from src.exceptions.ai import AiProviderError
-from src.exceptions.document_links import DocumentLinksServiceError
 from src.exceptions.project_stages import ProjectStagesServiceError
 from src.exceptions.projects import ProjectsServiceError
 from src.exceptions.task_attention import TaskAttentionServiceError
 from src.exceptions.tasks import TasksServiceError
 from src.exceptions.wbs_nodes import WbsNodesServiceError
-from src.schemas.document_links import LinkedDocumentSchema
 from src.schemas.enums import TaskPriority
 from src.schemas.tasks import (
     MyTaskSchema,
@@ -207,8 +204,9 @@ async def create_task(
 )
 async def rephrase_task_description(
     project_id: Annotated[int, Path(gt=0, description="Идентификатор проекта.")],
-    payload: Annotated[str, Form(description="JSON с черновиком и document_ids.")],
+    payload: Annotated[str, Form(description="JSON с черновиком и document_refs.")],
     service: TaskDescriptionServiceDep,
+    principal: PrincipalDep,
     files: Annotated[
         list[UploadFile] | None,
         File(description="Новые документы, выбранные в форме задачи."),
@@ -233,6 +231,7 @@ async def rephrase_task_description(
         read_files = await read_uploads(uploads, max_size=service.max_file_size)
         return await service.rephrase(
             project_id=project_id,
+            user_id=principal.user_id,
             data=data,
             files=[
                 TaskRephraseFile(name=item.name, content=item.content) for item in read_files
@@ -476,43 +475,6 @@ async def delete_task(
         logger.info("✅ Задача id=%s удалена.", task_id)
     except TaskErrors as error:
         logger.exception("❌ Ошибка DELETE /tasks/%s. Детали: %s", task_id, error)
-        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
-
-
-@router.get(
-    path="/tasks/{task_id}/links",
-    dependencies=[Depends(require_task_access)],
-    status_code=status.HTTP_200_OK,
-    summary="Получить документы задачи",
-    description="Возвращает документы, связанные с задачей.",
-    operation_id="getTaskLinks",
-    response_description="Связанные документы.",
-    responses={404: NOT_FOUND_RESPONSE, 422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
-    response_model=list[LinkedDocumentSchema],
-)
-async def get_task_links(
-    task_id: Annotated[int, Path(gt=0, description="Идентификатор задачи.")],
-    service: DocumentLinksServiceDep,
-) -> list[LinkedDocumentSchema]:
-    """Получает связанные с задачей документы.
-
-    Args:
-        task_id: Идентификатор задачи.
-        service: Сервис связей документов.
-
-    Returns:
-        Список связанных документов.
-
-    Raises:
-        HTTPException: Если задача не найдена или получить связи не удалось.
-    """
-    logger.info("🚀 Запрос GET /tasks/%s/links.", task_id)
-    try:
-        result = await service.get_links_for_task(task_id=task_id)
-        logger.info("✅ Связи задачи id=%s получены. Найдено: %s.", task_id, len(result))
-        return result
-    except (DocumentLinksServiceError, TasksServiceError) as error:
-        logger.exception("❌ Ошибка GET /tasks/%s/links. Детали: %s", task_id, error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 

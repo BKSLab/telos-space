@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.core.settings import Settings
 from src.db.session import async_session_factory
+from src.dependencies.document_catalog import build_bound_document_catalog_service
 from src.dependencies.settings import SettingsDep
 from src.dependencies.storage import TaskAttachmentStorageDep
 from src.exceptions.project_chats import ChatRepositoryError
@@ -232,6 +233,9 @@ def build_agent_project_tool_scope(
 
                     try:
                         yield AgentProjectToolScope(
+                            document_catalog=build_bound_document_catalog_service(
+                                session=session, settings=settings, storage=files, unit_of_work=domain_uow,
+                            ),
                             projects=ProjectsService(
                                 projects_repository=projects,
                                 members_repository=members,
@@ -456,6 +460,10 @@ def build_agent_conversation_scope(
                 boards=BoardsRepository(session),
                 board_shapes=BoardShapesRepository(session),
                 board_stickers=BoardStickersRepository(session),
+                auth=AuthService(
+                    users_repository=UsersRepository(session), tokens_repository=ApiTokensRepository(session),
+                    api_keys_repository=ApiKeysRepository(session), invite_code="unused",
+                ),
             )
 
     return scope
@@ -528,9 +536,6 @@ def build_checklist_suggestion_scope(
                 ),
                 projects=ProjectsRepository(session),
                 tasks=TasksRepository(session),
-                documents=DocumentsRepository(session),
-                links=DocumentLinksRepository(session),
-                attachments=TaskAttachmentsRepository(session),
             )
 
     return scope
@@ -780,7 +785,6 @@ def build_task_description_scope(
             yield TaskDescriptionScope(
                 projects=ProjectsRepository(session),
                 tasks=TasksRepository(session),
-                documents=DocumentsRepository(session),
             )
 
     return scope
