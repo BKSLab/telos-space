@@ -26,6 +26,18 @@ describe("buildTimelineStageRows", () => {
 describe("buildTimelineAssigneeRows", () => {
     const assigned = (id: number, assignee: string | null, start: string) => ({ ...task(id, 1, start), assignee });
 
+    it("показывает только реальную identity исполнителя и не угадывает фото по совпавшему имени", () => {
+        const person = { id: 7, username: "ivan", first_name: "Иван", last_name: "Петров", middle_name: null, has_avatar: true };
+        const first = { ...assigned(1, "Иван Петров", "2026-09-01"), executor: person };
+        const other = { ...assigned(2, "Иван Петров", "2026-09-02"), executor: { ...person, id: 8 } };
+        const group = buildTimelineAssigneeRows([first], new Set())[0];
+        expect(group.kind === "group" && group.user?.id).toBe(7);
+        const ambiguous = buildTimelineAssigneeRows([first, other], new Set())[0];
+        expect(ambiguous.kind === "group" && ambiguous.user).toBeUndefined();
+        const snapshot = buildTimelineAssigneeRows([assigned(3, "Иван Петров", "2026-09-03")], new Set())[0];
+        expect(snapshot.kind === "group" && snapshot.user).toBeUndefined();
+    });
+
     it("строка на человека по алфавиту, участник без задач тоже есть, «Без исполнителя» — в конце", () => {
         const rows = buildTimelineAssigneeRows(
             [assigned(1, "Яков", "2026-09-02"), assigned(2, null, "2026-09-01"), assigned(3, "Анна", "2026-09-03"), assigned(4, "Яков", "2026-09-01")],

@@ -21,12 +21,13 @@ from src.services.chat_scope import ChatScope
 
 
 def public_user(row) -> ChatUser:
-    """Оставляет в общей переписке только публичное имя участника."""
+    """Публичное имя и наличие фотографии без контактов и ключей хранилища."""
     return ChatUser(
         id=row["id"],
         username=row["username"],
         display_name=" ".join(filter(None, [row["last_name"], row["first_name"]]))
         or row["username"],
+        has_avatar=bool(row.get("has_avatar")),
     )
 
 

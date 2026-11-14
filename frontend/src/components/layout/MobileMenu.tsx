@@ -1,9 +1,9 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { Download, LogOut, Menu, UserRound } from "lucide-react";
 import { GLOBAL_NAV_ITEMS, HELP_NAV_ITEM } from "@/lib/navigation";
 import { useCurrentUser, useLogout } from "@/lib/useAuth";
-import { fullName } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { ProjectNavigation } from "@/components/layout/ProjectNavigation";
@@ -31,7 +31,7 @@ export function MobileMenu() {
             <div className="px-3 pb-3"><ProjectNavigation mobile onNavigate={close} /></div>
             <div className="flex flex-col gap-1 border-t border-line-subtle p-3">
                 <NavLink to={HELP_NAV_ITEM.to} onClick={close} className={({ isActive }) => item(isActive)}><HELP_NAV_ITEM.icon size={20} aria-hidden="true" />{HELP_NAV_ITEM.label}</NavLink>
-                <NavLink to="/profile" onClick={close} className={({ isActive }) => item(isActive)}><UserRound size={20} className="shrink-0" aria-hidden="true" /><span className="truncate">{user ? fullName(user) : "Профиль"}</span></NavLink>
+                <NavLink to="/profile" onClick={close} className={({ isActive }) => item(isActive)}>{user ? <UserIdentity user={user} size="sm" /> : <><UserRound size={20} className="shrink-0" aria-hidden="true" /><span>Профиль</span></>}</NavLink>
                 <NavLink to="/profile#install" onClick={close} className="flex min-h-12 items-center gap-3 rounded-md px-3 text-[14px] text-secondary hover:bg-hover"><Download size={20} aria-hidden="true" />На главный экран</NavLink>
                 <Button className="mt-2 justify-start" variant="ghost" icon={<LogOut size={20} />} disabled={logout.isPending} onClick={() => logout.mutate(undefined, { onSettled: () => { close(); navigate("/login"); } })}>Выйти</Button>
             </div>

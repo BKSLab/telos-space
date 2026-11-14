@@ -1,3 +1,4 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlignLeft, FileText, FolderInput, History, Link2, ListChecks, MessageSquare, Paperclip, Pencil, Users } from "lucide-react";
@@ -544,7 +545,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                                             <span className="ml-1">{event.to_value}</span>
                                                         )}
                                                     </p>
-                                                    {event.actor_name && <p className="text-[11px] text-muted">{event.actor_name}{event.via_api_key_label ? ` · через ${event.via_api_key_label}` : ""}</p>}
+                                                    {event.actor_name && <p className="text-[11px] text-muted"><UserIdentity userId={event.actor_user_id} name={event.actor_name} />{event.via_api_key_label ? ` · через ${event.via_api_key_label}` : ""}</p>}
                                                     <time
                                                         dateTime={event.created_at}
                                                         className={cn("text-[11px] text-disabled")}

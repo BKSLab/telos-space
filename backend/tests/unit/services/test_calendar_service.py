@@ -14,6 +14,7 @@ from src.repositories.project_stages import ProjectStagesRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.task_activity import TaskActivityRepository
 from src.repositories.task_dependencies import TaskDependenciesRepository
+from src.repositories.task_participants import TaskParticipantsRepository
 from src.repositories.tasks import CalendarTaskCounts, TasksRepository
 from src.repositories.wbs_nodes import WbsNodesRepository
 from src.services.calendar import MAX_CALENDAR_RANGE_DAYS, CalendarService
@@ -88,8 +89,12 @@ def build_service() -> tuple[
     milestones.get_range.return_value = []
     dependencies = AsyncMock(spec=TaskDependenciesRepository)
     dependencies.get_by_project.return_value = []
+    participants = AsyncMock(spec=TaskParticipantsRepository)
+    participants.get_by_task_ids.return_value = {}
     return (
-        CalendarService(projects, tasks, stages, nodes, activity, milestones, dependencies),
+        CalendarService(
+            projects, tasks, stages, nodes, activity, milestones, dependencies, participants
+        ),
         projects,
         tasks,
         stages,

@@ -8,7 +8,7 @@ import {
     IMPACT_LABELS, PROBABILITY_LABELS, RISK_STATUS_LABELS, RISK_STRATEGY_LABELS,
     isRiskReviewDue, riskChanges, type ProjectRisk, type RiskInput,
 } from "@/lib/risks";
-import { fullName, type ProjectMember, type Task } from "@/lib/types";
+import type { ProjectMember, Task } from "@/lib/types";
 import { useInvalidateRisks } from "@/lib/useRisks";
 import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 import { useMediaQuery } from "@/lib/useCalendarView";
@@ -20,6 +20,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { RiskBadge } from "@/components/risks/RiskBadge";
 import { RiskForm } from "@/components/risks/RiskForm";
+import { UserIdentity } from "@/components/users/UserIdentity";
 
 const SECTIONS = [
     { id: "overview", label: "Основное", icon: AlignLeft },
@@ -144,7 +145,7 @@ function RiskDialogContent({ projectId, riskId, onClose }: { projectId: number; 
                 <TabPanel id="control" className={PANEL_CLASS}>
                 <DrawerSection title="Ответственность и контроль">
                     <dl className="space-y-3 text-[12px]">
-                        <div><dt className="text-muted">Ответственный</dt><dd className="mt-1 text-secondary">{owner ? fullName(owner.user) : risk.owner_user_id ? "Участник проекта" : "Не назначен"}</dd></div>
+                        <div><dt className="text-muted">Ответственный</dt><dd className="mt-1 min-w-0 text-secondary">{owner ? <UserIdentity user={owner.user} size="sm" className="max-w-full" /> : risk.owner_user_id ? "Участник проекта" : "Не назначен"}</dd></div>
                         <div><dt className="text-muted">Следующий пересмотр</dt><dd className={isRiskReviewDue(risk) ? "mt-1 text-warning" : "mt-1 text-secondary"}>{risk.review_date ? formatFullDate(risk.review_date) : "Дата не назначена"}{isRiskReviewDue(risk) && " · требует контроля"}</dd></div>
                     </dl>
                 </DrawerSection>

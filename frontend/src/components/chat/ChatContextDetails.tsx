@@ -1,3 +1,4 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, CheckCircle2, Circle } from "lucide-react";
 import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
@@ -66,7 +67,7 @@ function TaskContextDetails({ target, projectId, onOpenFull }: ChatContextDetail
             <dt className="text-muted">Статус</dt>
             <dd className="break-words text-secondary">{stages.isPending && task.stage_id !== null ? "Загрузка…" : stage?.name ?? (task.stage_id === null ? "Без стадии" : "Статус недоступен")}</dd>
             <dt className="text-muted">Исполнитель</dt>
-            <dd className="break-words text-secondary">{executorName}</dd>
+            <dd className="break-words text-secondary">{executor ? <UserIdentity user={executor} /> : executorName}</dd>
             <dt className="text-muted">Срок</dt>
             <dd>{task.due_date ? <DueDate value={task.due_date} isDone={stage?.is_done_stage ?? Boolean(task.completed_at)} className="text-[13px]" /> : <span className="text-secondary">Не указан</span>}</dd>
             <dt className="text-muted">Приоритет</dt>

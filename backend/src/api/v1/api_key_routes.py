@@ -50,6 +50,7 @@ API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
     ("GET", f"{_P}/projects/{{project_id}}/risks/summary"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/risks/{{risk_id}}"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/users"): SCOPE_PROJECTS_READ,
+    ("GET", f"{_P}/users/{{user_id}}/avatar"): SCOPE_PROJECTS_READ,
     # ── Задачи: чтение ──────────────────────────────────────────────────────
     ("GET", f"{_P}/projects/{{project_id}}/tasks"): SCOPE_TASKS_READ,
     ("GET", f"{_P}/tasks/by-key/{{task_key}}"): SCOPE_TASKS_READ,

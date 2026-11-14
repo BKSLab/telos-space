@@ -1,3 +1,4 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { dataColor } from "@/lib/dataColor";
 import { useDroppable } from "@dnd-kit/core";
@@ -571,7 +572,7 @@ export function TimelineGrid({
                                                 style={{ background: dataColor(row.color) ?? "var(--color-text-muted)" }}
                                             />
                                             <span className={cn("min-w-0 flex-1 text-[11px] font-medium text-primary", compact ? "line-clamp-2" : "truncate")}>
-                                                {row.title}
+                                                {isPerson && row.assignee ? <UserIdentity user={row.user} name={row.user ? undefined : row.title} /> : row.title}
                                             </span>
                                             <span className="shrink-0 font-mono text-[9px] text-muted">
                                                 {personSummary ? (

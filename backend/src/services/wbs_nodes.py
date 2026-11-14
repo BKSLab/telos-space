@@ -27,10 +27,12 @@ from src.exceptions.wbs_nodes import (
 from src.repositories.project_stages import ProjectStagesRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.task_activity import TaskActivityRepository
+from src.repositories.task_participants import TaskParticipantsRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.repositories.wbs_nodes import WbsNodesRepository
 from src.schemas.tasks import TaskCompactSchema
+from src.schemas.users import UserSummarySchema
 from src.schemas.wbs_nodes import (
     WbsNodeDeleteResultSchema,
     WbsNodeSchema,
@@ -38,7 +40,7 @@ from src.schemas.wbs_nodes import (
     WbsStructureSchema,
 )
 from src.services.knowledge_events import KnowledgeEvents
-from src.services.tasks import build_task_key
+from src.services.tasks import build_task_key, executor_summary
 from src.utils.deadlines import is_task_overdue
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,7 @@ class WbsNodesService:
         activity_repository: TaskActivityRepository,
         unit_of_work: UnitOfWork,
         knowledge_events: KnowledgeEvents,
+        participants_repository: TaskParticipantsRepository,
     ):
         self.wbs_nodes_repository = wbs_nodes_repository
         self.projects_repository = projects_repository
@@ -82,6 +85,7 @@ class WbsNodesService:
         self.activity_repository = activity_repository
         self.unit_of_work = unit_of_work
         self.knowledge_events = knowledge_events
+        self.participants_repository = participants_repository
 
     async def get_structure(self, project_id: int) -> WbsStructureSchema:
         """Возвращает структуру проекта одним ответом.
@@ -107,12 +111,16 @@ class WbsNodesService:
             stages = await self.stages_repository.get_by_project(project_id=project_id)
             done_stage_ids = {stage.id for stage in stages if stage.is_done_stage}
             today = date.today()
+            participants = await self.participants_repository.get_by_task_ids(
+                [task.id for task in tasks]
+            )
 
             compact_tasks = [
                 _to_compact_task(
                     task=task,
                     project_key=project.key,
                     is_done=task.stage_id in done_stage_ids,
+                    executor=executor_summary(participants.get(task.id, [])),
                 )
                 for task in tasks
             ]
@@ -575,10 +583,12 @@ class WbsNodesService:
         """Строит компактное представление задачи с признаком выполнения."""
         stages = await self.stages_repository.get_by_project(project_id=project.id)
         done_stage_ids = {stage.id for stage in stages if stage.is_done_stage}
+        participants = await self.participants_repository.get_by_task_ids([task.id])
         return _to_compact_task(
             task=task,
             project_key=project.key,
             is_done=task.stage_id in done_stage_ids,
+            executor=executor_summary(participants.get(task.id, [])),
         )
 
     async def _get_project(self, project_id: int) -> Project:
@@ -690,7 +700,12 @@ def _collect_subtree_ids(nodes: list[WbsNode], root_id: int) -> set[int]:
     return collected
 
 
-def _to_compact_task(task: Task, project_key: str, is_done: bool) -> TaskCompactSchema:
+def _to_compact_task(
+    task: Task,
+    project_key: str,
+    is_done: bool,
+    executor: UserSummarySchema | None = None,
+) -> TaskCompactSchema:
     """Строит компактное представление задачи для структуры ИСР."""
     return TaskCompactSchema(
         id=task.id,
@@ -704,6 +719,7 @@ def _to_compact_task(task: Task, project_key: str, is_done: bool) -> TaskCompact
         canvas_y=task.canvas_y,
         priority=task.priority,
         assignee=task.assignee,
+        executor=executor,
         start_date=task.start_date,
         due_date=task.due_date,
         is_done=is_done,

@@ -164,8 +164,13 @@ class ChatHistoryFiltersSchema(BaseModel):
     )
     author_user_id: int | None = Field(
         default=None,
-        description="Фильтр по локальному ID автора пользователя; имена не разбираются эвристически.",
+        description="Применённый локальный ID автора: me нормализован сервером в ID инициатора; имена не определяют identity.",
         examples=[1, None],
+    )
+    author_type: Literal["USER", "AGENT"] | None = Field(
+        default=None,
+        description="Применённый тип автора; USER и AGENT фильтруются до LIMIT совместно с ID автора.",
+        examples=["USER", "AGENT", None],
     )
     date_from: date | None = Field(
         default=None,

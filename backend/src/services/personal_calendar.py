@@ -17,6 +17,7 @@ from src.repositories.milestones import MilestonesRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_stages import ProjectStagesRepository
 from src.repositories.projects import ProjectsRepository
+from src.repositories.task_participants import TaskParticipantsRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.users import UsersRepository
 from src.schemas.calendar import CalendarRangeSchema
@@ -37,7 +38,7 @@ from src.schemas.my_calendar import (
     PortfolioMilestoneSchema,
 )
 from src.services.calendar import to_calendar_task, validate_calendar_range
-from src.services.tasks import PERSONAL_TASK_KEY, task_state
+from src.services.tasks import PERSONAL_TASK_KEY, executor_summary, task_state
 from src.utils.deadlines import DUE_SOON_DAYS
 from src.utils.holidays_ru import SOURCES, holiday_days
 
@@ -83,6 +84,7 @@ class PersonalCalendarService:
         stages_repository: ProjectStagesRepository,
         tasks_repository: TasksRepository,
         milestones_repository: MilestonesRepository,
+        participants_repository: TaskParticipantsRepository,
     ):
         self.users_repository = users_repository
         self.members_repository = members_repository
@@ -90,6 +92,7 @@ class PersonalCalendarService:
         self.stages_repository = stages_repository
         self.tasks_repository = tasks_repository
         self.milestones_repository = milestones_repository
+        self.participants_repository = participants_repository
 
     async def get_my_range(
         self,
@@ -337,6 +340,9 @@ class PersonalCalendarService:
         stages_by_project: dict[int, list] = {}
         for stage in await self.stages_repository.get_by_project_ids(project_ids):
             stages_by_project.setdefault(stage.project_id, []).append(stage)
+        participants = await self.participants_repository.get_by_task_ids(
+            [task.id for task in tasks]
+        )
         items: list[MyCalendarTaskSchema] = []
         for task in tasks:
             source, key_prefix = _task_source(task, projects=projects)
@@ -351,6 +357,7 @@ class PersonalCalendarService:
                     source=source,
                     state=state,
                     state_label=label,
+                    executor=executor_summary(participants.get(task.id, [])),
                 )
             )
         return items

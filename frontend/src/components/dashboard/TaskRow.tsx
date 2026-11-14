@@ -1,16 +1,18 @@
-import type { DashboardTask, TaskPriority } from "@/lib/types";
+import type { DashboardTask, TaskPriority, UserSummary } from "@/lib/types";
+import { UserIdentity } from "@/components/users/UserIdentity";
 import type { ReactNode } from "react";
 import { formatRelative } from "@/lib/dates";
 import { DueDate } from "@/components/ui/DueDate";
 import { PriorityBadge, StatusDot } from "@/components/ui/Badge";
 
-export function OverviewTaskRow({ taskKey, title, stage, priority, dotColor, meta, onOpen }: {
+export function OverviewTaskRow({ taskKey, title, stage, priority, dotColor, meta, person, onOpen }: {
     taskKey: string;
     title: string;
     stage?: string | null;
     priority?: TaskPriority;
     dotColor?: string;
     meta?: ReactNode;
+    person?: UserSummary | null;
     onOpen: () => void;
 }) {
     return <button type="button" onClick={onOpen}
@@ -19,6 +21,7 @@ export function OverviewTaskRow({ taskKey, title, stage, priority, dotColor, met
             {dotColor && <StatusDot color={dotColor} />}
             <span className="font-mono">{taskKey}</span>
             {stage && <span className="max-w-36 truncate">· {stage}</span>}
+            {person && <UserIdentity user={person} className="max-w-40" />}
             <span className="ml-auto">{meta}</span>
         </div>
         <div className="flex w-full min-w-0 items-start gap-3">

@@ -17,7 +17,7 @@ from src.services import agent_task_actions as tasks
 PROJECT_ACTIONS = (
     ProjectAction(
         "telos_list_chat_messages", "Найти сообщения переписки",
-        "История текущего чата с авторами, датами и вложениями внутри сообщений. До50 сообщений; before_message_id/after_message_id и next_* продолжают чтение, query ищет текст либо буквальное имя вложения, date_from/date_to и author_user_id фильтруют. Дни в timezone вопроса. Для ответа на найденную тему читай соседние реплики.",
+        "История текущего чата с авторами, датами и вложениями внутри сообщений. До50 сообщений; before_message_id/after_message_id и next_* продолжают чтение. query ищет текст либо имя вложения, date_from/date_to — календарные дни timezone вопроса. author_user_id='me' означает инициатора; author_type USER/AGENT отделяет людей от Ариса. Для прежних своих вопросов передай me,USER,before_message_id текущего вопроса; затем читай оригинал и соседей.",
         p.ChatMessagesInput, chat_history_handler=chat_history.list_chat_messages,
         mutating=False, modes=ALL_MODES, project_optional=True,
     ),

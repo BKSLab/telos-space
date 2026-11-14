@@ -29,7 +29,10 @@ class ChatParticipantsRepository(ChatRepository):
         return list(
             (
                 await self._execute(
-                    select(User.id, User.username, User.first_name, User.last_name)
+                    select(
+                        User.id, User.username, User.first_name, User.last_name,
+                        User.avatar_key.is_not(None).label("has_avatar"),
+                    )
                     .join(ProjectMember, ProjectMember.user_id == User.id)
                     .where(ProjectMember.project_id == project_id, User.is_active.is_(True))
                     .order_by(User.last_name, User.id)
@@ -42,7 +45,10 @@ class ChatParticipantsRepository(ChatRepository):
         return list(
             (
                 await self._execute(
-                    select(User.id, User.username, User.first_name, User.last_name).where(
+                    select(
+                        User.id, User.username, User.first_name, User.last_name,
+                        User.avatar_key.is_not(None).label("has_avatar"),
+                    ).where(
                         User.id.in_(user_ids)
                     )
                 )

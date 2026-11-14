@@ -309,7 +309,8 @@ async def test_generate_counts_signals_from_database_not_from_model() -> None:
         milestones=milestones,
     )
 
-    await service.generate(**actor(), project_id=PROJECT_ID)
+    generated = await service.generate(**actor(), project_id=PROJECT_ID)
+    assert generated.created_by_user_id == USER_ID
 
     signals = reports_repository.save.call_args.kwargs["data"]["payload"]["signals"]
     assert signals["total_tasks"] == 4

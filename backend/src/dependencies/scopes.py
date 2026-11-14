@@ -330,6 +330,7 @@ def build_agent_project_tool_scope(
                                 activity_repository=activity,
                                 unit_of_work=domain_uow,
                                 knowledge_events=events,
+                                participants_repository=participants,
                             ),
                             milestones=MilestonesService(
                                 milestones_repository=milestones,
@@ -352,6 +353,7 @@ def build_agent_project_tool_scope(
                                 activity_repository=activity,
                                 dependencies_repository=dependencies,
                                 milestones_repository=milestones,
+                                participants_repository=participants,
                             ),
                             scenarios=CalendarScenarioService(
                                 projects_repository=projects,
@@ -884,6 +886,7 @@ def build_project_agent_scope(
                     activity_repository=TaskActivityRepository(session),
                     milestones_repository=MilestonesRepository(session),
                     dependencies_repository=TaskDependenciesRepository(session),
+                    participants_repository=TaskParticipantsRepository(session),
                 ),
                 scenario=CalendarScenarioService(
                     projects_repository=ProjectsRepository(session),

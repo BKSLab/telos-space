@@ -55,6 +55,27 @@ async def test_lifecycle_access_and_history_survive_new_service(chat_env):
     assert env.engine.sync_engine.pool.checkedout() == 0
 
 
+async def test_profile_avatar_presence_is_hydrated_in_chat_history_and_events(chat_env):
+    async with chat_env.factory() as db:
+        await db.execute(update(User).where(User.id == 1).values(avatar_key="private-test-avatar.png"))
+        await db.commit()
+    chat = chat_env.service
+    members = {member.id: member for member in (await chat.get_chat(1, 1)).members}
+    assert members[1].has_avatar is True and members[2].has_avatar is False
+    sent = await chat.send(1, 1, message())
+    assert sent.author.has_avatar is True
+    assert "avatar_key" not in sent.author.model_dump()
+    assert "private-test-avatar.png" not in sent.model_dump_json()
+    assert (await chat.history(1, 2)).messages[0].author.has_avatar is True
+    events = await chat.events(1, 2, 0)
+    created = next(event for event in events.events if event.type == "message.created")
+    assert created.data["message"]["author"]["has_avatar"] is True
+    async with chat_env.factory() as db:
+        await db.execute(update(User).where(User.id == 1).values(avatar_key=None))
+        await db.commit()
+    assert (await chat.history(1, 2)).messages[0].author.has_avatar is False
+
+
 async def test_concurrent_retry_has_one_message_and_one_event(chat_env):
     data = message()
     left, right = await asyncio.gather(

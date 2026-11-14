@@ -2,7 +2,7 @@
 
 import math
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -83,7 +83,16 @@ class ChatMessagesInput(ToolInput):
     before_message_id: int | None = Field(None, gt=0, description="Вернуть сообщения раньше этого ID, исключая сам якорь.", examples=[40])
     after_message_id: int | None = Field(None, gt=0, description="Вернуть сообщения позже этого ID, исключая сам якорь.", examples=[10])
     query: str | None = Field(None, min_length=1, max_length=200, description="Полнотекстовый поиск по сообщениям либо буквальное имя вложения; фильтры применяются совместно.", examples=["баг"])
-    author_user_id: int | None = Field(None, gt=0, description="Локальный ID автора из сообщений/участников; имя само по себе неоднозначно.", examples=[2])
+    author_user_id: Annotated[int, Field(gt=0, strict=True)] | Literal["me"] | None = Field(
+        None,
+        description="Локальный ID автора либо me — текущий инициатор вопроса по серверному контексту. Для своих прежних вопросов сочетайте me, author_type=USER и before_message_id текущего вопроса; имя не определяет автора.",
+        examples=["me", 2],
+    )
+    author_type: Literal["USER", "AGENT"] | None = Field(
+        None,
+        description="Тип автора: USER — реплики людей, AGENT — завершённые ответы Ариса; пересекается с author_user_id и остальными фильтрами.",
+        examples=["USER", "AGENT"],
+    )
     date_from: date | None = Field(None, description="Первый календарный день включительно в timezone вопроса.", examples=["2026-11-12"])
     date_to: date | None = Field(None, description="Последний календарный день включительно в timezone вопроса.", examples=["2026-11-12"])
 

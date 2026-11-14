@@ -2657,7 +2657,7 @@
       "write": false
     },
     {
-      "description": "История текущего чата с авторами, датами и вложениями внутри сообщений. До50 сообщений; before_message_id/after_message_id и next_* продолжают чтение, query ищет текст либо буквальное имя вложения, date_from/date_to и author_user_id фильтруют. Дни в timezone вопроса. Для ответа на найденную тему читай соседние реплики.",
+      "description": "История текущего чата с авторами, датами и вложениями внутри сообщений. До50 сообщений; before_message_id/after_message_id и next_* продолжают чтение. query ищет текст либо имя вложения, date_from/date_to — календарные дни timezone вопроса. author_user_id='me' означает инициатора; author_type USER/AGENT отделяет людей от Ариса. Для прежних своих вопросов передай me,USER,before_message_id текущего вопроса; затем читай оригинал и соседей.",
       "group": "tasks",
       "id": "mcp-action-49985621947ea425",
       "inputSchema": {
@@ -2681,6 +2681,27 @@
             ],
             "title": "After Message Id"
           },
+          "author_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "USER",
+                  "AGENT"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Тип автора: USER — реплики людей, AGENT — завершённые ответы Ариса; пересекается с author_user_id и остальными фильтрами.",
+            "examples": [
+              "USER",
+              "AGENT"
+            ],
+            "title": "Author Type"
+          },
           "author_user_id": {
             "anyOf": [
               {
@@ -2688,12 +2709,17 @@
                 "type": "integer"
               },
               {
+                "const": "me",
+                "type": "string"
+              },
+              {
                 "type": "null"
               }
             ],
             "default": null,
-            "description": "Локальный ID автора из сообщений/участников; имя само по себе неоднозначно.",
+            "description": "Локальный ID автора либо me — текущий инициатор вопроса по серверному контексту. Для своих прежних вопросов сочетайте me, author_type=USER и before_message_id текущего вопроса; имя не определяет автора.",
             "examples": [
+              "me",
               2
             ],
             "title": "Author User Id"
@@ -33686,7 +33712,7 @@
     },
     {
       "access": "authenticated",
-      "description": "",
+      "description": "Ищет активных локальных пользователей по имени или логину. Доступно вошедшему пользователю; API-ключ требует projects:read. Контакты и поля авторизации не выдаются.",
       "group": "users",
       "id": "api-040a2eafd625955a",
       "kind": "http",
@@ -33695,6 +33721,7 @@
       "operationId": "searchUsers",
       "parameters": [
         {
+          "description": "Подстрока имени или логина.",
           "in": "query",
           "name": "query",
           "required": false,
@@ -33708,15 +33735,24 @@
                 "type": "null"
               }
             ],
+            "description": "Подстрока имени или логина.",
+            "examples": [
+              "Иван"
+            ],
             "title": "Query"
           }
         },
         {
+          "description": "Максимальное число identities.",
           "in": "query",
           "name": "limit",
           "required": false,
           "schema": {
             "default": 20,
+            "description": "Максимальное число identities.",
+            "examples": [
+              20
+            ],
             "maximum": 100,
             "minimum": 1,
             "title": "Limit",
@@ -33771,17 +33807,76 @@
               }
             }
           },
-          "description": "Successful Response"
+          "description": "Безопасные identities для выбора участников."
+        },
+        "401": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Требуется вход в систему."
+              }
+            }
+          },
+          "description": "Требуется вход в систему."
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Недостаточно прав."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Недостаточно прав для этой операции."
         },
         "422": {
           "content": {
             "application/json": {
+              "examples": {
+                "domain": {
+                  "summary": "Доменная валидация",
+                  "value": {
+                    "detail": "Ошибка валидации."
+                  }
+                },
+                "request": {
+                  "summary": "Валидация параметров FastAPI",
+                  "value": {
+                    "detail": [
+                      {
+                        "loc": [
+                          "body",
+                          "title"
+                        ],
+                        "msg": "Field required",
+                        "type": "missing"
+                      }
+                    ]
+                  }
+                }
+              },
               "schema": {
-                "$ref": "#/components/schemas/HTTPValidationError"
+                "$ref": "#/components/schemas/HttpValidationErrorResponseSchema"
               }
             }
           },
-          "description": "Validation Error"
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
         }
       },
       "scopes": [
@@ -36163,6 +36258,182 @@
       "scopes": null,
       "summary": "Отозвать токен доступа",
       "tokens": []
+    },
+    {
+      "access": "authenticated",
+      "description": "Отдаёт только фотографию активной локальной identity вошедшему пользователю. API-ключ требует projects:read, как каталог users. Неактивная, отсутствующая identity и отсутствие фотографии дают 404; контакты и профиль не возвращаются.",
+      "group": "users",
+      "id": "api-d92f609bf94f30dd",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/users/{user_id}/avatar",
+      "operationId": "getUserAvatar",
+      "parameters": [
+        {
+          "description": "ID активного локального пользователя из identities.",
+          "in": "path",
+          "name": "user_id",
+          "required": true,
+          "schema": {
+            "description": "ID активного локального пользователя из identities.",
+            "examples": [
+              2
+            ],
+            "exclusiveMinimum": 0,
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/users/{user_id}/avatar",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "description": "Бинарная фотография локального пользователя."
+        },
+        "401": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Требуется вход в систему."
+              }
+            }
+          },
+          "description": "Требуется вход в систему."
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Недостаточно прав."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Недостаточно прав для этой операции."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "examples": {
+                "domain": {
+                  "summary": "Доменная валидация",
+                  "value": {
+                    "detail": "Ошибка валидации."
+                  }
+                },
+                "request": {
+                  "summary": "Валидация параметров FastAPI",
+                  "value": {
+                    "detail": [
+                      {
+                        "loc": [
+                          "body",
+                          "title"
+                        ],
+                        "msg": "Field required",
+                        "type": "missing"
+                      }
+                    ]
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpValidationErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:read"
+      ],
+      "summary": "Получить аватар пользователя",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ]
     },
     {
       "access": "authenticated",
@@ -42335,6 +42606,21 @@
           "title": "Created By",
           "type": "string"
         },
+        "created_by_user_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ID автора запроса; null после удаления пользователя.",
+          "examples": [
+            2
+          ],
+          "title": "Created By User Id"
+        },
         "duration_ms": {
           "description": "Время формирования, мс.",
           "examples": [
@@ -46400,6 +46686,20 @@
           ],
           "title": "Due Date"
         },
+        "executor": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/UserSummarySchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Назначенный исполнитель; свободная подпись assignee не определяет identity.",
+          "examples": [
+            null
+          ]
+        },
         "id": {
           "title": "Id",
           "type": "integer"
@@ -47539,6 +47839,15 @@
         "display_name": {
           "title": "Display Name",
           "type": "string"
+        },
+        "has_avatar": {
+          "default": false,
+          "description": "Загружена ли фотография профиля.",
+          "examples": [
+            true
+          ],
+          "title": "Has Avatar",
+          "type": "boolean"
         },
         "id": {
           "title": "Id",
@@ -50107,6 +50416,20 @@
             }
           ],
           "title": "Due Date"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/UserSummarySchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Назначенный исполнитель; свободная подпись assignee не определяет identity.",
+          "examples": [
+            null
+          ]
         },
         "id": {
           "title": "Id",
@@ -54159,6 +54482,20 @@
           ],
           "title": "Due Date"
         },
+        "executor": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/UserSummarySchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Назначенный исполнитель; null, если указана только свободная подпись.",
+          "examples": [
+            null
+          ]
+        },
         "id": {
           "description": "Уникальный идентификатор задачи.",
           "examples": [
@@ -55127,6 +55464,21 @@
     },
     "TaskReportSchema": {
       "properties": {
+        "author_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ID публикатора; null после удаления пользователя.",
+          "examples": [
+            2
+          ],
+          "title": "Author Id"
+        },
         "author_name": {
           "anyOf": [
             {

@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useDraggable } from "@dnd-kit/core";
+import { UserAvatar } from "@/components/users/UserAvatar";
 import { CSS } from "@dnd-kit/utilities";
 import { AlertTriangle } from "lucide-react";
 import { BarLinkHandle } from "@/components/calendar/schedule/BarLinkHandle";
@@ -173,7 +174,7 @@ export function TimelineTaskBar({
                         title={task.assignee ?? undefined}
                         data-bar-initials=""
                     >
-                        {initials}
+                        <UserAvatar user={task.executor ?? undefined} fallbackInitials={initials} size="xs" className="size-[18px] text-[9px]" />
                     </span>
                 )}
                 {task.start_date !== null && !readOnly && (

@@ -67,6 +67,7 @@ from src.schemas.tasks import (
     TaskParticipantSchema,
     TaskSchema,
 )
+from src.schemas.users import UserSummarySchema
 from src.services.auth import to_user_summary
 from src.services.knowledge_events import KnowledgeEvents
 from src.storage.task_attachments import TaskAttachmentStorage
@@ -1183,6 +1184,14 @@ def participant_user(participant: TaskParticipant):
     if participant.project_member is not None:
         return participant.project_member.user
     return participant.user
+
+
+def executor_summary(participants: list[TaskParticipant]) -> UserSummarySchema | None:
+    """Возвращает безопасную identity назначенного исполнителя без поиска по имени."""
+    for participant in participants:
+        if participant.role is TaskParticipantRole.EXECUTOR:
+            return to_user_summary(participant_user(participant))
+    return None
 
 
 def task_kind(task: Task) -> TaskKind:

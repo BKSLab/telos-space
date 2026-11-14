@@ -108,6 +108,7 @@ class ChatUser(BaseModel):
     id: int
     username: str
     display_name: str
+    has_avatar: bool = Field(default=False, description="Загружена ли фотография профиля.", examples=[True])
 
 
 class ChatAttachmentView(BaseModel):

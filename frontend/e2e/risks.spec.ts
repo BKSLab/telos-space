@@ -56,7 +56,8 @@ async function expectInternalScroll(dialog: Locator) {
     expect(await dialog.page().evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
 
-async function mockProject(page: Page, risks: Risk[] = [{ ...baseRisk }]) {
+async function mockProject(page: Page, risks: Risk[] = [{ ...baseRisk }], withAvatar = false) {
+    const visibleUser = { ...user, has_avatar: withAvatar };
     const state = { risks, fail: false, failedResponses: 0, attentionGets: 0, requests: [] as URL[], writes: [] as { method: string; body: Record<string, unknown> | null }[], errors: [] as string[] };
     const messages: { kind: string; text: string; expected: boolean }[] = [];
     browserErrors.set(page, messages);
@@ -73,15 +74,17 @@ async function mockProject(page: Page, risks: Risk[] = [{ ...baseRisk }]) {
         const headers = { "access-control-allow-origin": "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS" };
         const reply = (json: unknown, status = 200) => route.fulfill({ status, json, headers });
         if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
-        if (path.endsWith("/auth/me")) return reply(user);
+        if (path.endsWith("/auth/me")) return reply(visibleUser);
+        if (path === "/api/v1/users/1/avatar") return route.fulfill({ status: 200, contentType: "image/png", headers, body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGPwb9nxHwAFPAKL6l0kowAAAABJRU5ErkJggg==", "base64") });
         if (path === "/api/v1/documents") return reply({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
         if (path === "/api/v1/projects") return reply([project]);
         if (path === "/api/v1/projects/1") return reply(project);
+        if (path === "/api/v1/dashboard/analytics") return reply(null);
         if (path === "/api/v1/users/me/task-attention") return reply({ new_tasks: 0, overdue_tasks: 0, updated_tasks: 0, total: 0, items: [] });
         if (path === "/api/v1/projects/1/chat") return reply({ id: 1, project_id: 1, event_cursor: 0, last_read_seq: 0, unread_count: 0, members: [] });
         if (path === "/api/v1/projects/1/chat/events") return reply({ events: [], cursor: 0, has_more: false });
         if (path.endsWith("/stats")) return reply({ project_id: 1, total_tasks: 1, done_tasks: 0, in_progress_tasks: 1, overdue_tasks: 0, due_soon_tasks: 0, unassigned_tasks: 0, completion_rate: 0, next_due_date: null, stage_breakdown: [] });
-        if (path.endsWith("/members")) return reply([{ id: 1, project_id: 1, role: "OWNER", user, created_at: timestamp }]);
+        if (path.endsWith("/members")) return reply([{ id: 1, project_id: 1, role: "OWNER", user: visibleUser, created_at: timestamp }]);
         if (path.endsWith("/tasks")) return reply([task]);
         if (path === "/api/v1/tasks/7") return reply(task);
         if (path === "/api/v1/tasks/7/attention") { state.attentionGets += 1; return reply({ revision: 1, deadline_revision: 1, overdue: false }); }
@@ -127,6 +130,52 @@ async function mockProject(page: Page, risks: Risk[] = [{ ...baseRisk }]) {
     return state;
 }
 
+for (const width of [1440, 390]) {
+    test(`фото команды и владельца риска, выбор и сброс ответственного ${width}px`, async ({ page }, info) => {
+        const state = await mockProject(page, [{ ...baseRisk }], true);
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto("/projects/DEMO/team");
+        const team = page.locator('section[aria-labelledby="project-members-title"]');
+        await expect(team.getByText("Иванова Вера", { exact: true })).toBeVisible();
+        await expect(team.locator('img[src*="/users/1/avatar"]')).toBeVisible();
+        await expect.poll(() => team.locator("img").evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+        await page.screenshot({ path: info.outputPath(`team-avatar-${width}.png`), animations: "disabled" });
+        await page.goto("/projects/DEMO");
+        await page.getByText("О проекте", { exact: true }).click();
+        const summaryLink = page.getByRole("link", { name: "Открыть команду проекта", exact: true });
+        await expect(summaryLink.locator('img[src*="/users/1/avatar"]')).toBeVisible();
+        await expect(summaryLink).toHaveAttribute("href", "/projects/DEMO/team");
+        await page.screenshot({ path: info.outputPath(`team-summary-avatar-${width}.png`), animations: "disabled" });
+        await page.goto("/projects/DEMO/risks");
+        if (width < 768) await page.getByRole("button", { name: /^Фильтры/ }).click();
+        const owner = page.getByRole("button", { name: "Ответственный", exact: true });
+        await owner.click();
+        const picker = page.getByRole("dialog", { name: "Ответственный", exact: true });
+        const option = picker.getByRole("option", { name: "Иванова Вера", exact: true });
+        await expect(option.locator('img[src*="/users/1/avatar"]')).toBeVisible();
+        expect((await option.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await page.screenshot({ path: info.outputPath(`risk-owner-picker-${width}.png`), animations: "disabled" });
+        await option.focus();
+        await page.keyboard.press("Enter");
+        await expect(picker).toHaveCount(0);
+        await expect(owner).toBeFocused();
+        await expect.poll(() => state.requests.some(url => url.searchParams.get("owner_user_id") === "1")).toBe(true);
+        await owner.click();
+        await picker.getByRole("option", { name: "Все участники", exact: true }).click();
+        await expect.poll(() => state.requests.filter(url => url.pathname.endsWith("/risks")).at(-1)?.searchParams.has("owner_user_id")).toBe(false);
+        const row = page.getByRole("button", { name: "Открыть RISK-12: Задержка интеграции CRM", exact: true });
+        await expect(row.locator('img[src*="/users/1/avatar"]')).toBeVisible();
+        await row.click();
+        const dialog = page.getByRole("dialog", { name: "Риск RISK-12", exact: true });
+        await dialog.getByRole("tab", { name: "Контроль", exact: true }).click();
+        await expect(dialog.locator('img[src*="/users/1/avatar"]')).toBeVisible();
+        await expect(dialog.getByText("Иванова Вера", { exact: true })).toBeVisible();
+        await page.screenshot({ path: info.outputPath(`risk-owner-avatar-${width}.png`), animations: "disabled" });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+        expect(state.errors).toEqual([]);
+    });
+}
+
 test("реестр показывает загрузку, пустое состояние, ошибку и повтор", async ({ page }) => {
     const state = await mockProject(page, []);
     let release!: () => void;
@@ -158,7 +207,8 @@ test("создание, отмена и сохранение редактиро�
     await modal.getByLabel("Вероятность *", { exact: true }).selectOption("HIGH");
     await modal.getByLabel("Влияние *", { exact: true }).selectOption("MEDIUM");
     await expect(modal.getByLabel("Уровень риска: Высокий")).toBeVisible();
-    await modal.getByLabel("Ответственный", { exact: true }).selectOption("1");
+    await modal.getByRole("button", { name: "Ответственный", exact: true }).click();
+    await page.getByRole("dialog", { name: "Ответственный", exact: true }).getByRole("option", { name: "Иванова Вера", exact: true }).click();
     await modal.getByLabel("Поиск задачи проекта").fill("DEMO-142");
     await modal.getByLabel("Связанная задача", { exact: true }).selectOption("7");
     await modal.getByLabel("План митигации", { exact: true }).fill("Согласовать заранее");

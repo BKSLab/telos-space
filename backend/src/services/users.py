@@ -188,6 +188,29 @@ class UsersService:
             logger.error("❌ Ошибка чтения фотографии id=%s.", user_id, exc_info=True)
             raise UsersServiceError(str(error)) from error
 
+    async def get_identity_avatar(self, user_id: int) -> tuple[bytes, str]:
+        """Читает только фото активной локальной identity, доступной в каталоге users.
+
+        Ни профиль, ни контакты не возвращаются. Неактивная, отсутствующая
+        identity и отсутствующая фотография дают одинаковый not-found.
+        """
+        try:
+            user = await self.users_repository.get_by_id(user_id=user_id)
+            if user is None or not user.is_active or not user.avatar_key:
+                raise AvatarNotFoundError(user_id=user_id)
+            storage_key = user.avatar_key
+            content = await self.avatar_storage.read(storage_key=storage_key)
+            current = await self.users_repository.get_by_id(user_id=user_id)
+            if current is None or not current.is_active or current.avatar_key != storage_key:
+                raise AvatarNotFoundError(user_id=user_id)
+            return content, _content_type_for(storage_key)
+        except AvatarStorageError as error:
+            if isinstance(error.__cause__, FileNotFoundError):
+                raise AvatarNotFoundError(user_id=user_id) from error
+            raise AvatarOperationError("Не удалось прочитать фотографию пользователя.") from error
+        except UsersRepositoryError as error:
+            raise UsersServiceError("Не удалось проверить фотографию пользователя.") from error
+
     async def delete_avatar(self, user_id: int) -> None:
         """Удаляет фотографию профиля.
 
@@ -220,6 +243,16 @@ class UsersService:
             logger.error("❌ Ошибка удаления фотографии id=%s.", user_id, exc_info=True)
             raise UsersServiceError(str(error)) from error
 
+    async def search_users(
+        self, query: str | None = None, limit: int = 20
+    ) -> list[UserSummarySchema]:
+        """Ищет активные локальные identities без контактов и полей авторизации."""
+        try:
+            users = await self.users_repository.search(query=query, limit=limit)
+            return [to_user_summary(user) for user in users]
+        except UsersRepositoryError as error:
+            raise UsersServiceError("Не удалось найти локальных пользователей.") from error
+
     async def _get_user(self, user_id: int):
         """Возвращает пользователя или поднимает доменную ошибку."""
         user = await self.users_repository.get_by_id(user_id=user_id)
@@ -245,10 +278,3 @@ def _content_type_for(storage_key: str) -> str:
         if storage_key.endswith(extension):
             return content_type
     return "application/octet-stream"
-
-    async def search_users(self, query: str | None = None, limit: int = 20) -> list[UserSummarySchema]:
-        """Return safe identities for assigning personal tasks."""
-        try:
-            return [to_user_summary(user) for user in await self.users_repository.search(query=query, limit=limit)]
-        except UsersRepositoryError as error:
-            raise UsersServiceError(str(error)) from error

@@ -15,6 +15,9 @@ class TaskReportSchema(BaseModel):
     author_name: str | None = Field(
         default=None, description="Автор публикации.", examples=["Кирилл Барабанщиков"]
     )
+    author_id: int | None = Field(
+        default=None, description="ID публикатора; null после удаления пользователя.", examples=[2]
+    )
     created_at: datetime | None = Field(
         default=None, description="Время публикации.", examples=["2026-10-07T13:00:00Z"]
     )

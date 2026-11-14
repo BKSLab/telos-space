@@ -33,7 +33,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 from pydantic_ai import (
@@ -45,6 +45,7 @@ from pydantic_ai import (
     UsageLimits,
 )
 from pydantic_ai.capabilities import Capability, CapabilityOrdering, PrepareTools, ProcessHistory
+from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -64,7 +65,12 @@ from pydantic_ai.usage import RunUsage
 
 from src.agent.aris import ArisMode
 from src.agent.capabilities import WORKFLOWS, Workflow, workflow_for_tool
-from src.agent.chat_context import compact_chat_result, shrink_chat_page, shrink_chat_text
+from src.agent.chat_context import (
+    compact_chat_context,
+    compact_chat_result,
+    shrink_chat_page,
+    shrink_chat_text,
+)
 from src.agent.context import AgentContextBudget, compact_action, encode, estimate_tokens
 from src.agent.progress import CHECK_WRITE, THINKING, ProgressReporter, describe_call
 from src.agent.tools import (
@@ -103,6 +109,14 @@ MAX_WORKFLOW_LOAD_ROUNDS = 2
 LOAD_CAPABILITY_TOOL = "telos_load_capability"
 
 
+class _ContextBudgetExceeded(UsageLimitExceeded):
+    """Обязательный контекст не помещается; отдельная статическая метрика без данных."""
+
+
+class _StepBudgetExceeded(UsageLimitExceeded):
+    """Исчерпаны предметные шаги и резерв итогового ответа."""
+
+
 class ArisAnswer(BaseModel):
     """Окончательный ответ Ариса: текст и подтверждающие его источники."""
 
@@ -125,7 +139,8 @@ class ArisAnswer(BaseModel):
         ),
     )
     message_references: list[str] = Field(
-        default_factory=list, max_length=20,
+        default_factory=list,
+        max_length=20,
         description="message_reference_handle прочитанных сообщений для точных цитат. Сервер проверяет текст/автора/время; цитаты не составляй в Markdown самостоятельно.",
     )
 
@@ -250,7 +265,7 @@ class ArisDeps:
 
 @dataclass(frozen=True, slots=True)
 class ArisRunResult:
-    """Итог цикла: ответ модели (или None, если лимит шагов исчерпан) и метрики."""
+    """Итог цикла: ответ модели либо ограничение контекста/вызовов и метрики."""
 
     output: ArisAnswer | None
     requests: int
@@ -259,6 +274,7 @@ class ArisRunResult:
     output_tokens: int
     prompt_chars: int
     model_requests: list[dict[str, Any]] = field(default_factory=list)
+    exhaustion_reason: Literal["context", "steps", "usage"] | None = None
 
 
 class _PrepareArisTools(PrepareTools[ArisDeps]):
@@ -345,7 +361,10 @@ class ArisRuntime:
                 str,
             ],
             instructions=self._instructions,
-            capabilities=[_PrepareArisTools(self._prepare_tools), ProcessHistory(self._fit_history)],
+            capabilities=[
+                _PrepareArisTools(self._prepare_tools),
+                ProcessHistory(self._fit_history),
+            ],
             model_settings=ModelSettings(max_tokens=MAX_OUTPUT_TOKENS),
             retries=TOOL_RETRIES,
             # Все вызовы шага выполняются, даже если в том же ответе есть итог:
@@ -431,17 +450,17 @@ class ArisRuntime:
         return load
 
     async def run(self, deps: ArisDeps, *, metadata: dict[str, Any]) -> ArisRunResult:
-        """Выполняет вопрос до ответа или исчерпания лимита шагов.
+        """Выполняет вопрос до ответа или исчерпания бюджета контекста/вызовов.
 
         Args:
             deps: Состояние вопроса; ``content`` становится первым сообщением.
             metadata: Несекретные атрибуты трассы (канал, режим, проект, диалог).
         Returns:
-            Ответ модели и метрики; ``output=None`` — лимит шагов исчерпан.
+            Ответ модели и метрики; ``output=None`` — один из бюджетов исчерпан.
         Raises:
             pydantic_ai.exceptions.AgentRunError: Ошибка провайдера или поведения модели.
         """
-        from pydantic_ai.exceptions import ModelHTTPError, UsageLimitExceeded
+        from pydantic_ai.exceptions import ModelHTTPError
 
         # Native loading state belongs to this run's message history. Deps may be reused
         # by a low-level caller; context callbacks must start fresh as well.
@@ -481,8 +500,9 @@ class ArisRuntime:
                     output_tokens=sum(item["output_tokens"] for item in journal),
                     prompt_chars=len(encode(deps.content)),
                     model_requests=journal,
+                    exhaustion_reason="steps",
                 )
-            except UsageLimitExceeded:
+            except UsageLimitExceeded as error:
                 return ArisRunResult(
                     output=None,
                     requests=run_usage.requests,
@@ -491,6 +511,11 @@ class ArisRuntime:
                     output_tokens=sum(item["output_tokens"] for item in journal),
                     prompt_chars=len(encode(deps.content)),
                     model_requests=journal,
+                    exhaustion_reason="context"
+                    if isinstance(error, _ContextBudgetExceeded)
+                    else "steps"
+                    if isinstance(error, _StepBudgetExceeded)
+                    else "usage",
                 )
         usage = result.usage
         output = result.output
@@ -550,9 +575,7 @@ class ArisRuntime:
             # unused discovery reserve permits a third unavailable-tool retry,
             # which the framework treats as a fatal tool error instead of an
             # incomplete answer within the original two final-answer attempts.
-            from pydantic_ai.exceptions import UsageLimitExceeded
-
-            raise UsageLimitExceeded("Исчерпан бюджет предметных шагов и итогового ответа.")
+            raise _StepBudgetExceeded("Исчерпан бюджет предметных шагов и итогового ответа.")
         limit = deps.budget.max_tokens
         last_request = max(
             (index for index, item in enumerate(messages) if isinstance(item, ModelRequest)),
@@ -563,9 +586,13 @@ class ArisRuntime:
             prompt = deps.budget.tokens(deps.content)
             if prompt + traffic <= limit:
                 break
+            if compact_chat_context(deps.content):
+                continue
             if _compact_oldest_result(messages, keep_from=last_request):
                 continue
             if _shrink_chat_returns(messages):
+                continue
+            if _shrink_read_returns(messages):
                 continue
             try:
                 shrunk = AgentContextBudget(
@@ -581,9 +608,9 @@ class ArisRuntime:
                 break
         _replace_prompt(messages, encode(deps.content))
         if deps.budget.tokens(deps.content) + _traffic_tokens(messages) > limit:
-            from pydantic_ai.exceptions import UsageLimitExceeded
-
-            raise UsageLimitExceeded("Обязательный контекст и чтения превышают бюджет. Сузьте период или размер страницы.")
+            raise _ContextBudgetExceeded(
+                "Обязательный контекст и чтения превышают бюджет. Сузьте период или размер страницы."
+            )
         return messages
 
 
@@ -730,9 +757,9 @@ def _fit_result(result: dict[str, Any], max_tokens: int) -> dict[str, Any]:
         return result
     value = compact_chat_result(result) or deepcopy(result)
     while estimate_tokens(encode(value)) > max_tokens:
-        if shrink_chat_text(value):
-            continue
         if shrink_chat_page(value):
+            continue
+        if shrink_chat_text(value, min_content_chars=240):
             continue
         if AgentContextBudget._shrink_lists(value):
             continue
@@ -766,11 +793,72 @@ def _shrink_chat_returns(messages: list[ModelMessage]) -> bool:
             if not isinstance(part, ToolReturnPart) or not isinstance(part.content, dict):
                 continue
             projection = compact_chat_result(part.content)
-            if projection is not None or shrink_chat_text(part.content) or shrink_chat_page(part.content):
+            if (
+                projection is not None
+                or shrink_chat_page(part.content)
+                or shrink_chat_text(part.content, min_content_chars=240)
+            ):
                 parts = list(message.parts)
-                parts[position] = dataclass_replace(part, content=projection if projection is not None else part.content)
+                parts[position] = dataclass_replace(
+                    part, content=projection if projection is not None else part.content
+                )
                 messages[index] = dataclass_replace(message, parts=parts)
                 return True
+    return False
+
+
+def _shrink_read_returns(messages: list[ModelMessage]) -> bool:
+    """Дочитанный readonly результат уступает место обязательному окну и правилам."""
+    for index, message in enumerate(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        for position, part in enumerate(message.parts):
+            if not isinstance(part, ToolReturnPart) or not isinstance(part.content, dict):
+                continue
+            if (
+                part.tool_name == LOAD_CAPABILITY_TOOL
+                or "action" in part.content
+                or part.content.get("context_compacted")
+            ):
+                continue
+            fitted = deepcopy(part.content)
+            candidates = []
+
+            def visit(value, candidates):
+                if isinstance(value, dict):
+                    for key, child in value.items():
+                        if (
+                            key
+                            in {
+                                "text",
+                                "content_md",
+                                "body_md",
+                                "description_md",
+                                "summary_md",
+                                "summary",
+                            }
+                            and isinstance(child, str)
+                            and len(child) > 240
+                        ):
+                            candidates.append((len(child.encode("utf-8")), value, key))
+                        elif isinstance(child, (list, dict)):
+                            visit(child, candidates)
+                elif isinstance(value, list):
+                    for child in value:
+                        visit(child, candidates)
+
+            visit(fitted, candidates)
+            if not candidates:
+                continue
+            _, parent, key = max(candidates, key=lambda candidate: candidate[0])
+            parent[key] = parent[key][: max(240, len(parent[key]) // 2)]
+            parent[f"{key}_truncated"] = True
+            if key in {"text", "content_md"} and "offset" in parent:
+                parent["next_offset"] = parent["offset"] + len(parent[key])
+            parts = list(message.parts)
+            parts[position] = dataclass_replace(part, content=fitted)
+            messages[index] = dataclass_replace(message, parts=parts)
+            return True
     return False
 
 
@@ -819,6 +907,7 @@ def metrics(result: ArisRunResult) -> dict[str, Any]:
         "input_tokens": result.input_tokens,
         "output_tokens": result.output_tokens,
         "exhausted": result.output is None,
+        "exhaustion_reason": result.exhaustion_reason,
         "model_requests": result.model_requests,
     }
 

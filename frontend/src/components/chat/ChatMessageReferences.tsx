@@ -1,3 +1,4 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { Link } from "react-router-dom";
 import { MessageSquareQuote } from "lucide-react";
 import type { ChatMessageReference } from "@/lib/types";
@@ -15,7 +16,7 @@ function Reference({ reference }: { reference: ChatMessageReference }) {
     const available = reference.state === "available";
     return <li className="min-w-0 rounded-md border border-line bg-surface/60 px-3 py-2 text-[12px] text-secondary">
         {reference.state !== "unavailable" && <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-muted">
-            <span className="break-words font-medium text-secondary">{reference.author_name}</span>
+            <UserIdentity userId={reference.author_id} name={reference.author_name} className="font-medium text-secondary" />
             {!Number.isNaN(date.valueOf()) && <time dateTime={reference.created_at}>{date.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>}
         </div>}
         {reference.state === "available"

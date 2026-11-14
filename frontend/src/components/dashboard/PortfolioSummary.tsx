@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle2, FolderKanban, ListTodo } from "lucide-reac
 import { api, endpoints, queryKeys } from "@/lib/api";
 import { latestUpdate } from "@/lib/overview";
 import { cn } from "@/lib/cn";
-import { fullName, type MyTask, type Dashboard } from "@/lib/types";
+import type { MyTask, Dashboard } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { DueDate } from "@/components/ui/DueDate";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
@@ -70,7 +70,7 @@ export function PortfolioSummary() {
                 {personalTasks.error && <ErrorMessage message={(personalTasks.error as Error).message} action={<Button size="sm" onClick={() => void personalTasks.refetch()}>Повторить</Button>} />}
                 <div className="divide-y divide-line-subtle">{personalRows.slice(0, 6).map(task => {
                     const executor = task.participants?.find(person => person.role === "EXECUTOR")?.user;
-                    return <OverviewTaskRow key={task.id} taskKey={task.key} title={task.title} stage={`${task.state_label}${executor ? ` · ${fullName(executor)}` : ""}`}
+                    return <OverviewTaskRow key={task.id} taskKey={task.key} title={task.title} stage={task.state_label} person={executor}
                         priority={task.priority} meta={<DueDate value={task.due_date} className="text-[12px]" />} onOpen={() => setSelectedTaskId(task.id)} />;
                 })}</div>
             </OverviewPanel>}

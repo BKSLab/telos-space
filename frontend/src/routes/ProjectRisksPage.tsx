@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, ShieldAlert } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import { fullName, type ProjectMember, type Task } from "@/lib/types";
+import type { ProjectMember, Task } from "@/lib/types";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
 import { useRiskSummary } from "@/lib/useRisks";
 import { RISK_LEVEL_LABELS, RISK_STATUS_LABELS, riskQuery, type RiskPage, type RiskRating } from "@/lib/risks";
@@ -13,6 +13,7 @@ import { Field, Input, Select } from "@/components/ui/Field";
 import { ResponsiveFilters } from "@/components/ui/ResponsiveFilters";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 import { CreateRiskDialog } from "@/components/risks/CreateRiskDialog";
+import { UserSelect } from "@/components/users/UserSelect";
 import { RiskMatrix } from "@/components/risks/RiskMatrix";
 import { RiskRegister } from "@/components/risks/RiskRegister";
 import { RiskSuggestions } from "@/components/risks/RiskSuggestions";
@@ -67,6 +68,7 @@ function ProjectRisksContent({ projectId, initialParams }: { projectId: number; 
     };
     const filtered = !!search || status !== "active" || !!level || !!owner || !!probability || !!taskFilter;
     const pages = Math.max(1, Math.ceil((list.data?.total ?? 0) / PAGE_SIZE));
+    const selectedOwner = members.data?.find(member => member.user.id === Number(owner))?.user;
 
     return (
         <div className="scrollbar-thin h-full overflow-y-auto">
@@ -97,9 +99,10 @@ function ProjectRisksContent({ projectId, initialParams }: { projectId: number; 
                     <Field label="Уровень">{(id) => <Select id={id} value={level} onChange={(e) => { setLevel(e.target.value); setPage(1); }}>
                         <option value="">Любой уровень</option>{Object.entries(RISK_LEVEL_LABELS).map(([value, label]) => <option key={value} value={value}>{label} · {value}</option>)}
                     </Select>}</Field>
-                    <Field label="Ответственный">{(id) => <Select id={id} value={owner} disabled={members.isPending || !!members.error} onChange={(e) => { setOwner(e.target.value); setPage(1); }}>
-                        <option value="">Все участники</option>{members.data?.map((member) => <option key={member.user.id} value={member.user.id}>{fullName(member.user)}</option>)}
-                    </Select>}</Field>
+                    <Field label="Ответственный">{(id) => <UserSelect id={id} label="Ответственный" users={(members.data ?? []).map(member => member.user)} selected={selectedOwner ? [selectedOwner] : []}
+                        fallbackSelection={owner && !selectedOwner ? { userId: Number(owner), name: `Участник #${owner}` } : undefined}
+                        emptyLabel="Все участники" clearLabel="Все участники" loading={members.isPending} disabled={members.isPending || !!members.error}
+                        onChange={users => { setOwner(users[0] ? String(users[0].id) : ""); setPage(1); }} />}</Field>
                     {filtered && <Button className="self-end" variant="ghost" onClick={reset}>Сбросить</Button>}
                 </div>
                 {members.error && <p role="alert" className="text-[12px] text-warning">Фильтр по ответственному недоступен. <button type="button" className="underline" onClick={() => void members.refetch()}>Повторить загрузку команды</button></p>}

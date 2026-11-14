@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { apiUrl, authEndpoints } from "@/lib/api";
+import { apiUrl, endpoints } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { initials, type UserSummary } from "@/lib/types";
 
@@ -12,6 +12,8 @@ const SIZES = {
 
 interface UserAvatarProps {
     user?: UserSummary;
+    /** Публичная identity автора, когда полного UserSummary нет. */
+    userId?: number | null;
     size?: keyof typeof SIZES;
     /** Меняется после загрузки новой фотографии, чтобы обойти кэш браузера. */
     version?: number;
@@ -25,6 +27,7 @@ interface UserAvatarProps {
 /** Фотография профиля или инициалы, если она не загружена. */
 export function UserAvatar({
     user,
+    userId,
     size = "md",
     version = 0,
     avatarUrl,
@@ -32,16 +35,18 @@ export function UserAvatar({
     hasAvatar,
     className,
 }: UserAvatarProps) {
-    const source = avatarUrl ?? `${apiUrl(authEndpoints.avatar())}?v=${version}`;
+    const profileId = userId ?? user?.id;
+    const source = avatarUrl ?? (profileId && Number.isSafeInteger(profileId) && profileId > 0
+        ? `${apiUrl(endpoints.userAvatar(profileId))}?v=${version}` : undefined);
     const [failedSource, setFailedSource] = useState<string | null>(null);
-    const canLoadImage = (hasAvatar ?? user?.has_avatar ?? false) && failedSource !== source;
+    const canLoadImage = Boolean(source) && (hasAvatar ?? user?.has_avatar ?? Boolean(userId)) && failedSource !== source;
     const shared = cn(
         "flex shrink-0 items-center justify-center overflow-hidden rounded-full",
         SIZES[size],
         className,
     );
 
-    if (!canLoadImage) {
+    if (!canLoadImage || !source) {
         return (
             <span
                 aria-hidden="true"

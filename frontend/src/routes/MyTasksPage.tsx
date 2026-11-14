@@ -1,3 +1,4 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -5,7 +6,7 @@ import { ListChecks, Plus } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import { filterMyTasks, isClosedStatus, MY_ROLE_LABELS, MY_TASK_ROLES } from "@/lib/tasks";
 import { executorOf } from "@/lib/taskParticipants";
-import { fullName, type MyTask, type MyTaskRoleFilter, type Project } from "@/lib/types";
+import type { MyTask, MyTaskRoleFilter, Project } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
 import { useTaskAttention } from "@/lib/useTaskAttention";
 import { Page } from "@/components/layout/AppShell";
@@ -78,7 +79,7 @@ export function MyTasksPage() {
                     <td className="p-3 font-mono text-xs text-muted">{task.key}{item && (item.is_new || item.is_updated || item.is_overdue) && <span title="Есть непросмотренные изменения" className="ml-1 text-accent">●</span>}</td>
                     <td className="max-w-sm p-3"><button type="button" onClick={event => { event.stopPropagation(); setSelectedTaskId(task.id); }} className="text-left font-medium text-primary">{task.title}</button><span className="ml-2"><PriorityBadge priority={task.priority} /></span></td>
                     <td data-label="Проект" className="p-3"><TaskSourceLabel context={task.context} /></td><td data-label="Статус" className="p-3 text-secondary">{task.state_label}</td>
-                    <td data-label="Исполнитель" className="p-3 text-secondary">{executor ? fullName(executor) : task.assignee || "—"}</td><td data-label="Моя роль" className="p-3 text-muted">{task.my_roles.map(value => MY_ROLE_LABELS[value]).join(", ")}</td><td className="p-3"><DueDate value={task.due_date} isDone={isClosedStatus(task.state)} /></td>
+                    <td data-label="Исполнитель" className="p-3 text-secondary">{executor ? <UserIdentity user={executor} /> : task.assignee || "—"}</td><td data-label="Моя роль" className="p-3 text-muted">{task.my_roles.map(value => MY_ROLE_LABELS[value]).join(", ")}</td><td className="p-3"><DueDate value={task.due_date} isDone={isClosedStatus(task.state)} /></td>
                 </tr>;
             })}</tbody>
         </table></div>}

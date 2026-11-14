@@ -1,4 +1,3 @@
-import { apiUrl, endpoints } from "@/lib/api";
 import {
     resolveStickerAuthor,
     stickerAuthorLabel,
@@ -9,22 +8,16 @@ import { UserAvatar } from "@/components/users/UserAvatar";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 interface BoardStickerAuthorProps {
-    projectId?: number;
     sticker: BoardSticker;
     members: ProjectMember[];
 }
 
 export function BoardStickerAuthor({
-    projectId,
     sticker,
     members,
 }: BoardStickerAuthorProps) {
-    const resolvedProjectId = projectId ?? sticker.project_id;
     const author = resolveStickerAuthor(sticker, members);
     const label = stickerAuthorLabel(author);
-    const avatarUrl = resolvedProjectId != null && author.kind === "current" && author.user?.has_avatar
-        ? apiUrl(endpoints.projectMemberAvatar(resolvedProjectId!, author.user.id))
-        : undefined;
 
     return (
         <div className="project-sticker-author" aria-label={label}>
@@ -32,9 +25,9 @@ export function BoardStickerAuthor({
                 <span aria-hidden="true" className="shrink-0">
                     <UserAvatar
                         user={author.user ?? undefined}
+                        userId={sticker.created_by_user_id}
                         size="xs"
-                        avatarUrl={avatarUrl}
-                        hasAvatar={author.user?.has_avatar ?? false}
+                        hasAvatar={author.user?.has_avatar}
                         fallbackInitials={author.initials}
                         className={author.kind !== "current" ? "opacity-75 grayscale" : undefined}
                     />

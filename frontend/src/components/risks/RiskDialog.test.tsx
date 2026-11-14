@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import { queryKeys } from "@/lib/api";
 import type { ProjectRisk } from "@/lib/risks";
+import type { ProjectMember } from "@/lib/types";
 import { useToastStore } from "@/lib/toast";
 import { useUiStore } from "@/stores/ui";
 import { RiskDialog } from "./RiskDialog";
@@ -22,15 +23,16 @@ const risk: ProjectRisk = {
 };
 const clients: QueryClient[] = [];
 
-function setup() {
-    const state = { risk: { ...risk }, readStatus: 200, patchStatus: 200, gate: null as Promise<void> | null, calls: [] as { method: string; path: string; body?: unknown }[] };
+function setup(ownerId: number | null = null, members: ProjectMember[] = []) {
+    const state = { risk: { ...risk, owner_user_id: ownerId }, readStatus: 200, patchStatus: 200, gate: null as Promise<void> | null, calls: [] as { method: string; path: string; body?: unknown }[] };
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const path = new URL(String(input)).pathname;
         const method = init?.method ?? "GET";
         const body = init?.body ? JSON.parse(String(init.body)) : undefined;
         state.calls.push({ method, path, body });
         const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
-        if (path === "/api/v1/projects/1/members" || path === "/api/v1/projects/1/tasks") return json([]);
+        if (path === "/api/v1/projects/1/members") return json(members);
+        if (path === "/api/v1/projects/1/tasks") return json([]);
         if (path === "/api/v1/tasks/7") return json({ id: 7, project_id: 1, key: "DEMO-7", title: "Согласовать контракт" });
         if (path === "/api/v1/projects/1/risks/12") {
             if (method === "PATCH") {
@@ -83,6 +85,15 @@ it("разделы раскрывают планы и контроль, скры
     await within(dialog).findByText("Не назначен");
     expect(within(dialog).getByText("Дата не назначена")).toBeTruthy();
     expect(within(dialog).queryByText(risk.mitigation_plan)).toBeNull();
+});
+
+it("раздел контроля показывает имя и защищённую фотографию владельца риска", async () => {
+    const member: ProjectMember = { id: 901, project_id: 1, role: "MEMBER", created_at: stamp, user: { id: 7, username: "oleg", first_name: "Олег", last_name: "Петров", middle_name: null, has_avatar: true } };
+    const { user } = setup(7, [member]);
+    const dialog = await screen.findByRole("dialog", { name: "Риск RISK-12" });
+    await user.click(within(dialog).getByRole("tab", { name: "Контроль" }));
+    await within(dialog).findByText("Петров Олег");
+    expect(dialog.querySelector('img[src*="/users/7/avatar"]')).toBeTruthy();
 });
 
 it("переходит к связанной задаче без перезаписи её данных просмотра", async () => {

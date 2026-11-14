@@ -1,4 +1,5 @@
 import { useDeferredValue, useMemo, useState } from "react";
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useQuery } from "@tanstack/react-query";
 import { ListTodo, Plus, Search } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
@@ -209,7 +210,7 @@ export function TasksListPage() {
                                                 <PriorityBadge priority={task.priority} showLow />
                                             </td>
                                             <td data-label="Исполнитель" className="px-3 py-2 text-[12px] text-muted">
-                                                {task.assignee ?? "—"}
+                                                {task.participants?.some(person => person.role === "EXECUTOR") ? <UserIdentity user={task.participants.find(person => person.role === "EXECUTOR")!.user} /> : task.assignee || "—"}
                                             </td>
                                             <td className="px-3 py-2">
                                                 <DueDate

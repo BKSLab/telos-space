@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -201,6 +201,131 @@ async def private_history(env):
         }
         await db.commit()
         return data
+
+
+@pytest.mark.parametrize("kind", ["project_chat", "conversation"])
+async def test_author_filters_resolve_me_and_exclude_lexical_agent_distractors_before_limit(
+    chat_env, tmp_path, kind
+):
+    files = reader(chat_env, tmp_path)
+    history = build_agent_chat_history_service(session_factory=chat_env.factory, chat_files=files)
+    data = await (shared_history(chat_env) if kind == "project_chat" else private_history(chat_env))
+    context = replace(data["context"], timezone="Europe/Samara")
+    timestamp = datetime(2026, 11, 15, 9, tzinfo=UTC)
+    own_ids = data["older"][:3:2] if kind == "project_chat" else [data["first"]]
+    agent_id = data["answers"][-1] if kind == "project_chat" else data["completed"]
+    model = ChatMessage if kind == "project_chat" else AgentMessage
+    targets = [*own_ids, agent_id, data["question"], data["future"]]
+    async with chat_env.factory() as db:
+        await db.execute(
+            update(model)
+            .where(model.id.in_(targets))
+            .values(content="Обсуждали смету", created_at=timestamp)
+        )
+        if kind == "project_chat":
+            other_id = data["older"][1]
+            await db.execute(
+                update(ChatMessage)
+                .where(ChatMessage.id == other_id)
+                .values(content="Обсуждали смету", created_at=timestamp)
+            )
+            await db.execute(
+                update(ChatMessage)
+                .where(ChatMessage.id == data["future"])
+                .values(author_user_id=context.user_id)
+            )
+            await db.execute(
+                update(ChatMessage)
+                .where(ChatMessage.id == data["older"][4])
+                .values(content="Обсуждали смету", created_at=timestamp - timedelta(days=1))
+            )
+            foreign_scope = (
+                await db.execute(select(ProjectChat.id).where(ProjectChat.project_id == 2))
+            ).scalar_one()
+            db.add(
+                ChatMessage(
+                    chat_id=foreign_scope,
+                    project_id=2,
+                    seq=1,
+                    author_user_id=context.user_id,
+                    content="Обсуждали смету",
+                    client_message_id=uuid4(),
+                    created_at=timestamp,
+                )
+            )
+        else:
+            foreign = AgentConversation(user_id=context.user_id, title="Другая личная переписка")
+            db.add(foreign)
+            await db.flush()
+            foreign_scope = foreign.id
+            db.add(
+                AgentMessage(
+                    conversation_id=foreign_scope,
+                    request_id=uuid4(),
+                    role="user",
+                    status="completed",
+                    content="Обсуждали смету",
+                    created_at=timestamp,
+                )
+            )
+        await db.commit()
+
+    filters = {
+        "context": context,
+        "query": "смета",
+        "before_message_id": data["question"],
+        "date_from": date(2026, 11, 15),
+        "date_to": date(2026, 11, 15),
+    }
+    page = await history.list_messages(**filters, author_user_id="me", author_type="USER", limit=1)
+    assert [message.id for message in page.items] == own_ids[-1:]
+    assert page.applied_filters.author_user_id == context.user_id
+    assert page.applied_filters.author_type == "USER"
+    assert all(
+        message.author_id == context.user_id and message.author_type == "USER"
+        for message in page.items
+    )
+    assert page.has_more == (len(own_ids) > 1)
+    if page.has_more:
+        previous = await history.list_messages(
+            **(filters | {"before_message_id": page.next_before_message_id}),
+            author_user_id="me",
+            author_type="USER",
+            limit=1,
+        )
+        assert [message.id for message in previous.items] == own_ids[:1] and not previous.has_more
+    explicit = await history.list_messages(
+        **filters, author_user_id=context.user_id, author_type="USER"
+    )
+    assert [message.id for message in explicit.items] == own_ids
+    for author_id, author_type in ((99999999, "USER"), ("me", "AGENT")):
+        empty = await history.list_messages(
+            **filters, author_user_id=author_id, author_type=author_type
+        )
+        assert empty.items == []
+        assert empty.applied_filters.author_user_id == (
+            context.user_id if author_id == "me" else author_id
+        )
+        assert empty.applied_filters.author_type == author_type
+    humans = await history.list_messages(**filters, author_type="USER", limit=1)
+    assert [message.id for message in humans.items] == own_ids[-1:]
+    agents = await history.list_messages(**filters, author_type="AGENT", limit=3)
+    assert [message.id for message in agents.items] == [agent_id]
+    assert not agents.has_more
+    assert agents.items[0].author_type == "AGENT" and agents.items[0].author_id is None
+    if kind == "project_chat":
+        other = await history.list_messages(**filters, author_user_id=2, author_type="USER")
+        assert [message.id for message in other.items] == [other_id]
+    else:
+        other = await history.list_messages(**filters, author_user_id=1, author_type="USER")
+        assert other.items == []
+    unbounded_author = await history.list_messages(context=context, query="смета")
+    assert data["question"] in {message.id for message in unbounded_author.items}
+    assert data["future"] not in {message.id for message in unbounded_author.items}
+    with pytest.raises(ChatNotFoundError):
+        await history.list_messages(
+            **filters, chat_id=foreign_scope, author_user_id="me", author_type="USER"
+        )
 
 
 async def attachment(db, *, kind, scope_id, message_id, text=None, name="Решения.txt"):

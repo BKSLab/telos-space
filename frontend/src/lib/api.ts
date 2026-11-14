@@ -107,6 +107,7 @@ export const endpoints = {
         `${V1}/projects/${projectId}/members/${userId}`,
     projectMemberAvatar: (projectId: number, userId: number) =>
         `${V1}/projects/${projectId}/members/${userId}/avatar`,
+    userAvatar: (userId: number) => `${V1}/users/${userId}/avatar`,
     projectKnowledgeStatus: (projectId: number) =>
         `${V1}/projects/${projectId}/knowledge/status`,
     projectArisConversations: (projectId: number) => `${V1}/projects/${projectId}/aris/conversations`,

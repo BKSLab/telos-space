@@ -1,10 +1,11 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import { fileDraftKey, mergeFileDrafts, type FileUploadDraft } from "@/lib/files";
 import { formatRelative } from "@/lib/dates";
-import { fullName, type TaskComment } from "@/lib/types";
+import type { TaskComment } from "@/lib/types";
 import { newUuid } from "@/lib/uuid";
 import { MAX_DOCUMENT_SIZE, DOCUMENT_UPLOAD_ACCEPT } from "@/lib/documents";
 import { Button } from "@/components/ui/Button";
@@ -72,7 +73,7 @@ export function TaskCommentsSection({ taskId, comments, currentUserId, onChange,
         {comments.map(comment => <article key={comment.id} className="min-w-0 rounded-md border-l-2 border-accent-border bg-white/[0.025] px-2.5 py-2">
             <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                 <MessageSquare size={11} aria-hidden="true" />
-                <span className="font-medium text-secondary">{comment.author ? fullName(comment.author) : comment.author_name ?? "Без подписи"}</span>
+                <UserIdentity user={comment.author} name={comment.author ? undefined : comment.author_name ?? "Без подписи"} className="font-medium text-secondary" />
                 <time dateTime={comment.created_at}>{formatRelative(comment.created_at)}</time>
             </div>
             {editing?.id === comment.id ? <div className="flex flex-col gap-2">

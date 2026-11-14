@@ -71,7 +71,7 @@ function ProjectChatContent({ compact }: { compact: boolean }) {
         <header className="chat-project-header material-metal flex shrink-0 items-center gap-3 border-b border-line px-3 py-2 sm:px-6 sm:py-4">
             <div className="min-w-0 flex-1"><h2 className="text-base font-semibold tracking-tight text-primary">Чат проекта</h2><p className="chat-project-subtitle mt-1 hidden text-[12px] leading-relaxed text-secondary sm:block">Обсуждения и договорённости команды</p></div>
             <Popover label="Участники чата" trigger={<span className="flex items-center gap-1.5 text-xs"><Users size={14} /><span>{chat.info?.members.length}</span><span className="hidden text-muted sm:inline">· {onlineCount} в сети</span></span>} width={280}>
-                <div className="max-h-72 overflow-y-auto p-2"><p className="mb-2 px-1 text-[10px] text-muted">Участники проекта</p>{chat.info?.members.map((member) => <div key={member.id} className="flex items-center gap-2 rounded-md px-1 py-2.5 text-xs text-secondary"><span className={cn("size-1.5 shrink-0 rounded-full", chat.online.includes(member.id) ? "bg-success" : "bg-muted/30")} /><span className="min-w-0 flex-1 break-words">{member.display_name}</span><span className="shrink-0 text-[10px] text-muted">{chat.online.includes(member.id) ? "в сети" : "не в сети"}</span></div>)}</div>
+                <div className="max-h-72 overflow-y-auto p-2"><p className="mb-2 px-1 text-[10px] text-muted">Участники проекта</p>{chat.info?.members.map((member) => <div key={member.id} className="flex items-center gap-2 rounded-md px-1 py-2.5 text-xs text-secondary"><span className={cn("size-1.5 shrink-0 rounded-full", chat.online.includes(member.id) ? "bg-success" : "bg-muted/30")} /><UserIdentity userId={member.id} name={member.display_name} hasAvatar={member.has_avatar ?? false} className="min-w-0 flex-1" /><span className="shrink-0 text-[10px] text-muted">{chat.online.includes(member.id) ? "в сети" : "не в сети"}</span></div>)}</div>
             </Popover>
             <IconButton label="Поиск в чате" onClick={() => setSearching((value) => !value)}><Search size={16} /></IconButton>
             <ChatContextToggle obscured={searching} onShow={() => setSearching(false)} />
@@ -93,3 +93,4 @@ function ProjectChatContent({ compact }: { compact: boolean }) {
     </div>
     </ChatContextProvider>;
 }
+import { UserIdentity } from "@/components/users/UserIdentity";

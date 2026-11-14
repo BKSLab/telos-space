@@ -1299,6 +1299,7 @@ def _to_report_schema(report: AnalyticsReport, project: Project | None) -> Analy
         project_name=project.name if project else None,
         created_at=report.created_at,
         created_by=report.created_by_display_name_snapshot,
+        created_by_user_id=report.created_by_user_id,
         llm_model=report.llm_model,
         duration_ms=report.duration_ms,
         headline=payload.get("headline", ""),

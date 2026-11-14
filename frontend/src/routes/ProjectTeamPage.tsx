@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Crown, Trash2, UserRoundPlus, Users } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import type { ProjectMember } from "@/lib/types";
-import { fullName, initials } from "@/lib/types";
+import { fullName } from "@/lib/types";
 import { useCurrentUser } from "@/lib/useAuth";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
 import { Badge } from "@/components/ui/Badge";
@@ -11,6 +11,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
+import { UserIdentity } from "@/components/users/UserIdentity";
 
 export function ProjectTeamPage({ embedded = false }: { embedded?: boolean }) {
     const project = useProjectOutlet();
@@ -173,17 +174,9 @@ export function ProjectTeamPage({ embedded = false }: { embedded?: boolean }) {
                                 key={member.id}
                                 className="flex min-w-0 items-center gap-3 py-3.5"
                             >
-                                <span
-                                    aria-hidden="true"
-                                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[11px] font-semibold text-secondary"
-                                >
-                                    {initials(member.user)}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="truncate text-[13px] font-medium text-primary">
-                                            {fullName(member.user)}
-                                        </span>
+                                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                                        <UserIdentity user={member.user} size="md" className="max-w-full" nameClassName="text-[13px] font-medium text-primary" />
+                                        <span className="truncate font-mono text-[11px] text-muted">@{member.user.username}</span>
                                         {owner && (
                                             <Badge
                                                 title="Владелец проекта"
@@ -194,10 +187,6 @@ export function ProjectTeamPage({ embedded = false }: { embedded?: boolean }) {
                                             </Badge>
                                         )}
                                         {current && !owner && <Badge>Вы</Badge>}
-                                    </div>
-                                    <p className="mt-0.5 truncate font-mono text-[11px] text-muted">
-                                        @{member.user.username}
-                                    </p>
                                 </div>
                                 {isOwner && !owner && (
                                     <IconButton

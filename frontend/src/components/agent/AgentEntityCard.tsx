@@ -1,12 +1,13 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { ArrowUpRight, CalendarDays, Database, Diamond, FileText, FolderTree, Layers, ListTodo, MessageSquare, ShieldAlert, StickyNote, Users, UserRound } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Database, Diamond, FileText, FolderTree, Layers, ListTodo, MessageSquare, ShieldAlert, StickyNote, Users } from "lucide-react";
 import type { KnowledgeEntityType, KnowledgeSource, Project, TaskPriority } from "@/lib/types";
 import { PROJECT_STATUS_LABELS } from "@/lib/types";
 import { RISK_STATUS_LABELS } from "@/lib/risks";
 import { useUiStore } from "@/stores/ui";
 import { apiUrl } from "@/lib/api";
 import { UserAvatar } from "@/components/users/UserAvatar";
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { PriorityBadge } from "@/components/ui/Badge";
 import { chatContextKey, sourceContextTarget, useChatContext } from "@/lib/chatContext";
 import { DocumentDialog } from "@/components/documents/DocumentView";
@@ -63,7 +64,7 @@ export function AgentEntityCard({ source, project }: { source: KnowledgeSource; 
         {(card?.status || priority) && <span className="flex flex-wrap items-center gap-2">{card?.status && <span className="rounded border border-accent/15 bg-accent/8 px-1.5 py-0.5 text-[10px] text-accent">{source.entity_type === "task" ? card.status : STATUS[card.status] ?? card.status}</span>}{priority && <PriorityBadge priority={priority} />}</span>}
         {card?.summary && <span className="line-clamp-2 text-[12px] leading-relaxed break-words text-secondary">{card.summary.replace(/[#*_`]/g, "")}</span>}
         {(card?.assignee || (date && !Number.isNaN(date.valueOf()))) && <span className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line-subtle pt-2 text-[11px] text-muted">
-            {card?.assignee && <span className="flex min-w-0 items-center gap-1.5"><UserRound size={12} className="shrink-0" /><span className="truncate">{card.assignee}</span></span>}
+            {card?.assignee && <UserIdentity name={card.assignee} />}
             {date && !Number.isNaN(date.valueOf()) && <span className="flex items-center gap-1.5"><CalendarDays size={12} /><time dateTime={card!.due_date!}>{date.toLocaleDateString("ru-RU")}</time></span>}
         </span>}
     </Tag>{documentOpen && source.document_ref && <DocumentDialog documentRef={source.document_ref} fragment={source.reference} projectKey={project?.key} expectedProjectId={project?.id} onClose={() => setDocumentOpen(false)} />}</>;

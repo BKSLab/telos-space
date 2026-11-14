@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from sqlalchemy import and_, case, func, literal, or_, select
 
@@ -115,6 +116,7 @@ class AgentChatHistoryRepository(ChatRepository):
         after_order: int | None = None,
         query: str | None = None,
         author_user_id: int | None = None,
+        author_type: Literal["USER", "AGENT"] | None = None,
         start_at: datetime | None = None,
         end_before: datetime | None = None,
     ) -> list[dict]:
@@ -156,6 +158,15 @@ class AgentChatHistoryRepository(ChatRepository):
             )
         if author_user_id is not None:
             statement = statement.where(author == author_user_id)
+        if author_type is not None:
+            if kind == "conversation":
+                statement = statement.where(
+                    source.role == ("user" if author_type == "USER" else "assistant")
+                )
+            else:
+                statement = statement.where(
+                    source.author_kind == ("user" if author_type == "USER" else "agent")
+                )
         if start_at is not None:
             statement = statement.where(source.created_at >= start_at)
         if end_before is not None:

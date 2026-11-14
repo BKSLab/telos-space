@@ -11,6 +11,7 @@ import { ChatEntityCard } from "@/components/chat/ChatEntityCard";
 import { ChatAttachment } from "@/components/chat/ChatAttachment";
 import { ChatText } from "@/components/chat/ChatText";
 import { ArisAvatar } from "@/components/brand/ArisAvatar";
+import { UserAvatar } from "@/components/users/UserAvatar";
 
 interface Props { message: Message; highlighted?: boolean; onReply: (message: Message) => void; onQuote: (text: string) => void; onEdit: (message: Message) => void; onJump: (id: number) => void }
 
@@ -37,7 +38,7 @@ export function ChatMessage({ message, highlighted, onReply, onQuote, onEdit, on
     const interactive = canWrite && !message.deleted_at && !message.delivery;
     const initials = chatAuthorName(message, "?").split(" ").slice(0, 2).map((part) => part[0]).join("");
     return <article id={`chat-message-${message.id}`} data-message-id={message.id} data-message-seq={message.delivery ? undefined : message.seq} tabIndex={-1} aria-label={`Сообщение ${message.author_type === "AGENT" ? "Ариса" : chatAuthorName(message, "удалённого пользователя")}`} className={cn("group relative my-1 flex gap-3 rounded-xl px-3 py-4 text-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent sm:gap-4 sm:px-4", highlighted ? "bg-accent/[0.07]" : "hover:bg-control", message.delivery === "failed" && "bg-danger/[0.03]") }>
-        {message.author_type === "AGENT" ? <ArisAvatar className="mt-0.5" /> : <div aria-hidden="true" className={cn("material-metal mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-line text-[10px] font-semibold", own ? "text-accent" : "text-secondary")}>{initials}</div>}
+        {message.author_type === "AGENT" ? <ArisAvatar className="mt-0.5" /> : <UserAvatar size="sm" userId={message.author?.id} hasAvatar={message.author?.has_avatar ?? false} fallbackInitials={initials} className={cn("material-metal mt-0.5 size-8 rounded-lg border border-line text-[10px] font-semibold", own ? "text-accent" : "text-secondary")} />}
         <div className="min-w-0 flex-1">
             <div className={cn("mb-1.5 flex min-h-5 flex-wrap items-baseline gap-x-2 gap-y-0.5", interactive && "chat-message-meta pr-16")}>
                 <span className={cn("max-w-full text-[12px] font-semibold [overflow-wrap:anywhere]", message.author_type === "AGENT" ? "text-ai-blue" : "text-primary")}>{chatAuthorName(message, "Удалённый пользователь")}</span>

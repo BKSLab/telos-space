@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { AlertTriangle, MessageSquare } from "lucide-react";
 import type { ProjectStage, Task } from "@/lib/types";
 import { cn } from "@/lib/cn";
@@ -56,6 +57,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
     ref,
 ) {
     const description = task.description_md ? toPlainText(task.description_md) : "";
+    const executor = task.participants?.find(person => person.role === "EXECUTOR")?.user;
 
     return (
         <div
@@ -121,11 +123,11 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                     <p className="truncate text-[11px] text-disabled">{breadcrumb}</p>
                 )}
 
-                {(task.due_date !== null || task.comments_count > 0 || task.assignee) && (
+                {(task.due_date !== null || task.comments_count > 0 || task.assignee || executor) && (
                     <div className="flex items-center justify-between gap-2 pt-0.5">
                         <DueDate value={task.due_date} isDone={isDone} />
                         <div className="flex items-center gap-2.5 text-[11px] text-muted">
-                            {task.assignee && <span className="truncate">{task.assignee}</span>}
+                            {(task.assignee || executor) && <UserIdentity user={executor} name={executor ? undefined : task.assignee} className="max-w-full" />}
                             {task.comments_count > 0 && (
                                 <span
                                     className="inline-flex items-center gap-1"

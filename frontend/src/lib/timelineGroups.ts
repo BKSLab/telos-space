@@ -1,5 +1,5 @@
 import { buildTimelineWbsRows } from "@/lib/timelineWbs";
-import type { CalendarStage, CalendarTask, CalendarWbsNode } from "@/lib/types";
+import type { CalendarStage, CalendarTask, CalendarWbsNode, UserSummary } from "@/lib/types";
 
 export interface TimelineAggregate {
     total: number;
@@ -23,6 +23,7 @@ export interface TimelineGroupRow {
     groupKey?: TimelineGroupKey;
     /** Группировка по исполнителям: подпись исполнителя, null — «Без исполнителя». */
     assignee?: string | null;
+    user?: UserSummary | null;
     title: string;
     color: string | null;
     collapsed: boolean;
@@ -138,6 +139,8 @@ export function buildTimelineAssigneeRows(
     const rows: TimelineRow[] = [];
     const push = (assignee: string | null, items: CalendarTask[]) => {
         items.sort(byDates);
+        const executors = items.flatMap(task => task.executor ? [task.executor] : []);
+        const user = executors.length === items.length && new Set(executors.map(person => person.id)).size === 1 ? executors[0] : null;
         const key = assigneeGroupKey(assignee);
         const isCollapsed = collapsed.has(key);
         rows.push({
@@ -145,6 +148,7 @@ export function buildTimelineAssigneeRows(
             kind: "group",
             stageId: null,
             assignee,
+            ...(user ? { user } : {}),
             title: assignee ?? "Без исполнителя",
             color: null,
             collapsed: isCollapsed,

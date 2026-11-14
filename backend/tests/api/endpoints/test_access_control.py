@@ -42,6 +42,8 @@ PROTECTED_REQUESTS = [
     ("post", "/api/v1/documents/d1_ZG9jdW1lbnQ6MQ/tasks/1"),
     ("patch", "/api/v1/users/me"),
     ("get", "/api/v1/users/me/avatar"),
+    ("get", "/api/v1/users"),
+    ("get", "/api/v1/users/2/avatar"),
 ]
 
 

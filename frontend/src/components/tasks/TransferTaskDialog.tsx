@@ -1,7 +1,7 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import { fullName } from "@/lib/types";
 import type { Project, ProjectStage, Task, TaskKind, TaskTransferPreview, TaskTransferResult } from "@/lib/types";
 import {
     buildTransferTarget,
@@ -192,7 +192,7 @@ export function TransferTaskDialog({ task, kind, onClose, onMoved }: TransferTas
                         {preview.notes.map((note) => (
                             <p key={note}>{note}</p>
                         ))}
-                        <p>Исполнитель: {preview.executor ? fullName(preview.executor) : "не назначен"}</p>
+                        <p>Исполнитель: {preview.executor ? <UserIdentity user={preview.executor} /> : "не назначен"}</p>
                         <p className="text-muted">
                             Комментарии, чек-лист, файлы, отчёт и история переедут вместе с задачей.
                         </p>
@@ -207,7 +207,7 @@ export function TransferTaskDialog({ task, kind, onClose, onMoved }: TransferTas
                 {preview && outsiders.length > 0 && (
                     <div className="rounded-md border border-line-subtle bg-surface/35 border-warning/40 bg-warning/10 flex flex-col gap-2 px-3 py-2 text-[13px]" role="note">
                         <p>
-                            Не в команде проекта: {outsiders.map((user) => fullName(user)).join(", ")}. В задаче проекта могут
+                            Не в команде проекта: {outsiders.map((user, index) => <span key={user.id}>{index > 0 && ", "}<UserIdentity user={user} /></span>)}. В задаче проекта могут
                             быть только люди из его команды — добавьте их в команду проекта или уберите из задачи.
                         </p>
                         <label className="flex items-center gap-2">

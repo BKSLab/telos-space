@@ -14,6 +14,7 @@ from src.repositories.milestones import MilestonesRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_stages import ProjectStagesRepository
 from src.repositories.projects import ProjectsRepository
+from src.repositories.task_participants import TaskParticipantsRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.users import UsersRepository
 from src.services.calendar_feed import CalendarFeedService
@@ -32,6 +33,7 @@ def calendar(session):
         stages_repository=ProjectStagesRepository(session),
         tasks_repository=TasksRepository(session),
         milestones_repository=MilestonesRepository(session),
+        participants_repository=TaskParticipantsRepository(session),
     )
 
 

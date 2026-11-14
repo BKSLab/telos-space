@@ -143,6 +143,7 @@ function chatServer() {
             const url = new URL(route.request().url());
             const path = url.pathname;
             const method = route.request().method();
+            if (/^\/api\/v1\/users\/\d+\/avatar$/.test(path)) return route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#4090c0"/></svg>' });
             const headers = { "access-control-allow-origin": "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS" };
             const reply = (json: unknown, status = 200) => route.fulfill({ status, json, headers });
             if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
@@ -1095,3 +1096,64 @@ test("на узком экране редактор, карточки и пои�
     await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("project-chat-mobile.png"), fullPage: true });
 });
+
+for (const width of [390, 1440]) {
+    test(`аватар профиля виден у своего и чужого сообщения ${width}px`, async ({ page }, info) => {
+        const server = chatServer();
+        const own = server.add("Сообщение с моей фотографией", 1, false, { author: { id: 1, username: "anna", display_name: "Анна Иванова", has_avatar: true } });
+        const other = server.add("Сообщение с фотографией коллеги", 2, false, { author: { id: 2, username: "oleg", display_name: "Олег Петров", has_avatar: true } });
+        const fallback = server.add("Сообщение без фотографии", 2, false);
+        await server.attach(page);
+        const avatarRequests: string[] = [];
+        await page.route("**/api/v1/users/*/avatar*", route => {
+            avatarRequests.push(new URL(route.request().url()).pathname);
+            return route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#4090c0"/><circle cx="16" cy="12" r="6" fill="#e0e0e0"/><path d="M5 32v-5a11 11 0 0122 0v5" fill="#e0e0e0"/></svg>' });
+        });
+        await page.setViewportSize({ width, height: 1000 });
+        await openChat(page);
+        for (const row of [own, other]) {
+            const avatar = page.locator(`#chat-message-${row.id} > img`);
+            await expect(avatar).toBeVisible();
+            await expect.poll(() => avatar.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(32);
+            expect(await avatar.boundingBox()).toMatchObject({ width: 32, height: 32 });
+        }
+        await expect(page.locator(`#chat-message-${fallback.id} > img`)).toHaveCount(0);
+        expect(avatarRequests).toEqual(expect.arrayContaining(["/api/v1/users/1/avatar", "/api/v1/users/2/avatar"]));
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+        await page.screenshot({ path: info.outputPath(`chat-avatars-${width}.png`) });
+    });
+}
+
+for (const width of [390, 1440]) {
+    test(`длинное ФИО не распирает контекст документа и задачи ${width}px`, async ({ page }, info) => {
+        const server = chatServer();
+        const last = "П".repeat(100), first = "И".repeat(100);
+        const name = `${last} ${first}`;
+        server.document.author = { id: 2, name };
+        server.tasks.get(42)!.participants = [{ id: 1, role: "EXECUTOR", user: { id: 2, username: "oleg", first_name: first, last_name: last, middle_name: null, has_avatar: true } }];
+        server.tasks.get(42)!.assignee = name;
+        server.addAris("Откройте документ или задачу.", "completed", [server.documentSource, server.taskSource(42)], false);
+        await server.attach(page);
+        await page.setViewportSize({ width, height: 1000 });
+        await openChat(page);
+        const panel = page.getByRole(width >= 1280 ? "complementary" : "dialog", { name: "Контекст чата", exact: true });
+        const history = page.getByLabel("История сообщений проекта", { exact: true });
+        for (const label of [`Документ: ${server.documentSource.title}`, `Задача: ${server.taskSource(42).title}`]) {
+            await history.getByRole("button", { name: label, exact: true }).click();
+            if (width < 1280 && label.startsWith("Задача")) {
+                await page.getByRole("dialog", { name: /^Задача/ }).getByRole("button", { name: "Закрыть задачу", exact: true }).click();
+                await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
+            }
+            await expect(panel).toBeVisible();
+            await panel.evaluate(element => { element.style.width = "240px"; element.style.maxWidth = "240px"; });
+            const identity = panel.getByText(name, { exact: true }).first();
+            await expect(identity).toBeVisible();
+            const bounds = await panel.boundingBox();
+            const textBounds = await identity.boundingBox();
+            expect(textBounds!.x + textBounds!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width + 1);
+            expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBeTruthy();
+            await page.screenshot({ path: info.outputPath(`long-user-${width}-${label.startsWith("Документ") ? "document" : "task"}.png`) });
+            if (width < 1280) await panel.getByRole("button", { name: "Закрыть контекст", exact: true }).click();
+        }
+    });
+}

@@ -1,3 +1,4 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -149,7 +150,7 @@ function DocumentViewContent({ documentRef, fragment, projectKey, expectedProjec
                 <FileTypeIcon file={file} className="h-9 w-9" />
                 <div className="min-w-0 flex-1">
                     <h2 className="break-words text-[15px] font-semibold text-primary [overflow-wrap:anywhere]">{document.title}</h2>
-                    <p className="mt-1 text-[11px] break-words text-muted [overflow-wrap:anywhere]">{fileTypeLabel(file)}{document.original ? ` · ${formatFileSize(document.original.size)}` : ""} · {document.author?.name ?? "Без автора"}</p>
+                    <p className="mt-1 text-[11px] break-words text-muted [overflow-wrap:anywhere]">{fileTypeLabel(file)}{document.original ? ` · ${formatFileSize(document.original.size)}` : ""} · {document.author ? <UserIdentity userId={document.author.id} name={document.author.name} /> : "Без автора"}</p>
                 </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -199,7 +200,7 @@ function DocumentViewContent({ documentRef, fragment, projectKey, expectedProjec
                 <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 text-[12px]">
                     <dt className="text-muted">Создан</dt><dd className="break-words text-secondary">{formatDateTime(document.created_at)}</dd>
                     <dt className="text-muted">Изменён</dt><dd className="break-words text-secondary">{formatDateTime(document.updated_at)}</dd>
-                    <dt className="text-muted">Автор</dt><dd className="break-words text-secondary">{document.author?.name ?? "Не указан"}</dd>
+                    <dt className="text-muted">Автор</dt><dd className="break-words text-secondary">{document.author ? <UserIdentity userId={document.author.id} name={document.author.name} /> : "Не указан"}</dd>
                     {Object.entries(document.states).map(([key, state]) => <StateDetail key={key} name={key === "extraction" ? "Текст" : key === "fts" ? "Поиск" : "Знания Ариса"} status={state.status} detail={state.detail} />)}
                 </dl>
                 {document.tasks.length > 0 && <section className="mt-5 flex min-w-0 flex-col gap-2" aria-label="Задачи документа"><h3 className="text-[12px] font-medium text-secondary">Задачи</h3>{document.tasks.map(task => <button type="button" key={task.id} onClick={() => openTask(task.id)} className="touch-target min-w-0 rounded px-2 py-2 text-left text-[12px] text-accent hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent"><span className="font-mono">{task.key}</span> · {task.title}{task.relation === "owner" && <span className="text-muted"> · документ задачи</span>}</button>)}</section>}

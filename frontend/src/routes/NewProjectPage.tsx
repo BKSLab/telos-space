@@ -1,8 +1,9 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import { fullName, type Project, type ProjectStage } from "@/lib/types";
+import type { Project, ProjectStage } from "@/lib/types";
 import { useCurrentUser } from "@/lib/useAuth";
 import { useToast } from "@/lib/toast";
 import { formatDateOnly } from "@/lib/dates";
@@ -77,7 +78,7 @@ export function NewProjectPage() {
 
                 <p className="text-[13px] text-secondary">
                     <span className="text-muted">Руководитель: </span>
-                    {currentUser.data ? fullName(currentUser.data) : "Загрузка…"}
+                    {currentUser.data ? <UserIdentity user={currentUser.data} /> : "Загрузка…"}
                 </p>
                 <ProjectForm pendingImage={pendingImage} onPendingImageChange={setPendingImage} values={values} onChange={setValues} disabled={createMutation.isPending} />
                 <Field label="Команда" hint="Логины участников через запятую. Руководитель добавляется автоматически; состав можно изменить позже."

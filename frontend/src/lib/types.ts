@@ -216,6 +216,7 @@ export interface Task {
 }
 
 export interface TaskCompact {
+    executor?: UserSummary | null;
     checklist?: TaskChecklist | null;
     id: number;
     key: string;
@@ -259,6 +260,7 @@ export interface CalendarWbsNode {
 }
 
 export interface CalendarTask {
+    executor?: UserSummary | null;
     id: number;
     key: string;
     title: string;
@@ -934,6 +936,7 @@ export interface AnalyticsContext {
 }
 
 export interface AnalyticsReport {
+    created_by_user_id?: number | null;
     id: number;
     scope: AnalyticsScope;
     project_id: number | null;

@@ -409,6 +409,11 @@ class AnalyticsReportSchema(BaseModel):
         examples=["2026-09-04T12:00:00Z"],
     )
     created_by: str = Field(..., description="Кто запросил анализ.", examples=["Иванов Иван"])
+    created_by_user_id: int | None = Field(
+        default=None,
+        description="ID автора запроса; null после удаления пользователя.",
+        examples=[2],
+    )
     llm_model: str = Field(
         ...,
         description="Модель, сформировавшая свод.",

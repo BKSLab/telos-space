@@ -1,3 +1,4 @@
+import { UserIdentity } from "@/components/users/UserIdentity";
 import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ChevronDown, CircleCheckBig, Flame, History, Info, Lightbulb, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
@@ -157,7 +158,7 @@ function PulseFooter({ report }: { report: AnalyticsReport }) {
     ].filter(Boolean) as string[];
 
     return <footer className="flex flex-col gap-2 border-t border-line-subtle pt-4 text-[12px] leading-relaxed text-muted">
-        <p>Сохранённый разбор от {formatFullDate(report.created_at)} · {report.created_by}</p>
+        <p>Сохранённый разбор от {formatFullDate(report.created_at)} · <UserIdentity userId={report.created_by_user_id} name={report.created_by} /></p>
         <p>В разбор вошли: {included.join(", ")}.</p>
         {context.truncated && context.omitted.length > 0 && <details>
             <summary className="inline-flex cursor-pointer items-center gap-1.5 hover:text-secondary"><Info size={13} aria-hidden="true" />Часть данных не вошла в разбор</summary>

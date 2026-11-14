@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import type { TaskComment } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Field";
+import { UserIdentity } from "@/components/users/UserIdentity";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { formatDateTime } from "@/lib/dates";
 import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
@@ -13,6 +14,7 @@ interface Report {
     revision: number;
     body_md: string;
     author_name: string | null;
+    author_id?: number | null;
     created_at: string | null;
     source_comment_id: number | null;
     source_comment_original_id: number | null;
@@ -72,8 +74,8 @@ export function TaskReportSection({ taskId, active, selectedComment, clearCommen
             ? <div className="markdown-body text-[13px]" dangerouslySetInnerHTML={{ __html: reportHtml }} />
             : <p className="text-[13px] text-muted">Отчёт пока не добавлен.</p>}
         {report.data && report.data.revision > 0 && <p className="text-[12px] text-muted">
-            Версия {report.data.revision} · {report.data.author_name} · {report.data.created_at ? formatDateTime(report.data.created_at) : ""}
-            {report.data.source_comment_original_id && ` · Из комментария #${report.data.source_comment_original_id} (${report.data.source_author_name ?? "автор неизвестен"})`}
+            Версия {report.data.revision} · {report.data.author_name && <UserIdentity userId={report.data.author_id} name={report.data.author_name} />} · {report.data.created_at ? formatDateTime(report.data.created_at) : ""}
+            {report.data.source_comment_original_id && <> · Из комментария #{report.data.source_comment_original_id} (<UserIdentity name={report.data.source_author_name ?? "автор неизвестен"} />)</>}
         </p>}
         {!canEdit && <p className="text-[12px] text-muted">{readOnlyHint ?? "У вас есть доступ к просмотру отчёта."}</p>}
         {canEdit && selectedComment ? <div className="rounded-md border border-line-subtle bg-surface/35 p-3 flex flex-col gap-2">
@@ -95,7 +97,7 @@ export function TaskReportSection({ taskId, active, selectedComment, clearCommen
         {report.data && report.data.revision > 0 && <details onToggle={(e) => setHistoryOpen(e.currentTarget.open)}><summary className="cursor-pointer text-[13px]">История публикаций</summary>
             {history.isPending && <Skeleton className="mt-2 h-16 w-full" />}
             {(history.data ?? []).map((item) => <article key={item.revision} className="rounded-md border border-line-subtle bg-surface/35 mt-2 p-3">
-                <p className="text-[12px] text-muted">Версия {item.revision} · {item.author_name}</p>
+                <p className="text-[12px] text-muted">Версия {item.revision} · {item.author_name && <UserIdentity userId={item.author_id} name={item.author_name} />}</p>
                 <p className="whitespace-pre-wrap text-[13px]">{item.body_md || "Отчёт очищен."}</p>
             </article>)}
             {history.error && <ErrorMessage message={(history.error as Error).message} />}

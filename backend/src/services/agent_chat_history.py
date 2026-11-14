@@ -9,6 +9,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.exceptions.agent_files import AgentFileNotFoundError
@@ -336,7 +337,8 @@ class AgentChatHistoryService:
         before_message_id: int | None = None,
         after_message_id: int | None = None,
         query: str | None = None,
-        author_user_id: int | None = None,
+        author_user_id: int | Literal["me"] | None = None,
+        author_type: Literal["USER", "AGENT"] | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
     ) -> ChatHistoryPageSchema:
@@ -346,8 +348,12 @@ class AgentChatHistoryService:
         query = query.strip() if query else None
         if query and len(query) > 200:
             raise ChatValidationError("Поисковая строка должна быть не длиннее 200 символов.")
-        if author_user_id is not None and author_user_id <= 0:
-            raise ChatValidationError("author_user_id должен быть положительным.")
+        if author_user_id == "me":
+            author_user_id = context.user_id
+        if author_user_id is not None and (type(author_user_id) is not int or author_user_id <= 0):
+            raise ChatValidationError("author_user_id должен быть положительным ID либо me.")
+        if author_type not in (None, "USER", "AGENT"):
+            raise ChatValidationError("author_type должен быть USER либо AGENT.")
         start, end = self._period(context, date_from, date_to)
         location = await self._location(context, chat_id)
         async with self._scope() as db:
@@ -368,6 +374,7 @@ class AgentChatHistoryService:
                 after_order=after_order,
                 query=query,
                 author_user_id=author_user_id,
+                author_type=author_type,
                 start_at=start,
                 end_before=end,
             )
@@ -401,6 +408,7 @@ class AgentChatHistoryService:
                 kind=location.kind,
                 query=query,
                 author_user_id=author_user_id,
+                author_type=author_type,
                 date_from=date_from,
                 date_to=date_to,
                 timezone=context.timezone,

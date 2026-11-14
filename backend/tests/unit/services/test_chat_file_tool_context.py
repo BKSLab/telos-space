@@ -44,13 +44,20 @@ async def test_history_tool_preserves_server_context_without_business_transactio
     )
     ctx = AgentToolContext(project_id=1, user_id=2, message_id=10, run_id=uuid4(), timezone="Europe/Samara")
     service = AgentActionsService(scope=unexpected_scope, actions=PROJECT_ACTIONS, chat_history=reader)
-    result = await service.execute(context=ctx, name="telos_list_chat_messages", arguments={"query": "баг"})
+    result = await service.execute(context=ctx, name="telos_list_chat_messages", arguments={"query": "баг", "author_user_id": "me", "author_type": "USER", "before_message_id": 8})
     assert result["items"] == []
     used = reader.list_messages.await_args.kwargs
     assert used["context"].message_id == ctx.message_id and used["context"].run_id == ctx.run_id
     assert used["context"].timezone == "Europe/Samara" and used["query"] == "баг"
+    assert used["author_user_id"] == "me" and used["author_type"] == "USER"
+    assert used["before_message_id"] == 8
     with pytest.raises(AgentToolArgumentsError):
         await service.execute(context=ctx, name="telos_list_chat_messages", arguments={"conversation_id": 999})
+    for invalid in (0, -1, True, "2", "ME"):
+        with pytest.raises(AgentToolArgumentsError):
+            await service.execute(context=ctx, name="telos_list_chat_messages", arguments={"author_user_id": invalid})
+    with pytest.raises(AgentToolArgumentsError):
+        await service.execute(context=ctx, name="telos_list_chat_messages", arguments={"author_type": "HUMAN"})
 
 
 @pytest.mark.asyncio

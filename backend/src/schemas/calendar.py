@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from src.db.models.project_milestones import ProjectMilestoneStatus
 from src.db.models.task_dependencies import TaskDependencyType
 from src.schemas.enums import TaskPriority
+from src.schemas.users import UserSummarySchema
 
 
 class CalendarRangeSchema(BaseModel):
@@ -66,6 +67,11 @@ class CalendarTaskSchema(BaseModel):
     wbs_node_id: int | None
     priority: TaskPriority
     assignee: str | None
+    executor: UserSummarySchema | None = Field(
+        default=None,
+        description="Назначенный исполнитель; свободная подпись assignee не определяет identity.",
+        examples=[None],
+    )
     is_done: bool
     is_overdue: bool
     is_due_soon: bool

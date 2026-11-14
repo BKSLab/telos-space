@@ -18,6 +18,7 @@ from src.repositories.project_stages import ProjectStagesRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.task_activity import TaskActivityRepository
 from src.repositories.task_dependencies import TaskDependenciesRepository
+from src.repositories.task_participants import TaskParticipantsRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.wbs_nodes import WbsNodesRepository
 from src.schemas.calendar import (
@@ -35,7 +36,7 @@ from src.schemas.calendar import (
     UnscheduledTasksPageSchema,
 )
 from src.services.critical_path import checklist_progress, critical_path
-from src.services.tasks import build_task_key
+from src.services.tasks import build_task_key, executor_summary
 from src.utils.deadlines import DUE_SOON_DAYS, is_task_due_soon, is_task_overdue
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class CalendarService:
         activity_repository: TaskActivityRepository,
         milestones_repository: MilestonesRepository,
         dependencies_repository: TaskDependenciesRepository,
+        participants_repository: TaskParticipantsRepository,
     ):
         self.projects_repository = projects_repository
         self.tasks_repository = tasks_repository
@@ -63,6 +65,7 @@ class CalendarService:
         self.activity_repository = activity_repository
         self.milestones_repository = milestones_repository
         self.dependencies_repository = dependencies_repository
+        self.participants_repository = participants_repository
 
     async def get_range(
         self,
@@ -156,6 +159,9 @@ class CalendarService:
                 project_due_date=project.due_date,
                 latest_open_due_date=latest_open_end,
             )
+            participants = await self.participants_repository.get_by_task_ids(
+                [task.id for task in tasks]
+            )
             result = CalendarResponseSchema(
                 range=CalendarRangeSchema(date_from=date_from, date_to=date_to, today=today),
                 project=CalendarProjectSchema(
@@ -170,6 +176,7 @@ class CalendarService:
                         today=today,
                         extra_risks=dependency_risks.get(task.id, []),
                         is_critical=task.id in critical.task_ids,
+                        executor=executor_summary(participants.get(task.id, [])),
                     )
                     for task in tasks
                 ],
@@ -308,6 +315,9 @@ class CalendarService:
             )
             has_more = len(tasks) > limit
             page = tasks[:limit]
+            participants = await self.participants_repository.get_by_task_ids(
+                [task.id for task in page]
+            )
             done_stage_ids = {stage.id for stage in stages if stage.is_done_stage}
             return UnscheduledTasksPageSchema(
                 items=[
@@ -316,6 +326,7 @@ class CalendarService:
                         project_key=project.key,
                         is_done=task.stage_id in done_stage_ids,
                         today=today,
+                        executor=executor_summary(participants.get(task.id, [])),
                     )
                     for task in page
                 ],

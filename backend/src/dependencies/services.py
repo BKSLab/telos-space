@@ -418,6 +418,7 @@ def get_wbs_nodes_service(
     activity_repository: TaskActivityRepositoryDep,
     knowledge_events: KnowledgeEventsDep,
     unit_of_work: UnitOfWorkDep,
+    participants_repository: TaskParticipantsRepositoryDep,
 ) -> WbsNodesService:
     """Создаёт сервис структуры ИСР."""
     return WbsNodesService(
@@ -428,6 +429,7 @@ def get_wbs_nodes_service(
         activity_repository=activity_repository,
         knowledge_events=knowledge_events,
         unit_of_work=unit_of_work,
+        participants_repository=participants_repository,
     )
 
 
@@ -494,6 +496,7 @@ def get_calendar_service(
     activity_repository: TaskActivityRepositoryDep,
     milestones_repository: MilestonesRepositoryDep,
     dependencies_repository: TaskDependenciesRepositoryDep,
+    participants_repository: TaskParticipantsRepositoryDep,
 ) -> CalendarService:
     """Создаёт сервис календаря проекта."""
     return CalendarService(
@@ -504,6 +507,7 @@ def get_calendar_service(
         activity_repository=activity_repository,
         milestones_repository=milestones_repository,
         dependencies_repository=dependencies_repository,
+        participants_repository=participants_repository,
     )
 
 
@@ -1232,6 +1236,7 @@ def get_personal_calendar_service(
     stages_repository: ProjectStagesRepositoryDep,
     tasks_repository: TasksRepositoryDep,
     milestones_repository: MilestonesRepositoryDep,
+    participants_repository: TaskParticipantsRepositoryDep,
 ) -> PersonalCalendarService:
     return PersonalCalendarService(
         users_repository=users_repository,
@@ -1240,6 +1245,7 @@ def get_personal_calendar_service(
         stages_repository=stages_repository,
         tasks_repository=tasks_repository,
         milestones_repository=milestones_repository,
+        participants_repository=participants_repository,
     )
 
 

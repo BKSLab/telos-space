@@ -18,6 +18,7 @@ from src.exceptions.wbs_nodes import (
 from src.repositories.project_stages import ProjectStagesRepository
 from src.repositories.projects import ProjectsRepository
 from src.repositories.task_activity import TaskActivityRepository
+from src.repositories.task_participants import TaskParticipantsRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.repositories.wbs_nodes import WbsNodesRepository
@@ -92,6 +93,8 @@ def build_service(
             SimpleNamespace(id=1, is_done_stage=False),
             SimpleNamespace(id=2, is_done_stage=True),
         ]
+    participants = AsyncMock(spec=TaskParticipantsRepository)
+    participants.get_by_task_ids.return_value = {}
     return WbsNodesService(
         wbs_nodes_repository=wbs_nodes_repository or AsyncMock(spec=WbsNodesRepository),
         projects_repository=projects_repository,
@@ -100,6 +103,7 @@ def build_service(
         activity_repository=activity_repository or AsyncMock(spec=TaskActivityRepository),
         unit_of_work=unit_of_work or AsyncMock(spec=UnitOfWork),
         knowledge_events=knowledge_events or AsyncMock(spec=KnowledgeEvents),
+        participants_repository=participants,
     )
 
 

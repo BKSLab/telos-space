@@ -4,7 +4,7 @@ import { ARIS_NAME } from "@/lib/aris";
 
 export type ChatEntityType = "TASK" | "DOCUMENT" | "RISK" | "MILESTONE" | "WBS_NODE";
 /** Человек в чате — та же ссылка на пользователя, что и во всём API. */
-export interface ChatUser { id: number; username: string; display_name: string }
+export interface ChatUser { id: number; username: string; display_name: string; has_avatar?: boolean }
 export interface ChatEntityRef { entity_type: ChatEntityType; entity_id: number | null; document_ref?: string | null }
 export const chatEntityKey = (ref: ChatEntityRef) => `${ref.entity_type}:${ref.entity_type === "DOCUMENT" ? ref.document_ref : ref.entity_id}`;
 export interface ChatEntity extends ChatEntityRef {

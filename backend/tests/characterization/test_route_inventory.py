@@ -108,6 +108,7 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ('GET', '/api/v1/users/me/task-attention'),
     ('GET', '/api/v1/users/me/tasks'),
     ('GET', '/api/v1/users/me/tokens'),
+    ('GET', '/api/v1/users/{user_id}/avatar'),
     ('GET', '/health/live'),
     ('GET', '/health/ready'),
     ('PATCH', '/api/v1/boards/{board_id}'),

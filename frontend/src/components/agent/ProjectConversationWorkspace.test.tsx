@@ -19,7 +19,7 @@ const { chat } = vi.hoisted(() => {
     } };
 });
 vi.mock("@/lib/useProjectConversations", () => ({ useProjectConversations: vi.fn(() => chat) }));
-vi.mock("@/lib/useAuth", () => ({ useCurrentUser: () => ({ data: { id: 9 } }) }));
+vi.mock("@/lib/useAuth", () => ({ useCurrentUser: () => ({ data: { id: 9, username: "anna", first_name: "Анна", last_name: "Иванова", middle_name: null, has_avatar: false } }) }));
 vi.mock("@/lib/useProjectKnowledgeStatus", () => ({ useProjectKnowledgeStatus: () => ({ data: undefined, error: null }) }));
 const clients: QueryClient[] = [];
 const file: AgentFile = { id: "private-file", original_name: "private.txt", content_type: "text/plain", size: 5, created_at: "2026-11-15T10:00:00Z" };

@@ -1,3 +1,5 @@
+import { UserAvatar } from "@/components/users/UserAvatar";
+import { useCurrentUser } from "@/lib/useAuth";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useSearchParams } from "react-router-dom";
@@ -29,6 +31,7 @@ import "@/components/chat/chat.css";
 
 /** Панель личного диалога с Арисом (docs/agent.md, 3). */
 export function ArisPanel({ userId, onClose, embedded = false }: { userId: number; onClose?: () => void; embedded?: boolean }) {
+    const currentUser = useCurrentUser().data;
     const location = useLocation();
     const [params, setParams] = useSearchParams();
     const personalRoute = embedded && location.pathname.replace(/\/$/, "") === "/chat";
@@ -229,6 +232,7 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
                     const asked = message.role === "user" && message.page_context ? describePageContext(message.page_context) : "";
                     return <div key={message.id} data-chat-message={message.id} data-highlighted={message.id === around || undefined} tabIndex={message.id === around ? -1 : undefined} aria-label={message.id === around ? "Выбранное сообщение" : undefined} className={cn("flex gap-2 rounded-lg", message.id === around && "ring-2 ring-accent/60", message.role === "user" ? "justify-end" : "justify-start")}>
                         {message.role === "assistant" && <ArisAvatar className="mt-1" />}
+                        {message.role === "user" && <UserAvatar userId={userId} hasAvatar={currentUser?.id === userId && currentUser.has_avatar} size="sm" className="mt-1" />}
                         <div data-role={message.role} className={cn("chat-content chat-personal-message min-w-0 max-w-[92%] rounded-lg px-3 py-2.5", message.role === "user" ? "bg-accent/85 text-on-accent" : "aris-message text-secondary")}>
                             {message.status === "queued" || message.status === "processing" ? <ArisThinking progress={message.progress} />
                                 : message.status === "failed" ? <div className="space-y-2 text-[12px]">

@@ -211,6 +211,7 @@ def build_calendar_service(session: AsyncSession) -> CalendarService:
         activity_repository=TaskActivityRepository(session),
         milestones_repository=MilestonesRepository(session),
         dependencies_repository=TaskDependenciesRepository(session),
+        participants_repository=TaskParticipantsRepository(session),
     )
 
 

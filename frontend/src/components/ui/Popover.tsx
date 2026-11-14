@@ -17,6 +17,8 @@ interface PopoverProps {
     align?: "start" | "end";
     className?: string;
     triggerClassName?: string;
+    triggerId?: string;
+    triggerDescriptionId?: string;
     width?: number;
     onOpenChange?: (isOpen: boolean) => void;
     disabled?: boolean;
@@ -33,6 +35,8 @@ export function Popover({
     align = "end",
     className,
     triggerClassName,
+    triggerId,
+    triggerDescriptionId,
     width: panelWidth = 288,
     onOpenChange,
     disabled = false,
@@ -100,7 +104,7 @@ export function Popover({
     const close = () => {
         changeOpen(false);
         window.requestAnimationFrame(() => {
-            document.getElementById(`${id}-trigger`)?.focus();
+            document.getElementById(triggerId ?? `${id}-trigger`)?.focus();
         });
     };
 
@@ -137,10 +141,11 @@ export function Popover({
         <div ref={rootRef} className="relative">
             <Button
                 ref={triggerRef}
-                id={`${id}-trigger`}
+                id={triggerId ?? `${id}-trigger`}
                 size="sm"
                 aria-haspopup="dialog"
                 aria-label={label}
+                aria-describedby={triggerDescriptionId}
                 aria-expanded={isOpen}
                 aria-controls={isOpen ? id : undefined}
                 disabled={disabled}

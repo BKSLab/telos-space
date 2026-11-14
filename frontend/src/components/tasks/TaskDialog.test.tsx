@@ -27,6 +27,7 @@ const task: Task = {
 const clients: QueryClient[] = [];
 
 function setup(initial = task) {
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
     const state = { task: { ...initial }, calls: [] as { method: string; path: string; body?: TaskUpdate }[] };
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const path = new URL(String(input)).pathname;
@@ -75,6 +76,7 @@ afterEach(() => {
     clients.splice(0).forEach(client => client.clear());
     useUiStore.getState().setSelectedTaskId(null);
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
 });
 
 it("сохраняет описание с версией открытия, удерживает черновик при 409 и принимает новую версию после повторного открытия", async () => {
@@ -172,6 +174,12 @@ it("выбор участника использует актуальную ве
     await screen.findByRole("heading", { name: task.title });
     await updateCache({ revision: 3 });
     await user.click(screen.getByRole("tab", { name: "Участники" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Исполнитель" }), { target: { value: "2" } });
+    await user.click(screen.getByRole("button", { name: "Исполнитель" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Поиск: Исполнитель" })));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Исполнитель" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Задача DEMO-5" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Исполнитель" }));
+    await user.click(screen.getByRole("option", { name: "Исполнитель Иван" }));
     await waitFor(() => expect(patches()[0].body).toEqual({ executor_id: 2, expected_revision: 3 }));
 }, 15_000);

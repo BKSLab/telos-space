@@ -1,3 +1,4 @@
+import { UserAvatar } from "@/components/users/UserAvatar";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -66,7 +67,8 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
         const next = update(new URLSearchParams(location.search));
         navigate({ pathname: location.pathname, search: next.toString(), hash: location.hash }, options);
     }, [location, navigate]);
-    const userId = useCurrentUser().data?.id ?? 0;
+    const currentUser = useCurrentUser().data;
+    const userId = currentUser?.id ?? 0;
     const sessionKey = `${userId}:${project.id}`;
     const rememberedId = useProjectConversationStore((state) => state.conversations[sessionKey]);
     const select = useProjectConversationStore((state) => state.select);
@@ -326,11 +328,12 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
                                         tabIndex={message.id === around ? -1 : undefined}
                                         aria-label={message.id === around ? "Выбранное сообщение" : undefined}
                                         className={cn(
-                                            "flex rounded-lg",
+                                            "flex gap-2 rounded-lg",
                                             message.id === around && "ring-2 ring-accent/60",
                                             message.role === "user" ? "justify-end" : "justify-start",
                                         )}
                                     >
+                                        {message.role === "user" && <UserAvatar user={currentUser ?? undefined} hasAvatar={currentUser?.has_avatar ?? false} size="sm" className="mt-1" />}
                                         <div
                                             className={cn(
                                                 "chat-content chat-personal-message min-w-0 max-w-[88%] rounded-lg px-3.5 py-3",

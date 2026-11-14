@@ -158,6 +158,11 @@ class TaskCompactSchema(BaseModel):
     )
     priority: TaskPriority = Field(..., description="Приоритет задачи.", examples=["HIGH"])
     assignee: str | None = Field(None, description="Подпись исполнителя.", examples=["Иван"])
+    executor: UserSummarySchema | None = Field(
+        default=None,
+        description="Назначенный исполнитель; null, если указана только свободная подпись.",
+        examples=[None],
+    )
     start_date: date | None = Field(None, description="Плановая дата начала.")
     due_date: date | None = Field(
         None,

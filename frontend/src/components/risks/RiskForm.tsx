@@ -1,7 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import { fullName, type ProjectMember, type Task } from "@/lib/types";
+import type { ProjectMember, Task } from "@/lib/types";
 import {
     IMPACT_LABELS, PROBABILITY_LABELS, RISK_RATINGS, RISK_STATUS_LABELS, RISK_STRATEGY_LABELS,
     previewRiskLevel, riskFormError, riskInput, type RiskInput, type RiskRating, type RiskStatus, type RiskStrategy,
@@ -11,6 +11,7 @@ import { ErrorMessage } from "@/components/ui/States";
 import { Button } from "@/components/ui/Button";
 import { RiskBadge } from "@/components/risks/RiskBadge";
 import { RiskFieldAssistant } from "@/components/risks/RiskFieldAssistant";
+import { UserSelect } from "@/components/users/UserSelect";
 
 interface Props {
     projectId: number;
@@ -39,6 +40,7 @@ export function RiskForm({ projectId, initial, formId, isSaving, error, onSave }
         setValidation(null);
     }
     const search = taskSearch.trim().toLocaleLowerCase("ru-RU");
+    const owner = members.data?.find(member => member.user.id === draft.owner_user_id)?.user;
     const visibleTasks = (tasks.data ?? []).filter((task) =>
         task.id === draft.task_id || `${task.key} ${task.title}`.toLocaleLowerCase("ru-RU").includes(search),
     );
@@ -92,11 +94,10 @@ export function RiskForm({ projectId, initial, formId, isSaving, error, onSave }
                 <RiskFieldAssistant projectId={projectId} field="response_plan" draft={draft} onAccept={(text) => change("response_plan", text)} disabled={isSaving} />
                 <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Ответственный">
-                        {(id) => <Select id={id} value={draft.owner_user_id ?? ""} disabled={members.isPending || !!members.error} onChange={(e) => change("owner_user_id", e.target.value ? Number(e.target.value) : null)}>
-                            <option value="">{members.isPending ? "Загрузка команды…" : "Не назначен"}</option>
-                            {draft.owner_user_id && !members.data?.some((item) => item.user.id === draft.owner_user_id) && <option value={draft.owner_user_id}>Участник #{draft.owner_user_id}</option>}
-                            {members.data?.map((member) => <option key={member.user.id} value={member.user.id}>{fullName(member.user)} · @{member.user.username}</option>)}
-                        </Select>}
+                        {(id) => <UserSelect id={id} label="Ответственный" users={(members.data ?? []).map(member => member.user)} selected={owner ? [owner] : []}
+                            fallbackSelection={!owner && draft.owner_user_id ? { userId: draft.owner_user_id, name: `Участник #${draft.owner_user_id}` } : undefined}
+                            emptyLabel="Не назначен" clearLabel="Не назначен" loading={members.isPending} disabled={isSaving || members.isPending || !!members.error}
+                            describeUser={user => `@${user.username}`} onChange={users => change("owner_user_id", users[0]?.id ?? null)} />}
                     </Field>
                     <Field label="Дата контроля" hint="Дата следующего пересмотра риска.">
                         {(id) => <Input id={id} type="date" value={draft.review_date ?? ""} onChange={(e) => change("review_date", e.target.value || null)} />}
