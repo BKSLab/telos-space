@@ -186,8 +186,22 @@ Codex этим экспериментом не проверялись. Клие�
 поэтому полное равенство клиентской JSON Schema/defaults/outputSchema не заявляется.
 
 После перевыпуска ключа замена User environment не обновляет окружение уже
-открытого Codex. Перезапустите приложение, чтобы оно получило новое значение;
-новая история субагента сама по себе не обновляет переменные процесса.
+запущенного фонового app-server Codex. Он может пережить закрытие окна;
+новая сессия или история субагента тоже не обновляет переменные процесса.
+При `bearer_token_env_var` клиент продолжит отправлять прежний ключ, даже
+если в пользовательских переменных Windows уже сохранён новый.
+
+В локальной Windows-конфигурации проверен `http_headers_helper`: PowerShell
+читает `TELOS_MCP_API_KEY` через `GetEnvironmentVariable(..., 'User')` и
+возвращает JSON с заголовком `Authorization: Bearer ...`. Сам секрет остаётся
+в User environment. Одновременный `bearer_token_env_var` нужно убрать:
+явно заданный Bearer имеет приоритет над заголовком helper. После изменения
+ключа или настройки перезагрузите MCP-подключение. Штатный запрос app-server
+`config/mcpServer/reload` применил эту настройку в уже открытой сессии Codex
+0.167.0; нативные `telos_list_projects` и `telos_get_project(TELOS)` прошли
+без перезапуска фонового процесса. Параметры helper описаны в
+[официальной документации MCP](https://learn.chatgpt.com/docs/extend/mcp),
+перезагрузка — в [документации app-server](https://learn.chatgpt.com/docs/app-server).
 
 Для автономной проверки через Codex CLI ограничьте дочерний процесс тремя
 чтениями: `telos_list_projects`, `telos_get_project`, `telos_get_task`.

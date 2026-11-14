@@ -451,5 +451,7 @@ Frontend: React, TypeScript, Vite, Tailwind, TanStack Query, Zustand, React Flow
 | [Арис и MCP](docs/agent.md) | Runtime, подтверждения, диалоги и внешние инструменты |
 | [Знания](docs/knowledge.md) | Источники, локальное извлечение, outbox, поиск и саммари |
 | [Сценарии MCP](docs/mcp-skills/README.md) | Примеры работы внешнего клиента |
-| [План улучшения MCP](docs/mcp-first-real-case-plan.md) | Рекомендации по первому реальному кейсу BKS Term и критерии приёмки |
+| [Первый кейс MCP](docs/mcp-first-real-case-plan.md) | Исторические наблюдения и актуальный статус доработок |
+| [Второй кейс MCP](docs/mcp-second-real-case-feedback.md) | Создание TERM-3 и сверка полного текста; прежние имена отмечены как исторические |
+| [Референсы интерфейса](docs/ref/README.md) | Макет следующих доработок дашбордов и датированные снимки прежнего UI |
 | [Формат retrieval eval](backend/evals/knowledge_retrieval/FORMAT.md) | Входные данные проверок поиска |
