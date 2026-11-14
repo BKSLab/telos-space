@@ -264,6 +264,7 @@ POLICIES = (
 POLICY_BY_TABLE = {item.table: item for item in POLICIES}
 POLICY_BY_TYPE = {item.kind: item for item in POLICIES if item.kind}
 EXCLUDED_TABLES = {
+    "chat_file_texts": "Тексты приватных и командных файлов доступны только в точном контексте переписки, без проектного Qdrant.",
     "document_submissions": "Квитанции повторов; документы индексируются по исходной сущности.",
     "document_index_states": "Производное состояние обработки документов, не самостоятельные знания.",
     "api_keys": "Учётные данные локальных пользователей.",

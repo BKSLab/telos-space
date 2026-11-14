@@ -14,6 +14,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from src.clients.vision import DisabledVisionCapability
 from src.core.app_state import (
     RUNTIME_STATE_KEY,
     SESSION_FACTORY_STATE_KEY,
@@ -78,7 +79,7 @@ async def mcp_env(agent_env, tmp_path):
             keys[user_id] = SimpleNamespace(raw=raw_key, id=row.id)
         await session.commit()
     state = {
-        RUNTIME_STATE_KEY: SimpleNamespace(),
+        RUNTIME_STATE_KEY: SimpleNamespace(vision=DisabledVisionCapability()),
         SETTINGS_STATE_KEY: settings,
         SESSION_FACTORY_STATE_KEY: factory,
     }

@@ -2538,6 +2538,63 @@
       "write": false
     },
     {
+      "description": "Файлы текущего чата, включая старые сообщения: имя, UUID, статус подготовки и короткий фрагмент. q ищет по имени; next_offset продолжает историю. Черновики и другие диалоги закрыты.",
+      "group": "tasks",
+      "id": "mcp-action-e9048ef83367b28b",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 20,
+            "description": "Размер страницы файлов.",
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Смещение страницы файлов.",
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "q": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Часть исходного имени файла; null — последние файлы текущего чата.",
+            "title": "Q"
+          }
+        },
+        "title": "ChatFilesInput",
+        "type": "object"
+      },
+      "kind": "action",
+      "name": "telos_list_chat_files",
+      "needsProject": false,
+      "ownerOnly": false,
+      "projectOptional": true,
+      "requiresConfirmation": false,
+      "scopes": [
+        "projects:read",
+        "agent:ask"
+      ],
+      "summary": "Найти файлы переписки",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
       "description": "Обсуждение задачи с ID комментариев.",
       "group": "comments",
       "id": "mcp-action-afe0674319a5fb30",
@@ -3758,6 +3815,73 @@
         "WRITE"
       ],
       "write": true
+    },
+    {
+      "description": "Сохранённый текст файла текущего чата по UUID, страницы Unicode до 8000 символов. q быстро ищет внутри файла, next_offset продолжает чтение/поиск. pending/processing — текст ещё готовится, не отсутствие файла; truncated явно обозначает предел обработки.",
+      "group": "tasks",
+      "id": "mcp-action-63e96795a5a36c61",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "file_id": {
+            "description": "UUID из uploaded_files или telos_list_chat_files; не путь и не ссылка.",
+            "format": "uuid",
+            "title": "File Id",
+            "type": "string"
+          },
+          "max_chars": {
+            "default": 2000,
+            "description": "Максимум символов одной страницы текста.",
+            "maximum": 8000,
+            "minimum": 1,
+            "title": "Max Chars",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Начало чтения/поиска в Unicode code points.",
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "q": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Буквальный поиск внутри файла без учёта регистра; null — чтение страницы.",
+            "title": "Q"
+          }
+        },
+        "required": [
+          "file_id"
+        ],
+        "title": "ChatFileReadInput",
+        "type": "object"
+      },
+      "kind": "action",
+      "name": "telos_read_chat_file",
+      "needsProject": false,
+      "ownerOnly": false,
+      "projectOptional": true,
+      "requiresConfirmation": false,
+      "scopes": [
+        "projects:read",
+        "agent:ask"
+      ],
+      "summary": "Прочитать текст файла переписки",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
     },
     {
       "description": "Владелец удаляет участника и назначения; владельца удалить нельзя.",

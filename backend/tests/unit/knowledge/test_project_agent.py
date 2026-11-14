@@ -206,9 +206,17 @@ def build_service(*, semantic_available: bool = True):
     async def scope():
         yield db
 
+    async def current_task(_context, arguments):
+        current = next(record for record in tasks.search_ranked.return_value if record.id == arguments.task_id)
+        return {"source_id": f"task:{current.id}"}
+
+    query_tools = build_knowledge_tool_executor(ProjectQueryService(scope=scope))
     service = ProjectAgentService(
         scope=scope,
-        tools=build_knowledge_tool_executor(ProjectQueryService(scope=scope)),
+        tools=AgentToolExecutor([
+            *query_tools.tools.values(),
+            AgentTool("telos_get_task", "Перечитать текущую задачу", TaskInput, current_task),
+        ]),
         llm_client=llm_client,
         embedding_client=embedding_client,
         qdrant_client=qdrant_client,
@@ -260,7 +268,7 @@ async def test_smalltalk_does_not_load_project_data_or_start_write_intent():
 
 
 @pytest.mark.asyncio
-async def test_task_workflow_loads_sql_once_without_embeddings_or_write_intent():
+async def test_task_workflow_rechecks_selected_task_without_embeddings_or_write_intent():
     from pydantic_ai.messages import ModelResponse, ToolCallPart
     from pydantic_ai.models.function import FunctionModel
 
@@ -301,8 +309,8 @@ async def test_task_workflow_loads_sql_once_without_embeddings_or_write_intent()
 
     assert answer.sources[0].source_id == "task:7"
     assert step == 3
-    handler.assert_awaited_once()
-    db.sources.get_project_rows.assert_awaited_once()
+    assert handler.await_count == 2  # Первое чтение и повторный ACL перед карточкой.
+    assert db.sources.get_project_rows.await_count == 2  # База и актуальность выбранной карточки.
     db.sources.search.assert_awaited_once()
     clients.embedding_client.get_embedding.assert_not_awaited()
     clients.llm_client.get_structured_response.assert_not_awaited()
@@ -371,8 +379,12 @@ async def test_created_task_receives_a_handle_before_the_next_step_and_is_revali
         }
 
     handler = AsyncMock(side_effect=create)
+    read_task = AsyncMock(return_value={"source_id": "task:8"})
     service.tools = AgentToolExecutor(
-        [AgentTool("telos_create_task", "Создать задачу", TaskCreateInput, handler, mutating=True)]
+        [
+            AgentTool("telos_create_task", "Создать задачу", TaskCreateInput, handler, mutating=True),
+            AgentTool("telos_get_task", "Перечитать задачу", TaskInput, read_task),
+        ]
     )
 
     async def respond(*, schema, content, **_kwargs):
@@ -402,6 +414,8 @@ async def test_created_task_receives_a_handle_before_the_next_step_and_is_revali
     )
 
     handler.assert_awaited_once()
+    read_task.assert_awaited_once()
+    assert read_task.await_args.args[1].task_id == created.id
     assert answer.answer == ""
     assert [source.source_id for source in answer.sources] == ["task:8"]
     assert "Актуальный заголовок" in answer.sources[0].title

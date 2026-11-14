@@ -66,11 +66,13 @@ from src.core.app_state import (
 from src.core.config_logger import configure_logging
 from src.core.settings import get_settings
 from src.db.session import async_session_factory, engine
+from src.dependencies.chat_files import build_agent_chat_files_service
 from src.dependencies.file_processing import build_file_processing_worker
 from src.dependencies.scopes import build_api_key_usage_recorder
 from src.dependencies.services import build_agent_worker
 from src.dependencies.task_attention import build_task_attention_runtime
 from src.exceptions.clients import VectorStoreClientError
+from src.files.chat_worker import ChatFilePreparationWorker
 from src.knowledge.composition import build_knowledge_worker
 from src.knowledge.runtime import (
     build_knowledge_runtime,
@@ -131,6 +133,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[dict[str, object]]:
     file_worker_task = asyncio.create_task(
         file_worker.run(worker_stop), name="file-text-processor"
     )
+    chat_file_worker = ChatFilePreparationWorker(
+        files=build_agent_chat_files_service(session_factory=async_session_factory, settings=settings, vision=runtime.vision),
+        poll_seconds=files_settings.file_processing_poll_seconds,
+        concurrency=settings.agent.agent_concurrency,
+        cleanup_seconds=settings.chat.chat_cleanup_seconds,
+        retention_hours=settings.chat.chat_draft_retention_hours,
+    )
+    chat_file_task = asyncio.create_task(chat_file_worker.run(worker_stop), name="chat-file-preparation")
     worker_task: asyncio.Task | None = None
     if settings.knowledge.knowledge_enabled:
         try:
@@ -178,6 +188,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[dict[str, object]]:
         await attention_runtime.close()
         await chat_runtime.close()
         worker_stop.set()
+        chat_file_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await chat_file_task
         agent_task.cancel()
         with suppress(asyncio.CancelledError):
             await agent_task

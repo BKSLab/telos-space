@@ -41,6 +41,8 @@ from src.schemas.agent_conversations import (
 from src.schemas.agent_files import AgentFileSchema
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeChatMessageSchema
+from src.services.agent_chat_file_actions import initial_chat_files
+from src.services.agent_chat_files import AgentChatFilesService
 from src.services.agent_routing import AgentRoutingAnswer, AgentRoutingService
 from src.services.auth import ApiKeyGrant, Principal
 from src.services.board_selection import checked_board_selection, normalize_board_selection
@@ -91,12 +93,14 @@ class AgentConversationsService:
         llm_client: LlmClient,
         config: AgentConversationConfig,
         routing: AgentRoutingService | None = None,
+        chat_files: AgentChatFilesService | None = None,
     ) -> None:
         self.scope = scope
         self.agent = agent
         self.llm_client = llm_client
         self.config = config
         self.routing = routing
+        self.chat_files = chat_files
         # Память беседы к следующему вопросу готовится после ответа, пока
         # участник его читает: иначе её пересказ моделью ждал бы следующий вопрос.
         self._memory_tasks: dict[int, asyncio.Task[None]] = {}
@@ -490,6 +494,9 @@ class AgentConversationsService:
             message_id=message.id,
             run_id=message.run_id,
         )
+        uploaded_files = [file for item in [*reversed(recent), question] for file in item.files]
+        if self.chat_files is not None:
+            uploaded_files = await initial_chat_files(self.chat_files, execution)
         if project_id is None:
             answer = await self.agent.ask_personal(
                 question=question.content,
@@ -501,9 +508,7 @@ class AgentConversationsService:
                 page_context=page_context,
                 conversation_id=f"conversation:{conversation.id}",
                 on_progress=on_progress,
-                uploaded_files=[
-                    file for item in [*reversed(recent), question] for file in item.files
-                ],
+                uploaded_files=uploaded_files,
             )
             return answer, None
         answer = await self.agent.ask(
@@ -514,7 +519,7 @@ class AgentConversationsService:
             actor=actor,
             execution=execution,
             action_history=action_history,
-            uploaded_files=[file for item in [*reversed(recent), question] for file in item.files],
+            uploaded_files=uploaded_files,
             mode=ArisMode.WIDGET_PROJECT,
             extra_context={"page_context": page_context},
             conversation_id=f"conversation:{conversation.id}",

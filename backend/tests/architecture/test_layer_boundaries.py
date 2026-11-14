@@ -43,6 +43,7 @@ COMPOSITION_MODULES = {
     SRC / "dependencies" / "file_comments.py",
     SRC / "dependencies" / "document_catalog.py",
     SRC / "dependencies" / "agent_file_content.py",
+    SRC / "dependencies" / "chat_files.py",
     SRC / "mcp_server" / "services.py",
     SRC / "mcp_server" / "app.py",
     SRC / "knowledge" / "composition.py",

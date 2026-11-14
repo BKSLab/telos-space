@@ -15,6 +15,7 @@ from src.agent.aris import ArisMode
 from src.agent.context import AgentContextBudget
 from src.agent.runtime import ArisDeps, ArisRuntime, WriteGate
 from src.agent.tools import AgentToolContext
+from src.clients.vision import DisabledVisionCapability
 from src.core.app_state import RUNTIME_STATE_KEY, SESSION_FACTORY_STATE_KEY, SETTINGS_STATE_KEY
 from src.core.settings import get_settings
 from src.db.models import AgentToolRun, BoardShape, Task, TaskReport
@@ -196,7 +197,7 @@ async def test_personal_board_to_project_task_moves_and_report_search(agent_env,
         report = await session.scalar(select(TaskReport).where(TaskReport.task_id == task["id"]))
     assert len(runs) == 6 and all(run.status == "completed" for run in runs)
     assert report.author_id == 1 and report.body_md == body
-    context = TransportContext(state={RUNTIME_STATE_KEY: SimpleNamespace(), SETTINGS_STATE_KEY: settings,
+    context = TransportContext(state={RUNTIME_STATE_KEY: SimpleNamespace(vision=DisabledVisionCapability()), SETTINGS_STATE_KEY: settings,
         SESSION_FACTORY_STATE_KEY: env.factory}, headers={"Authorization": f"Bearer {secret}"})
     assert await read_project_knowledge(context, "SMOKE", search) == hits
     source = await read_project_knowledge(context, "SMOKE", KnowledgeReadRequest(

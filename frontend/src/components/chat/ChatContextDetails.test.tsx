@@ -143,3 +143,19 @@ it.each([403, 404])("скрывает прежние данные докумен
     fireEvent.click(screen.getByRole("button", { name: "Повторить загрузку документа" }));
     await screen.findByRole("heading", { name: "Текущий документ" });
 });
+
+it.each([403, 404])("автовыбор не раскрывает кэш задачи до повторной проверки доступа (%s)", async status => {
+    const state = mockApi();
+    state.failures.set("/api/v1/tasks/5", status);
+    mount(target("task"), { seed: client => client.setQueryData([...queryKeys.task(5), "chat-preview", 1], {
+        ...task, title: "Закрытая задача из кэша", description_md: "Закрытое описание из кэша",
+    }) });
+    expect(screen.queryByText("Закрытая задача из кэша")).toBeNull();
+    expect(screen.queryByText("Закрытое описание из кэша")).toBeNull();
+    await screen.findByRole("alert");
+    expect(screen.queryByText(/Внутреннее пояснение/)).toBeNull();
+    expect(state.calls.some(call => call.url.pathname.endsWith("/stages"))).toBe(false);
+    state.failures.clear();
+    fireEvent.click(screen.getByRole("button", { name: "Повторить загрузку" }));
+    expect(await screen.findByRole("heading", { name: task.title })).toBeTruthy();
+});

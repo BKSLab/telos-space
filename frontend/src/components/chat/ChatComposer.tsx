@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { AtSign, CornerUpLeft, Hash, Loader2, Paperclip, Send, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { chatAuthorName, chatEntityKey, chatKeys, chatPath, type ChatAttachment, type ChatEntity, type ChatMessage, type ChatMessageBody, type ChatUser } from "@/lib/projectChat";
@@ -10,6 +10,8 @@ import { emptyChatDraft, useChatUiStore, type ChatDraft } from "@/stores/chat";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { newUuid } from "@/lib/uuid";
+import { draftUploadProblem, useDraftUploads } from "@/lib/useDraftUploads";
+import { DraftUploadList } from "@/components/files/DraftUploadList";
 import { isTouchChatInput, shouldSubmitChat, useChatInput } from "./useChatInput";
 import "./chat.css";
 
@@ -30,10 +32,10 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
     const [selection, setSelection] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const sending = useChatUiStore((state) => state.busy[`${sessionKey}:send`]) ?? false;
-    const uploading = useChatUiStore((state) => state.busy[`${sessionKey}:upload`]) ?? false;
+    const uploads = useDraftUploads<ChatAttachment>(draftKey);
+    const uploading = uploads.entries.some(entry => entry.status === "uploading");
     const setBusy = useChatUiStore((state) => state.setBusy);
     const setSending = (active: boolean) => setBusy(`${sessionKey}:send`, active);
-    const setUploading = (active: boolean) => setBusy(`${sessionKey}:upload`, active);
     const input = useChatInput(draft.content);
     const fileInput = useRef<HTMLInputElement>(null);
     const lastTyping = useRef(0);
@@ -53,24 +55,28 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
         const next = { ...patch, clientMessageId: newUuid() };
         updateStored(draftKey, { ...draft, ...next });
     };
-    const uploadMutation = useMutation({ mutationFn: (file: File) => { const data = new FormData(); data.append("file", file); return api.postForm<ChatAttachment>(`${chatPath(chat.projectId)}/attachments`, data); } });
-    const upload = async (files: FileList | File[]) => {
-        if (editing || !chat.canWrite || sending || useChatUiStore.getState().busy[`${sessionKey}:upload`]) return;
+    const upload = (files: FileList | File[]) => {
+        if (editing || !chat.canWrite || sending) return;
         setError(null);
         const selected = [...files];
-        if (draft.attachments.length + selected.length > 5) { setError("В одном сообщении можно отправить до 5 файлов."); return; }
-        if (selected.some((file) => file.size > 10 * 1024 * 1024 || !file.size)) { setError("Нужны непустые файлы размером до 10 МБ."); return; }
-        setUploading(true);
-        try {
-            for (const file of selected) {
-                const result = await uploadMutation.mutateAsync(file);
+        const problem = draftUploadProblem(selected, draft.attachments.length + uploads.count);
+        if (problem) { setError(problem); return; }
+        const path = `${chatPath(chat.projectId)}/attachments`;
+        uploads.add(selected, {
+            upload: file => { const data = new FormData(); data.append("file", file); return api.postForm<ChatAttachment>(path, data); },
+            attach: result => {
                 const current = useChatUiStore.getState().drafts[draftKey] ?? draft;
                 updateStored(draftKey, { ...current, attachments: [...current.attachments, result], clientMessageId: newUuid() });
-            }
-        } catch (failure) { setError((failure as Error).message); } finally { setUploading(false); }
+            },
+            discard: result => api.delete(`${path}/${result.id}`),
+        });
     };
     const removeFile = async (file: ChatAttachment) => {
-        try { await api.delete(`${chatPath(chat.projectId)}/attachments/${file.id}`); update({ attachments: draft.attachments.filter((item) => item.id !== file.id) }); }
+        try { await uploads.remove(file.id, async () => {
+            await api.delete(`${chatPath(chat.projectId)}/attachments/${file.id}`);
+            const current = useChatUiStore.getState().drafts[draftKey];
+            if (current) updateStored(draftKey, { attachments: current.attachments.filter(item => item.id !== file.id), clientMessageId: newUuid() });
+        }); }
         catch (failure) { setError((failure as Error).message); }
     };
     const choose = (choice: ChatUser | ChatEntity) => {
@@ -103,7 +109,7 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
         } else chat.signalTyping(false);
     };
     const submit = async () => {
-        if (disabled || uploading || useChatUiStore.getState().busy[`${sessionKey}:send`] || chat.state !== "connected" || !(draft.content.trim() || draft.entities.length || draft.attachments.length)) return;
+        if (disabled || uploads.isBlocked() || useChatUiStore.getState().busy[`${sessionKey}:send`] || chat.state !== "connected" || !(draft.content.trim() || draft.entities.length || draft.attachments.length)) return;
         setSending(true); setError(null); setPicker(null); chat.signalTyping(false);
         const body: ChatMessageBody = { content: draft.content.trim(), mentions: draft.mentions, entities: draft.entities.map(({ entity_type, entity_id, document_ref }) => entity_type === "DOCUMENT" ? ({ entity_type, entity_id: null, document_ref }) : ({ entity_type, entity_id })), attachment_ids: draft.attachments.map((file) => file.id) };
         try {
@@ -151,8 +157,9 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
             {(draft.entities.length > 0 || draft.mentions.length > 0 || draft.attachments.length > 0) && <div aria-label="Вложения и ссылки сообщения" className="chat-draft-items flex flex-wrap gap-2 px-4 pt-3">
                 {draft.mentions.map((id) => <span key={`mention-${id}`} className="chat-draft-chip flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/8 px-2 py-1 text-[11px] text-accent"><span className="truncate">@{chat.info?.members.find((user) => user.id === id)?.display_name ?? "Участник"}</span><button type="button" aria-label="Убрать упоминание" disabled={disabled} onClick={() => update({ mentions: draft.mentions.filter((value) => value !== id) })}><X size={11} /></button></span>)}
                 {draft.entities.map((entity) => <span key={chatEntityKey(entity)} className="chat-draft-chip control-surface flex max-w-full items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[11px] text-secondary"><Hash size={11} className="shrink-0" /><span className="max-w-60 truncate">{entity.title}</span><button type="button" aria-label={`Убрать ссылку ${entity.title}`} disabled={disabled} onClick={() => update({ entities: draft.entities.filter((ref) => ref !== entity) })}><X size={11} /></button></span>)}
-                {draft.attachments.map(file => <ChatFileCard key={file.id} file={file} projectId={chat.projectId} onRemove={!editing ? () => void removeFile(file) : undefined} removeDisabled={disabled || uploading} />)}
+                {draft.attachments.map(file => <ChatFileCard key={file.id} file={file} projectId={chat.projectId} onRemove={!editing ? () => void removeFile(file) : undefined} removeDisabled={disabled || uploads.removing} />)}
             </div>}
+            <div className="px-4"><DraftUploadList entries={uploads.entries} onCancel={uploads.cancel} onRetry={uploads.retry} /></div>
             <textarea ref={input} id="project-chat-composer" aria-label={editing ? "Редактирование сообщения" : "Сообщение проекту"} aria-controls={picker ? "chat-picker" : undefined} aria-expanded={Boolean(picker)} aria-activedescendant={picker && choices.length ? `chat-choice-${selection}` : undefined} aria-autocomplete="list" role="combobox" aria-describedby={!editing && chat.canWrite ? "chat-composer-hint chat-composer-agent-hint" : "chat-composer-hint"} rows={2} maxLength={8000} value={draft.content} disabled={disabled} onChange={(event) => changeText(event.target.value, event.target.selectionStart)} onKeyDown={keyDown} onPaste={(event) => { if (event.clipboardData.files.length && !editing) { event.preventDefault(); void upload(event.clipboardData.files); } }} placeholder={chat.canWrite ? "Сообщение команде…  @ участник, # объект, Арис, …" : "Этот токен разрешает только чтение"} className="chat-input block min-h-24 w-full resize-none bg-transparent px-4 pt-4 pb-2 text-[14px] leading-relaxed text-primary outline-none placeholder:text-muted disabled:opacity-50" />
             {!editing && chat.canWrite && <p id="chat-composer-agent-hint" className={cn("chat-composer-hint px-4 pb-3 text-[11px] leading-relaxed", isForAris(draft.content) ? "text-ai-blue" : "text-muted")}>{isForAris(draft.content) ? "Арис — проектный менеджер — ответит здесь, в чате проекта" : ARIS_CHAT_HINT}</p>}
             {draft.content.length > 7000 && <p className="px-3 pb-1 text-right font-mono text-[10px] text-muted sm:hidden">{draft.content.length}/8000</p>}
@@ -162,7 +169,7 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
                 <IconButton label="Добавить ссылку на объект" disabled={disabled} onClick={() => openPicker("#")}><Hash size={15} /></IconButton>
                 <span id="chat-composer-hint" className="chat-keyboard-hint ml-2 hidden flex-1 text-[10px] text-muted sm:block">Enter — {editing ? "сохранить" : "отправить"} · Shift+Enter — новая строка</span>
                 <span className="ml-auto mr-2 hidden font-mono text-[10px] text-muted sm:inline">{draft.content.length > 7000 ? `${draft.content.length}/8000` : ""}</span>
-                <Button variant="primary" size="sm" className="ml-auto" disabled={disabled || uploading || chat.state !== "connected" || !(draft.content.trim() || draft.entities.length || draft.attachments.length)} icon={sending ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" /> : <Send size={13} />} onClick={() => void submit()}>{editing ? "Сохранить" : "Отправить"}</Button>
+                <Button variant="primary" size="sm" className="ml-auto" disabled={disabled || uploads.blocked || chat.state !== "connected" || !(draft.content.trim() || draft.entities.length || draft.attachments.length)} icon={sending ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" /> : <Send size={13} />} onClick={() => void submit()}>{editing ? "Сохранить" : "Отправить"}</Button>
             </div>
         </div>
         {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}

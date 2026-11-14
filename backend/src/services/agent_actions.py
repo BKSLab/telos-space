@@ -36,6 +36,7 @@ from src.schemas.agent_tools import (
     AgentToolRunSchema,
 )
 from src.services.agent_action_helpers import checked_task
+from src.services.agent_chat_files import AgentChatFilesService
 from src.services.agent_tool_scope import AgentProjectToolScope, AgentProjectToolScopeFactory
 from src.services.auth import Principal
 from src.services.tasks import user_display_name
@@ -62,8 +63,10 @@ class AgentActionsService:
         scope: AgentProjectToolScopeFactory,
         actions: Sequence[ProjectAction],
         confirm_ttl: timedelta = DEFAULT_CONFIRM_TTL,
+        chat_files: AgentChatFilesService | None = None,
     ) -> None:
         self.scope = scope
+        self.chat_files = chat_files
         self.confirm_ttl = confirm_ttl
         self.actions = {action.name: action for action in actions}
         if len(self.actions) != len(actions):
@@ -107,6 +110,12 @@ class AgentActionsService:
         if not definition.needs_project:
             # Личное действие не живёт в проекте, даже если страница указывала на проект.
             context = replace(context, project_id=None)
+        if definition.chat_file_handler is not None:
+            if self.chat_files is None:
+                raise AgentToolAccessError("Чтение файлов чата не подключено.")
+            # Сервис заново проверяет активный ход, пользователя и точный чат.
+            # Внешний UnitOfWork не занимает соединение во время ожидания подготовки.
+            return await definition.chat_file_handler(self.chat_files, context, parameters)
         async with self._scope() as db:
             actor = await self._authorize(db, context, definition)
             if not definition.mutating:

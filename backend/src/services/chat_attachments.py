@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+from src.agent.wakeup import wake_agent_worker
 from src.exceptions.project_chats import (
     ChatConflictError,
     ChatNotFoundError,
@@ -94,6 +95,7 @@ class ChatAttachmentsService:
                 )
                 result = ChatAttachmentView.model_validate(row)
                 await db.unit_of_work.commit()
+                wake_agent_worker()
                 return result
         except Exception as error:
             if key:

@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -75,9 +76,11 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         return runtime
 
     settings = SimpleNamespace(
-        app=SimpleNamespace(app_name="Test app", mcp_path="/mcp", uploads_path="uploads"),
+        app=SimpleNamespace(app_name="Test app", mcp_path="/mcp", uploads_path=Path("uploads")),
         knowledge=SimpleNamespace(knowledge_enabled=True),
         file_processing=FileProcessingSettings(_env_file=None),
+        agent=SimpleNamespace(agent_concurrency=2),
+        chat=SimpleNamespace(chat_cleanup_seconds=60, chat_draft_retention_hours=24),
     )
     close_runtime = AsyncMock()
     dispose_engine = AsyncMock()
@@ -106,6 +109,25 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(main_module, "build_knowledge_worker", build_worker)
     agent_started = asyncio.Event()
     files_started = asyncio.Event()
+    chat_files_started = asyncio.Event()
+    chat_files_stopped = asyncio.Event()
+    chat_files = object()
+    build_chat_files = Mock(return_value=chat_files)
+    chat_file_options = {}
+
+    class FakeChatFileWorker:
+        def __init__(self, **kwargs):
+            chat_file_options.update(kwargs)
+
+        async def run(self, stop_event):
+            chat_files_started.set()
+            try:
+                await stop_event.wait()
+            finally:
+                chat_files_stopped.set()
+
+    monkeypatch.setattr(main_module, "build_agent_chat_files_service", build_chat_files)
+    monkeypatch.setattr(main_module, "ChatFilePreparationWorker", FakeChatFileWorker)
 
     class FakeFileWorker:
         async def run(self, stop_event):
@@ -148,6 +170,11 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     return SimpleNamespace(
         agent_worker_started=agent_started,
         file_worker_started=files_started,
+        chat_file_worker_started=chat_files_started,
+        chat_file_worker_stopped=chat_files_stopped,
+        build_chat_files=build_chat_files,
+        chat_files=chat_files,
+        chat_file_options=chat_file_options,
         db_session=db_session,
         runtime=runtime,
         settings=settings,
@@ -167,6 +194,7 @@ async def test_lifespan_creates_and_closes_resources_exactly_once(
     """Каждый сетевой ресурс создаётся и закрывается ровно один раз."""
     async with main_module.lifespan(FastAPI()):
         await asyncio.wait_for(composition.worker_started.wait(), timeout=1)
+        await asyncio.wait_for(composition.chat_file_worker_started.wait(), timeout=1)
 
     assert composition.created.http == 1
     assert composition.created.qdrant == 1
@@ -176,6 +204,7 @@ async def test_lifespan_creates_and_closes_resources_exactly_once(
     composition.dispose_engine.assert_awaited_once_with()
     composition.attention_runtime.start.assert_awaited_once_with()
     composition.attention_runtime.close.assert_awaited_once_with()
+    assert composition.chat_file_worker_stopped.is_set()
 
 
 async def test_lifespan_gives_the_worker_its_dependencies_explicitly(
@@ -192,6 +221,18 @@ async def test_lifespan_gives_the_worker_its_dependencies_explicitly(
     assert composition.worker_built.runtime is composition.runtime
     assert composition.worker_built.settings is composition.settings
     assert composition.worker_built.session_factory is not None
+    composition.build_chat_files.assert_called_once_with(
+        session_factory=composition.worker_built.session_factory,
+        settings=composition.settings,
+        vision=composition.runtime.vision,
+    )
+    assert composition.chat_file_options == {
+        "files": composition.chat_files,
+        "poll_seconds": composition.settings.file_processing.file_processing_poll_seconds,
+        "concurrency": 2,
+        "cleanup_seconds": 60,
+        "retention_hours": 24,
+    }
 
 
 async def test_lifespan_publishes_resources_in_request_state(
@@ -271,6 +312,7 @@ async def test_lifespan_does_not_start_the_worker_when_knowledge_is_disabled(
     async with main_module.lifespan(FastAPI()):
         await asyncio.wait_for(composition.agent_worker_started.wait(), timeout=1)
         await asyncio.wait_for(composition.file_worker_started.wait(), timeout=1)
+        await asyncio.wait_for(composition.chat_file_worker_started.wait(), timeout=1)
 
     assert composition.worker_started.is_set() is False
     assert composition.worker_built.runtime is None
@@ -282,6 +324,7 @@ async def test_file_processing_starts_before_qdrant_backfill(composition):
     """Даже ожидающий Qdrant не задерживает независимую обработку файлов."""
     async def backfill():
         await asyncio.wait_for(composition.file_worker_started.wait(), timeout=1)
+        await asyncio.wait_for(composition.chat_file_worker_started.wait(), timeout=1)
 
     composition.runtime.qdrant_client.backfill_payload_indexes.side_effect = backfill
     async with main_module.lifespan(FastAPI()):

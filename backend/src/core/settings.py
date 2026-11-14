@@ -39,6 +39,22 @@ class AppSettings(SettingsBase):
     project_file_max_size: int = Field(
         default=10 * 1024 * 1024, ge=1, description="Максимальный размер файла проекта в байтах."
     )
+    chat_file_text_max_chars: int = Field(
+        default=1_000_000, ge=8000, le=10_000_000,
+        description="Предел кэша извлечённого текста файла переписки; усечение помечается явно.",
+    )
+    chat_file_text_lease_seconds: int = Field(
+        default=180, ge=30, le=3600,
+        description="Lease извлечения файла переписки; продлевается каждые треть срока.",
+    )
+    chat_file_text_poll_seconds: float = Field(
+        default=1.0, gt=0, le=30,
+        description="Период короткой проверки отмены и продления lease извлечения.",
+    )
+    chat_file_text_wait_seconds: float = Field(
+        default=120, ge=0, le=300,
+        description="Предел ожидания готового кэша инструментом Ариса; статус service.read_text остаётся немедленным.",
+    )
     app_public_url: str = ""
 
 

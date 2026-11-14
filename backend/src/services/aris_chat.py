@@ -28,6 +28,8 @@ from src.exceptions.ai import AiProviderError
 from src.exceptions.base import RepositoryError
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeChatMessageSchema
+from src.services.agent_chat_file_actions import initial_chat_files
+from src.services.agent_chat_files import AgentChatFilesService
 from src.services.db_scope import ArisChatScope, ArisChatScopeFactory
 from src.services.project_agent import ProjectAgentService
 from src.services.tasks import user_display_name
@@ -53,11 +55,13 @@ class ArisChatService:
     """Исполняет ходы Ариса в чатах проектов; БД не удерживается во время вызова модели."""
 
     def __init__(
-        self, *, scope: ArisChatScopeFactory, agent: ProjectAgentService, config: ArisChatConfig
+        self, *, scope: ArisChatScopeFactory, agent: ProjectAgentService, config: ArisChatConfig,
+        chat_files: AgentChatFilesService | None = None,
     ) -> None:
         self.scope = scope
         self.agent = agent
         self.config = config
+        self.chat_files = chat_files
 
     async def process_next(self) -> bool:
         """Выполняет один ход или завершает ошибкой одну прерванную попытку.
@@ -157,18 +161,20 @@ class ArisChatService:
                 "author": self._author(quoted, names),
                 "content": quoted.content[:HISTORY_MESSAGE_CHARS],
             }
+        execution = AgentToolContext(
+            project_id=turn.project_id, user_id=turn.requester_id,
+            can_write=grant.can_write, chat_turn_id=turn.id, run_id=turn.run_id,
+        )
+        uploaded_files = []
+        if self.chat_files is not None:
+            uploaded_files = await initial_chat_files(self.chat_files, execution)
         return await self.agent.ask(
             project_id=turn.project_id,
             question=strip_address(request.content),
             history=history,
             actor=actor,
-            execution=AgentToolContext(
-                project_id=turn.project_id,
-                user_id=turn.requester_id,
-                can_write=grant.can_write,
-                chat_turn_id=turn.id,
-                run_id=turn.run_id,
-            ),
+            execution=execution,
+            uploaded_files=uploaded_files,
             action_history=action_history,
             mode=ArisMode.PROJECT_CHAT,
             extra_context=extra,

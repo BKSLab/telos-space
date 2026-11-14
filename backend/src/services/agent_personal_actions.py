@@ -24,9 +24,7 @@ def _compact(item: dict) -> dict:
 def _task_payload(task) -> dict:
     data = task.model_dump(mode="json")
     result = {"task": data}
-    if task.project_id is not None:
-        # source_id понимает только каталог проекта: карточку покажем в проектном режиме.
-        result["source_id"] = f"task:{task.id}"
+    result["source_id"] = f"task:{task.id}"
     return result
 
 

@@ -82,10 +82,13 @@ async def tool_context(
     authorization = _authorization_header(context)
     runtime, settings, session_factory = _app_resources(context)
     async with session_factory() as session:
+        from src.dependencies.chat_files import build_agent_chat_files_service
+
         services = build_tool_services(
             session=session,
             session_factory=session_factory,
             settings=settings,
+            chat_files=build_agent_chat_files_service(session_factory=session_factory, settings=settings, vision=runtime.vision),
         )
         try:
             principal = await services.auth.resolve_principal(

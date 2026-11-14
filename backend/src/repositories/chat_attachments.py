@@ -1,8 +1,9 @@
 """Загрузки и одноразовая привязка файлов к сообщению."""
 
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import delete, func, insert, literal, select, update
 
 from src.db.models.chat_attachments import ChatAttachment
+from src.db.models.chat_file_texts import ChatFileText
 from src.repositories.chat_base import ChatRepository
 
 
@@ -50,9 +51,22 @@ class ChatAttachmentsRepository(ChatRepository):
         ).scalar_one()
 
     async def save(self, data: dict):
-        """Сохраняет метаданные без выдачи storage key клиенту."""
+        """Создаёт оригинал и durable очередь подготовки одним statement."""
+        saved = (
+            insert(ChatAttachment)
+            .values(**data)
+            .returning(*ChatAttachment.__table__.c)
+            .cte("saved_file")
+        )
+        queued = (
+            insert(ChatFileText)
+            .from_select(["chat_attachment_id", "status"], select(saved.c.id, literal("pending")))
+            .cte("queued_text")
+        )
         return (
-            await self._execute(insert(ChatAttachment).values(**data).returning(ChatAttachment))
+            await self._execute(
+                select(ChatAttachment).from_statement(select(saved).add_cte(queued))
+            )
         ).scalar_one()
 
     async def bind(self, file_ids: list, message_id: int) -> None:

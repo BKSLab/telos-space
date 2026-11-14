@@ -24,9 +24,34 @@ describe("контекст из карточек переписки", () => {
         expect(entityContextTarget({ ...entity, available: false })).toBeNull();
         expect(entityContextTarget({ ...entity, entity_id: -1 })).toBeNull();
         expect(sourceContextTarget(source(1.5))).toBeNull();
-        expect(sourceContextTarget(source(5, "task_report"))).toBeNull();
         expect(sourceContextTarget(source(5, "risk"))).toBeNull();
         expect(sourceContextTarget({ ...source(7, "document"), document_ref: null })).toBeNull();
+    });
+    it.each(["comment", "task_report", "activity"] as const)("открывает задачу источника %s по server task_id, сохраняя релевантный фрагмент", type => {
+        const related = { ...source(900, type), task_id: 42, excerpt: "Подтверждённый контекст задачи" };
+        expect(sourceContextTarget(related)).toEqual({ type: "task", id: 42, title: "Объект 900", excerpt: related.excerpt });
+        expect(sourceContextTarget({ ...related, task_id: null })).toBeNull();
+        expect(sourceContextTarget({ ...related, task_id: -1 })).toBeNull();
+        expect(suggestedChatContext([answer(1, [source(42), related])])?.target).toMatchObject({ type: "task", id: 42, excerpt: related.excerpt });
+    });
+    it("выбирает единственную доступную TASK entity завершённого ответа, когда sources не заданы", () => {
+        const completed = { ...answer(1, []), entities: [entity, entity] };
+        expect(suggestedChatContext([completed])?.target).toEqual({ type: "task", id: 42, title: "Задача 42" });
+        expect(suggestedChatContext([{ ...completed, agent: { ...completed.agent!, status: "processing" } }])).toBeNull();
+        expect(suggestedChatContext([{ ...completed, entities: [{ ...entity, available: false }] }])).toBeNull();
+        expect(suggestedChatContext([{ ...completed, entities: [entity, { ...entity, entity_id: 43 }] }])).toBeNull();
+        expect(suggestedChatContext([answer(2, [])])).toBeNull();
+        expect(suggestedChatContext([{ ...completed, content: "Задача DEMO-99 готова", entities: [] }])).toBeNull();
+    });
+    it("источники и основной документ имеют приоритет над fallback TASK entity", () => {
+        const document = source(9, "document");
+        expect(suggestedChatContext([{ ...answer(1, [document]), entities: [entity] }])?.target).toMatchObject({ type: "document", documentRef: "opaque-document-9" });
+        expect(suggestedChatContext([{ ...answer(2, [source(7), { ...document, is_primary: true }]), entities: [entity] }])?.target).toMatchObject({ type: "document", documentRef: "opaque-document-9" });
+    });
+    it("основные источники одной задачи не создают ложную неоднозначность", () => {
+        const task = { ...source(42), is_primary: true };
+        const comment = { ...source(9, "comment"), task_id: 42, is_primary: true, excerpt: "Важное уточнение" };
+        expect(suggestedChatContext([answer(1, [task, comment])])?.target).toMatchObject({ type: "task", id: 42, excerpt: comment.excerpt });
     });
     it("объединяет повторы из источников и ссылок, исключая удалённые и локальные сообщения", () => {
         const history = [answer(1, [source(42)]), { ...answer(2, []), entities: [entity] },

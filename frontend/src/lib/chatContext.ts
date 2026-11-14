@@ -8,14 +8,18 @@ export type ChatContextTarget =
 
 export const CHAT_CONTEXT_LABELS = { task: "Задача", document: "Документ" };
 export const chatContextKey = (target: ChatContextTarget) => `${target.type}:${target.type === "document" ? target.documentRef : target.id}`;
-const validId = (id: number | null) => id !== null && Number.isSafeInteger(id) && id > 0;
+const validId = (id: number | null): id is number => id !== null && Number.isSafeInteger(id) && id > 0;
+const TASK_SOURCE_TYPES = new Set(["task", "comment", "task_report", "activity"]);
+const DOCUMENT_SOURCE_TYPES = new Set(["document", "project_file", "attachment"]);
 
 /** IDs come from server-hydrated cards, never from generated prose. */
 export function sourceContextTarget(source: KnowledgeSource): ChatContextTarget | null {
-    if (!["task", "document", "project_file", "attachment"].includes(source.entity_type)) return null;
-    const id = source.entity_type === "task" ? source.task_id ?? source.entity_id : source.entity_id;
-    if (!validId(id)) return null;
-    if (source.entity_type === "task") return { type: "task", id, title: source.title, excerpt: source.excerpt };
+    if (TASK_SOURCE_TYPES.has(source.entity_type)) {
+        // Related sources carry their own entity_id; only the server's task_id identifies the task.
+        const id = source.entity_type === "task" ? source.task_id ?? source.entity_id : source.task_id;
+        return validId(id) ? { type: "task", id, title: source.title, excerpt: source.excerpt } : null;
+    }
+    if (!DOCUMENT_SOURCE_TYPES.has(source.entity_type) || !validId(source.entity_id)) return null;
     if (!source.document_ref) return null;
     return { type: "document", title: source.title, documentRef: source.document_ref, fragment: source.reference };
 }
@@ -52,11 +56,19 @@ export function suggestedChatContext(messages: ChatMessage[]): { key: string; ta
     for (const message of [...messages].reverse()) {
         if (message.deleted_at || message.delivery || message.agent?.status !== "completed") continue;
         const targets = new Map<string, ChatContextTarget>();
-        const primary = message.agent.sources.filter((source) => source.is_primary).map(sourceContextTarget).filter((target): target is ChatContextTarget => target !== null);
-        if (primary.length === 1) return { key: `${message.id}:${message.revision}`, target: primary[0] };
+        const primary = new Map<string, ChatContextTarget>();
+        for (const source of message.agent.sources.filter(source => source.is_primary)) {
+            const target = sourceContextTarget(source);
+            if (target) primary.set(chatContextKey(target), target);
+        }
+        if (primary.size === 1) return { key: `${message.id}:${message.revision}`, target: [...primary.values()][0] };
         for (const source of message.agent.sources) {
             const target = sourceContextTarget(source);
             if (target) targets.set(chatContextKey(target), target);
+        }
+        if (!targets.size) for (const entity of message.entities) {
+            const target = entityContextTarget(entity);
+            if (target?.type === "task") targets.set(chatContextKey(target), target);
         }
         if (targets.size === 1) return { key: `${message.id}:${message.revision}`, target: [...targets.values()][0] };
     }

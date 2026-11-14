@@ -1,9 +1,11 @@
-import { useEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, Eye, Paperclip, Plus, Send, X } from "lucide-react";
 import { AgentFileList } from "@/components/files/AgentFileList";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import type { AgentMessage, Project, Task } from "@/lib/types";
+import type { AgentFile, AgentMessage, Project, Task } from "@/lib/types";
+import { draftUploadProblem, useDraftUploads } from "@/lib/useDraftUploads";
+import { DraftUploadList } from "@/components/files/DraftUploadList";
 import { useArisConversations } from "@/lib/useArisConversations";
 import { describePageContext, ARIS_NAME, ARIS_PERSONA } from "@/lib/aris";
 import { useArisPageContext } from "@/lib/useArisPageContext";
@@ -38,17 +40,25 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
     const firstId = conversations[0]?.id;
     // Текущий диалог — первый в списке сервера, пока пользователь не выбрал другой.
     const conversationId = remembered ?? firstId ?? null;
-    useEffect(() => { if (remembered == null && firstId != null) select(userId, firstId); }, [remembered, firstId, select, userId]);
     const messages = chat.messages.data?.pages.slice().reverse().flatMap((page) => page.items) ?? [];
     const draftKey = `${userId}:${conversationId ?? "new"}`;
     const draft = useArisWidgetStore((state) => state.drafts[draftKey]);
     const question = draft?.content ?? "";
     const selectedFiles = draft?.files ?? [];
+    const uploads = useDraftUploads<{ file: AgentFile; conversationId: number; key: string }>(draftKey);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+    useEffect(() => {
+        if (remembered != null || firstId == null || uploads.blocked) return;
+        const key = `${userId}:new`;
+        const current = useArisWidgetStore.getState().drafts[key];
+        if (current) { updateDraft(`${userId}:${firstId}`, current); clearDraft(key, current.requestId); }
+        select(userId, firstId);
+    }, [remembered, firstId, uploads.blocked, select, userId, updateDraft, clearDraft]);
     const busy = messages.some((message) => message.status === "queued" || message.status === "processing");
     const sending = chat.mutating;
     const sendingRef = useRef(false);
     const loading = chat.conversations.isPending || (conversationId != null && chat.messages.isPending);
-    const chatError = chat.conversations.error || chat.messages.error || chat.create.error || chat.send.error || chat.retry.error || chat.decide.error || chat.upload.error || chat.removeUpload.error;
+    const chatError = chat.conversations.error || chat.messages.error || chat.create.error || chat.send.error || chat.retry.error || chat.decide.error;
     const lastMessage = messages.at(-1);
     const panel = useRef<HTMLElement>(null);
     const input = useChatInput(question);
@@ -57,6 +67,7 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
     useEffect(() => { if (!isTouchChatInput()) input.current?.focus(); }, [input]);
 
     function resetErrors() {
+        setUploadError(null);
         chat.send.reset(); chat.retry.reset(); chat.decide.reset(); chat.upload.reset(); chat.removeUpload.reset(); chat.create.reset();
     }
     function choose(id: number) { select(userId, id); resetErrors(); }
@@ -70,7 +81,7 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
 
     async function submit(value = question) {
         const normalized = value.trim();
-        if (normalized.length < 2 || sending || sendingRef.current || busy || loading || chat.messages.isError) return;
+        if (normalized.length < 2 || sending || sendingRef.current || uploads.isBlocked() || busy || loading || chat.messages.isError) return;
         sendingRef.current = true;
         scrollToLatest();
         const requestId = draft?.content.trim() === normalized ? draft.requestId : newUuid();
@@ -94,26 +105,41 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
         try { choose((await chat.create.mutateAsync()).id); } catch { /* Ошибка показывается над полем ввода. */ } finally { sendingRef.current = false; }
     }
 
-    async function uploadFiles(files: File[]) {
+    function uploadFiles(files: File[]) {
         if (sending || sendingRef.current || busy || loading) return;
-        sendingRef.current = true;
-        try {
-            const id = await ensureConversation();
-            const key = `${userId}:${id}`;
-            if (key !== draftKey) updateDraft(key, { content: question, files: selectedFiles });
-            for (const file of files.slice(0, 5 - selectedFiles.length)) {
-                const uploaded = await chat.upload.mutateAsync({ id, file });
-                updateDraft(key, { files: [...(useArisWidgetStore.getState().drafts[key]?.files ?? []), uploaded] });
-            }
-        } catch { /* Загруженные файлы остаются, ошибка — над полем ввода. */ } finally { sendingRef.current = false; }
+        const problem = draftUploadProblem(files, selectedFiles.length + uploads.count);
+        setUploadError(problem);
+        if (problem) return;
+        let conversation: Promise<number> | undefined;
+        let moved = false;
+        uploads.add(files, {
+            upload: async (file, operation) => {
+                const id = await (conversation ??= (conversationId == null ? chat.create.mutateAsync().then(value => value.id) : Promise.resolve(conversationId))
+                    .catch(cause => { conversation = undefined; throw cause; }));
+                if (operation.cancelled()) throw new Error("Загрузка отменена");
+                const key = `${userId}:${id}`;
+                if (key !== draftKey && !moved) {
+                    moved = true; operation.adoptScope(key);
+                    const current = useArisWidgetStore.getState().drafts[draftKey];
+                    if (current) { updateDraft(key, current); clearDraft(draftKey, current.requestId); }
+                    select(userId, id);
+                }
+                return { file: await chat.upload.mutateAsync({ id, file }), conversationId: id, key };
+            },
+            attach: item => updateDraft(item.key, { files: [...(useArisWidgetStore.getState().drafts[item.key]?.files ?? []), item.file] }),
+            discard: item => api.delete(`${endpoints.arisFiles(item.conversationId)}/${item.file.id}`),
+        });
     }
 
     async function removeFile(fileId: string) {
         if (conversationId == null || sending || busy) return;
         try {
-            await chat.removeUpload.mutateAsync({ id: conversationId, fileId });
-            updateDraft(draftKey, { files: (useArisWidgetStore.getState().drafts[draftKey]?.files ?? []).filter((file) => file.id !== fileId) });
-        } catch { /* Ошибка показывается над полем ввода. */ }
+            await uploads.remove(fileId, async () => {
+                await chat.removeUpload.mutateAsync({ id: conversationId, fileId });
+                const current = useArisWidgetStore.getState().drafts[draftKey];
+                if (current) updateDraft(draftKey, { files: current.files.filter(file => file.id !== fileId) });
+            });
+        } catch (cause) { setUploadError((cause as Error).message); }
     }
 
     function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -213,16 +239,18 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
 
         <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }} className="chat-personal-composer shrink-0 border-t border-line-subtle px-3 py-2.5">
             {chatError && <ErrorMessage title="Арис сейчас недоступен" message={(chatError as Error).message} />}
-            {selectedFiles.length > 0 && conversationId !== null && <div aria-label="Файлы для отправки" className="chat-draft-items mb-2 flex"><AgentFileList files={selectedFiles} conversationId={conversationId} onRemove={id => void removeFile(id)} removeDisabled={sending || busy} /></div>}
+            {uploadError && <p role="alert" className="mb-2 text-xs text-danger">{uploadError}</p>}
+            <DraftUploadList entries={uploads.entries} onCancel={uploads.cancel} onRetry={uploads.retry} />
+            {selectedFiles.length > 0 && conversationId !== null && <div aria-label="Файлы для отправки" className="chat-draft-items mb-2 flex"><AgentFileList files={selectedFiles} conversationId={conversationId} onRemove={id => void removeFile(id)} removeDisabled={sending || busy || uploads.removing} /></div>}
             <div className="flex items-end gap-1.5 rounded-[var(--radius-card)] border border-ai-border bg-surface p-1.5 focus-within:border-ai-blue/55">
                 <input type="file" multiple ref={fileInput} aria-label="Файлы для Ариса" className="hidden" onChange={(event) => { void uploadFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
-                <IconButton label="Приложить файл для Ариса: до 5 штук, до 10 МБ каждый" disabled={sending || busy || loading || selectedFiles.length >= 5} onClick={() => fileInput.current?.click()}><Paperclip size={15} /></IconButton>
+                <IconButton label="Приложить файл для Ариса: до 5 штук, до 10 МБ каждый" disabled={sending || busy || loading || selectedFiles.length + uploads.count >= 5} onClick={() => fileInput.current?.click()}><Paperclip size={15} /></IconButton>
                 <textarea ref={input} value={question} rows={1} maxLength={2000}
                     onChange={(event) => updateDraft(draftKey, { content: event.target.value })} onKeyDown={onKeyDown}
                     placeholder={busy ? "Арис отвечает — можно подготовить следующий вопрос…" : "Спросите Ариса о задачах, сроках, проектах…"} aria-label="Вопрос Арису"
-                    disabled={sending || loading}
+                    disabled={(sending && !chat.create.isPending) || (loading && !uploads.blocked)}
                     className="chat-input scrollbar-thin min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1 py-1 text-[14px] leading-relaxed text-primary outline-none placeholder:text-faint" />
-                <IconButton label="Отправить Арису (Enter)" title="Отправить Арису" variant="ai" type="submit" disabled={question.trim().length < 2 || sending || busy || loading || chat.messages.isError}><Send size={14} /></IconButton>
+                <IconButton label="Отправить Арису (Enter)" title="Отправить Арису" variant="ai" type="submit" disabled={question.trim().length < 2 || sending || uploads.blocked || busy || loading || chat.messages.isError}><Send size={14} /></IconButton>
             </div>
             <p className="chat-personal-help mt-1 text-[10px] text-muted">Видите только вы.<span className="chat-keyboard-hint hidden sm:inline"> Enter — отправить, Shift+Enter — новая строка.</span><span className="chat-personal-help-detail"> Изменения Арис выполняет по вашему поручению; опасные действия требуют подтверждения.</span></p>
         </form>

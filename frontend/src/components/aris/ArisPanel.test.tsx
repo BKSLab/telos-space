@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { AgentMessage } from "@/lib/types";
-import { queryKeys } from "@/lib/api";
+import type { AgentFile, AgentMessage } from "@/lib/types";
+import { api, queryKeys } from "@/lib/api";
 import { useArisWidgetStore } from "@/stores/arisWidget";
 import { ArisPanel } from "./ArisPanel";
 
@@ -30,8 +30,11 @@ beforeEach(() => {
     useArisWidgetStore.setState({ drafts: {}, conversations: { 9: 1 } });
     chat.messages.data.pages[0].items = [];
     chat.send.mutateAsync.mockReset().mockResolvedValue({});
+    chat.conversations.data.pages[0].items = [{ id: 1, title: "Планирование" }, { id: 2, title: "Другой диалог" }];
+    chat.upload.mutateAsync.mockReset();
+    chat.removeUpload.mutateAsync.mockReset().mockResolvedValue(undefined);
 });
-afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 it("не открывает экранную клавиатуру при входе и отправляет личный вопрос отдельной кнопкой", async () => {
     setup();
@@ -67,4 +70,43 @@ it("разрешает подготовить черновик во время �
     expect((screen.getByRole("button", { name: "Отправить Арису (Enter)" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
     expect(chat.send.mutateAsync).not.toHaveBeenCalled();
+});
+
+const file: AgentFile = { id: "late-upload", original_name: "draft.txt", content_type: "text/plain", size: 5, created_at: "2026-11-15T10:00:00Z" };
+
+it("pending upload разрешает ввод, блокирует Send и удаляется после смены личного диалога", async () => {
+    let finish!: (value: AgentFile) => void;
+    chat.upload.mutateAsync.mockImplementation(() => new Promise(resolve => { finish = resolve as typeof finish; }));
+    const remove = vi.spyOn(api, "delete").mockResolvedValue(undefined);
+    setup();
+    fireEvent.change(screen.getByLabelText("Файлы для Ариса"), { target: { files: [new File(["draft"], "draft.txt")] } });
+    await waitFor(() => expect(chat.upload.mutateAsync).toHaveBeenCalledOnce());
+    const field = screen.getByRole("textbox", { name: /^Вопрос Арису$/ }) as HTMLTextAreaElement;
+    expect(field.disabled).toBe(false);
+    fireEvent.change(field, { target: { value: "Текст во время upload" } });
+    expect((screen.getByRole("button", { name: "Отправить Арису (Enter)" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(field, { key: "Enter", ctrlKey: true });
+    expect(chat.send.mutateAsync).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("combobox", { name: "Диалог с Арисом" }), { target: { value: "2" } });
+    expect(screen.queryByRole("button", { name: "Отменить загрузку draft.txt" })).toBeNull();
+    fireEvent.change(field, { target: { value: "Другой приватный draft" } });
+    await act(async () => { finish(file); });
+    expect(remove).toHaveBeenCalledExactlyOnceWith("/api/v1/aris/conversations/1/files/late-upload");
+    expect(useArisWidgetStore.getState().drafts["9:2"]).toMatchObject({ content: "Другой приватный draft", files: [] });
+    expect(useArisWidgetStore.getState().drafts["9:1"]).toMatchObject({ content: "Текст во время upload", files: [] });
+});
+
+it("готовый private draft публикует только file_ids после явного Send и не удаляется при закрытии", async () => {
+    chat.upload.mutateAsync.mockResolvedValue(file);
+    const remove = vi.spyOn(api, "delete").mockResolvedValue(undefined);
+    const view = setup();
+    fireEvent.change(screen.getByLabelText("Файлы для Ариса"), { target: { files: [new File(["draft"], "draft.txt")] } });
+    await screen.findByRole("button", { name: "Убрать draft.txt" });
+    expect(chat.send.mutateAsync).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: /^Вопрос Арису$/ }), { target: { value: "Опубликовать файл" } });
+    fireEvent.click(screen.getByRole("button", { name: "Отправить Арису (Enter)" }));
+    await waitFor(() => expect(chat.send.mutateAsync).toHaveBeenCalledOnce());
+    expect(chat.send.mutateAsync.mock.calls[0][0]).toMatchObject({ id: 1, content: "Опубликовать файл", fileIds: ["late-upload"] });
+    view.unmount();
+    expect(remove).not.toHaveBeenCalled();
 });

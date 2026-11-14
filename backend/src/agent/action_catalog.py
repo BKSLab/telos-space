@@ -5,6 +5,7 @@ from src.agent.aris import ALL_MODES, WIDGET_MODES
 from src.schemas import board_diagrams as diagrams
 from src.schemas import project_tool_inputs as p
 from src.services import agent_board_actions as boards
+from src.services import agent_chat_file_actions as chat_files
 from src.services import agent_document_actions as documents
 from src.services import agent_personal_actions as personal
 from src.services import agent_project_actions as projects
@@ -13,6 +14,18 @@ from src.services import agent_structure_actions as structure
 from src.services import agent_task_actions as tasks
 
 PROJECT_ACTIONS = (
+    ProjectAction(
+        "telos_list_chat_files", "Найти файлы переписки",
+        "Файлы текущего чата, включая старые сообщения: имя, UUID, статус подготовки и короткий фрагмент. q ищет по имени; next_offset продолжает историю. Черновики и другие диалоги закрыты.",
+        p.ChatFilesInput, chat_file_handler=chat_files.list_chat_files,
+        mutating=False, modes=ALL_MODES, project_optional=True,
+    ),
+    ProjectAction(
+        "telos_read_chat_file", "Прочитать текст файла переписки",
+        "Сохранённый текст файла текущего чата по UUID, страницы Unicode до 8000 символов. q быстро ищет внутри файла, next_offset продолжает чтение/поиск. pending/processing — текст ещё готовится, не отсутствие файла; truncated явно обозначает предел обработки.",
+        p.ChatFileReadInput, chat_file_handler=chat_files.read_chat_file,
+        mutating=False, modes=ALL_MODES, project_optional=True,
+    ),
     ProjectAction(
         "telos_get_board_scene",
         "Прочитать схему доски",

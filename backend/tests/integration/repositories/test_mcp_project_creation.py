@@ -21,6 +21,7 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.api.v1.endpoints.projects import router as projects_router
+from src.clients.vision import DisabledVisionCapability
 from src.core.app_state import RUNTIME_STATE_KEY, SESSION_FACTORY_STATE_KEY, SETTINGS_STATE_KEY
 from src.core.settings import get_settings
 from src.db.models import AgentToolRun, Base, Project, ProjectMember, User
@@ -88,7 +89,7 @@ async def project_creation_env(postgres_container, tmp_path):
                                  prefix=raw[:8], scope=scope))
             legacy[scope] = raw
         await session.commit()
-    state = {RUNTIME_STATE_KEY: SimpleNamespace(), SETTINGS_STATE_KEY: settings, SESSION_FACTORY_STATE_KEY: factory}
+    state = {RUNTIME_STATE_KEY: SimpleNamespace(vision=DisabledVisionCapability()), SETTINGS_STATE_KEY: settings, SESSION_FACTORY_STATE_KEY: factory}
     try:
         yield SimpleNamespace(engine=engine, factory=factory, settings=settings, keys=keys, legacy=legacy, state=state)
     finally:
@@ -407,6 +408,7 @@ import os
 from types import SimpleNamespace
 import uvicorn
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from src.clients.vision import DisabledVisionCapability
 from src.core.app_state import RUNTIME_STATE_KEY, SESSION_FACTORY_STATE_KEY, SETTINGS_STATE_KEY
 from src.core.settings import get_settings
 from src.mcp_server.server import build_mcp_app
@@ -418,7 +420,7 @@ settings.knowledge.knowledge_enabled = True
 engine = create_async_engine(os.environ["PROJECT_CREATION_TEST_DB"])
 factory = async_sessionmaker(engine, expire_on_commit=False)
 app = build_mcp_app(settings=settings)
-state = {RUNTIME_STATE_KEY: SimpleNamespace(), SESSION_FACTORY_STATE_KEY: factory, SETTINGS_STATE_KEY: settings}
+state = {RUNTIME_STATE_KEY: SimpleNamespace(vision=DisabledVisionCapability()), SESSION_FACTORY_STATE_KEY: factory, SETTINGS_STATE_KEY: settings}
 dropped = False
 async def with_resources(scope, receive, send):
     global dropped

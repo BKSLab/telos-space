@@ -1,11 +1,12 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Result, delete, func, insert, select, update
+from sqlalchemy import Result, delete, func, insert, literal, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.agent_files import AgentFile
+from src.db.models.chat_file_texts import ChatFileText
 from src.exceptions.agent_files import AgentFilesRepositoryError
 
 
@@ -32,9 +33,15 @@ class AgentFilesRepository:
         ).scalar_one()
 
     async def save(self, data: dict) -> AgentFile:
-        """Сохраняет проверенные метаданные без commit."""
+        """Атомарно сохраняет оригинал и очередь подготовки, без скрытого commit."""
+        saved = insert(AgentFile).values(**data).returning(*AgentFile.__table__.c).cte("saved_file")
+        queued = (
+            insert(ChatFileText)
+            .from_select(["agent_file_id", "status"], select(saved.c.id, literal("pending")))
+            .cte("queued_text")
+        )
         return (
-            await self._execute(insert(AgentFile).values(**data).returning(AgentFile))
+            await self._execute(select(AgentFile).from_statement(select(saved).add_cte(queued)))
         ).scalar_one()
 
     async def bind_message(self, file_id: UUID, message_id: int) -> None:

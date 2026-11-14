@@ -67,6 +67,7 @@ from src.schemas.knowledge import (
     KnowledgeSourceSchema,
     KnowledgeStatusSchema,
 )
+from src.schemas.tasks import TaskSchema
 from src.services.agent_cards import source_card
 from src.services.db_scope import ProjectAgentScope, ProjectAgentScopeFactory
 from src.utils.document_refs import decode_document_ref
@@ -406,6 +407,7 @@ class ProjectAgentService:
             )
             member_handles: list[str] = []
             completed_actions: set[str] = set()
+            directly_read_tasks: set[str] = set()
 
             async def register(tool: AgentTool, result: dict[str, Any]) -> None:
                 mutating = tool.mutating or tool.name == PROJECT_ACTION_TOOL
@@ -419,6 +421,10 @@ class ProjectAgentService:
                         )
                     state["stale"] = False
                 self._register_views(result, state["catalog"], registry)
+                if tool.name in {"telos_get_task", "telos_get_any_task"}:
+                    source_id = result.get("source_id")
+                    if isinstance(source_id, str) and source_id.startswith("task:") and registry.get_handle(source_id):
+                        directly_read_tasks.add(source_id)
                 if tool.name in {"telos_list_members", "telos_list_sources"}:
                     for item in result.get("items", []):
                         source_id = item.get("source_id", "")
@@ -451,8 +457,26 @@ class ProjectAgentService:
                 requested_handles = [*output.source_ids]
                 if output.primary_reference:
                     requested_handles.append(output.primary_reference)
+                fallback_task = None
+                if run.output is not None and not requested_handles and len(directly_read_tasks) == 1:
+                    fallback_task = registry.get_handle(next(iter(directly_read_tasks)))
+                    if fallback_task:
+                        requested_handles.append(fallback_task)
+                # Модель могла ждать после первого чтения. Текущий ACL и credentials
+                # проверяет тот же доменный инструмент до новой выборки карточки.
+                if tool_context.user_id is not None:
+                    checked_tasks = set()
+                    for handle in requested_handles:
+                        source = registry.resolve_reference(handle)
+                        if source and source.entity_type == "task" and source.entity_id not in checked_tasks:
+                            verified_task = await self.tools.execute(tool_context, AgentToolRequest(
+                                name="telos_get_task", arguments={"task_id": source.entity_id},
+                            ))
+                            if verified_task.get("error") or verified_task.get("source_id") != source.source_id:
+                                raise AgentAnswerError("Доступ к задаче изменился. Повторите вопрос.")
+                            checked_tasks.add(source.entity_id)
                 needs_current_document = any(
-                    source and source.entity_type in DOCUMENT_SOURCE_TYPES
+                    source and (source.entity_type in DOCUMENT_SOURCE_TYPES or source.entity_type == "task")
                     for source in (registry.resolve_reference(handle) for handle in requested_handles)
                 )
                 if state["stale"] or needs_current_document:
@@ -464,7 +488,7 @@ class ProjectAgentService:
                 catalog = state["catalog"]
                 selected = []
                 seen_sources = set()
-                primary = registry.resolve_reference(output.primary_reference)
+                primary = registry.resolve_reference(output.primary_reference or fallback_task)
                 for handle in [*requested_handles, *(member_handles if run.output else [])]:
                     source = registry.resolve_reference(handle)
                     if (
@@ -611,9 +635,12 @@ class ProjectAgentService:
             progress=ProgressReporter(on_progress),
         )
         registry = _SourceRegistry()
+        directly_read_tasks: set[str] = set()
 
         async def register_personal(_tool, result):
             self._register_personal_views(result, registry)
+            if _tool.name == "telos_get_any_task" and result.get("source_handle"):
+                directly_read_tasks.add(result["source_handle"])
 
         deps.on_result = register_personal
         run: ArisRunResult | None = None
@@ -629,13 +656,26 @@ class ProjectAgentService:
             if run.output is None:
                 return KnowledgeAnswerSchema(answer=INCOMPLETE_ANSWER, sources=[])
             output = run.output
-            primary = registry.resolve_reference(output.primary_reference)
+            fallback_task = next(iter(directly_read_tasks)) if not output.source_ids and not output.primary_reference and len(directly_read_tasks) == 1 else None
+            primary = registry.resolve_reference(output.primary_reference or fallback_task)
             selected = []
             seen_sources = set()
-            handles = [*output.source_ids, *([output.primary_reference] if output.primary_reference else [])]
+            handles = [*output.source_ids, *([output.primary_reference or fallback_task] if output.primary_reference or fallback_task else [])]
             for handle in handles:
                 source = registry.resolve_reference(handle)
-                if source is None or source.source_id in seen_sources or not source.document_ref:
+                if source is None or source.source_id in seen_sources:
+                    continue
+                if source.entity_type == "task":
+                    current = await self.tools.execute(tool_context, AgentToolRequest(
+                        name="telos_get_any_task", arguments={"task_id": source.entity_id},
+                    ))
+                    verified = self._personal_task_source(current)
+                    if verified is None:
+                        raise AgentAnswerError("Доступ к задаче изменился. Повторите вопрос.")
+                    selected.append(verified.model_copy(update={"is_primary": bool(primary and primary.source_id == verified.source_id)}))
+                    seen_sources.add(verified.source_id)
+                    continue
+                if not source.document_ref:
                     continue
                 current = await self.tools.execute(tool_context, AgentToolRequest(
                     name="telos_get_document", arguments={"document_ref": source.document_ref, "max_chars": 500}
@@ -724,9 +764,32 @@ class ProjectAgentService:
                 ProjectAgentService._register_views(item, catalog, registry)
 
     @staticmethod
+    def _personal_task_source(value) -> KnowledgeSourceSchema | None:
+        """Карточка строится из серверного DTO; финальный выбор перечитывает задачу с ACL."""
+        if not isinstance(value, dict) or not isinstance(value.get("task"), dict):
+            return None
+        try:
+            task = TaskSchema.model_validate(value["task"])
+        except ValueError:
+            return None
+        if value.get("source_id") != f"task:{task.id}":
+            return None
+        return KnowledgeSourceSchema(
+            source_id=value["source_id"], entity_type="task", entity_id=task.id, task_id=task.id,
+            title=f"{task.key} · {task.title}", excerpt=(task.description_md or "")[:SOURCE_EXCERPT_LIMIT] or None,
+            card=KnowledgeSourceCardSchema(key=task.key, status=task.status.value if task.status else None,
+                priority=task.priority.value, assignee=task.assignee,
+                due_date=task.due_date.isoformat() if task.due_date else None,
+                summary=(task.description_md or "")[:240] or None),
+        )
+
+    @staticmethod
     def _register_personal_views(value, registry) -> None:
         """Личные документы подтверждает общий сервис; приватные загрузки не источники."""
         if isinstance(value, dict):
+            task_source = ProjectAgentService._personal_task_source(value)
+            if task_source is not None:
+                value["source_handle"] = registry.register(task_source)
             data = value.get("document", value)
             if value.get("source_id") and isinstance(data, dict) and data.get("ownership"):
                 try:

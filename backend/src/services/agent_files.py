@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 from uuid import UUID, uuid4
 
+from src.agent.wakeup import wake_agent_worker
 from src.exceptions.access import AccessServiceError
 from src.exceptions.agent_files import (
     AgentFileConflictError,
@@ -57,6 +58,7 @@ class AgentFilesService:
             )
             response = AgentFileSchema.model_validate(row)
             await db.unit_of_work.commit()
+            wake_agent_worker()
             return response
 
     async def delete_draft(self, *, user_id: int, conversation_id: int, file_id: UUID, project_id: int | None = None) -> None:

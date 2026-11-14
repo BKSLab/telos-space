@@ -48,6 +48,29 @@ it("показывает новую единственную задачу и у�
     expect(useUiStore.getState().selectedTaskId).toBe(77);
 });
 
+it("завершённый ответ с TASK entity выбирает задачу, сохраняя ручной выбор и закрепление", () => {
+    const first = answer(1, 42);
+    const entity = { entity_type: "TASK" as const, entity_id: 43, available: true, title: "Проверенная задача", status: null, subtitle: null, href: null };
+    const pending = { ...answer(2, 43), entities: [entity], agent: { ...answer(2, 43).agent!, status: "processing" as const, sources: [] } };
+    const view = render(<Workspace messages={[first]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Задача: Задача 77" }));
+    view.rerender(<Workspace messages={[first, pending]} />);
+    expect(selected()).toBe("77");
+    const completed = { ...pending, revision: 2, agent: { ...pending.agent, status: "completed" as const } };
+    view.rerender(<Workspace messages={[first, completed]} />);
+    expect(selected()).toBe("43");
+    fireEvent.click(screen.getByRole("button", { name: "Закрепить" }));
+    const report = { ...answer(3, 44), agent: { ...answer(3, 44).agent!, sources: [{ ...source(900), entity_type: "task_report" as const, task_id: 44 }] } };
+    view.rerender(<Workspace messages={[first, completed, report]} />);
+    expect(selected()).toBe("43");
+    fireEvent.click(screen.getByRole("button", { name: "Задача: Задача 77" }));
+    expect(selected()).toBe("77");
+    fireEvent.click(screen.getByRole("button", { name: "Закрепить" }));
+    expect(selected()).toBe("77");
+    view.rerender(<Workspace messages={[first, completed, report, answer(4, 45)]} />);
+    expect(selected()).toBe("45");
+});
+
 it("ссылка на задачу в сообщении открывает общую карточку и сохраняет контекст", () => {
     render(<Workspace messages={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Задача: Ссылка на задачу" }));

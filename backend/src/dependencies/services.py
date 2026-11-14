@@ -22,6 +22,8 @@ from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor, Agen
 from src.agent.worker import AgentWorker
 from src.clients.agent_model import build_agent_model
 from src.core.settings import Settings
+from src.db.session import async_session_factory
+from src.dependencies.chat_files import build_agent_chat_files_service
 from src.dependencies.clients import (
     EmbeddingClientDep,
     LlmClientDep,
@@ -87,6 +89,7 @@ from src.schemas.knowledge import KnowledgeReadParameters, KnowledgeReadRequest
 from src.schemas.project_tool_inputs import ProjectActionInput, ToolSchemasInput
 from src.services.access import AccessService
 from src.services.agent_actions import AgentActionsService
+from src.services.agent_chat_files import AgentChatFilesService
 from src.services.agent_conversations import AgentConversationConfig, AgentConversationsService
 from src.services.agent_files import AgentFilesService
 from src.services.agent_requests import AgentRequestsService, RequestLinks
@@ -632,13 +635,22 @@ def build_knowledge_tool_executor(query: ProjectQueryService) -> AgentToolExecut
     )
 
 
+def get_agent_chat_files_service(settings: SettingsDep, vision: VisionCapabilityDep) -> AgentChatFilesService:
+    """Собирает подготовку и чтение файлов с отдельными короткими областями БД."""
+    return build_agent_chat_files_service(session_factory=async_session_factory, settings=settings, vision=vision)
+
+
+AgentChatFilesServiceDep = Annotated[AgentChatFilesService, Depends(get_agent_chat_files_service)]
+
+
 def get_agent_actions_service(
-    scope: AgentProjectToolScopeDep, settings: SettingsDep
+    scope: AgentProjectToolScopeDep, settings: SettingsDep, chat_files: AgentChatFilesServiceDep,
 ) -> AgentActionsService:
     """Собирает общий сценарий проектных инструментов для чата и MCP."""
     return AgentActionsService(
         scope=scope,
         actions=ARIS_ACTIONS,
+        chat_files=chat_files,
         confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
     )
 
@@ -823,11 +835,13 @@ def get_agent_conversations_service(
     agent: ProjectAgentServiceDep,
     llm_client: LlmClientDep,
     settings: SettingsDep,
+    chat_files: AgentChatFilesServiceDep,
 ) -> AgentConversationsService:
     """Собирает сценарии постоянных диалогов из явных зависимостей."""
     return AgentConversationsService(
         scope=scope,
         routing=routing,
+        chat_files=chat_files,
         agent=agent,
         llm_client=llm_client,
         config=build_agent_conversation_config(settings),
@@ -843,6 +857,7 @@ def build_agent_worker(
     *, session_factory: SessionFactory, settings: Settings, runtime: KnowledgeRuntime
 ) -> AgentWorker:
     """Собирает фоновое исполнение с теми же сервисами и клиентами, что HTTP."""
+    chat_files = build_agent_chat_files_service(session_factory=session_factory, settings=settings, vision=runtime.vision)
     tools = build_project_tool_executor(
         ProjectQueryService(
             scope=build_project_knowledge_query_scope(session_factory=session_factory)
@@ -852,6 +867,7 @@ def build_agent_worker(
                 session_factory=session_factory, settings=settings
             ),
             actions=ARIS_ACTIONS,
+            chat_files=chat_files,
             confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
         ),
     )
@@ -869,6 +885,7 @@ def build_agent_worker(
         agent=agent,
         llm_client=runtime.llm_client,
         config=build_agent_conversation_config(settings),
+        chat_files=chat_files,
     )
     routing = AgentRoutingService(
         scope=build_agent_project_tool_scope(session_factory=session_factory, settings=settings),
@@ -882,6 +899,7 @@ def build_agent_worker(
         scope=build_aris_chat_scope(session_factory=session_factory),
         agent=agent,
         config=ArisChatConfig(turn_timeout_seconds=settings.agent.agent_turn_timeout_seconds),
+        chat_files=chat_files,
     )
     return AgentWorker(
         services=[service, chat],

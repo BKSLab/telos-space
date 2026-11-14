@@ -12,11 +12,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.clients.vision import DisabledVisionCapability
 from src.core.app_state import (
     RUNTIME_STATE_KEY,
     SESSION_FACTORY_STATE_KEY,
     SETTINGS_STATE_KEY,
 )
+from src.core.settings import get_settings
 from src.exceptions.clients import ClientError
 from src.mcp_server import context as ctx
 from src.mcp_server import server as srv
@@ -51,6 +53,7 @@ class RecordingRuntime:
         self.scope_active_during_call: list[bool] = []
         self.embedding_client = SimpleNamespace(get_embedding=self._embedding)
         self.qdrant_client = SimpleNamespace(search=self._search)
+        self.vision = DisabledVisionCapability()
         self._hits = hits
 
     async def _embedding(self, text: str) -> list[float]:
@@ -68,17 +71,17 @@ class SearchContext:
 
     def __init__(self, runtime: object, tracker: ScopeTracker) -> None:
         self.headers = {"Authorization": "Bearer telos_token_test"}
+        settings = get_settings().model_copy(deep=True)
+        settings.knowledge = settings.knowledge.model_copy(update={
+            "knowledge_enabled": True,
+            "qdrant_score_threshold": 0.42,
+            "knowledge_chunk_target_chars": 2200,
+            "knowledge_chunk_overlap_chars": 300,
+        })
         state = SimpleNamespace(
             **{
                 RUNTIME_STATE_KEY: runtime,
-                SETTINGS_STATE_KEY: SimpleNamespace(
-                    knowledge=SimpleNamespace(
-                        knowledge_enabled=True,
-                        qdrant_score_threshold=0.42,
-                        knowledge_chunk_target_chars=2200,
-                        knowledge_chunk_overlap_chars=300,
-                    )
-                ),
+                SETTINGS_STATE_KEY: settings,
                 SESSION_FACTORY_STATE_KEY: tracker,
             }
         )

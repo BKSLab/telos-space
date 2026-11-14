@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { AgentToolRun, AgentFile, KnowledgeSource, AgentPageContext } from "../src/lib/types";
+import { delayedDraftUpload } from "./support/draftUploadMock";
 
 async function expectAgentCardAccent(page: Page, card: Locator) {
     const stripe = await card.evaluate(element => {
@@ -42,6 +43,48 @@ async function openProjectPersonal(page: Page, key = "DEMO") {
     await expect(page).toHaveURL(new RegExp(`/projects/${key}/conversations(?:\\?conversation=\\d+)?$`));
     await expect(page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true })).toBeEnabled();
 }
+
+test("личный draft upload не блокирует ввод и удаляется после отмены до Send", async ({ page }) => {
+    const control = await installProjectApi(page);
+    const transfer = await delayedDraftUpload(page, "private-pending.txt");
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto("/chat");
+    try {
+        await page.getByLabel("Файлы для Ариса", { exact: true }).setInputFiles({ name: "private-pending.txt", mimeType: "text/plain", buffer: Buffer.from("draft") });
+        await expect.poll(() => transfer.uploaded.length).toBe(1);
+        const input = page.getByRole("textbox", { name: "Вопрос Арису", exact: true });
+        await expect(input).toBeEditable();
+        await input.fill("Вопрос во время загрузки");
+        const send = page.getByRole("button", { name: "Отправить Арису (Enter)", exact: true });
+        await expect(send).toBeDisabled();
+        expect(control.submissions).toEqual([]);
+        await page.getByRole("button", { name: "Отменить загрузку private-pending.txt", exact: true }).click();
+        await expect(send).toBeEnabled();
+        transfer.release();
+        await expect.poll(() => transfer.removed).toEqual([`${transfer.uploaded[0]}/${transfer.fileId}`]);
+        await expect(page.getByRole("button", { name: "Убрать private-pending.txt", exact: true })).toHaveCount(0);
+        await expect(input).toHaveValue("Вопрос во время загрузки");
+        expect(control.submissions).toEqual([]);
+    } finally { transfer.release(); }
+});
+
+test("уход из проектного private диалога отменяет pending upload без переноса в другой чат", async ({ page }) => {
+    const control = await installProjectApi(page);
+    const transfer = await delayedDraftUpload(page, "project-pending.txt");
+    await openProjectPersonal(page);
+    try {
+        await page.getByLabel("Файлы для Ариса", { exact: true }).setInputFiles({ name: "project-pending.txt", mimeType: "text/plain", buffer: Buffer.from("draft") });
+        await expect.poll(() => transfer.uploaded.length).toBe(1);
+        const input = page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true });
+        await expect(input).toBeEditable(); await input.fill("Приватный черновик проекта");
+        await expect(page.getByRole("button", { name: "Спросить", exact: true })).toBeDisabled();
+        await page.getByRole("navigation", { name: "Разделы проекта", exact: true }).getByRole("link", { name: "Команда", exact: true }).click();
+        await expect(input).toHaveCount(0);
+        transfer.release();
+        await expect.poll(() => transfer.removed).toEqual([`${transfer.uploaded[0]}/${transfer.fileId}`]);
+        expect(control.submissions).toEqual([]);
+    } finally { transfer.release(); }
+});
 
 test("единое окно личного Ариса сохраняет черновик, файлы и диалог при переходе во вкладку", async ({ page }) => {
     const control = await installProjectApi(page);

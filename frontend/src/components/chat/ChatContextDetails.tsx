@@ -34,6 +34,7 @@ function TaskContextDetails({ target, projectId, onOpenFull }: ChatContextDetail
     const detail = useQuery({
         queryKey: [...queryKeys.task(target.id), "chat-preview", projectId],
         queryFn: () => api.get<Task>(endpoints.task(target.id)),
+        staleTime: 0,
         refetchOnMount: "always",
         retry: false,
     });
@@ -41,12 +42,12 @@ function TaskContextDetails({ target, projectId, onOpenFull }: ChatContextDetail
     const stages = useQuery({
         queryKey: queryKeys.stages(projectId),
         queryFn: () => api.get<ProjectStage[]>(endpoints.projectStages(projectId)),
-        enabled: detail.isSuccess && task?.project_id === projectId,
+        enabled: detail.isSuccess && detail.isFetchedAfterMount && task?.project_id === projectId,
         retry: false,
     });
 
     if (detail.error) return <ReadError error={detail.error} busy={detail.isFetching} retry={() => void detail.refetch()} />;
-    if (detail.isPending || !task) return <LoadingDetails />;
+    if (detail.isPending || !detail.isFetchedAfterMount || !task) return <LoadingDetails />;
     if (task.project_id !== projectId) return <WrongProject />;
     if (isAccessError(stages.error)) return <ReadError error={stages.error!} busy={stages.isFetching} retry={() => void stages.refetch()} />;
 

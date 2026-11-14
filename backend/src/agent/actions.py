@@ -11,6 +11,7 @@ from src.agent.tools import AgentToolContext
 from src.utils.tool_names import require_canonical_tool_name
 
 if TYPE_CHECKING:
+    from src.services.agent_chat_files import AgentChatFilesService
     from src.services.agent_tool_scope import AgentProjectToolScope
 
 
@@ -24,7 +25,7 @@ class ProjectAction:
     parameters: type[BaseModel]
     handler: Callable[
         ["AgentProjectToolScope", AgentToolContext, BaseModel], Awaitable[dict[str, Any]]
-    ]
+    ] | None = None
     mutating: bool = True
     requires_confirmation: bool = False
     owner_only: bool = False
@@ -34,6 +35,14 @@ class ProjectAction:
     """Режимы Ариса, в которых действие доступно модели; MCP режимы не проверяет."""
     project_optional: bool = False
     """Один документный сценарий работает и в личной задаче, сохраняя текущий контекст."""
+    chat_file_handler: Callable[
+        ["AgentChatFilesService", AgentToolContext, BaseModel], Awaitable[dict[str, Any]]
+    ] | None = None
+    """Читает через собственные короткие области, без внешней транзакции инструмента."""
 
     def __post_init__(self) -> None:
         require_canonical_tool_name(self.name)
+        if (self.handler is None) == (self.chat_file_handler is None):
+            raise ValueError("Нужен ровно один обработчик действия.")
+        if self.chat_file_handler is not None and self.mutating:
+            raise ValueError("Файловый обработчик доступен только для чтения.")

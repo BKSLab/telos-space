@@ -75,6 +75,19 @@ class PageInput(ToolInput):
     limit: int = Field(30, ge=1, le=100, description="Максимум элементов.")
 
 
+class ChatFilesInput(ToolInput):
+    q: str | None = Field(default=None, max_length=200, description="Часть исходного имени файла; null — последние файлы текущего чата.")
+    limit: int = Field(default=20, ge=1, le=50, description="Размер страницы файлов.")
+    offset: int = Field(default=0, ge=0, description="Смещение страницы файлов.")
+
+
+class ChatFileReadInput(ToolInput):
+    file_id: UUID = Field(description="UUID из uploaded_files или telos_list_chat_files; не путь и не ссылка.")
+    offset: int = Field(default=0, ge=0, description="Начало чтения/поиска в Unicode code points.")
+    max_chars: int = Field(default=2000, ge=1, le=8000, description="Максимум символов одной страницы текста.")
+    q: str | None = Field(default=None, min_length=1, max_length=200, description="Буквальный поиск внутри файла без учёта регистра; null — чтение страницы.")
+
+
 class TaskInput(ToolInput):
     task_id: int = Field(gt=0, description="ID задачи из результатов поиска текущего проекта.")
 

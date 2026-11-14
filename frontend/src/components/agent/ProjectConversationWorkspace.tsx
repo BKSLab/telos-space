@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import type {
+    AgentFile,
     Project,
 } from "@/lib/types";
 import { useCurrentUser } from "@/lib/useAuth";
@@ -27,6 +28,8 @@ import { ARIS_PERSONA } from "@/lib/aris";
 import { ProjectKnowledgePanel } from "@/components/knowledge/ProjectKnowledgePanel";
 import { useProjectKnowledgeStatus } from "@/lib/useProjectKnowledgeStatus";
 import { newUuid } from "@/lib/uuid";
+import { draftUploadProblem, useDraftUploads } from "@/lib/useDraftUploads";
+import { DraftUploadList } from "@/components/files/DraftUploadList";
 import { ArisAvatar } from "@/components/brand/ArisAvatar";
 import { shouldSubmitChat, useChatInput } from "@/components/chat/useChatInput";
 import { useChatHistory } from "@/components/chat/useChatHistory";
@@ -82,14 +85,17 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
     const input = useChatInput(question);
     const { viewportRef, contentRef, atBottom, onScroll, scrollToLatest } = useChatHistory(draftKey, messages.map(message => `${message.id}:${message.status}:${message.content.length}`).join("|"));
     const selectedFiles = draft?.files ?? [];
+    const uploads = useDraftUploads<{ file: AgentFile; conversationId: number; key: string }>(draftKey);
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const sendingRef = useRef(false);
     const busy = messages.some((message) => message.status === "queued" || message.status === "processing");
     const sending = chat.mutating;
     const loading = chat.conversations.isPending || (conversationId != null && chat.messages.isPending);
-    const chatError = chat.conversations.error || chat.messages.error || chat.create.error || chat.send.error || chat.retry.error || chat.decide.error || chat.upload.error || chat.removeUpload.error;
+    const chatError = chat.conversations.error || chat.messages.error || chat.create.error || chat.send.error || chat.retry.error || chat.decide.error;
     const lastMessage = messages.at(-1);
 
     function selectConversation(id: number) {
+        setUploadError(null);
         select(sessionKey, id);
         if (mounted.current) updateSearchParams((previous) => { const next = new URLSearchParams(previous); next.set("conversation", String(id)); return next; });
         chat.send.reset();
@@ -127,17 +133,20 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
         return () => { active = false; };
     }, [completedActions, project.id, project.key, queryClient, navigate]);
     useEffect(() => {
-        if (conversationId == null && firstConversationId != null) {
+        if (conversationId == null && firstConversationId != null && !uploads.blocked) {
+            const key = `${sessionKey}:new`;
+            const current = useProjectConversationStore.getState().drafts[key];
+            if (current) { updateDraft(`${sessionKey}:${firstConversationId}`, current); clearDraft(key, current.requestId); }
             select(sessionKey, firstConversationId);
             updateSearchParams((previous) => { const next = new URLSearchParams(previous); next.set("conversation", String(firstConversationId)); return next; }, { replace: true });
         }
-    }, [conversationId, firstConversationId, select, sessionKey, updateSearchParams]);
+    }, [conversationId, firstConversationId, uploads.blocked, select, sessionKey, updateSearchParams, updateDraft, clearDraft]);
 
     const statusQuery = useProjectKnowledgeStatus(project.id);
 
     async function submit(value = question) {
         const normalized = value.trim();
-        if (normalized.length < 2 || sending || sendingRef.current || busy || loading || chat.messages.isError) return;
+        if (normalized.length < 2 || sending || sendingRef.current || uploads.isBlocked() || busy || loading || chat.messages.isError) return;
         sendingRef.current = true;
         scrollToLatest();
         const requestId = draft?.content.trim() === normalized ? draft.requestId : newUuid();
@@ -172,32 +181,41 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
         }
     }
 
-    async function uploadFiles(files: File[]) {
+    function uploadFiles(files: File[]) {
         if (sending || sendingRef.current || busy || loading) return;
-        sendingRef.current = true;
-        let id = conversationId;
-        try {
-            if (id == null) {
-                id = (await chat.create.mutateAsync()).id;
-                updateDraft(`${sessionKey}:${id}`, { content: question, files: selectedFiles });
-                if (draft) clearDraft(draftKey, draft.requestId);
-                selectConversation(id);
-            }
-            for (const file of files.slice(0, 5 - selectedFiles.length)) {
-                const uploaded = await chat.upload.mutateAsync({ id, file });
+        const problem = draftUploadProblem(files, selectedFiles.length + uploads.count);
+        setUploadError(problem);
+        if (problem) return;
+        let conversation: Promise<number> | undefined;
+        let moved = false;
+        uploads.add(files, {
+            upload: async (file, operation) => {
+                const id = await (conversation ??= (conversationId == null ? chat.create.mutateAsync().then(value => value.id) : Promise.resolve(conversationId))
+                    .catch(cause => { conversation = undefined; throw cause; }));
+                if (operation.cancelled()) throw new Error("Загрузка отменена");
                 const key = `${sessionKey}:${id}`;
-                updateDraft(key, { files: [...(useProjectConversationStore.getState().drafts[key]?.files ?? []), uploaded] });
-            }
-        } catch { /* Уже загруженные файлы сохраняются, ошибка показывается в форме. */ }
-        finally { sendingRef.current = false; }
+                if (key !== draftKey && !moved) {
+                    moved = true; operation.adoptScope(key);
+                    const current = useProjectConversationStore.getState().drafts[draftKey];
+                    if (current) { updateDraft(key, current); clearDraft(draftKey, current.requestId); }
+                    selectConversation(id);
+                }
+                return { file: await chat.upload.mutateAsync({ id, file }), conversationId: id, key };
+            },
+            attach: item => updateDraft(item.key, { files: [...(useProjectConversationStore.getState().drafts[item.key]?.files ?? []), item.file] }),
+            discard: item => api.delete(`${endpoints.projectArisFiles(project.id, item.conversationId)}/${item.file.id}`),
+        });
     }
 
     async function removeFile(fileId: string) {
         if (conversationId == null || sending || busy) return;
         try {
-            await chat.removeUpload.mutateAsync({ id: conversationId, fileId });
-            updateDraft(draftKey, { files: (useProjectConversationStore.getState().drafts[draftKey]?.files ?? []).filter((file) => file.id !== fileId) });
-        } catch { /* Ошибка показывается в форме. */ }
+            await uploads.remove(fileId, async () => {
+                await chat.removeUpload.mutateAsync({ id: conversationId, fileId });
+                const current = useProjectConversationStore.getState().drafts[draftKey];
+                if (current) updateDraft(draftKey, { files: current.files.filter(file => file.id !== fileId) });
+            });
+        } catch (cause) { setUploadError((cause as Error).message); }
     }
 
     function onSubmit(event: FormEvent) {
@@ -340,10 +358,12 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
 
                     <form onSubmit={onSubmit} className="chat-personal-composer shrink-0 border-t border-line-subtle bg-surface/55 px-4 py-3">
                         {chatError && <ErrorMessage title="Не удалось обновить диалог" message={(chatError as Error).message} />}
-                        {selectedFiles.length > 0 && conversationId !== null && <div aria-label="Файлы для отправки" className="chat-draft-items mx-auto mb-2 flex max-w-3xl"><AgentFileList files={selectedFiles} conversationId={conversationId} projectId={project.id} onRemove={id => void removeFile(id)} removeDisabled={sending || busy} /></div>}
+                        {uploadError && <p role="alert" className="mb-2 text-xs text-danger">{uploadError}</p>}
+                        <DraftUploadList entries={uploads.entries} onCancel={uploads.cancel} onRetry={uploads.retry} />
+                        {selectedFiles.length > 0 && conversationId !== null && <div aria-label="Файлы для отправки" className="chat-draft-items mx-auto mb-2 flex max-w-3xl"><AgentFileList files={selectedFiles} conversationId={conversationId} projectId={project.id} onRemove={id => void removeFile(id)} removeDisabled={sending || busy || uploads.removing} /></div>}
                         <div className="material-metal mx-auto flex max-w-3xl items-end gap-2 rounded-[var(--radius-card)] border border-ai-border p-2 transition-[border-color,box-shadow] focus-within:border-ai-blue/55 focus-within:shadow-focus">
                             <input type="file" multiple ref={fileInputRef} aria-label="Файлы для Ариса" className="hidden" onChange={(event) => { void uploadFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
-                            <IconButton label="Добавить файл до 10 МБ" disabled={sending || busy || loading || selectedFiles.length >= 5} onClick={() => fileInputRef.current?.click()}><Paperclip size={16} /></IconButton>
+                            <IconButton label="Добавить файл до 10 МБ" disabled={sending || busy || loading || selectedFiles.length + uploads.count >= 5} onClick={() => fileInputRef.current?.click()}><Paperclip size={16} /></IconButton>
                             <textarea
                                 ref={input}
                                 value={question}
@@ -353,14 +373,14 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
                                 maxLength={2000}
                                 placeholder={busy ? "Арис отвечает — можно подготовить следующий вопрос…" : "Спросите о проекте…"}
                                 aria-label="Вопрос Арису по проекту"
-                                disabled={sending || loading}
+                                disabled={(sending && !chat.create.isPending) || (loading && !uploads.blocked)}
                                 className="chat-input scrollbar-thin min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1 text-[14px] leading-relaxed text-primary outline-none placeholder:text-disabled"
                             />
                             <Button
                                 type="submit"
                                 variant="ai"
                                 size="md"
-                                disabled={question.trim().length < 2 || sending || busy || loading || chat.messages.isError}
+                                disabled={question.trim().length < 2 || sending || uploads.blocked || busy || loading || chat.messages.isError}
                                 icon={<Send size={14} aria-hidden="true" />}
                             >
                                 <span className="sr-only sm:not-sr-only">Спросить</span>

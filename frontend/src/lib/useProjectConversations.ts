@@ -8,7 +8,9 @@ export function useProjectConversations(projectId: number, conversationId: numbe
     const queryClient = useQueryClient();
     const userId = useCurrentUser().data?.id;
     const baseKey = ["projects", projectId, "aris", userId] as const;
-    const mutating = useIsMutating({ mutationKey: baseKey }) > 0;
+    const mutating = useIsMutating({ mutationKey: baseKey,
+        predicate: mutation => !["upload", "removeUpload"].includes(String(mutation.options.mutationKey?.at(-1))),
+    }) > 0;
     const messageKey = (id: number | null) => [...baseKey, "messages", id] as const;
 
     const conversations = useInfiniteQuery({

@@ -20,6 +20,7 @@ from .calendar_feed_tokens import CalendarFeedToken
 from .chat_agent_turns import ChatAgentTurn
 from .chat_attachments import ChatAttachment
 from .chat_events import ChatEvent
+from .chat_file_texts import ChatFileText
 from .chat_message_entities import ChatMessageEntity
 from .chat_message_mentions import ChatMessageMention
 from .chat_messages import ChatMessage
@@ -73,6 +74,7 @@ __all__ = [
     "TaskReport",
     "TaskView",
     "ChatAgentTurn",
+    "ChatFileText",
     "CalendarFeedToken",
     "AgentFile",
     "AgentConversation",

@@ -96,6 +96,8 @@ PHRASES: dict[str, str] = {
     "telos_move_sticker": "Двигаю стикер…",
     "telos_delete_sticker": "Готовлю удаление стикера — спрошу подтверждение…",
     # Документы и вложения.
+    "telos_list_chat_files": "Смотрю файлы в переписке…",
+    "telos_read_chat_file": "Читаю файл из переписки…",
     "telos_list_documents": "Смотрю документы проекта…",
     "telos_get_document": "Читаю документ…",
     "telos_create_document": "Создаю документ…",

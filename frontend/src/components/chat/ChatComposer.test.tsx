@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { emptyChatDraft, useChatUiStore } from "@/stores/chat";
+import { api } from "@/lib/api";
+import type { ChatAttachment } from "@/lib/projectChat";
 import { ChatComposer } from "./ChatComposer";
 
 const chat = vi.hoisted(() => ({
@@ -23,11 +25,12 @@ function setup() {
 }
 beforeEach(() => {
     useChatUiStore.setState({ drafts: {}, editing: {}, busy: {} });
+    chat.projectId = 1;
     chat.send.mockReset().mockResolvedValue({});
     chat.command.mockReset().mockResolvedValue({});
     touchDevice(false);
 });
-afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 it("сохраняет и отправляет сообщение по HTTP без crypto.randomUUID", async () => {
     const cryptoApi = globalThis.crypto;
@@ -99,4 +102,65 @@ it("сохраняет черновик и квитанцию после оши�
     await waitFor(() => expect(chat.send).toHaveBeenCalledTimes(2));
     expect(chat.send.mock.calls.map(call => call[0].client_message_id)).toEqual(["same-request", "same-request"]);
     await waitFor(() => expect(useChatUiStore.getState().drafts["9:1"]).toBeUndefined());
+});
+
+const attachment = (id: string): ChatAttachment => ({ id, original_name: `${id}.txt`, content_type: "text/plain", size_bytes: 5, message_id: null, created_at: "2026-11-15T10:00:00Z" });
+
+it("загружает сразу, оставляет набор текста и ждёт upload перед Send; отмена убирает поздний результат", async () => {
+    let finish!: (file: ChatAttachment) => void;
+    vi.spyOn(api, "postForm").mockImplementation(() => new Promise(resolve => { finish = resolve as typeof finish; }));
+    const remove = vi.spyOn(api, "delete").mockResolvedValue(undefined);
+    setup();
+    fireEvent.change(screen.getByLabelText("Файлы сообщения"), { target: { files: [new File(["draft"], "pending.txt")] } });
+    expect(api.postForm).toHaveBeenCalledOnce();
+    const field = screen.getByRole("combobox", { name: "Сообщение проекту" }) as HTMLTextAreaElement;
+    expect(field.disabled).toBe(false);
+    fireEvent.change(field, { target: { value: "Написано во время загрузки" } });
+    const send = screen.getByRole("button", { name: "Отправить" }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(chat.send).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Отменить загрузку pending.txt" }));
+    expect(send.disabled).toBe(false);
+    fireEvent.click(send);
+    await waitFor(() => expect(chat.send).toHaveBeenCalledOnce());
+    expect(chat.send.mock.calls[0][0]).toMatchObject({ content: "Написано во время загрузки", attachment_ids: [] });
+    await act(async () => { finish(attachment("late")); });
+    expect(remove).toHaveBeenCalledExactlyOnceWith("/api/v1/projects/1/chat/attachments/late");
+    expect(useChatUiStore.getState().drafts["9:1"]).toBeUndefined();
+});
+
+it("уход из редактора удаляет только поздний pending upload, готовый файл отправляется и сохраняется", async () => {
+    let finish!: (file: ChatAttachment) => void;
+    const post = vi.spyOn(api, "postForm").mockImplementationOnce(() => new Promise(resolve => { finish = resolve as typeof finish; }))
+        .mockResolvedValueOnce(attachment("sent"));
+    const remove = vi.spyOn(api, "delete").mockResolvedValue(undefined);
+    const first = setup();
+    fireEvent.change(screen.getByLabelText("Файлы сообщения"), { target: { files: [new File(["draft"], "pending.txt")] } });
+    first.unmount();
+    await act(async () => { finish(attachment("orphan")); });
+    expect(remove).toHaveBeenCalledExactlyOnceWith("/api/v1/projects/1/chat/attachments/orphan");
+    const next = setup();
+    fireEvent.change(screen.getByLabelText("Файлы сообщения"), { target: { files: [new File(["draft"], "sent.txt")] } });
+    await screen.findByRole("button", { name: "Убрать файл sent.txt" });
+    fireEvent.click(screen.getByRole("button", { name: "Отправить" }));
+    await waitFor(() => expect(chat.send).toHaveBeenCalledOnce());
+    expect(chat.send.mock.calls[0][0].attachment_ids).toEqual(["sent"]);
+    next.unmount();
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(remove).toHaveBeenCalledTimes(1);
+});
+
+it("удаление читает актуальный draft после ответа и сохраняет новый файл и набранный текст", async () => {
+    useChatUiStore.getState().updateDraft("9:1", { attachments: [attachment("first")], content: "Прежний текст" });
+    let finish!: () => void;
+    vi.spyOn(api, "delete").mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    vi.spyOn(api, "postForm").mockResolvedValue(attachment("second"));
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Убрать файл first.txt" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Сообщение проекту" }), { target: { value: "Актуальный текст" } });
+    fireEvent.change(screen.getByLabelText("Файлы сообщения"), { target: { files: [new File(["draft"], "second.txt")] } });
+    await screen.findByRole("button", { name: "Убрать файл second.txt" });
+    await act(async () => { finish(); });
+    expect(useChatUiStore.getState().drafts["9:1"]).toMatchObject({ content: "Актуальный текст", attachments: [attachment("second")] });
 });

@@ -5,6 +5,7 @@ import os
 import shutil
 import uuid
 import warnings
+from itertools import islice
 from pathlib import Path, PurePosixPath
 
 from PIL import Image, ImageOps
@@ -195,6 +196,25 @@ class TaskAttachmentStorage:
         finally:
             temporary.unlink(missing_ok=True)
         return PurePosixPath("tasks", str(task_id), file_name).as_posix()
+
+    async def old_key_batches(self, cutoff_timestamp: float):
+        """Пакетно находит старые кандидаты TTL; наличие владельца проверяет сервис."""
+
+        def keys():
+            root = self.root.resolve()
+            for path in root.rglob("*"):
+                try:
+                    if path.is_file() and path.stat().st_mtime < cutoff_timestamp:
+                        yield path.relative_to(root).as_posix()
+                except FileNotFoundError:
+                    continue
+
+        candidates = keys()
+        try:
+            while batch := await asyncio.to_thread(lambda: list(islice(candidates, 100))):
+                yield batch
+        except OSError as error:
+            raise TaskAttachmentStorageError(str(error)) from error
 
     async def save_in(self, directory: PurePosixPath, extension: str, content: bytes) -> str:
         """Atomically save a local file in a validated uploads subdirectory."""

@@ -174,6 +174,11 @@ WORKFLOWS = (
         frozenset({"telos_run_project_action", "telos_get_tool_schemas"}),
     ),
     Workflow(
+        "chat_files",
+        "Файлы текущей переписки: найти старое вложение, прочитать текст или искать внутри большого файла; состояние подготовки и OCR.",
+        frozenset({"telos_list_chat_files", "telos_read_chat_file"}),
+    ),
+    Workflow(
         "sources",
         "Знания проекта: поиск фактов и текста по всем источникам, чтение оригиналов "
         "и связанных объектов для анализа или ответа по документам.",

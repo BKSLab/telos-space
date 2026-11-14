@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import type { ChatAgentState, ChatAttachment, ChatEntity, ChatEvent, ChatMessage, ChatMessageCreate } from "../src/lib/projectChat";
 import type { DocumentDetail, KnowledgeSource, Task } from "../src/lib/types";
+import { delayedDraftUpload } from "./support/draftUploadMock";
 
 test.setTimeout(60_000);
 
@@ -278,6 +279,42 @@ async function openChat(page: Page) {
     await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
 }
 
+for (const width of [1440, 390]) {
+    test(`draft upload начинается до Send, отменяется и не возвращается поздним ответом, ${width}px`, async ({ page }, info) => {
+        const server = chatServer(); await server.attach(page);
+        const transfer = await delayedDraftUpload(page, "pending.txt");
+        await page.setViewportSize({ width, height: 900 });
+        await openChat(page);
+        try {
+            await page.getByLabel("Файлы сообщения", { exact: true }).setInputFiles({ name: "pending.txt", mimeType: "text/plain", buffer: Buffer.from("draft") });
+            await expect.poll(() => transfer.uploaded.length).toBe(1);
+            const input = page.getByRole("combobox", { name: "Сообщение проекту", exact: true });
+            await expect(input).toBeEditable();
+            await input.fill("Черновик набран во время загрузки");
+            const send = page.getByRole("button", { name: "Отправить", exact: true });
+            await expect(send).toBeDisabled();
+            expect(server.control.commands.filter(command => command.type === "message.send")).toEqual([]);
+            const cancel = page.getByRole("button", { name: "Отменить загрузку pending.txt", exact: true });
+            await expect(cancel).toBeVisible();
+            if (width < 768) {
+                const box = await cancel.boundingBox();
+                expect(box!.width).toBeGreaterThanOrEqual(44); expect(box!.height).toBeGreaterThanOrEqual(44);
+            }
+            await page.screenshot({ path: info.outputPath(`pending-upload-${width}.png`), animations: "disabled" });
+            await cancel.click();
+            await expect(cancel).toHaveCount(0);
+            await expect(send).toBeEnabled();
+            transfer.release();
+            await expect.poll(() => transfer.removed).toEqual([`${transfer.uploaded[0]}/${transfer.fileId}`]);
+            await expect(page.getByRole("button", { name: "Убрать файл pending.txt", exact: true })).toHaveCount(0);
+            await expect(input).toHaveValue("Черновик набран во время загрузки");
+            await send.click();
+            await expect.poll(() => server.control.commands.filter(command => command.type === "message.send").length).toBe(1);
+            expect(server.control.commands.find(command => command.type === "message.send")!.data.attachment_ids).toEqual([]);
+        } finally { transfer.release(); }
+    });
+}
+
 test("одна вкладка чата и обращение к Арису по начальному имени", async ({ page }) => {
     const server = chatServer(); await server.attach(page); await openChat(page);
     const sections = page.getByRole("navigation", { name: "Разделы проекта" });
@@ -534,6 +571,59 @@ test("источники Ариса открываются рядом, авто-
     await expect(page.getByRole("dialog", { name: /^Задача/ })).toHaveCount(0);
     await expect(input).toHaveValue("Продолжаю обсуждать источники");
 });
+
+for (const width of [1440, 390]) {
+    test(`подтверждённая задача Ариса появляется карточкой и выбирается в контексте, ${width}px`, async ({ page }, info) => {
+        watchBrowserErrors(page);
+        await page.setViewportSize({ width, height: 900 });
+        const server = chatServer();
+        await server.attach(page); await openChat(page);
+        const history = page.getByLabel("История сообщений проекта", { exact: true });
+        const composer = page.getByRole("combobox", { name: "Сообщение проекту", exact: true });
+        await composer.fill("Черновик следующего вопроса");
+        const panel = page.getByRole(width >= 1280 ? "complementary" : "dialog", { name: "Контекст чата", exact: true });
+        const showContext = async () => {
+            if (width < 1280) {
+                await expect(panel).toHaveCount(0);
+                await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
+            }
+        };
+        const closeMobileContext = async () => {
+            if (width < 1280) await panel.getByRole("button", { name: "Закрыть контекст", exact: true }).click();
+        };
+
+        const pending = server.addAris("", "processing");
+        await expect(history.getByText("Арис думает…", { exact: true })).toBeVisible();
+        const taskSource = { ...server.taskSource(42), is_primary: true };
+        Object.assign(pending, { revision: 2, content: "Проверил выбранную задачу.", agent: { ...pending.agent!, status: "completed", sources: [taskSource] } });
+        server.emit("message.updated", { message_id: pending.id, message: pending });
+        await expect(history.getByRole("button", { name: `Задача: ${taskSource.title}`, exact: true })).toHaveAttribute("aria-pressed", "true");
+        await showContext();
+        await expect(panel.getByRole("heading", { name: server.tasks.get(42)!.title, exact: true })).toBeVisible();
+        await expect(panel.getByText(server.tasks.get(42)!.description_md!, { exact: true })).toBeVisible();
+        await closeMobileContext();
+
+        const commentSource: KnowledgeSource = { ...server.taskSource(43), source_id: "comment:901", entity_type: "comment", entity_id: 901,
+            title: "Уточнение по приёмке", excerpt: "Подтверждение заказа приходит на электронную почту.", is_primary: true };
+        server.addAris("Проверил уточнение участника.", "completed", [commentSource]);
+        await expect(history.getByRole("button", { name: `Комментарий: ${commentSource.title}`, exact: true })).toHaveAttribute("aria-pressed", "true");
+        await showContext();
+        await expect(panel.getByRole("heading", { name: server.tasks.get(43)!.title, exact: true })).toBeVisible();
+        await expect(panel.getByText(commentSource.excerpt!, { exact: true })).toBeVisible();
+        await page.screenshot({ path: info.outputPath(`aris-task-related-context-${width}.png`), animations: "disabled" });
+        await closeMobileContext();
+
+        server.add("Проверенная сущность ответа.", 0, true, { author_type: "AGENT", author: null, entities: [server.taskEntity(42)],
+            agent: { ...pending.agent!, status: "completed", sources: [] } });
+        await expect(history.getByRole("button", { name: `Задача: ${server.tasks.get(42)!.title}`, exact: true })).toHaveAttribute("aria-pressed", "true");
+        await showContext();
+        await expect(panel.getByRole("heading", { name: server.tasks.get(42)!.title, exact: true })).toBeVisible();
+        await closeMobileContext();
+        await expect(composer).toHaveValue("Черновик следующего вопроса");
+        await expect(page.getByRole("dialog", { name: /^Задача / })).toHaveCount(0);
+        expect(server.control.commands.filter(command => command.type === "message.send")).toEqual([]);
+    });
+}
 
 for (const width of [1440, 390]) {
     test(`основной документ задачи открывает проверенный фрагмент из нескольких источников, ${width}px`, async ({ page }, info) => {
