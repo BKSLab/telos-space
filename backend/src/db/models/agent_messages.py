@@ -35,6 +35,8 @@ class AgentMessage(Base):
             "role = 'assistant' OR status = 'completed'", name="ck_agent_user_message_complete"
         ),
         Index("ix_agent_messages_conversation", "conversation_id", "id"),
+        Index("ix_agent_messages_date", "conversation_id", "created_at", "id"),
+        Index("ix_agent_messages_history", "conversation_id", "role", "status", "id"),
         Index("ix_agent_messages_queue", "status", "id"),
         Index("ix_agent_messages_request_result", "request_id", "role"),
         Index(
@@ -65,6 +67,10 @@ class AgentMessage(Base):
         server_default=text("'[]'::jsonb"),
         doc="Проверенные источники ответа.",
         comment="Проверенные источники ответа.",
+    )
+    message_references: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb"),
+        doc="Проверенные цитаты сообщений диалога.", comment="Проверенные цитаты сообщений диалога.",
     )
     files: Mapped[list] = mapped_column(
         JSONB,

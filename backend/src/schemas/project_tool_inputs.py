@@ -75,14 +75,42 @@ class PageInput(ToolInput):
     limit: int = Field(30, ge=1, le=100, description="Максимум элементов.")
 
 
-class ChatFilesInput(ToolInput):
-    q: str | None = Field(default=None, max_length=200, description="Часть исходного имени файла; null — последние файлы текущего чата.")
-    limit: int = Field(default=20, ge=1, le=50, description="Размер страницы файлов.")
-    offset: int = Field(default=0, ge=0, description="Смещение страницы файлов.")
+class ChatMessagesInput(ToolInput):
+    """История одного серверного диалога с курсором и пересечением фильтров."""
+
+    chat_id: int | None = Field(None, gt=0, description="ID текущего чата из chat_context; null выбирает его автоматически.", examples=[1])
+    limit: int = Field(15, ge=1, le=50, description="Максимум сообщений страницы.", examples=[15])
+    before_message_id: int | None = Field(None, gt=0, description="Вернуть сообщения раньше этого ID, исключая сам якорь.", examples=[40])
+    after_message_id: int | None = Field(None, gt=0, description="Вернуть сообщения позже этого ID, исключая сам якорь.", examples=[10])
+    query: str | None = Field(None, min_length=1, max_length=200, description="Полнотекстовый поиск по сообщениям либо буквальное имя вложения; фильтры применяются совместно.", examples=["баг"])
+    author_user_id: int | None = Field(None, gt=0, description="Локальный ID автора из сообщений/участников; имя само по себе неоднозначно.", examples=[2])
+    date_from: date | None = Field(None, description="Первый календарный день включительно в timezone вопроса.", examples=["2026-11-12"])
+    date_to: date | None = Field(None, description="Последний календарный день включительно в timezone вопроса.", examples=["2026-11-12"])
+
+    @model_validator(mode="after")
+    def coherent_filters(self):
+        """Один курсор и непротиворечивый период."""
+        if self.before_message_id is not None and self.after_message_id is not None:
+            raise ValueError("Укажите before_message_id либо after_message_id.")
+        if self.date_from and self.date_to and self.date_from > self.date_to:
+            raise ValueError("date_from не может быть позже date_to.")
+        return self
+
+
+class ChatMessageInput(ToolInput):
+    """Конкретное сообщение, соседние реплики и точный фрагмент для цитаты."""
+
+    message_id: int = Field(gt=0, description="ID из chat_context или telos_list_chat_messages.", examples=[12])
+    chat_id: int | None = Field(None, gt=0, description="ID текущего диалога; null — серверный контекст.", examples=[1])
+    before_count: int = Field(0, ge=0, le=5, description="Сколько соседних реплик перед сообщением прочитать.", examples=[3])
+    after_count: int = Field(0, ge=0, le=5, description="Сколько соседних реплик после сообщения прочитать в пределах текущего вопроса.", examples=[3])
+    offset: int = Field(0, ge=0, description="Начало страницы полного текста в Unicode codepoints.", examples=[0])
+    max_chars: int = Field(8000, ge=1, le=8000, description="Максимум символов страницы; next_content_offset продолжает чтение.", examples=[4000])
+    quote: str | None = Field(None, min_length=1, max_length=2000, description="Дословный фрагмент уже прочитанного сообщения для проверенной цитаты; сервер сверяет текст.", examples=["Исправлю завтра."])
 
 
 class ChatFileReadInput(ToolInput):
-    file_id: UUID = Field(description="UUID из uploaded_files или telos_list_chat_files; не путь и не ссылка.")
+    file_id: UUID = Field(description="UUID из attachments конкретного сообщения chat_context или инструментов истории; не путь и не ссылка.")
     offset: int = Field(default=0, ge=0, description="Начало чтения/поиска в Unicode code points.")
     max_chars: int = Field(default=2000, ge=1, le=8000, description="Максимум символов одной страницы текста.")
     q: str | None = Field(default=None, min_length=1, max_length=200, description="Буквальный поиск внутри файла без учёта регистра; null — чтение страницы.")

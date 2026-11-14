@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { ArrowDown, Eye, Paperclip, Plus, Send, X } from "lucide-react";
 import { AgentFileList } from "@/components/files/AgentFileList";
 import { api, endpoints, queryKeys } from "@/lib/api";
@@ -21,10 +22,20 @@ import { ArisMarkdown, ArisThinking } from "@/components/chat/ArisChatReply";
 import { newUuid } from "@/lib/uuid";
 import { isTouchChatInput, shouldSubmitChat, useChatInput } from "@/components/chat/useChatInput";
 import { useChatHistory } from "@/components/chat/useChatHistory";
+import { ChatMessageReferences } from "@/components/chat/ChatMessageReferences";
+import { chatMessageId } from "@/lib/chatMessageReferences";
+import { browserTimezone } from "@/lib/timezone";
 import "@/components/chat/chat.css";
 
 /** Панель личного диалога с Арисом (docs/agent.md, 3). */
 export function ArisPanel({ userId, onClose, embedded = false }: { userId: number; onClose?: () => void; embedded?: boolean }) {
+    const location = useLocation();
+    const [params, setParams] = useSearchParams();
+    const personalRoute = embedded && location.pathname.replace(/\/$/, "") === "/chat";
+    const requestedId = personalRoute ? chatMessageId(params.get("conversation")) : null;
+    const around = requestedId != null ? chatMessageId(params.get("message")) : null;
+    const mounted = useRef(true);
+    useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
     const context = useArisPageContext();
     const projects = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()) }).data ?? [];
     const task = useQuery({ queryKey: queryKeys.task(context.task_id ?? 0), queryFn: () => api.get<Task>(endpoints.task(context.task_id!)), enabled: context.task_id != null }).data;
@@ -35,11 +46,12 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
     const select = useArisWidgetStore((state) => state.select);
     const updateDraft = useArisWidgetStore((state) => state.updateDraft);
     const clearDraft = useArisWidgetStore((state) => state.clearDraft);
-    const chat = useArisConversations(remembered ?? null);
+    const chat = useArisConversations(requestedId ?? remembered ?? null, true, around);
     const conversations = chat.conversations.data?.pages.flatMap((page) => page.items) ?? [];
     const firstId = conversations[0]?.id;
     // Текущий диалог — первый в списке сервера, пока пользователь не выбрал другой.
-    const conversationId = remembered ?? firstId ?? null;
+    const conversationId = requestedId ?? remembered ?? firstId ?? null;
+    useEffect(() => { if (requestedId != null && requestedId !== remembered) select(userId, requestedId); }, [requestedId, remembered, select, userId]);
     const messages = chat.messages.data?.pages.slice().reverse().flatMap((page) => page.items) ?? [];
     const draftKey = `${userId}:${conversationId ?? "new"}`;
     const draft = useArisWidgetStore((state) => state.drafts[draftKey]);
@@ -48,12 +60,12 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
     const uploads = useDraftUploads<{ file: AgentFile; conversationId: number; key: string }>(draftKey);
     const [uploadError, setUploadError] = useState<string | null>(null);
     useEffect(() => {
-        if (remembered != null || firstId == null || uploads.blocked) return;
+        if (requestedId != null || remembered != null || firstId == null || uploads.blocked) return;
         const key = `${userId}:new`;
         const current = useArisWidgetStore.getState().drafts[key];
         if (current) { updateDraft(`${userId}:${firstId}`, current); clearDraft(key, current.requestId); }
         select(userId, firstId);
-    }, [remembered, firstId, uploads.blocked, select, userId, updateDraft, clearDraft]);
+    }, [requestedId, remembered, firstId, uploads.blocked, select, userId, updateDraft, clearDraft]);
     const busy = messages.some((message) => message.status === "queued" || message.status === "processing");
     const sending = chat.mutating;
     const sendingRef = useRef(false);
@@ -62,15 +74,19 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
     const lastMessage = messages.at(-1);
     const panel = useRef<HTMLElement>(null);
     const input = useChatInput(question);
-    const { viewportRef, contentRef, atBottom, onScroll, scrollToLatest } = useChatHistory(draftKey, messages.map(message => `${message.id}:${message.status}:${message.content.length}`).join("|"));
+    const { viewportRef, contentRef, atBottom, onScroll, scrollToLatest } = useChatHistory(`${draftKey}:${around ?? "latest"}`, messages.map(message => `${message.id}:${message.status}:${message.content.length}`).join("|"), around);
     const fileInput = useRef<HTMLInputElement>(null);
-    useEffect(() => { if (!isTouchChatInput()) input.current?.focus(); }, [input]);
+    useEffect(() => { if (around == null && !isTouchChatInput()) input.current?.focus(); }, [input, around]);
 
     function resetErrors() {
         setUploadError(null);
         chat.send.reset(); chat.retry.reset(); chat.decide.reset(); chat.upload.reset(); chat.removeUpload.reset(); chat.create.reset();
     }
-    function choose(id: number) { select(userId, id); resetErrors(); }
+    function showLatest(id = conversationId) {
+        if (personalRoute && mounted.current) setParams(previous => { const next = new URLSearchParams(previous); next.delete("message"); if (id != null) next.set("conversation", String(id)); return next; });
+        scrollToLatest();
+    }
+    function choose(id: number) { select(userId, id); showLatest(id); resetErrors(); }
 
     async function ensureConversation(): Promise<number> {
         if (conversationId != null) return conversationId;
@@ -85,13 +101,16 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
         sendingRef.current = true;
         scrollToLatest();
         const requestId = draft?.content.trim() === normalized ? draft.requestId : newUuid();
-        updateDraft(draftKey, { content: normalized, files: selectedFiles, requestId });
+        const pageContext = draft?.submission?.requestId === requestId ? draft.submission.pageContext : { ...context, timezone: browserTimezone() };
+        const submitted = { content: normalized, files: selectedFiles, requestId, submission: { requestId, pageContext } };
+        updateDraft(draftKey, submitted);
         try {
             const id = await ensureConversation();
             const key = `${userId}:${id}`;
-            if (key !== draftKey) { updateDraft(key, { content: normalized, files: selectedFiles, requestId }); clearDraft(draftKey, requestId); }
-            await chat.send.mutateAsync({ id, content: normalized, requestId, fileIds: selectedFiles.map((file) => file.id), pageContext: context });
+            if (key !== draftKey) { updateDraft(key, submitted); clearDraft(draftKey, requestId); }
+            await chat.send.mutateAsync({ id, content: normalized, requestId, fileIds: selectedFiles.map((file) => file.id), pageContext });
             clearDraft(key, requestId);
+            showLatest(id);
         } catch {
             // Черновик и UUID остаются: повтор не создаст второй вопрос.
         } finally {
@@ -180,6 +199,7 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
             {!embedded && <IconButton label="Закрыть окно Ариса" onClick={onClose}><X size={16} /></IconButton>}
         </header>
 
+        {around != null && <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-1 text-xs text-secondary"><span>Контекст сообщения</span><Button size="sm" variant="ghost" onClick={() => showLatest()}>К последним сообщениям</Button></div>}
         {conversations.length > 0 && <div className="flex shrink-0 items-center gap-2 border-b border-line-subtle px-3 py-1.5">
             <select aria-label="Диалог с Арисом" title="Прежние диалоги с Арисом — от недавних к старым" value={conversationId ?? ""} disabled={sending} onChange={(event) => choose(Number(event.target.value))}
                 className="min-h-9 min-w-0 flex-1 rounded-[var(--radius-control)] border border-line bg-surface px-2 py-1 text-[12px] text-primary">
@@ -207,7 +227,7 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
                     const project = message.role === "assistant" ? answerProject(message) : null;
                     const actions = message.actions ?? [];
                     const asked = message.role === "user" && message.page_context ? describePageContext(message.page_context) : "";
-                    return <div key={message.id} data-chat-message={message.id} className={cn("flex gap-2", message.role === "user" ? "justify-end" : "justify-start")}>
+                    return <div key={message.id} data-chat-message={message.id} data-highlighted={message.id === around || undefined} tabIndex={message.id === around ? -1 : undefined} aria-label={message.id === around ? "Выбранное сообщение" : undefined} className={cn("flex gap-2 rounded-lg", message.id === around && "ring-2 ring-accent/60", message.role === "user" ? "justify-end" : "justify-start")}>
                         {message.role === "assistant" && <ArisAvatar className="mt-1" />}
                         <div data-role={message.role} className={cn("chat-content chat-personal-message min-w-0 max-w-[92%] rounded-lg px-3 py-2.5", message.role === "user" ? "bg-accent/85 text-on-accent" : "aris-message text-secondary")}>
                             {message.status === "queued" || message.status === "processing" ? <ArisThinking progress={message.progress} />
@@ -218,6 +238,7 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
                                 : message.role === "assistant" ? (message.content.trim() ? <ArisMarkdown content={message.content} /> : null)
                                 : <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{message.content}</p>}
                             {asked && <p className="mt-1 text-[10px] opacity-75" title="Страница, с которой задан вопрос — её видел Арис">{asked}</p>}
+                            {message.role === "assistant" && Boolean(message.message_references?.length) && !chat.messages.isError && chat.messages.isFetchedAfterMount !== false && <div className="mt-2"><ChatMessageReferences references={message.message_references} /></div>}
                             {(message.files?.length ?? 0) > 0 && <div className="mt-2"><AgentFileList files={message.files!} conversationId={message.conversation_id} /></div>}
                             {actions.map((action) => <AgentActionCard key={action.id} action={action} project={project} sources={message.sources}
                                 pending={chat.decide.isPending && chat.decide.variables?.actionId === action.id}
@@ -234,7 +255,7 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
             </div>}
             </div>
         </div>
-        {!atBottom && <Button size="sm" className="material-glass absolute right-3 bottom-3 shadow-panel" icon={<ArrowDown size={14} />} onClick={scrollToLatest}>К последним сообщениям</Button>}
+        {!atBottom && around == null && <Button size="sm" className="material-glass absolute right-3 bottom-3 shadow-panel" icon={<ArrowDown size={14} />} onClick={scrollToLatest}>К последним сообщениям</Button>}
         </div>
 
         <form onSubmit={(event: FormEvent) => { event.preventDefault(); void submit(); }} className="chat-personal-composer shrink-0 border-t border-line-subtle px-3 py-2.5">

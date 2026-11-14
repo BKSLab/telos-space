@@ -69,6 +69,8 @@ from src.schemas.knowledge import (
 )
 from src.schemas.tasks import TaskSchema
 from src.services.agent_cards import source_card
+from src.services.agent_chat_history import AgentChatHistoryService
+from src.services.agent_chat_reference_registry import ChatReferenceRegistry
 from src.services.db_scope import ProjectAgentScope, ProjectAgentScopeFactory
 from src.utils.document_refs import decode_document_ref
 
@@ -196,6 +198,7 @@ class ProjectAgentService:
         config: ProjectAgentConfig,
         tools: AgentToolExecutor,
         agent_model: Model,
+        chat_history: AgentChatHistoryService | None = None,
     ) -> None:
         """Создаёт Арис.
 
@@ -216,6 +219,7 @@ class ProjectAgentService:
         self.config = config
         self.tools = tools
         self.agent_model = agent_model
+        self.chat_history = chat_history
         self._runtime: ArisRuntime | None = None
 
     @property
@@ -236,6 +240,7 @@ class ProjectAgentService:
         execution: AgentToolContext | None = None,
         action_history: list[dict[str, Any]] | None = None,
         uploaded_files: list[dict[str, Any]] | None = None,
+        chat_context: dict[str, Any] | None = None,
         mode: ArisMode = ArisMode.WIDGET_PROJECT,
         extra_context: dict[str, Any] | None = None,
         channel: str = "web",
@@ -299,6 +304,7 @@ class ProjectAgentService:
         try:
             query = retrieval_query(question, history)
             registry = _SourceRegistry()
+            chat_references = ChatReferenceRegistry()
             content = {
                 "mode": mode.value,
                 "current_date": date.today().isoformat(),
@@ -312,6 +318,12 @@ class ProjectAgentService:
                 "previous_actions": action_history or [],
                 "uploaded_files": uploaded_files or [],
             }
+            if chat_context is not None:
+                content["chat_context"] = chat_context
+                content["current_date"] = chat_context.get("current_datetime", content["current_date"])[:10]
+                content["dialog_history"] = []
+                content.pop("uploaded_files", None)
+                chat_references.register(chat_context)
             system_prompt = ARIS_BASE_PROMPTS[mode]
             if api_channel:
                 system_prompt = PROJECT_AGENT_API_BASE_PROMPT
@@ -335,6 +347,8 @@ class ProjectAgentService:
 
             async def load_context(group_id: str) -> None:
                 """Читает данные только после выбора рабочей области моделью."""
+                if group_id == "chat_history":
+                    return
                 async with context_lock:
                     progress.report(SEARCH_PROJECT)
                     if state["catalog"] is None:
@@ -410,6 +424,9 @@ class ProjectAgentService:
             directly_read_tasks: set[str] = set()
 
             async def register(tool: AgentTool, result: dict[str, Any]) -> None:
+                if tool.name in {"telos_list_chat_messages", "telos_get_chat_message", "telos_read_chat_file"}:
+                    chat_references.register(result)
+                    return
                 mutating = tool.mutating or tool.name == PROJECT_ACTION_TOOL
                 # Новая сущность должна получить проверенный handle уже в результате
                 # создавшего её инструмента, до следующего шага модели.
@@ -454,6 +471,9 @@ class ProjectAgentService:
                     },
                 )
                 output = run.output or ArisAnswer()
+                message_references = await chat_references.select(
+                    handles=output.message_references, history=self.chat_history, context=tool_context,
+                )
                 requested_handles = [*output.source_ids]
                 if output.primary_reference:
                     requested_handles.append(output.primary_reference)
@@ -514,16 +534,16 @@ class ProjectAgentService:
                 answer = output.answer.strip()
                 if run.output is None:
                     answer = INCOMPLETE_ANSWER
-                elif not answer and not selected and completed_actions:
+                elif not answer and not selected and not message_references and completed_actions:
                     answer = (
                         "Действие выполнено. Результат — в карточке действия."
                         if len(completed_actions) == 1
                         else f"Выполнено действий: {len(completed_actions)}. "
                         "Результаты — в карточках действий."
                     )
-                elif not answer and not selected:
+                elif not answer and not selected and not message_references:
                     answer = EMPTY_ANSWER
-                return KnowledgeAnswerSchema(answer=answer, sources=selected)
+                return KnowledgeAnswerSchema(answer=answer, sources=selected, message_references=message_references)
             except AgentRunError as error:
                 raise AiProviderError(str(error)) from error
             except ClientError as error:
@@ -570,6 +590,7 @@ class ProjectAgentService:
         conversation_id: str | None = None,
         on_progress: ProgressSink | None = None,
         uploaded_files: list[dict[str, Any]] | None = None,
+        chat_context: dict[str, Any] | None = None,
     ) -> KnowledgeAnswerSchema:
         """Ответ Ариса в личном виджете, когда страница не указывает на проект.
 
@@ -610,6 +631,13 @@ class ProjectAgentService:
             "previous_actions": action_history or [],
             "uploaded_files": uploaded_files or [],
         }
+        chat_references = ChatReferenceRegistry()
+        if chat_context is not None:
+            content["chat_context"] = chat_context
+            content["current_date"] = chat_context.get("current_datetime", content["current_date"])[:10]
+            content["dialog_history"] = []
+            content.pop("uploaded_files", None)
+            chat_references.register(chat_context)
         system_prompt = ARIS_BASE_PROMPTS[mode]
         budget = AgentContextBudget(
             system_prompt=system_prompt,
@@ -638,6 +666,8 @@ class ProjectAgentService:
         directly_read_tasks: set[str] = set()
 
         async def register_personal(_tool, result):
+            if _tool.name in {"telos_list_chat_messages", "telos_get_chat_message"}:
+                chat_references.register(result)
             self._register_personal_views(result, registry)
             if _tool.name == "telos_get_any_task" and result.get("source_handle"):
                 directly_read_tasks.add(result["source_handle"])
@@ -656,6 +686,9 @@ class ProjectAgentService:
             if run.output is None:
                 return KnowledgeAnswerSchema(answer=INCOMPLETE_ANSWER, sources=[])
             output = run.output
+            message_references = await chat_references.select(
+                handles=output.message_references, history=self.chat_history, context=tool_context,
+            )
             fallback_task = next(iter(directly_read_tasks)) if not output.source_ids and not output.primary_reference and len(directly_read_tasks) == 1 else None
             primary = registry.resolve_reference(output.primary_reference or fallback_task)
             selected = []
@@ -693,10 +726,10 @@ class ProjectAgentService:
                     "reference": primary.reference if is_primary else source.reference,
                 }))
                 seen_sources.add(source.source_id)
-            answer = output.answer.strip() or ("" if selected else (
+            answer = output.answer.strip() or ("" if selected or message_references else (
                 "Не удалось завершить проверку данных. Уточните вопрос."
             ))
-            return KnowledgeAnswerSchema(answer=answer, sources=selected)
+            return KnowledgeAnswerSchema(answer=answer, sources=selected, message_references=message_references)
         except AgentRunError as error:
             raise AiProviderError(str(error)) from error
         except ClientError as error:

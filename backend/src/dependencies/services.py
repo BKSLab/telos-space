@@ -24,6 +24,7 @@ from src.clients.agent_model import build_agent_model
 from src.core.settings import Settings
 from src.db.session import async_session_factory
 from src.dependencies.chat_files import build_agent_chat_files_service
+from src.dependencies.chat_history import build_agent_chat_history_service
 from src.dependencies.clients import (
     EmbeddingClientDep,
     LlmClientDep,
@@ -90,6 +91,7 @@ from src.schemas.project_tool_inputs import ProjectActionInput, ToolSchemasInput
 from src.services.access import AccessService
 from src.services.agent_actions import AgentActionsService
 from src.services.agent_chat_files import AgentChatFilesService
+from src.services.agent_chat_history import AgentChatHistoryService
 from src.services.agent_conversations import AgentConversationConfig, AgentConversationsService
 from src.services.agent_files import AgentFilesService
 from src.services.agent_requests import AgentRequestsService, RequestLinks
@@ -643,14 +645,24 @@ def get_agent_chat_files_service(settings: SettingsDep, vision: VisionCapability
 AgentChatFilesServiceDep = Annotated[AgentChatFilesService, Depends(get_agent_chat_files_service)]
 
 
+def get_agent_chat_history_service(chat_files: AgentChatFilesServiceDep) -> AgentChatHistoryService:
+    """Внедряет scoped history reader с общей авторизацией файлов и переписки."""
+    return build_agent_chat_history_service(session_factory=async_session_factory, chat_files=chat_files)
+
+
+AgentChatHistoryServiceDep = Annotated[AgentChatHistoryService, Depends(get_agent_chat_history_service)]
+
+
 def get_agent_actions_service(
     scope: AgentProjectToolScopeDep, settings: SettingsDep, chat_files: AgentChatFilesServiceDep,
+    chat_history: AgentChatHistoryServiceDep,
 ) -> AgentActionsService:
     """Собирает общий сценарий проектных инструментов для чата и MCP."""
     return AgentActionsService(
         scope=scope,
         actions=ARIS_ACTIONS,
         chat_files=chat_files,
+        chat_history=chat_history,
         confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
     )
 
@@ -782,6 +794,7 @@ def get_project_agent_service(
     qdrant_client: QdrantClientDep,
     settings: SettingsDep,
     tools: AgentToolExecutorDep,
+    chat_history: AgentChatHistoryServiceDep,
 ) -> ProjectAgentService:
     """Создаёт Арис.
 
@@ -796,6 +809,7 @@ def get_project_agent_service(
         config=build_project_agent_config(settings),
         tools=tools,
         agent_model=build_agent_model(settings.llm, llm_client.http_client),
+        chat_history=chat_history,
     )
 
 
@@ -836,12 +850,14 @@ def get_agent_conversations_service(
     llm_client: LlmClientDep,
     settings: SettingsDep,
     chat_files: AgentChatFilesServiceDep,
+    chat_history: AgentChatHistoryServiceDep,
 ) -> AgentConversationsService:
     """Собирает сценарии постоянных диалогов из явных зависимостей."""
     return AgentConversationsService(
         scope=scope,
         routing=routing,
         chat_files=chat_files,
+        chat_history=chat_history,
         agent=agent,
         llm_client=llm_client,
         config=build_agent_conversation_config(settings),
@@ -858,6 +874,7 @@ def build_agent_worker(
 ) -> AgentWorker:
     """Собирает фоновое исполнение с теми же сервисами и клиентами, что HTTP."""
     chat_files = build_agent_chat_files_service(session_factory=session_factory, settings=settings, vision=runtime.vision)
+    chat_history = build_agent_chat_history_service(session_factory=session_factory, chat_files=chat_files)
     tools = build_project_tool_executor(
         ProjectQueryService(
             scope=build_project_knowledge_query_scope(session_factory=session_factory)
@@ -868,6 +885,7 @@ def build_agent_worker(
             ),
             actions=ARIS_ACTIONS,
             chat_files=chat_files,
+            chat_history=chat_history,
             confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
         ),
     )
@@ -879,6 +897,7 @@ def build_agent_worker(
         config=build_project_agent_config(settings),
         tools=tools,
         agent_model=build_agent_model(settings.llm, runtime.http_client),
+        chat_history=chat_history,
     )
     service = AgentConversationsService(
         scope=build_agent_conversation_scope(session_factory=session_factory),
@@ -886,6 +905,7 @@ def build_agent_worker(
         llm_client=runtime.llm_client,
         config=build_agent_conversation_config(settings),
         chat_files=chat_files,
+        chat_history=chat_history,
     )
     routing = AgentRoutingService(
         scope=build_agent_project_tool_scope(session_factory=session_factory, settings=settings),
@@ -900,6 +920,7 @@ def build_agent_worker(
         agent=agent,
         config=ArisChatConfig(turn_timeout_seconds=settings.agent.agent_turn_timeout_seconds),
         chat_files=chat_files,
+        chat_history=chat_history,
     )
     return AgentWorker(
         services=[service, chat],

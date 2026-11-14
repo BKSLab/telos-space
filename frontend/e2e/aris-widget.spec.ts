@@ -44,7 +44,7 @@ async function setup(page: Page, patch: (state: MockState) => void = () => undef
     return state;
 }
 
-test("виджет видит страницу и открытую задачу, вопрос уходит с контекстом страницы", async ({ page }) => {
+test("виджет видит страницу и открытую задачу, вопрос уходит с контекстом страницы", async ({ page }, info) => {
     const state = await setup(page);
     await page.goto("/projects/DEMO/tasks");
     await page.getByText("Согласовать макеты личного кабинета").first().click();
@@ -60,16 +60,16 @@ test("виджет видит страницу и открытую задачу,
     await expect(panel.getByText("Проект DEMO · задача #100", { exact: true })).toBeVisible();
     expect(state.aris.submissions).toHaveLength(1);
     expect(Object.keys(state.aris.submissions[0]).sort()).toEqual(["content", "file_ids", "page_context", "request_id"]);
-    expect(state.aris.submissions[0].page_context).toEqual({ route: "/projects/DEMO/tasks", project_key: "DEMO", task_id: 100 });
+    expect(state.aris.submissions[0].page_context).toEqual({ route: "/projects/DEMO/tasks", project_key: "DEMO", task_id: 100, timezone: await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC") });
     // Карточка задачи всё ещё открыта: клик в виджете её не закрыл
     await expect(page.getByRole("dialog", { name: "Задача DEMO-1", exact: true })).toBeVisible();
-    await page.screenshot({ path: "test-results/aris-widget-task.png", animations: "disabled" });
+    await page.screenshot({ path: info.outputPath("aris-widget-task.png"), animations: "disabled" });
     await panel.getByRole("textbox", { name: "Вопрос Арису" }).press("Escape");
     await expect(panel).toHaveCount(0);
     expect(state.errors).toEqual([]);
 });
 
-test("без проекта на странице Арис в личном режиме; ожидание ответа переживает перезагрузку", async ({ page }) => {
+test("без проекта на странице Арис в личном режиме; ожидание ответа переживает перезагрузку", async ({ page }, info) => {
     const state = await setup(page, (value) => { value.aris.pending = true; });
     await page.goto("/");
     let panel = await openAris(page);
@@ -87,11 +87,11 @@ test("без проекта на странице Арис в личном ре�
     await expect(live).toHaveText("Ищу среди ваших задач: «горит»…");
     await expect(live).toHaveAttribute("aria-live", "polite");
     await expect(panel.getByText("Арис думает…")).toHaveCount(0);
-    await page.screenshot({ path: "test-results/aris-widget-progress.png", animations: "disabled" });
+    await page.screenshot({ path: info.outputPath("aris-widget-progress.png"), animations: "disabled" });
     state.aris.pending = false;
     await expect(panel.getByText("По задачам всё в порядке: просрочек нет.")).toBeVisible();
     await expect(panel.getByText("Ищу среди ваших задач: «горит»…")).toHaveCount(0);
-    expect(state.aris.submissions[0].page_context).toEqual({ route: "/", project_key: null, task_id: null });
+    expect(state.aris.submissions[0].page_context).toEqual({ route: "/", project_key: null, task_id: null, timezone: await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC") });
 });
 
 test("новый диалог и возврат к прежнему; ошибка ответа — повтор без дубля вопроса", async ({ page }) => {
@@ -151,7 +151,7 @@ test("файл уходит вместе с вопросом", async ({ page }) 
     expect(state.aris.submissions[0].file_ids).toEqual(["f918d205-2ced-48eb-85f4-19b8e55ef361"]);
 });
 
-test("на телефоне панель во весь экран; проект использует единый чат", async ({ page }) => {
+test("на телефоне панель во весь экран; проект использует единый чат", async ({ page }, info) => {
     await setup(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/projects/DEMO");
@@ -166,7 +166,7 @@ test("на телефоне панель во весь экран; проект 
     expect(box).toEqual({ x: 0, y: 0, width: 390, height: 844 });
     await expect(panel.getByRole("button", { name: "Свернуть чат" })).toBeInViewport();
     await expect(panel.getByRole("textbox", { name: "Вопрос Арису" })).toBeInViewport();
-    await page.screenshot({ path: "test-results/aris-widget-mobile.png" });
+    await page.screenshot({ path: info.outputPath("aris-widget-mobile.png") });
     await panel.getByRole("button", { name: "Свернуть чат" }).click();
     await expect(panel).toHaveCount(0);
     await page.goto("/projects/DEMO/conversations");

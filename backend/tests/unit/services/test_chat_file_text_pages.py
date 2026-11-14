@@ -65,7 +65,7 @@ async def test_active_context_and_limits_are_required_before_file_lookup():
 
 async def test_extraction_states_and_explicit_resource_limit(tmp_path):
     from src.clients.vision import DisabledVisionCapability
-    from src.services.agent_chat_files import _Location
+    from src.services.agent_chat_files import ChatFileLocation
     from src.storage.task_attachments import TaskAttachmentStorage
 
     storage = TaskAttachmentStorage(tmp_path)
@@ -83,7 +83,7 @@ async def test_extraction_states_and_explicit_resource_limit(tmp_path):
         "message_id": 1,
         "created_at": datetime.now(UTC),
     }
-    location = _Location("conversation", 1, 1)
+    location = ChatFileLocation("conversation", 1, 1)
     for name, content, status in (
         ("sample.txt", "🙂привет мир".encode(), "ready"),
         ("empty.txt", b" \n ", "empty"),

@@ -2,7 +2,7 @@ from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Result, func, insert, select, update
+from sqlalchemy import Result, exists, func, insert, select, union_all, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,6 +64,74 @@ class AgentMessagesRepository:
             (await self._execute(statement.order_by(AgentMessage.id.desc()).limit(limit))).scalars()
         )
 
+    async def get_many(self, conversation_id: int, message_ids: list[int]) -> list[AgentMessage]:
+        """Пакетно обновляет источники цитат только в проверенном диалоге."""
+        return list(
+            (
+                await self._execute(
+                    select(AgentMessage)
+                    .where(
+                        AgentMessage.conversation_id == conversation_id,
+                        AgentMessage.id.in_(message_ids),
+                    )
+                    .execution_options(populate_existing=True)
+                )
+            ).scalars()
+        )
+
+    async def get_around(
+        self, conversation_id: int, message_id: int, *, limit: int
+    ) -> list[AgentMessage]:
+        """Одна страница вокруг своего target; чужой ID даёт пустой результат."""
+        anchor = (
+            select(AgentMessage.id)
+            .where(AgentMessage.conversation_id == conversation_id, AgentMessage.id == message_id)
+            .scalar_subquery()
+        )
+        before = (limit - 1) // 2
+        older = (
+            select(AgentMessage.id)
+            .where(AgentMessage.conversation_id == conversation_id, AgentMessage.id <= anchor)
+            .order_by(AgentMessage.id.desc())
+            .limit(before + 1)
+            .subquery()
+        )
+        newer = (
+            select(AgentMessage.id)
+            .where(AgentMessage.conversation_id == conversation_id, AgentMessage.id > anchor)
+            .order_by(AgentMessage.id)
+            .limit(limit - before - 1)
+            .subquery()
+        )
+        selected = union_all(select(older.c.id), select(newer.c.id)).subquery()
+        return list(
+            (
+                await self._execute(
+                    select(AgentMessage)
+                    .where(
+                        AgentMessage.conversation_id == conversation_id,
+                        AgentMessage.id.in_(select(selected.c.id)),
+                    )
+                    .order_by(AgentMessage.id)
+                )
+            ).scalars()
+        )
+
+    async def has_before(self, conversation_id: int, before_id: int) -> bool:
+        """Уточняет курсор вокруг target без предположения о заполненности окна."""
+        return bool(
+            (
+                await self._execute(
+                    select(
+                        exists().where(
+                            AgentMessage.conversation_id == conversation_id,
+                            AgentMessage.id < before_id,
+                        )
+                    )
+                )
+            ).scalar_one()
+        )
+
     async def get_request(self, conversation_id: int, request_id: UUID) -> list[AgentMessage]:
         """Возвращает обе реплики одной отправки для идемпотентного повтора.
 
@@ -99,10 +167,13 @@ class AgentMessagesRepository:
             statement = statement.join(AgentConversation).where(
                 AgentConversation.user_id == user_id,
                 AgentConversation.channel == "api",
-                AgentConversation.api_key_id.is_(None) if api_key_id is None
+                AgentConversation.api_key_id.is_(None)
+                if api_key_id is None
                 else AgentConversation.api_key_id == api_key_id,
             )
-        return (await self._execute(statement.order_by(AgentMessage.id).limit(1))).scalar_one_or_none()
+        return (
+            await self._execute(statement.order_by(AgentMessage.id).limit(1))
+        ).scalar_one_or_none()
 
     async def get_active(self, conversation_id: int) -> AgentMessage | None:
         """Находит незавершённый ответ диалога.
@@ -307,6 +378,7 @@ class AgentMessagesRepository:
             )
             .returning(AgentMessage.request_id)
         )
+
     async def retry(self, message_id: int) -> AgentMessage:
         """Возвращает проверенный сервисом неудачный ответ в очередь.
 

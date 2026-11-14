@@ -6,6 +6,7 @@ from src.schemas import board_diagrams as diagrams
 from src.schemas import project_tool_inputs as p
 from src.services import agent_board_actions as boards
 from src.services import agent_chat_file_actions as chat_files
+from src.services import agent_chat_history_actions as chat_history
 from src.services import agent_document_actions as documents
 from src.services import agent_personal_actions as personal
 from src.services import agent_project_actions as projects
@@ -15,9 +16,15 @@ from src.services import agent_task_actions as tasks
 
 PROJECT_ACTIONS = (
     ProjectAction(
-        "telos_list_chat_files", "Найти файлы переписки",
-        "Файлы текущего чата, включая старые сообщения: имя, UUID, статус подготовки и короткий фрагмент. q ищет по имени; next_offset продолжает историю. Черновики и другие диалоги закрыты.",
-        p.ChatFilesInput, chat_file_handler=chat_files.list_chat_files,
+        "telos_list_chat_messages", "Найти сообщения переписки",
+        "История текущего чата с авторами, датами и вложениями внутри сообщений. До50 сообщений; before_message_id/after_message_id и next_* продолжают чтение, query ищет текст либо буквальное имя вложения, date_from/date_to и author_user_id фильтруют. Дни в timezone вопроса. Для ответа на найденную тему читай соседние реплики.",
+        p.ChatMessagesInput, chat_history_handler=chat_history.list_chat_messages,
+        mutating=False, modes=ALL_MODES, project_optional=True,
+    ),
+    ProjectAction(
+        "telos_get_chat_message", "Прочитать сообщение переписки",
+        "Конкретное сообщение, его attachments и до5 соседей с каждой стороны. Страницы текста до8000символов, next_content_offset продолжает чтение. quote выбирает точный прочитанный фрагмент для проверенной цитаты; message_reference_handle укажи в итоговом message_references.",
+        p.ChatMessageInput, chat_history_handler=chat_history.get_chat_message,
         mutating=False, modes=ALL_MODES, project_optional=True,
     ),
     ProjectAction(

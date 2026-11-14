@@ -12,6 +12,7 @@ from src.utils.tool_names import require_canonical_tool_name
 
 if TYPE_CHECKING:
     from src.services.agent_chat_files import AgentChatFilesService
+    from src.services.agent_chat_history import AgentChatHistoryService
     from src.services.agent_tool_scope import AgentProjectToolScope
 
 
@@ -39,10 +40,13 @@ class ProjectAction:
         ["AgentChatFilesService", AgentToolContext, BaseModel], Awaitable[dict[str, Any]]
     ] | None = None
     """Читает через собственные короткие области, без внешней транзакции инструмента."""
+    chat_history_handler: Callable[
+        ["AgentChatHistoryService", AgentToolContext, BaseModel], Awaitable[dict[str, Any]]
+    ] | None = None
 
     def __post_init__(self) -> None:
         require_canonical_tool_name(self.name)
-        if (self.handler is None) == (self.chat_file_handler is None):
+        if sum(handler is not None for handler in (self.handler, self.chat_file_handler, self.chat_history_handler)) != 1:
             raise ValueError("Нужен ровно один обработчик действия.")
-        if self.chat_file_handler is not None and self.mutating:
+        if (self.chat_file_handler is not None or self.chat_history_handler is not None) and self.mutating:
             raise ValueError("Файловый обработчик доступен только для чтения.")

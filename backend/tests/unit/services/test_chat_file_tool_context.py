@@ -8,11 +8,13 @@ import pytest
 from src.agent.action_catalog import PROJECT_ACTIONS
 from src.agent.tools import AgentToolContext
 from src.exceptions.agent_tools import AgentToolArgumentsError
-from src.schemas.chat_files import ChatFileListSchema, ChatFileSchema, ChatFileTextSchema
+from src.schemas.chat_files import ChatFileSchema, ChatFileTextSchema
+from src.schemas.chat_history import ChatHistoryPageSchema
 from src.schemas.project_tool_inputs import ChatFileReadInput
 from src.services.agent_actions import AgentActionsService
-from src.services.agent_chat_file_actions import initial_chat_files, read_chat_file
+from src.services.agent_chat_file_actions import read_chat_file
 from src.services.agent_chat_files import AgentChatFilesService
+from src.services.agent_chat_history import AgentChatHistoryService
 
 
 def context():
@@ -31,18 +33,24 @@ def page(item, text="", status=None):
 
 
 @pytest.mark.asyncio
-async def test_initial_context_has_bounded_prefixes_and_metadata_for_other_files():
-    reader = AsyncMock(spec=AgentChatFilesService)
-    items = [file(index) for index in range(6)]
-    reader.list_files.return_value = ChatFileListSchema(items=items, total=80, limit=20, offset=0, next_offset=20)
-    reader.read_text.side_effect = lambda **kwargs: page(next(item for item in items if item.file_id == kwargs["file_id"]), "я" * kwargs["max_chars"])
-    result = await initial_chat_files(reader, context())
-    assert len(result) == 6
-    assert sum(len(item.get("text", "")) for item in result) == 6000
-    assert all("excerpt" not in item for item in result)
-    assert reader.read_text.await_count == 3
-    assert all("file_id" in item and "original_chars" in item for item in result)
-    reader.process_next.assert_not_awaited()
+async def test_history_tool_preserves_server_context_without_business_transaction():
+    def unexpected_scope():
+        raise AssertionError("History must use its own short read scopes")
+
+    reader = AsyncMock(spec=AgentChatHistoryService)
+    reader.list_messages.return_value = ChatHistoryPageSchema(
+        items=[], has_more=False, next_before_message_id=None, next_after_message_id=None,
+        applied_filters={"chat_id": 1, "kind": "conversation", "timezone": "Europe/Samara"},
+    )
+    ctx = AgentToolContext(project_id=1, user_id=2, message_id=10, run_id=uuid4(), timezone="Europe/Samara")
+    service = AgentActionsService(scope=unexpected_scope, actions=PROJECT_ACTIONS, chat_history=reader)
+    result = await service.execute(context=ctx, name="telos_list_chat_messages", arguments={"query": "баг"})
+    assert result["items"] == []
+    used = reader.list_messages.await_args.kwargs
+    assert used["context"].message_id == ctx.message_id and used["context"].run_id == ctx.run_id
+    assert used["context"].timezone == "Europe/Samara" and used["query"] == "баг"
+    with pytest.raises(AgentToolArgumentsError):
+        await service.execute(context=ctx, name="telos_list_chat_messages", arguments={"conversation_id": 999})
 
 
 @pytest.mark.asyncio

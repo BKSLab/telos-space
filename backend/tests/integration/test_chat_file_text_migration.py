@@ -101,7 +101,7 @@ async def test_chat_file_cache_upgrade_roundtrip_preserves_originals(postgres_co
 
         before = snapshot()
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, "f01b96d24c8a")
         connection.commit()
         assert snapshot() == before
         assert connection.execute(text("SELECT count(*) FROM chat_file_texts")).scalar_one() == 0
@@ -143,7 +143,7 @@ async def test_chat_file_cache_upgrade_roundtrip_preserves_originals(postgres_co
         command.downgrade(config, "e92a74c610bf")
         connection.commit()
         assert snapshot() == before
-        command.upgrade(config, "head")
+        command.upgrade(config, "f01b96d24c8a")
         connection.commit()
         assert snapshot() == before
         assert connection.execute(text("SELECT count(*) FROM chat_file_texts")).scalar_one() == 0

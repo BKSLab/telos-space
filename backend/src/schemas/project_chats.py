@@ -4,11 +4,13 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.schemas.agent_tools import AgentToolRunSchema
+from src.schemas.chat_references import ChatMessageReferenceSchema
 from src.schemas.knowledge import KnowledgeSourceSchema
 from src.utils.document_refs import decode_document_ref
+from src.utils.timezones import validate_timezone
 
 EntityType = Literal["TASK", "DOCUMENT", "RISK", "MILESTONE", "WBS_NODE"]
 Reaction = Literal["👍", "❤️", "👀", "✅", "🎉"]
@@ -71,6 +73,8 @@ class ChatMessageCreate(ChatMessageBody):
 
     client_message_id: UUID
     reply_to_message_id: PositiveId | None = None
+    timezone: str = Field("UTC", max_length=64, description="Часовой пояс IANA инициатора ответа.", examples=["Europe/Samara"])
+    _validate_timezone = field_validator("timezone")(validate_timezone)
 
 
 class ChatMessageEdit(ChatMessageBody):
@@ -159,6 +163,7 @@ class ChatAgentView(BaseModel):
     sources: list[KnowledgeSourceSchema] = Field(
         description="Карточки сущностей проекта, подтверждающие ответ."
     )
+    message_references: list[ChatMessageReferenceSchema] = Field(default_factory=list, description="Проверенные цитаты сообщений этого чата.")
     actions: list[AgentToolRunSchema] = Field(
         description="Действия ответа; pending ждёт решения в карточке."
     )

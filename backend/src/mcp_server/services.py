@@ -44,6 +44,7 @@ from src.repositories.wbs_nodes import WbsNodesRepository
 from src.services.access import AccessService
 from src.services.agent_actions import AgentActionsService
 from src.services.agent_chat_files import AgentChatFilesService
+from src.services.agent_chat_history import AgentChatHistoryService
 from src.services.agent_requests import AgentRequestsService, RequestLinks
 from src.services.auth import AuthService
 from src.services.calendar import CalendarService
@@ -316,6 +317,7 @@ def build_tool_services(
     session_factory: SessionFactory,
     settings: Settings,
     chat_files: AgentChatFilesService | None = None,
+    chat_history: AgentChatHistoryService | None = None,
 ) -> ToolServices:
     """Собирает полный набор сервисов одного вызова инструмента.
 
@@ -358,6 +360,7 @@ def build_tool_services(
             ),
             actions=PROJECT_ACTIONS + PERSONAL_ACTIONS,
             chat_files=chat_files,
+            chat_history=chat_history,
             confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
         ),
     )

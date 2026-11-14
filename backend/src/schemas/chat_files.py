@@ -62,7 +62,7 @@ class ChatFileSchema(BaseModel):
     )
     excerpt: str | None = Field(
         default=None,
-        description="Начальные не более 600 Unicode codepoints готового кэша для списка; полное чтение выполняет отдельный bounded read.",
+        description="Короткое начало готового текста: до 2000 Unicode codepoints внутри сообщения; продолжение читает bounded read.",
         examples=["Принятые решения по проекту…"],
     )
 

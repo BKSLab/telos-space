@@ -12,7 +12,7 @@ export function invalidateAfterArisAction(queryClient: QueryClient) {
 }
 
 /** Личный диалог с Арисом в виджете (docs/agent.md): не привязан к проекту, виден только владельцу. */
-export function useArisConversations(conversationId: number | null, enabled = true) {
+export function useArisConversations(conversationId: number | null, enabled = true, aroundMessageId: number | null = null) {
     const queryClient = useQueryClient();
     const userId = useCurrentUser().data?.id;
     const baseKey = ["aris", userId] as const;
@@ -30,13 +30,15 @@ export function useArisConversations(conversationId: number | null, enabled = tr
     });
 
     const messages = useInfiniteQuery({
-        queryKey: messageKey(conversationId),
+        queryKey: aroundMessageId == null ? messageKey(conversationId) : [...messageKey(conversationId), "around", aroundMessageId],
         enabled: enabled && conversationId != null && userId != null,
         initialPageParam: null as number | null,
-        queryFn: ({ pageParam }) => api.get<AgentMessagePage>(
-            `${endpoints.arisMessages(conversationId!)}${pageParam == null ? "" : `?before_id=${pageParam}`}`,
-        ),
+        queryFn: ({ pageParam }) => {
+            const query = pageParam != null ? `?before_id=${pageParam}` : aroundMessageId != null ? `?around_message_id=${aroundMessageId}` : "";
+            return api.get<AgentMessagePage>(`${endpoints.arisMessages(conversationId!)}${query}`);
+        },
         getNextPageParam: (lastPage) => lastPage.next_before_id ?? undefined,
+        refetchOnMount: "always",
         // Ответ готовится в фоне: пока Арис думает — опрашиваем чаще.
         refetchInterval: (query) => query.state.data?.pages[0].items.some(
             (message) => message.status === "queued" || message.status === "processing",

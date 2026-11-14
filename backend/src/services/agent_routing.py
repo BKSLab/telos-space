@@ -143,6 +143,7 @@ class AgentRoutingService:
         page_context: dict[str, Any] | None = None,
         conversation_id: str | None = None,
         on_progress: ProgressSink | None = None,
+        chat_context: dict[str, Any] | None = None,
     ) -> AgentRoutingAnswer:
         """Отвечает на вопрос без проекта: в проекте, обзором или уточнением.
 
@@ -204,6 +205,7 @@ class AgentRoutingService:
                 actor=actor,
                 overview=overview,
                 page=page,
+                chat_context=chat_context,
             )
             if route.mode == "project":
                 target = keys.get((route.project_key or "").strip().upper())
@@ -244,6 +246,7 @@ class AgentRoutingService:
                     },
                     conversation_id=conversation_id,
                     on_progress=on_progress,
+                    chat_context=chat_context,
                 )
                 return AgentRoutingAnswer(
                     answer=answer, project_id=None, project_key=None, mode="overview"
@@ -285,6 +288,7 @@ class AgentRoutingService:
             verbatim=verbatim,
             conversation_id=conversation_id,
             on_progress=on_progress,
+            chat_context=chat_context,
         )
         return AgentRoutingAnswer(
             answer=answer,
@@ -422,12 +426,19 @@ class AgentRoutingService:
         actor: dict[str, Any],
         overview: _Overview,
         page: _PageContext,
+        chat_context: dict[str, Any] | None = None,
     ) -> AgentRoutingDecision:
         recent = {
             "question": question,
             "dialog_history": [message.model_dump() for message in history],
             "dialog_memory": memory,
         }
+        if chat_context is not None:
+            # Маршрутизатор не получает текст файлов или цитаты: ему достаточно темы реплик.
+            recent["dialog_history"] = [
+                {"role": "assistant" if message["author_type"] == "AGENT" else "user", "content": message["content"]}
+                for message in chat_context.get("messages", []) if message.get("content")
+            ]
         AgentContextBudget(
             system_prompt=AGENT_ROUTING_SYSTEM_PROMPT,
             max_tokens=self.context_tokens,

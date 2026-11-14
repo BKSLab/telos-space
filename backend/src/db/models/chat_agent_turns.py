@@ -45,6 +45,11 @@ class ChatAgentTurn(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True, doc="ID хода.", comment="ID хода.")
     chat_id: Mapped[int] = mapped_column(doc="Чат хода.", comment="Чат хода.")
     project_id: Mapped[int] = mapped_column(doc="Проект хода.", comment="Проект хода.")
+    timezone: Mapped[str] = mapped_column(String(64), server_default="UTC", doc="Часовой пояс IANA инициатора.", comment="Часовой пояс IANA инициатора.")
+    message_references: Mapped[list] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb"),
+        doc="Проверенные цитаты сообщений чата.", comment="Проверенные цитаты сообщений чата.",
+    )
     request_message_id: Mapped[int] = mapped_column(
         ForeignKey("chat_messages.id", ondelete="CASCADE"),
         unique=True,

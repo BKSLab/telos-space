@@ -91,3 +91,9 @@ it("упоминание ключа в Markdown без подтверждённ�
     expect(screen.queryByRole("heading", { name: task.title })).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
 });
+
+it("общий чат выводит отдельную подтверждённую цитату из ChatAgentState", () => {
+    setup(answer({ agent: { ...answer().agent!, sources: [], message_references: [{ kind: "project_chat", chat_id: 1, message_id: 4, project_id: 1, project_key: "DEMO", author_id: 2, author_name: "Олег", created_at: "2026-11-14T09:30:00Z", revision: 1, content_hash: "verified", quote: "Согласовали приёмку в пятницу.", start: 0, end: 29, offset_unit: "unicode_codepoints", state: "available" }] } }));
+    expect(screen.getByRole("region", { name: "Цитаты сообщений" }).querySelector("blockquote")?.textContent).toBe("Согласовали приёмку в пятницу.");
+    expect(screen.getByRole("link", { name: "Открыть сообщение" }).getAttribute("href")).toBe("/projects/DEMO/chat?message=4");
+});

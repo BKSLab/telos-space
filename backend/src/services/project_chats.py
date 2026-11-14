@@ -71,7 +71,7 @@ class ProjectChatService:
                 session_token=session_token, bearer_secret=bearer_secret
             )
             if getattr(principal, "api_key", None) is not None:
-                raise ApiKeyRouteNotAllowedError('project chat')
+                raise ApiKeyRouteNotAllowedError("project chat")
             await self.require(db, project_id, principal.user_id)
             return principal
 
@@ -170,7 +170,7 @@ class ProjectChatService:
             await db.events.save(chat.id, seq, "message.created", {"message_id": row.id})
             aris_called = is_addressed_to_aris(data.content)
             if aris_called:
-                await self._call_aris(db, chat, project_id, user_id, row)
+                await self._call_aris(db, chat, project_id, user_id, row, timezone=data.timezone)
             result = (await self.presenter.messages(db, [row]))[0]
             await db.unit_of_work.commit()
             if aris_called:
@@ -189,7 +189,9 @@ class ProjectChatService:
             )
             return result
 
-    async def _call_aris(self, db: ChatScope, chat, project_id: int, user_id: int, request) -> None:
+    async def _call_aris(
+        self, db: ChatScope, chat, project_id: int, user_id: int, request, *, timezone: str
+    ) -> None:
         """Ставит ответ Ариса в очередь: пустое сообщение Ариса видно всем как «печатает».
 
         Ответ-заглушка и ход сохраняются в транзакции вопроса, поэтому вопрос
@@ -215,6 +217,7 @@ class ProjectChatService:
                 request_message_id=request.id,
                 reply_message_id=reply.id,
                 requester_id=user_id,
+                timezone=timezone,
                 status="queued",
             )
         )

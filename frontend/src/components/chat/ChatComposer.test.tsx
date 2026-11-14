@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { emptyChatDraft, useChatUiStore } from "@/stores/chat";
 import { api } from "@/lib/api";
 import type { ChatAttachment } from "@/lib/projectChat";
+import * as timezone from "@/lib/timezone";
 import { ChatComposer } from "./ChatComposer";
 
 const chat = vi.hoisted(() => ({
@@ -92,15 +93,18 @@ it("не выбирает упоминание мобильным Enter и по�
 });
 
 it("сохраняет черновик и квитанцию после ошибки, повторяет тот же запрос", async () => {
+    const zone = vi.spyOn(timezone, "browserTimezone").mockReturnValue("Europe/Samara");
     chat.send.mockRejectedValueOnce(new Error("Нет соединения"));
     useChatUiStore.getState().updateDraft("9:1", { ...emptyChatDraft(), content: "Не потерять сообщение", clientMessageId: "same-request" });
     setup();
     fireEvent.click(screen.getByRole("button", { name: /^Отправить$/ }));
     await screen.findByRole("alert");
     expect(useChatUiStore.getState().drafts["9:1"].content).toBe("Не потерять сообщение");
+    zone.mockReturnValue("Asia/Tokyo");
     fireEvent.click(screen.getByRole("button", { name: /^Отправить$/ }));
     await waitFor(() => expect(chat.send).toHaveBeenCalledTimes(2));
     expect(chat.send.mock.calls.map(call => call[0].client_message_id)).toEqual(["same-request", "same-request"]);
+    expect(chat.send.mock.calls.map(call => call[0].timezone)).toEqual(["Europe/Samara", "Europe/Samara"]);
     await waitFor(() => expect(useChatUiStore.getState().drafts["9:1"]).toBeUndefined());
 });
 

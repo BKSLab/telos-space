@@ -41,6 +41,7 @@ class ChatMessage(TimestampMixin, Base):
             name="fk_chat_reply_same_chat",
         ),
         Index("ix_chat_messages_search", "search_vector", postgresql_using="gin"),
+        Index("ix_chat_messages_author_date", "chat_id", "author_user_id", "created_at", "id"),
         CheckConstraint("author_kind IN ('user', 'agent')", name="ck_chat_message_author_kind"),
         CheckConstraint(
             "author_kind = 'user' OR author_user_id IS NULL", name="ck_chat_agent_message_author"

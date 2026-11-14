@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page, type WebSocketRoute } from "@pla
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import type { ChatAgentState, ChatAttachment, ChatEntity, ChatEvent, ChatMessage, ChatMessageCreate } from "../src/lib/projectChat";
-import type { DocumentDetail, KnowledgeSource, Task } from "../src/lib/types";
+import type { ChatMessageReference, DocumentDetail, KnowledgeSource, Task } from "../src/lib/types";
 import { delayedDraftUpload } from "./support/draftUploadMock";
 
 test.setTimeout(60_000);
@@ -131,8 +131,8 @@ function chatServer() {
         rows.push(message); emit("message.created", { message_id: message.id, message }, broadcast);
         return message;
     };
-    const add = (content: string, userId = 2, broadcast = true, patch: Partial<ChatMessage> = {}) => create(userId, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, broadcast, patch);
-    const addAris = (content: string, status: ChatAgentState["status"] = "completed", sources: KnowledgeSource[] = [], broadcast = true) => create(0, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null }, broadcast, { author_type: "AGENT", author: null, agent: { name: "Арис", status, requester: members[0], request_message_id: 1, error: null, sources, actions: [] } });
+    const add = (content: string, userId = 2, broadcast = true, patch: Partial<ChatMessage> = {}) => create(userId, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null, timezone: "UTC" }, broadcast, patch);
+    const addAris = (content: string, status: ChatAgentState["status"] = "completed", sources: KnowledgeSource[] = [], broadcast = true) => create(0, { content, mentions: [], entities: [], attachment_ids: [], client_message_id: randomUUID(), reply_to_message_id: null, timezone: "UTC" }, broadcast, { author_type: "AGENT", author: null, agent: { name: "Арис", status, requester: members[0], request_message_id: 1, error: null, sources, actions: [] } });
 
     const attach = async (page: Page, userId = 1) => {
         const publicUser = members.find((user) => user.id === userId)!;
@@ -278,6 +278,56 @@ async function openChat(page: Page) {
     await expect(page.getByText("Подключено", { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
 }
+
+test.describe("проверяемые цитаты общего чата", () => {
+    test.use({ timezoneId: "Europe/Samara" });
+    for (const width of [1440, 390]) {
+        test(`цитата ведёт к источнику, edit/delete скрывают её до fresh history, timezone ${width}px`, async ({ page }, info) => {
+            const server = chatServer();
+            const quote = "😀 Приёмка в пятницу, отправка после согласования.";
+            const source = server.add(quote, 2, false);
+            for (let index = 0; index < 60; index += 1) server.add(`Позднее сообщение ${index + 1}`, 2, false);
+            const reference: ChatMessageReference = { kind: "project_chat", chat_id: 1, message_id: source.id, project_id: 1, project_key: "DEMO", author_id: 2, author_name: "Олег Петров", created_at: source.created_at, revision: 1, content_hash: createHash("sha256").update(quote, "utf8").digest("hex"), quote, start: 0, end: Array.from(quote).length, offset_unit: "unicode_codepoints", state: "available" };
+            const answer = server.addAris("Нашёл договорённость команды.", "completed", [], false);
+            answer.agent!.message_references = [reference];
+            await server.attach(page);
+            await page.setViewportSize({ width, height: 1000 });
+            await openChat(page);
+            const citations = page.getByRole("region", { name: "Цитаты сообщений", exact: true });
+            await expect(citations.locator("blockquote")).toHaveText(quote);
+            await page.screenshot({ path: info.outputPath("verified-citation.png"), animations: "disabled" });
+            await citations.getByRole("link", { name: "Открыть сообщение", exact: true }).click();
+            await expect(page).toHaveURL(`/projects/DEMO/chat?message=${source.id}`);
+            await expect(page.locator(`#chat-message-${source.id}`)).toBeInViewport();
+            await expect(page.locator(`#chat-message-${source.id}`)).toHaveClass(/bg-accent/);
+            await page.getByRole("button", { name: "К последним сообщениям", exact: true }).first().click();
+            await expect(citations).toBeVisible();
+            let release!: () => void;
+            const gate = new Promise<void>(resolve => { release = resolve; });
+            let hold = true;
+            await page.route("**/projects/1/chat/messages*", async route => { if (hold) await gate; await route.fallback(); });
+            try {
+                Object.assign(source, { content: "Новое условие: приёмка в понедельник.", revision: 2, edited_at: source.created_at });
+                answer.agent!.message_references = [{ ...reference, state: "edited" }];
+                server.emit("message.updated", { message_id: source.id, message: source });
+                await expect(citations.getByRole("status")).toContainText("Сообщение изменено");
+                await expect(citations.locator("blockquote")).toHaveCount(0);
+                expect(await citations.textContent()).not.toContain(quote);
+            } finally { hold = false; release(); }
+            Object.assign(source, { content: "", revision: 3, deleted_at: source.created_at });
+            answer.agent!.message_references = [{ ...reference, state: "deleted", quote: "" }];
+            server.emit("message.deleted", { message_id: source.id, message: source });
+            await expect(citations.getByRole("status")).toContainText("Сообщение удалено");
+            await expect(citations.locator("blockquote")).toHaveCount(0);
+            await page.screenshot({ path: info.outputPath("redacted-citation.png"), animations: "disabled" });
+            await page.getByRole("combobox", { name: "Сообщение проекту", exact: true }).fill("Проверка часового пояса");
+            await page.getByRole("button", { name: "Отправить", exact: true }).click();
+            await expect.poll(() => server.control.commands.filter(command => command.type === "message.send").length).toBe(1);
+            expect(server.control.commands.find(command => command.type === "message.send")!.data.timezone).toBe("Europe/Samara");
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        });
+    }
+});
 
 for (const width of [1440, 390]) {
     test(`draft upload начинается до Send, отменяется и не возвращается поздним ответом, ${width}px`, async ({ page }, info) => {

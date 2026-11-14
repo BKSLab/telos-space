@@ -1,10 +1,10 @@
 import { useInfiniteQuery, useIsMutating, useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { api, ApiError, endpoints } from "@/lib/api";
 import { useCurrentUser } from "@/lib/useAuth";
-import type { AgentFile } from "@/lib/types";
+import type { AgentFile, AgentPageContext } from "@/lib/types";
 import type { AgentConversation, AgentConversationPage, AgentMessage, AgentMessageAccepted, AgentMessagePage } from "@/lib/types";
 
-export function useProjectConversations(projectId: number, conversationId: number | null) {
+export function useProjectConversations(projectId: number, conversationId: number | null, aroundMessageId: number | null = null) {
     const queryClient = useQueryClient();
     const userId = useCurrentUser().data?.id;
     const baseKey = ["projects", projectId, "aris", userId] as const;
@@ -22,13 +22,15 @@ export function useProjectConversations(projectId: number, conversationId: numbe
     });
 
     const messages = useInfiniteQuery({
-        queryKey: messageKey(conversationId),
+        queryKey: aroundMessageId == null ? messageKey(conversationId) : [...messageKey(conversationId), "around", aroundMessageId],
         enabled: conversationId != null && userId != null,
         initialPageParam: null as number | null,
-        queryFn: ({ pageParam }) => api.get<AgentMessagePage>(
-            `${endpoints.projectArisMessages(projectId, conversationId!)}${pageParam == null ? "" : `?before_id=${pageParam}`}`,
-        ),
+        queryFn: ({ pageParam }) => {
+            const query = pageParam != null ? `?before_id=${pageParam}` : aroundMessageId != null ? `?around_message_id=${aroundMessageId}` : "";
+            return api.get<AgentMessagePage>(`${endpoints.projectArisMessages(projectId, conversationId!)}${query}`);
+        },
         getNextPageParam: (lastPage) => lastPage.next_before_id ?? undefined,
+        refetchOnMount: "always",
         refetchInterval: (query) => query.state.data?.pages[0].items.some(
             (message) => message.status === "queued" || message.status === "processing",
         ) ? 1500 : 10000,
@@ -52,8 +54,8 @@ export function useProjectConversations(projectId: number, conversationId: numbe
 
     const send = useMutation({
         mutationKey: [...baseKey, "send"],
-        mutationFn: ({ id, content, requestId, fileIds = [] }: { id: number; content: string; requestId: string; fileIds?: string[] }) =>
-            api.post<AgentMessageAccepted>(endpoints.projectArisMessages(projectId, id), { content, request_id: requestId, file_ids: fileIds }),
+        mutationFn: ({ id, content, requestId, fileIds = [], pageContext }: { id: number; content: string; requestId: string; fileIds?: string[]; pageContext: AgentPageContext }) =>
+            api.post<AgentMessageAccepted>(endpoints.projectArisMessages(projectId, id), { content, request_id: requestId, file_ids: fileIds, page_context: pageContext }),
         retry: (count, error) => count < 1 && (!(error instanceof ApiError) || error.status >= 500),
         onSuccess: (result, { id }) => {
             remember(id, [result.user_message, result.assistant_message]);

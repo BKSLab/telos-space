@@ -677,6 +677,25 @@ export interface AgentToolRun {
     created_at: string;
 }
 
+/** Сервер проверяет цитату и актуальный доступ при выдаче ответа/истории. */
+export interface ChatMessageReference {
+    kind: "project_chat" | "conversation";
+    chat_id: number;
+    message_id: number;
+    project_id: number | null;
+    project_key: string | null;
+    author_id: number | null;
+    author_name: string;
+    created_at: string;
+    revision: number;
+    content_hash: string;
+    quote: string;
+    start: number;
+    end: number;
+    offset_unit: "unicode_codepoints";
+    state: "available" | "edited" | "deleted" | "unavailable";
+}
+
 export interface AgentMessage {
     actions?: AgentToolRun[];
     files?: AgentFile[];
@@ -686,6 +705,7 @@ export interface AgentMessage {
     role: "user" | "assistant";
     content: string;
     sources: KnowledgeSource[];
+    message_references?: ChatMessageReference[];
     page_context?: AgentPageContext | null;
     status: "queued" | "processing" | "completed" | "failed";
     error: string | null;
@@ -1102,6 +1122,7 @@ export interface BoardObjectSelectionRef {
 }
 
 export interface AgentPageContext {
+    timezone?: string;
     board_selection?: BoardObjectSelectionRef[];
     board_id?: number | null;
     route: string;

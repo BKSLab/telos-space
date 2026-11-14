@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { AgentFile } from "@/lib/types";
+import type { AgentFile, AgentPageContext } from "@/lib/types";
 import { newUuid } from "@/lib/uuid";
 
-interface ProjectConversationDraft { content: string; files: AgentFile[]; requestId: string }
+interface ProjectConversationDraft { content: string; files: AgentFile[]; requestId: string; submission?: { requestId: string; pageContext: AgentPageContext } }
 interface ProjectConversationState {
     conversations: Record<string, number>;
     drafts: Record<string, ProjectConversationDraft>;

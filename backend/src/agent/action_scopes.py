@@ -24,7 +24,8 @@ from src.utils.api_scopes import (
 #: Действия вне таблицы закрыты для новых ключей. Токену telos_token_ они доступны
 #: по его уровню READ/WRITE; доступ к самому объекту проверяется отдельно.
 ACTION_SCOPES: dict[str, str] = {
-    "telos_list_chat_files": SCOPE_AGENT_ASK,
+    "telos_list_chat_messages": SCOPE_AGENT_ASK,
+    "telos_get_chat_message": SCOPE_AGENT_ASK,
     "telos_read_chat_file": SCOPE_AGENT_ASK,
     "telos_get_structure": SCOPE_STRUCTURE_READ,
     "telos_create_wbs_node": SCOPE_STRUCTURE_WRITE,

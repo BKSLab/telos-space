@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { AgentFile } from "@/lib/types";
+import type { AgentFile, AgentPageContext } from "@/lib/types";
 import { newUuid } from "@/lib/uuid";
 
-interface ArisDraft { content: string; files: AgentFile[]; requestId: string }
+interface ArisDraft { content: string; files: AgentFile[]; requestId: string; submission?: { requestId: string; pageContext: AgentPageContext } }
 interface ArisWidgetState {
     /** Выбранный диалог по пользователю; нет записи — текущий = первый в списке сервера. */
     conversations: Record<number, number>;

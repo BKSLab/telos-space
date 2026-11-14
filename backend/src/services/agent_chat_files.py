@@ -51,6 +51,7 @@ class ChatFileContext:
     chat_turn_id: int | None = None
     run_id: UUID | None = None
     principal: Principal | None = None
+    timezone: str = "UTC"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,10 +70,15 @@ AgentChatFilesScopeFactory = Callable[[], AbstractAsyncContextManager[AgentChatF
 
 
 @dataclass(frozen=True, slots=True)
-class _Location:
+class ChatFileLocation:
+    """Проверенная сервером переписка и включительная граница текущего вопроса."""
+
     kind: str
     scope_id: int
     upper_bound: int
+    question_id: int | None = None
+    project_id: int | None = None
+    project_key: str | None = None
 
     def query(self) -> dict:
         return {"kind": self.kind, "scope_id": self.scope_id, "upper_bound": self.upper_bound}
@@ -171,7 +177,12 @@ class AgentChatFilesService:
         except RepositoryError as error:
             raise AgentFilesServiceError("Не удалось прочитать файл переписки.") from error
 
-    async def _require(self, db: AgentChatFilesScope, context: ChatFileContext) -> _Location:
+    async def location(self, context: ChatFileContext) -> ChatFileLocation:
+        """Общая актуальная авторизация чтения файлов и сообщений одной переписки."""
+        async with self._scope() as db:
+            return await self._require(db, context)
+
+    async def _require(self, db: AgentChatFilesScope, context: ChatFileContext) -> ChatFileLocation:
         if context.run_id is None or (context.message_id is None) == (context.chat_turn_id is None):
             raise AgentFileNotFoundError("Нет активного контекста переписки.")
         if context.principal is not None:
@@ -208,10 +219,17 @@ class AgentChatFilesService:
             await db.access.ensure_project_access(
                 project_id=context.project_id, user_id=context.user_id
             )
-        return _Location(kind, row["scope_id"], row["upper_bound"])
+        return ChatFileLocation(
+            kind,
+            row["scope_id"],
+            row["upper_bound"],
+            row["question_id"],
+            row["project_id"],
+            row["project_key"],
+        )
 
     @staticmethod
-    async def _file(db: AgentChatFilesScope, location: _Location, file_id: UUID) -> dict:
+    async def _file(db: AgentChatFilesScope, location: ChatFileLocation, file_id: UUID) -> dict:
         file = await db.files.get_file(**location.query(), file_id=file_id)
         if file is None:
             raise AgentFileNotFoundError("Отправленный файл недоступен в текущей переписке.")
@@ -304,7 +322,9 @@ class AgentChatFilesService:
         await self._recheck(context, location, file)
         return ChatFileSchema(**self._metadata(file)), content
 
-    async def _recheck(self, context: ChatFileContext, location: _Location, file: dict) -> None:
+    async def _recheck(
+        self, context: ChatFileContext, location: ChatFileLocation, file: dict
+    ) -> None:
         async with self._scope() as db:
             current_location = await self._require(db, context)
             current = await self._file(db, current_location, file["file_id"])
@@ -442,7 +462,7 @@ class AgentChatFilesService:
                 )
                 await db.unit_of_work.commit()
             return True
-        location = _Location(kind, file["scope_id"], 0)
+        location = ChatFileLocation(kind, file["scope_id"], 0)
         stop = asyncio.Event()
         extraction = asyncio.create_task(self._extract(location, file))
         watcher = asyncio.create_task(self._watch_preparation(kind, file_id, token, stop))
@@ -544,7 +564,7 @@ class AgentChatFilesService:
                 removed += 1
         return removed
 
-    async def _extract(self, location: _Location, file: dict) -> dict:
+    async def _extract(self, location: ChatFileLocation, file: dict) -> dict:
         values = {
             "status": "ready",
             "detail": None,

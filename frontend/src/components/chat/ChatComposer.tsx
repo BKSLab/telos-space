@@ -10,6 +10,7 @@ import { emptyChatDraft, useChatUiStore, type ChatDraft } from "@/stores/chat";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { newUuid } from "@/lib/uuid";
+import { browserTimezone } from "@/lib/timezone";
 import { draftUploadProblem, useDraftUploads } from "@/lib/useDraftUploads";
 import { DraftUploadList } from "@/components/files/DraftUploadList";
 import { isTouchChatInput, shouldSubmitChat, useChatInput } from "./useChatInput";
@@ -118,8 +119,10 @@ export function ChatComposer({ editing, onCancelEdit }: { editing: ChatMessage |
                 onCancelEdit();
             } else {
                 // UUID и тело черновика сохраняются до ack — retry переживает даже reload.
-                updateStored(draftKey, draft);
-                await chat.send({ ...body, client_message_id: draft.clientMessageId, reply_to_message_id: draft.reply?.id ?? null }, draft);
+                const timezone = draft.submission?.clientMessageId === draft.clientMessageId ? draft.submission.timezone : browserTimezone();
+                const submitted = { ...draft, submission: { clientMessageId: draft.clientMessageId, timezone } };
+                updateStored(draftKey, submitted);
+                await chat.send({ ...body, client_message_id: draft.clientMessageId, reply_to_message_id: draft.reply?.id ?? null, timezone }, submitted);
                 clearStored(draftKey, draft.clientMessageId);
             }
             input.current?.focus();

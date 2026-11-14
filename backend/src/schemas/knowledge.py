@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.knowledge.catalog import SourceType
+from src.schemas.chat_references import ChatMessageReferenceSchema
 from src.schemas.document_references import DocumentFragmentSchema
 from src.utils.document_refs import encode_document_ref
 
@@ -117,6 +118,10 @@ class KnowledgeAnswerSchema(BaseModel):
 
     answer: str
     sources: list[KnowledgeSourceSchema]
+    message_references: list[ChatMessageReferenceSchema] = Field(
+        default_factory=list, max_length=20,
+        description="Проверенные цитаты сообщений текущей переписки; не знания проекта.",
+    )
 
 
 class KnowledgeStatusSchema(BaseModel):

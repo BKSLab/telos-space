@@ -45,6 +45,7 @@ class AgentToolContext:
     # ограничения ключом (вопрос из интерфейса трекера).
     allowed_tools: frozenset[str] | None = None
     principal: "Principal | None" = None
+    timezone: str = "UTC"
 
     def allows(self, name: str) -> bool:
         """Открыт ли изменяющий инструмент правами ключа этого вопроса."""

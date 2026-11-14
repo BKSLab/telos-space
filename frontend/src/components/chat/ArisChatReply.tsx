@@ -10,6 +10,7 @@ import { actionSources } from "@/lib/agentCards";
 import { invalidateAfterArisAction } from "@/lib/useArisConversations";
 import { AgentActionCard } from "@/components/projects/AgentActionCard";
 import { AgentEntityCard } from "@/components/agent/AgentEntityCard";
+import { ChatMessageReferences } from "./ChatMessageReferences";
 
 /** Ответ Ариса — Markdown; HTML очищается DOMPurify внутри общего рендерера. */
 export function ArisMarkdown({ content }: { content: string }) {
@@ -73,6 +74,7 @@ export function ArisChatReply({ message }: { message: ChatMessage }) {
         {failed
             ? <div className="flex items-start gap-2 text-[13px] text-danger"><CircleAlert size={14} className="mt-0.5 shrink-0" aria-hidden="true" /><div><p className="whitespace-pre-wrap">{message.content || "Не получилось ответить. Спросите ещё раз."}</p><p className="mt-1 text-[11px] text-muted">Чтобы спросить снова, начните новое сообщение с «Арис».</p></div></div>
             : message.content ? <ArisMarkdown content={message.content} /> : null}
+        <ChatMessageReferences references={agent?.message_references} />
         {sources.length > 0 && <div className="grid gap-3 sm:grid-cols-2">{sources.map((source) => <AgentEntityCard key={source.source_id} source={source} project={project} />)}</div>}
         {actions.map((action) => <AgentActionCard key={action.id} action={action} project={project} sources={agent?.sources ?? []}
             pending={decide.isPending && decide.variables?.actionId === action.id}

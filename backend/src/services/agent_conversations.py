@@ -1,11 +1,14 @@
 """Личный диалог с Арисом в виджете: хранение, очередь ответов и контекст страницы."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -41,15 +44,21 @@ from src.schemas.agent_conversations import (
 from src.schemas.agent_files import AgentFileSchema
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeChatMessageSchema
-from src.services.agent_chat_file_actions import initial_chat_files
-from src.services.agent_chat_files import AgentChatFilesService
+from src.services.agent_chat_files import AgentChatFilesService, ChatFileContext
 from src.services.agent_routing import AgentRoutingAnswer, AgentRoutingService
 from src.services.auth import ApiKeyGrant, Principal
 from src.services.board_selection import checked_board_selection, normalize_board_selection
+from src.services.chat_message_references import (
+    hydrate_message_references,
+    scoped_message_references,
+)
 from src.services.db_scope import AgentConversationScope, AgentConversationScopeFactory
 from src.services.project_agent import API_CHANNEL, ProjectAgentService
 from src.services.tasks import user_display_name
 from src.utils.api_scopes import WRITE_SCOPES
+
+if TYPE_CHECKING:
+    from src.services.agent_chat_history import AgentChatHistoryService
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +103,7 @@ class AgentConversationsService:
         config: AgentConversationConfig,
         routing: AgentRoutingService | None = None,
         chat_files: AgentChatFilesService | None = None,
+        chat_history: AgentChatHistoryService | None = None,
     ) -> None:
         self.scope = scope
         self.agent = agent
@@ -101,6 +111,7 @@ class AgentConversationsService:
         self.config = config
         self.routing = routing
         self.chat_files = chat_files
+        self.chat_history = chat_history
         # Память беседы к следующему вопросу готовится после ответа, пока
         # участник его читает: иначе её пересказ моделью ждал бы следующий вопрос.
         self._memory_tasks: dict[int, asyncio.Task[None]] = {}
@@ -167,6 +178,7 @@ class AgentConversationsService:
         before_id: int | None,
         limit: int,
         project_id: int | None = None,
+        around_message_id: int | None = None,
     ) -> AgentMessagePageSchema:
         """Восстанавливает переписку, включая состояние незавершённого ответа.
 
@@ -174,20 +186,33 @@ class AgentConversationsService:
             user_id: Текущий пользователь.
             conversation_id: Выбранный диалог.
             before_id: Граница чтения ранних реплик.
+            around_message_id: Своя реплика, включаемая вместе с соседями.
             limit: Размер страницы.
         Returns:
             Хронологическая страница и курсор ранних реплик.
         Raises:
             AgentConversationsServiceError: При отказе доступа или ошибке хранения.
         """
+        if before_id is not None and around_message_id is not None:
+            raise AgentMessageConflictError("Задайте только один курсор истории.")
         async with self._scope() as db:
-            await self._require(db, user_id, conversation_id, project_id=project_id)
-            rows = await db.messages.get_page(conversation_id, before_id=before_id, limit=limit + 1)
-            page = rows[:limit]
+            conversation = await self._require(db, user_id, conversation_id, project_id=project_id)
+            if around_message_id is not None:
+                page = await db.messages.get_around(conversation_id, around_message_id, limit=limit)
+                if not page or not any(row.id == around_message_id for row in page):
+                    raise AgentConversationNotFoundError("Сообщение не найдено в этом диалоге.")
+                more = await db.messages.has_before(conversation_id, page[0].id)
+            else:
+                rows = await db.messages.get_page(
+                    conversation_id, before_id=before_id, limit=limit + 1
+                )
+                page = list(reversed(rows[:limit]))
+                more = len(rows) > limit
             actions = await db.runs.get_for_messages([row.id for row in page])
+            views = await self._message_views(db, conversation, page)
             return AgentMessagePageSchema(
                 items=[
-                    AgentMessageSchema.model_validate(row).model_copy(
+                    row.model_copy(
                         update={
                             "actions": [
                                 AgentToolRunSchema.model_validate(action)
@@ -196,9 +221,9 @@ class AgentConversationsService:
                             ]
                         }
                     )
-                    for row in reversed(page)
+                    for row in views
                 ],
-                next_before_id=page[-1].id if len(rows) > limit else None,
+                next_before_id=page[0].id if more else None,
             )
 
     async def send_message(
@@ -228,7 +253,7 @@ class AgentConversationsService:
             )
             existing = await db.messages.get_request(conversation_id, data.request_id)
             if existing:
-                result = self._accepted(existing)
+                result = self._accepted(await self._message_views(db, conversation, existing))
                 if (
                     result.user_message.content != data.content
                     or [item.id for item in result.user_message.files] != data.file_ids
@@ -369,67 +394,9 @@ class AgentConversationsService:
                 "username": user.username,
                 "name": user_display_name(user),
             }
-            key_scopes = None
-            key = None
-            if conversation.channel == API_CHANNEL and conversation.api_key_id is not None:
-                if db.api_keys is None:
-                    raise AgentConversationsServiceError("Проверка API-ключа не подключена.")
-                key = await db.api_keys.get_by_id(conversation.api_key_id)
-                from datetime import UTC, datetime
-
-                if (
-                    key is None
-                    or key.owner_user_id != conversation.user_id
-                    or not key.is_active
-                    or key.revoked_at is not None
-                    or (key.expires_at is not None and key.expires_at <= datetime.now(UTC))
-                ):
-                    raise AgentConversationNotFoundError("API-ключ больше недоступен.")
-                key_scopes = set(key.scopes)
-                if "agent:ask" not in key_scopes:
-                    raise AgentConversationNotFoundError(
-                        "API-ключ больше не разрешает вопросы агенту."
-                    )
             pair = await db.messages.get_request(conversation.id, message.request_id)
             question = next(item for item in pair if item.role == "user")
-            if key_scopes is not None:
-                question.key_scopes = sorted(set(question.key_scopes or []) & key_scopes)
-            request_principal = None
-            if conversation.channel == API_CHANNEL:
-                scopes = frozenset(question.key_scopes or [])
-                request_principal = Principal(
-                    user_id=user.id,
-                    username=user.username,
-                    last_name=user.last_name,
-                    first_name=user.first_name,
-                    middle_name=user.middle_name,
-                    scope=ApiTokenScope.WRITE
-                    if question.key_scopes is None or scopes & WRITE_SCOPES
-                    else ApiTokenScope.READ,
-                    via_api_token=question.key_scopes is not None
-                    or question.api_token_id is not None,
-                    api_token_id=question.api_token_id,
-                    api_key=ApiKeyGrant(
-                        key_id=key.id,
-                        label=key.label,
-                        key_prefix=key.key_prefix,
-                        owner_user_id=user.id,
-                        scopes=scopes,
-                        kind=key.kind,
-                    )
-                    if key is not None
-                    else None,
-                )
-                if db.auth is None:
-                    raise AgentConversationsServiceError(
-                        "Проверка учётных данных worker-а не подключена."
-                    )
-                try:
-                    request_principal = await db.auth.refresh_principal(request_principal)
-                except AuthServiceError as error:
-                    raise AgentConversationNotFoundError(
-                        "Учётные данные больше недоступны. Повторите вопрос."
-                    ) from error
+            request_principal = await self._external_principal(db, conversation, question, user)
             page_context = dict(question.page_context or {})
             if conversation.channel == API_CHANNEL:
                 # Внешняя беседа: маршрутизатор выбирает проект и проверяет роль.
@@ -454,7 +421,11 @@ class AgentConversationsService:
                 conversation.id, before_id=question.id, limit=self.config.history_messages
             )
             boundary = recent[-1].id if recent else question.id
-            earlier_history = await self._unsummarized_history(db, conversation, boundary)
+            earlier_history = (
+                await self._unsummarized_history(db, conversation, boundary)
+                if self.chat_history is None
+                else []
+            )
             action_history = [
                 AgentToolRunSchema.model_validate(item).model_dump(mode="json")
                 for item in await db.runs.get_for_messages(
@@ -470,7 +441,34 @@ class AgentConversationsService:
         # Пересказ остаётся фоновым: следующий вопрос не ждёт его LLM.
         # Пока сводка не готова, точные выдержки сохраняют ранние факты в контексте.
         summary = conversation.summary
-        history = earlier_history + [self._history(item) for item in reversed(recent)]
+        history = (
+            earlier_history + [self._history(item) for item in reversed(recent)]
+            if self.chat_history is None
+            else []
+        )
+        execution = AgentToolContext(
+            project_id=project_id,
+            user_id=conversation.user_id,
+            can_write=can_write,
+            message_id=message.id,
+            run_id=message.run_id,
+            principal=request_principal,
+            timezone=page_context.get("timezone", "UTC"),
+        )
+        chat_context = (
+            await self.chat_history.initial_context(
+                context=ChatFileContext(
+                    user_id=execution.user_id,
+                    project_id=execution.project_id,
+                    message_id=execution.message_id,
+                    run_id=execution.run_id,
+                    principal=execution.principal,
+                    timezone=execution.timezone,
+                )
+            )
+            if self.chat_history is not None
+            else None
+        )
         if conversation.channel == API_CHANNEL:
             result = await self._generate_routed(
                 message=message,
@@ -484,19 +482,15 @@ class AgentConversationsService:
                 pinned_project_id=current_actions[0].project_id if current_actions else None,
                 page_context=page_context,
                 principal=request_principal,
+                chat_context=chat_context,
             )
             return result.answer, result.project_id
         on_progress = self._progress_sink(message)
-        execution = AgentToolContext(
-            project_id=project_id,
-            user_id=conversation.user_id,
-            can_write=can_write,
-            message_id=message.id,
-            run_id=message.run_id,
+        uploaded_files = (
+            []
+            if chat_context is not None
+            else [file for item in [*reversed(recent), question] for file in item.files]
         )
-        uploaded_files = [file for item in [*reversed(recent), question] for file in item.files]
-        if self.chat_files is not None:
-            uploaded_files = await initial_chat_files(self.chat_files, execution)
         if project_id is None:
             answer = await self.agent.ask_personal(
                 question=question.content,
@@ -508,7 +502,11 @@ class AgentConversationsService:
                 page_context=page_context,
                 conversation_id=f"conversation:{conversation.id}",
                 on_progress=on_progress,
-                uploaded_files=uploaded_files,
+                **(
+                    {"chat_context": chat_context}
+                    if chat_context is not None
+                    else {"uploaded_files": uploaded_files}
+                ),
             )
             return answer, None
         answer = await self.agent.ask(
@@ -519,11 +517,15 @@ class AgentConversationsService:
             actor=actor,
             execution=execution,
             action_history=action_history,
-            uploaded_files=uploaded_files,
             mode=ArisMode.WIDGET_PROJECT,
             extra_context={"page_context": page_context},
             conversation_id=f"conversation:{conversation.id}",
             on_progress=on_progress,
+            **(
+                {"chat_context": chat_context}
+                if chat_context is not None
+                else {"uploaded_files": uploaded_files}
+            ),
         )
         return answer, project_id
 
@@ -541,6 +543,7 @@ class AgentConversationsService:
         pinned_project_id: int | None,
         page_context: dict,
         principal: Principal | None = None,
+        chat_context: dict | None = None,
     ) -> AgentRoutingAnswer:
         """Отвечает в беседе без проекта: маршрутизатор выбирает доступный контекст.
 
@@ -551,7 +554,13 @@ class AgentConversationsService:
         """
         if self.routing is None:
             raise AgentConversationsServiceError("Маршрутизация вопросов Арису не подключена.")
-        allowed = tools_for_scopes(question.key_scopes) if question.key_scopes is not None else None
+        allowed = (
+            tools_for_scopes(principal.api_key.scopes)
+            if principal is not None and principal.api_key is not None
+            else tools_for_scopes(question.key_scopes)
+            if question.key_scopes is not None
+            else None
+        )
         result = await self.routing.ask(
             user_id=conversation.user_id,
             question=question.content,
@@ -568,12 +577,14 @@ class AgentConversationsService:
                 run_id=message.run_id,
                 allowed_tools=allowed,
                 principal=principal,
+                timezone=page_context.get("timezone", "UTC"),
             ),
             action_history=action_history,
             pinned_project_id=pinned_project_id,
             page_context=page_context,
             conversation_id=conversation.external_key or f"api:{conversation.id}",
             on_progress=self._progress_sink(message),
+            **({"chat_context": chat_context} if chat_context is not None else {}),
         )
         return result
 
@@ -827,21 +838,113 @@ class AgentConversationsService:
                 if conversation is None:
                     return
                 await self._require(
-                    db, conversation.user_id, conversation.id, channel=conversation.channel
+                    db,
+                    conversation.user_id,
+                    conversation.id,
+                    channel=conversation.channel,
+                    lock=True,
                 )
+                active = await db.messages.get_for_update(message.id)
+                if (
+                    active is None
+                    or active.status != "processing"
+                    or active.run_id != message.run_id
+                ):
+                    return
+                pair = await db.messages.get_request(conversation.id, message.request_id)
+                question = next(item for item in pair if item.role == "user")
+                user = await db.users.get_by_id(conversation.user_id)
+                principal = await self._external_principal(db, conversation, question, user)
+                references = []
+                if answer.message_references:
+                    if self.chat_history is None:
+                        raise AgentMessageConflictError("Проверка цитат переписки недоступна.")
+                    context = ChatFileContext(
+                        user_id=conversation.user_id,
+                        project_id=conversation.project_id
+                        if conversation.project_id is not None
+                        else project_id,
+                        message_id=message.id,
+                        run_id=message.run_id,
+                        principal=principal,
+                        timezone=(question.page_context or {}).get("timezone", "UTC"),
+                    )
+                    for reference in answer.message_references:
+                        verified = await self.chat_history.verify_reference(
+                            context=context, reference=reference
+                        )
+                        references.append(verified.model_dump(mode="json"))
             data = (
-                {"status": "failed", "error": error}
+                {"status": "failed", "error": error, "message_references": []}
                 if error
                 else {
                     "status": "completed",
                     "content": answer.answer.replace("\x00", ""),
                     "sources": [source.model_dump(mode="json") for source in answer.sources],
+                    "message_references": references,
                     "error": None,
                     "project_id": project_id,
                 }
             )
             await db.messages.finish(message.id, message.run_id, data)
             await db.unit_of_work.commit()
+
+    @staticmethod
+    async def _external_principal(db, conversation, question, user) -> Principal | None:
+        """Один текущий снимок credentials перед моделью и перед публикацией ответа."""
+        if conversation.channel != API_CHANNEL:
+            return None
+        key = None
+        scopes = frozenset(question.key_scopes or [])
+        if conversation.api_key_id is not None:
+            from datetime import UTC, datetime
+
+            if db.api_keys is None:
+                raise AgentConversationsServiceError("Проверка API-ключа не подключена.")
+            key = await db.api_keys.get_by_id(conversation.api_key_id)
+            if (
+                key is None
+                or key.owner_user_id != user.id
+                or not key.is_active
+                or key.revoked_at is not None
+                or (key.expires_at is not None and key.expires_at <= datetime.now(UTC))
+            ):
+                raise AgentConversationNotFoundError("API-ключ больше недоступен.")
+            if "agent:ask" not in key.scopes:
+                raise AgentConversationNotFoundError("API-ключ больше не разрешает вопросы агенту.")
+            scopes &= frozenset(key.scopes)
+        principal = Principal(
+            user_id=user.id,
+            username=user.username,
+            last_name=user.last_name,
+            first_name=user.first_name,
+            middle_name=user.middle_name,
+            scope=ApiTokenScope.WRITE
+            if (question.key_scopes is None and key is None) or scopes & WRITE_SCOPES
+            else ApiTokenScope.READ,
+            via_api_token=key is not None
+            or question.key_scopes is not None
+            or question.api_token_id is not None,
+            api_token_id=question.api_token_id,
+            api_key=ApiKeyGrant(
+                key_id=key.id,
+                label=key.label,
+                key_prefix=key.key_prefix,
+                owner_user_id=user.id,
+                scopes=scopes,
+                kind=key.kind,
+            )
+            if key is not None
+            else None,
+        )
+        if db.auth is None:
+            raise AgentConversationsServiceError("Проверка учётных данных worker-а не подключена.")
+        try:
+            return await db.auth.refresh_principal(principal)
+        except AuthServiceError as error:
+            raise AgentConversationNotFoundError(
+                "Учётные данные больше недоступны. Повторите вопрос."
+            ) from error
 
     @staticmethod
     async def _require_user(db: AgentConversationScope, user_id: int) -> None:
@@ -902,6 +1005,53 @@ class AgentConversationsService:
         return AgentMessageAcceptedSchema(
             user_message=by_role["user"], assistant_message=by_role["assistant"]
         )
+
+    @staticmethod
+    async def _message_views(db, conversation, rows) -> list[AgentMessageSchema]:
+        """Пакетно проверяет сохранённые цитаты в текущем приватном диалоге."""
+        refs = [
+            reference
+            for row in rows
+            for reference in scoped_message_references(
+                getattr(row, "message_references", None) or [],
+                kind="conversation",
+                chat_id=conversation.id,
+                project_id=conversation.project_id,
+            )
+        ]
+        source_ids = list({ref.message_id for ref in refs})
+        sources = (
+            {row.id: row for row in await db.messages.get_many(conversation.id, source_ids)}
+            if source_ids
+            else {}
+        )
+        owner = await db.users.get_by_id(conversation.user_id) if refs else None
+        authors = {conversation.user_id: user_display_name(owner)} if owner is not None else {}
+        project = (
+            await db.projects.get_by_id(project_id=conversation.project_id)
+            if refs and conversation.project_id is not None and db.projects is not None
+            else None
+        )
+        result = []
+        for row in rows:
+            references = hydrate_message_references(
+                getattr(row, "message_references", None) or [],
+                kind="conversation",
+                chat_id=conversation.id,
+                project_id=conversation.project_id,
+                project_key=project.key if project else None,
+                messages=sources,
+                authors=authors,
+                owner_user_id=conversation.user_id,
+            )
+            data = {
+                name: getattr(row, name)
+                for name in AgentMessageSchema.model_fields
+                if hasattr(row, name)
+            }
+            data["message_references"] = references
+            result.append(AgentMessageSchema.model_validate(data))
+        return result
 
     @asynccontextmanager
     async def _scope(self) -> AsyncIterator[AgentConversationScope]:

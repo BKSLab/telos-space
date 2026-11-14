@@ -37,6 +37,7 @@ from src.schemas.agent_tools import (
 )
 from src.services.agent_action_helpers import checked_task
 from src.services.agent_chat_files import AgentChatFilesService
+from src.services.agent_chat_history import AgentChatHistoryService
 from src.services.agent_tool_scope import AgentProjectToolScope, AgentProjectToolScopeFactory
 from src.services.auth import Principal
 from src.services.tasks import user_display_name
@@ -64,9 +65,11 @@ class AgentActionsService:
         actions: Sequence[ProjectAction],
         confirm_ttl: timedelta = DEFAULT_CONFIRM_TTL,
         chat_files: AgentChatFilesService | None = None,
+        chat_history: AgentChatHistoryService | None = None,
     ) -> None:
         self.scope = scope
         self.chat_files = chat_files
+        self.chat_history = chat_history
         self.confirm_ttl = confirm_ttl
         self.actions = {action.name: action for action in actions}
         if len(self.actions) != len(actions):
@@ -110,6 +113,10 @@ class AgentActionsService:
         if not definition.needs_project:
             # Личное действие не живёт в проекте, даже если страница указывала на проект.
             context = replace(context, project_id=None)
+        if definition.chat_history_handler is not None:
+            if self.chat_history is None:
+                raise AgentToolAccessError("Чтение истории переписки не подключено.")
+            return await definition.chat_history_handler(self.chat_history, context, parameters)
         if definition.chat_file_handler is not None:
             if self.chat_files is None:
                 raise AgentToolAccessError("Чтение файлов чата не подключено.")

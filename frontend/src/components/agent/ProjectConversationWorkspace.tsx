@@ -33,6 +33,10 @@ import { DraftUploadList } from "@/components/files/DraftUploadList";
 import { ArisAvatar } from "@/components/brand/ArisAvatar";
 import { shouldSubmitChat, useChatInput } from "@/components/chat/useChatInput";
 import { useChatHistory } from "@/components/chat/useChatHistory";
+import { ChatMessageReferences } from "@/components/chat/ChatMessageReferences";
+import { chatMessageId } from "@/lib/chatMessageReferences";
+import { useArisPageContext } from "@/lib/useArisPageContext";
+import { browserTimezone } from "@/lib/timezone";
 import "@/components/chat/chat.css";
 
 const STARTERS = [
@@ -68,14 +72,16 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
     const select = useProjectConversationStore((state) => state.select);
     const updateDraft = useProjectConversationStore((state) => state.updateDraft);
     const clearDraft = useProjectConversationStore((state) => state.clearDraft);
-    const requestedId = Number(searchParams.get("conversation"));
-    const conversationId = Number.isSafeInteger(requestedId) && requestedId > 0 ? requestedId : rememberedId ?? null;
+    const context = useArisPageContext();
+    const requestedId = chatMessageId(searchParams.get("conversation"));
+    const conversationId = requestedId ?? rememberedId ?? null;
+    const around = requestedId != null ? chatMessageId(searchParams.get("message")) : null;
     const mounted = useRef(true);
     useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
     useEffect(() => {
         if (conversationId != null && conversationId !== rememberedId) select(sessionKey, conversationId);
     }, [conversationId, rememberedId, select, sessionKey]);
-    const chat = useProjectConversations(project.id, conversationId);
+    const chat = useProjectConversations(project.id, conversationId, around);
     const conversations = chat.conversations.data?.pages.flatMap((page) => page.items) ?? [];
     const messages = chat.messages.data?.pages.slice().reverse().flatMap((page) => page.items) ?? [];
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -83,7 +89,7 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
     const draft = useProjectConversationStore((state) => state.drafts[draftKey]);
     const question = draft?.content ?? "";
     const input = useChatInput(question);
-    const { viewportRef, contentRef, atBottom, onScroll, scrollToLatest } = useChatHistory(draftKey, messages.map(message => `${message.id}:${message.status}:${message.content.length}`).join("|"));
+    const { viewportRef, contentRef, atBottom, onScroll, scrollToLatest } = useChatHistory(`${draftKey}:${around ?? "latest"}`, messages.map(message => `${message.id}:${message.status}:${message.content.length}`).join("|"), around);
     const selectedFiles = draft?.files ?? [];
     const uploads = useDraftUploads<{ file: AgentFile; conversationId: number; key: string }>(draftKey);
     const [uploadError, setUploadError] = useState<string | null>(null);
@@ -97,12 +103,17 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
     function selectConversation(id: number) {
         setUploadError(null);
         select(sessionKey, id);
-        if (mounted.current) updateSearchParams((previous) => { const next = new URLSearchParams(previous); next.set("conversation", String(id)); return next; });
+        if (mounted.current) updateSearchParams((previous) => { const next = new URLSearchParams(previous); next.set("conversation", String(id)); next.delete("message"); return next; });
         chat.send.reset();
         chat.retry.reset();
         chat.decide.reset();
         chat.upload.reset();
         chat.removeUpload.reset();
+    }
+
+    function showLatest(id = conversationId) {
+        if (mounted.current) updateSearchParams(previous => { const next = new URLSearchParams(previous); next.delete("message"); if (id != null) next.set("conversation", String(id)); return next; });
+        scrollToLatest();
     }
 
     const firstConversationId = conversations[0]?.id;
@@ -150,18 +161,21 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
         sendingRef.current = true;
         scrollToLatest();
         const requestId = draft?.content.trim() === normalized ? draft.requestId : newUuid();
-        updateDraft(draftKey, { content: normalized, files: selectedFiles, requestId });
+        const pageContext = draft?.submission?.requestId === requestId ? draft.submission.pageContext : { ...context, timezone: browserTimezone() };
+        const submitted = { content: normalized, files: selectedFiles, requestId, submission: { requestId, pageContext } };
+        updateDraft(draftKey, submitted);
         let id = conversationId;
         try {
             if (id == null) {
                 id = (await chat.create.mutateAsync()).id;
-                updateDraft(`${sessionKey}:${id}`, { content: normalized, files: selectedFiles, requestId });
+                updateDraft(`${sessionKey}:${id}`, submitted);
                 clearDraft(draftKey, requestId);
                 selectConversation(id);
             }
-            await chat.send.mutateAsync({ id, content: normalized, requestId, fileIds: selectedFiles.map((file) => file.id) });
+            await chat.send.mutateAsync({ id, content: normalized, requestId, fileIds: selectedFiles.map((file) => file.id), pageContext });
             clearDraft(draftKey, requestId);
             clearDraft(`${sessionKey}:${id}`, requestId);
+            showLatest(id);
         } catch {
             // Черновик и UUID сохраняются для повтора в любом представлении чата.
         } finally {
@@ -272,6 +286,7 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
                         {chat.conversations.hasNextPage && <Button size="sm" disabled={chat.conversations.isFetchingNextPage} onClick={() => void chat.conversations.fetchNextPage()}>Ещё диалоги</Button>}
                     </div>
 
+                    {around != null && <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-1 text-xs text-secondary"><span>Контекст сообщения</span><Button size="sm" variant="ghost" onClick={() => showLatest()}>К последним сообщениям</Button></div>}
                     <div className="relative min-h-0 flex-1">
                     <div ref={viewportRef} onScroll={onScroll} aria-label="История личного диалога проекта" className="chat-history scrollbar-thin h-full overflow-y-auto px-3 py-4 sm:px-4 sm:py-5" aria-live="polite">
                         <div ref={contentRef}>
@@ -307,8 +322,12 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
                                     <div
                                         key={message.id}
                                         data-chat-message={message.id}
+                                        data-highlighted={message.id === around || undefined}
+                                        tabIndex={message.id === around ? -1 : undefined}
+                                        aria-label={message.id === around ? "Выбранное сообщение" : undefined}
                                         className={cn(
-                                            "flex",
+                                            "flex rounded-lg",
+                                            message.id === around && "ring-2 ring-accent/60",
                                             message.role === "user" ? "justify-end" : "justify-start",
                                         )}
                                     >
@@ -334,6 +353,7 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
                                                     {message.content}
                                                 </p>
                                             )}
+                                            {message.role === "assistant" && Boolean(message.message_references?.length) && !chat.messages.isError && chat.messages.isFetchedAfterMount !== false && <div className="mt-2"><ChatMessageReferences references={message.message_references} /></div>}
                                             {(message.files?.length ?? 0) > 0 && <div className="mt-2"><AgentFileList files={message.files!} conversationId={message.conversation_id} projectId={project.id} /></div>}
                                             {(message.actions ?? []).map((action) => <AgentActionCard
                                                 key={action.id} action={action} project={project} sources={message.sources}
@@ -353,7 +373,7 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
                         )}
                         </div>
                     </div>
-                    {!atBottom && <Button size="sm" className="material-glass absolute right-3 bottom-3 shadow-panel" icon={<ArrowDown size={14} />} onClick={scrollToLatest}>К последним сообщениям</Button>}
+                    {!atBottom && around == null && <Button size="sm" className="material-glass absolute right-3 bottom-3 shadow-panel" icon={<ArrowDown size={14} />} onClick={scrollToLatest}>К последним сообщениям</Button>}
                     </div>
 
                     <form onSubmit={onSubmit} className="chat-personal-composer shrink-0 border-t border-line-subtle bg-surface/55 px-4 py-3">

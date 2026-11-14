@@ -243,7 +243,7 @@ class AgentSettings(SettingsBase):
     agent_poll_seconds: float = Field(default=1.0, gt=0)
     # Общий срок включает планирование, поиск, память и все дочитывания модели.
     agent_turn_timeout_seconds: float = Field(default=600.0, gt=0)
-    agent_history_messages: int = Field(default=10, ge=2, le=10)
+    agent_history_messages: int = Field(default=15, ge=2, le=50)
     agent_summary_batch_size: int = Field(default=10, ge=1, le=10)
     agent_tool_rounds: int = Field(default=8, ge=1, le=16)
     # Локальная оценка токенов; включает системный prompt и все результаты раунда.

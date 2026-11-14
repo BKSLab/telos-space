@@ -6,7 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serial
 
 from src.schemas.agent_files import AgentFileSchema
 from src.schemas.agent_tools import AgentToolRunSchema
+from src.schemas.chat_references import ChatMessageReferenceSchema
 from src.schemas.knowledge import KnowledgeSourceSchema
+from src.utils.timezones import validate_timezone
 
 MAX_BOARD_SELECTION = 200
 
@@ -32,6 +34,8 @@ class AgentPageContextSchema(BaseModel):
     route: str = Field(
         max_length=500, description="Маршрут страницы фронта, например /projects/PROJ/board."
     )
+    timezone: str = Field("UTC", max_length=64, description="Часовой пояс IANA пользователя.", examples=["Europe/Samara"])
+    _validate_timezone = field_validator("timezone")(validate_timezone)
     project_key: str | None = Field(
         None, max_length=32, description="Ключ проекта открытой страницы."
     )
@@ -128,6 +132,7 @@ class AgentMessageSchema(BaseModel):
     role: Literal["user", "assistant"] = Field(description="Автор: участник или агент.")
     content: str = Field(description="Текст вопроса или готового ответа.")
     sources: list[KnowledgeSourceSchema] = Field(description="Проверенные источники ответа.")
+    message_references: list[ChatMessageReferenceSchema] = Field(default_factory=list, description="Проверяемые цитаты сообщений диалога.")
     actions: list[AgentToolRunSchema] = Field(
         default_factory=list,
         description="Сохранённые действия и запросы подтверждения этого ответа.",

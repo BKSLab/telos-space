@@ -293,6 +293,13 @@ async def get_agent_messages(
     before_id: Annotated[
         int | None, Query(gt=0, description="Читать реплики раньше этого ID.")
     ] = None,
+    around_message_id: Annotated[
+        int | None,
+        Query(
+            gt=0,
+            description="Прочитать сообщение этого диалога и соседние реплики; несовместимо с before_id.",
+        ),
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=100, description="Размер страницы переписки.")] = 50,
 ) -> AgentMessagePageSchema:
     """Восстанавливает диалог после открытия страницы.
@@ -303,11 +310,16 @@ async def get_agent_messages(
         principal: Аутентифицированный участник.
         service: Сценарии диалога.
         before_id: Курсор предыдущей страницы.
+        around_message_id: Сообщение этого диалога для перехода к его окружению.
         limit: Размер страницы.
     Returns:
         Реплики и курсор продолжения.
     """
     logger.info("🚀 Чтение диалога id=%s.", conversation_id)
+    if before_id is not None and around_message_id is not None:
+        raise HTTPException(
+            status_code=422, detail="Задайте before_id или around_message_id — только один курсор."
+        )
     try:
         result = await service.get_messages(
             project_id=project_id,
@@ -315,6 +327,7 @@ async def get_agent_messages(
             conversation_id=conversation_id,
             before_id=before_id,
             limit=limit,
+            **({"around_message_id": around_message_id} if around_message_id is not None else {}),
         )
         logger.info("✅ Диалог id=%s прочитан.", conversation_id)
         return result

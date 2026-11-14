@@ -13,6 +13,10 @@ from src.schemas.project_chats import (
     ChatReplyView,
     ChatUser,
 )
+from src.services.chat_message_references import (
+    hydrate_message_references,
+    scoped_message_references,
+)
 from src.services.chat_scope import ChatScope
 
 
@@ -78,6 +82,44 @@ class ChatPresenter:
             row.reply_message_id: row
             for row in (await db.turns.get_by_replies(agent_ids) if agent_ids else [])
         }
+        message_refs = [
+            reference
+            for turn in turns.values()
+            for reference in scoped_message_references(
+                getattr(turn, "message_references", None) or [],
+                kind="project_chat",
+                chat_id=rows[0].chat_id,
+                project_id=rows[0].project_id,
+            )
+        ]
+        source_ids = list({reference.message_id for reference in message_refs})
+        citation_sources = (
+            {
+                row.id: row
+                for row in await db.messages.get_many(
+                    rows[0].chat_id, source_ids, populate_existing=True
+                )
+            }
+            if source_ids
+            else {}
+        )
+        project_key = await db.chats.get_project_key(rows[0].project_id) if message_refs else None
+        citation_agent_ids = [
+            row.id for row in citation_sources.values() if row.author_kind == "agent"
+        ]
+        citation_turns = (
+            {
+                turn.reply_message_id: turn
+                for turn in await db.turns.get_by_replies(citation_agent_ids)
+            }
+            if citation_agent_ids
+            else {}
+        )
+        unavailable_citations = frozenset(
+            message_id
+            for message_id in citation_agent_ids
+            if message_id not in citation_turns or citation_turns[message_id].status != "completed"
+        )
         stale_reply_ids = [
             row.id
             for row in rows
@@ -99,14 +141,26 @@ class ChatPresenter:
         ):
             actions_by_turn[run.chat_turn_id].append(AgentToolRunSchema.model_validate(run))
         user_ids = (
-            {row.author_user_id for row in [*rows, *replies] if row.author_user_id}
+            {
+                row.author_user_id
+                for row in [*rows, *replies, *citation_sources.values()]
+                if row.author_user_id
+            }
             | {row.user_id for row in mentions}
             | {turn.requester_id for turn in turns.values()}
         )
         users = {
             row["id"]: public_user(row) for row in await db.participants.get_users(list(user_ids))
         }
-        ref_keys = list({(row.entity_type, row.document_ref if row.entity_type == "DOCUMENT" else row.entity_id) for row in refs})
+        ref_keys = list(
+            {
+                (
+                    row.entity_type,
+                    row.document_ref if row.entity_type == "DOCUMENT" else row.entity_id,
+                )
+                for row in refs
+            }
+        )
         entity_rows = (
             await db.entity_lookup.find(
                 rows[0].project_id, refs=ref_keys, limit=max(len(ref_keys), 1)
@@ -114,7 +168,13 @@ class ChatPresenter:
             if ref_keys
             else []
         )
-        entities = {(row["entity_type"], row.get("document_ref") if row["entity_type"] == "DOCUMENT" else row["entity_id"]): entity_view(row) for row in entity_rows}
+        entities = {
+            (
+                row["entity_type"],
+                row.get("document_ref") if row["entity_type"] == "DOCUMENT" else row["entity_id"],
+            ): entity_view(row)
+            for row in entity_rows
+        }
         refs_by_message, mentions_by_message, files_by_message, reactions_by_message = (
             defaultdict(list),
             defaultdict(list),
@@ -123,7 +183,12 @@ class ChatPresenter:
         )
         for row in refs:
             refs_by_message[row.message_id].append(
-                entities.get((row.entity_type, row.document_ref if row.entity_type == "DOCUMENT" else row.entity_id))
+                entities.get(
+                    (
+                        row.entity_type,
+                        row.document_ref if row.entity_type == "DOCUMENT" else row.entity_id,
+                    )
+                )
                 or ChatEntityView(
                     entity_type=row.entity_type,
                     entity_id=row.entity_id,
@@ -181,13 +246,29 @@ class ChatPresenter:
                         {"reaction": reaction, "user_ids": user_ids}
                         for reaction, user_ids in reactions_by_message[row.id].items()
                     ],
-                    agent=self._agent(turns.get(row.id), users, actions_by_turn),
+                    agent=self._agent(
+                        turns.get(row.id),
+                        users,
+                        actions_by_turn,
+                        hydrate_message_references(
+                            getattr(turns.get(row.id), "message_references", None) or [],
+                            kind="project_chat",
+                            chat_id=row.chat_id,
+                            project_id=row.project_id,
+                            messages=citation_sources,
+                            authors={key: user.display_name for key, user in users.items()},
+                            project_key=project_key,
+                            unavailable_message_ids=unavailable_citations,
+                        )
+                        if not deleted
+                        else [],
+                    ),
                 )
             )
         return result
 
     @staticmethod
-    def _agent(turn, users, actions_by_turn) -> ChatAgentView | None:
+    def _agent(turn, users, actions_by_turn, message_references=None) -> ChatAgentView | None:
         """Карточка ответа Ариса; у людских сообщений — None."""
         if turn is None:
             return None
@@ -199,5 +280,6 @@ class ChatPresenter:
             requester=users.get(turn.requester_id),
             request_message_id=turn.request_message_id,
             sources=turn.sources,
+            message_references=message_references or [],
             actions=actions_by_turn.get(turn.id, []),
         )

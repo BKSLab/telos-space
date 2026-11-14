@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /** Держит читаемое сообщение на месте при подгрузке истории и изменении высоты ответа. */
-export function useChatHistory(session: string, contentVersion: string) {
+export function useChatHistory(session: string, contentVersion: string, targetMessageId: number | null = null) {
     const viewport = useRef<HTMLDivElement>(null);
     const content = useRef<HTMLDivElement>(null);
     const previous = useRef({ session, first: "" });
@@ -51,12 +51,19 @@ export function useChatHistory(session: string, contentVersion: string) {
         const first = root.querySelector<HTMLElement>("[data-chat-message]")?.dataset.chatMessage ?? "";
         if (!first) return;
         const prepended = initialized.current && previous.current.first !== first;
-        if (!initialized.current) { root.scrollTop = root.scrollHeight; initialized.current = true; }
+        if (!initialized.current) {
+            const target = targetMessageId == null ? null : [...root.querySelectorAll<HTMLElement>("[data-chat-message]")].find(item => item.dataset.chatMessage === String(targetMessageId));
+            if (target) {
+                root.scrollTop += target.getBoundingClientRect().top - root.getBoundingClientRect().top - (root.clientHeight - target.getBoundingClientRect().height) / 2;
+                target.focus({ preventScroll: true });
+            } else root.scrollTop = root.scrollHeight;
+            initialized.current = true;
+        }
         else if (prepended || !bottom.current) restore();
         else root.scrollTop = root.scrollHeight;
         previous.current = { session, first };
         onScroll();
-    }, [session, contentVersion, onScroll, restore]);
+    }, [session, contentVersion, targetMessageId, onScroll, restore]);
 
     useEffect(() => {
         const root = viewport.current;

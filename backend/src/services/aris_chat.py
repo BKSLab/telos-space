@@ -11,12 +11,14 @@
 решение по действию и выполнение инструмента, поэтому циклов ожидания нет.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from src.agent.aris import ARIS_NAME, ArisMode, strip_address
@@ -28,11 +30,13 @@ from src.exceptions.ai import AiProviderError
 from src.exceptions.base import RepositoryError
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeChatMessageSchema
-from src.services.agent_chat_file_actions import initial_chat_files
-from src.services.agent_chat_files import AgentChatFilesService
+from src.services.agent_chat_files import AgentChatFilesService, ChatFileContext
 from src.services.db_scope import ArisChatScope, ArisChatScopeFactory
 from src.services.project_agent import ProjectAgentService
 from src.services.tasks import user_display_name
+
+if TYPE_CHECKING:
+    from src.services.agent_chat_history import AgentChatHistoryService
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +59,19 @@ class ArisChatService:
     """Исполняет ходы Ариса в чатах проектов; БД не удерживается во время вызова модели."""
 
     def __init__(
-        self, *, scope: ArisChatScopeFactory, agent: ProjectAgentService, config: ArisChatConfig,
+        self,
+        *,
+        scope: ArisChatScopeFactory,
+        agent: ProjectAgentService,
+        config: ArisChatConfig,
         chat_files: AgentChatFilesService | None = None,
+        chat_history: AgentChatHistoryService | None = None,
     ) -> None:
         self.scope = scope
         self.agent = agent
         self.config = config
         self.chat_files = chat_files
+        self.chat_history = chat_history
 
     async def process_next(self) -> bool:
         """Выполняет один ход или завершает ошибкой одну прерванную попытку.
@@ -130,19 +140,24 @@ class ArisChatService:
             user = await db.users.get_by_id(turn.requester_id)
             if user is None or not user.is_active:
                 raise ArisChatUnavailableError("позвавший больше не активен")
-            earlier = await db.messages.get_page(
-                turn.chat_id, before=request.seq, limit=self.config.history_messages
+            earlier = (
+                await db.messages.get_page(
+                    turn.chat_id, before=request.seq, limit=self.config.history_messages
+                )
+                if self.chat_history is None
+                else []
             )
             quoted = (
                 await db.messages.get(turn.chat_id, request.reply_to_message_id)
-                if request.reply_to_message_id
+                if request.reply_to_message_id and self.chat_history is None
                 else None
             )
             author_ids = {
                 row.author_user_id for row in [*earlier, *([quoted] if quoted else [])]
             } - {None}
             names = {
-                row["id"]: " ".join(filter(None, (row["last_name"], row["first_name"]))) or row["username"]
+                row["id"]: " ".join(filter(None, (row["last_name"], row["first_name"])))
+                or row["username"]
                 for row in await db.participants.get_users(list(author_ids))
             }
             action_history = [
@@ -162,19 +177,38 @@ class ArisChatService:
                 "content": quoted.content[:HISTORY_MESSAGE_CHARS],
             }
         execution = AgentToolContext(
-            project_id=turn.project_id, user_id=turn.requester_id,
-            can_write=grant.can_write, chat_turn_id=turn.id, run_id=turn.run_id,
+            project_id=turn.project_id,
+            user_id=turn.requester_id,
+            can_write=grant.can_write,
+            chat_turn_id=turn.id,
+            run_id=turn.run_id,
+            timezone=getattr(turn, "timezone", None) or "UTC",
+        )
+        chat_context = (
+            await self.chat_history.initial_context(
+                context=ChatFileContext(
+                    user_id=turn.requester_id,
+                    project_id=turn.project_id,
+                    chat_turn_id=turn.id,
+                    run_id=turn.run_id,
+                    timezone=execution.timezone,
+                )
+            )
+            if self.chat_history is not None
+            else None
         )
         uploaded_files = []
-        if self.chat_files is not None:
-            uploaded_files = await initial_chat_files(self.chat_files, execution)
         return await self.agent.ask(
             project_id=turn.project_id,
             question=strip_address(request.content),
             history=history,
             actor=actor,
             execution=execution,
-            uploaded_files=uploaded_files,
+            **(
+                {"chat_context": chat_context}
+                if chat_context is not None
+                else {"uploaded_files": uploaded_files}
+            ),
             action_history=action_history,
             mode=ArisMode.PROJECT_CHAT,
             extra_context=extra,
@@ -205,13 +239,53 @@ class ArisChatService:
         answer: KnowledgeAnswerSchema | None = None,
         error: str | None = None,
     ) -> None:
-        sources = [] if answer is None else [s.model_dump(mode="json") for s in answer.sources]
-        data = (
-            {"status": "failed", "error": error}
-            if error is not None
-            else {"status": "completed", "error": None, "sources": sources}
-        )
         async with self._scope() as db:
+            active = await db.turns.get(turn.id, lock=True)
+            if active is None or active.status != "processing" or active.run_id != turn.run_id:
+                return
+            if await db.chats.get(turn.project_id, lock=True) is None:
+                return
+            sources = [] if answer is None else [s.model_dump(mode="json") for s in answer.sources]
+            references = []
+            if answer is not None:
+                user = await db.users.get_by_id(turn.requester_id)
+                request = await db.messages.get(turn.chat_id, turn.request_message_id)
+                if (
+                    user is None
+                    or not user.is_active
+                    or await db.participants.get_member(turn.project_id, turn.requester_id) is None
+                ):
+                    raise ArisChatUnavailableError("позвавший больше не участник проекта")
+                if request is None or request.deleted_at is not None:
+                    raise ArisChatUnavailableError("вопрос удалён")
+                await db.access.ensure_project_access(
+                    project_id=turn.project_id, user_id=turn.requester_id
+                )
+                if answer.message_references:
+                    if self.chat_history is None:
+                        raise ArisChatUnavailableError("проверка цитат переписки недоступна")
+                    context = ChatFileContext(
+                        user_id=turn.requester_id,
+                        project_id=turn.project_id,
+                        chat_turn_id=turn.id,
+                        run_id=turn.run_id,
+                        timezone=getattr(turn, "timezone", None) or "UTC",
+                    )
+                    for reference in answer.message_references:
+                        verified = await self.chat_history.verify_reference(
+                            context=context, reference=reference
+                        )
+                        references.append(verified.model_dump(mode="json"))
+            data = (
+                {"status": "failed", "error": error, "sources": [], "message_references": []}
+                if error is not None
+                else {
+                    "status": "completed",
+                    "error": None,
+                    "sources": sources,
+                    "message_references": references,
+                }
+            )
             # Только своя активная попытка: истёкшую уже закрыл другой воркер.
             if not await db.turns.finish(turn.id, turn.run_id, data):
                 return

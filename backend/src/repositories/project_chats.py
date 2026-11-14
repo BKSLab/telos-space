@@ -3,6 +3,7 @@
 from sqlalchemy import select, update
 
 from src.db.models.project_chats import ProjectChat
+from src.db.models.projects import Project
 from src.repositories.chat_base import ChatRepository
 
 
@@ -31,4 +32,10 @@ class ProjectChatsRepository(ChatRepository):
         """Находит проект для фоновой очистки загрузок."""
         return (
             await self._execute(select(ProjectChat.project_id).where(ProjectChat.id == chat_id))
+        ).scalar_one_or_none()
+
+    async def get_project_key(self, project_id: int) -> str | None:
+        """Текущий ключ проверенного проекта для ссылок на историю."""
+        return (
+            await self._execute(select(Project.key).where(Project.id == project_id))
         ).scalar_one_or_none()

@@ -3,6 +3,10 @@
 import json
 import re
 from copy import deepcopy
+from hashlib import sha256
+
+from src.agent.aris import strip_address
+from src.agent.chat_context import chat_receipt, chat_text_tokens, is_chat_message, shrink_chat_text
 
 _HISTORY_OMISSION = "\n… [часть реплики опущена] …\n"
 _HISTORY_FACT = re.compile(
@@ -266,6 +270,10 @@ class AgentContextBudget:
 
     def prepare(self, content: dict) -> None:
         """Ограничивает историю по объёму, а не только по числу сообщений."""
+        chat = content.get("chat_context")
+        if chat:
+            while chat_text_tokens(chat) > self.history_tokens and shrink_chat_text(chat):
+                pass
         history = content.get("dialog_history", [])
         kept = compact_dialogue_history(
             history,
@@ -351,6 +359,32 @@ class AgentContextBudget:
     def fit(self, content: dict) -> str:
         """Применяется перед КАЖДЫМ раундом, включая накопленные ответы инструментов."""
         while self.tokens(content) > self.max_tokens:
+            current = (content.get("chat_context") or {}).get("current_message")
+            question = content.get("question")
+            duplicate = False
+            if (is_chat_message(current) and isinstance(question, str)
+                    and current.get("content_offset", 0) == 0 and len(current["content"]) > 400):
+                prefix = strip_address(current["content"])
+                candidates = [question]
+                if prefix and question.startswith(prefix):
+                    leader = current["content"][:current["content"].find(prefix)]
+                    candidates.append(leader + question)
+                duplicate = any(
+                    len(candidate) == current.get("content_total_chars")
+                    and sha256(candidate.encode("utf-8")).hexdigest() == current.get("content_hash")
+                    for candidate in candidates
+                )
+            if duplicate:
+                # Reader даёт только prefix; полный SHA256 доказывает совпадение
+                # question с оригиналом (включая обращение). Убираем
+                # только дубль, не сжимая поручение и не теряя сообщение/вложения.
+                current["content"] = ""
+                current["content_in_question"] = True
+                current["text_truncated"] = True
+                current["next_content_offset"] = 0
+                continue
+            if shrink_chat_text(content):
+                continue
             history = content.get("dialog_history", [])
             if history:
                 try:
@@ -462,6 +496,9 @@ class AgentContextBudget:
 
     @staticmethod
     def _receipt(result: dict) -> dict:
+        history = chat_receipt(result)
+        if history is not None:
+            return history
         keys = {
             "source_id",
             "source_handle",
@@ -488,6 +525,8 @@ class AgentContextBudget:
         def visit(value, path=()):
             if not isinstance(value, dict):
                 return
+            if is_chat_message(value):
+                return
             for key, item in list(value.items()):
                 if key in {
                     "available_tools",
@@ -496,10 +535,14 @@ class AgentContextBudget:
                     "arguments",
                     "previous_actions",
                     "dialog_history",
+                    "chat_context",
                 }:
                     continue
                 if isinstance(item, list):
-                    if key != "read_results" and len(item) > 1:
+                    if key != "read_results" and len(item) > 1 and not any(
+                        is_chat_message(child) or (isinstance(child, dict) and child.get("message_reference_handle"))
+                        for child in item
+                    ):
                         candidates.append((len(encode(item)), value, key, path))
                     for child in item:
                         visit(child, (*path, key))
@@ -525,6 +568,8 @@ class AgentContextBudget:
 
         def visit(value):
             if isinstance(value, dict):
+                if is_chat_message(value):
+                    return
                 for key, item in list(value.items()):
                     if key in {
                         "question",
@@ -535,6 +580,7 @@ class AgentContextBudget:
                         "action",
                         "previous_actions",
                         "dialog_history",
+                        "chat_context",
                     }:
                         continue
                     if isinstance(item, str) and len(item) > 400:

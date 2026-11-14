@@ -7,6 +7,7 @@ import { newUuid } from "@/lib/uuid";
 export interface ChatDraft {
     content: string; mentions: number[]; entities: ChatEntity[]; attachments: ChatAttachment[];
     reply: ChatReply | null; clientMessageId: string;
+    submission?: { clientMessageId: string; timezone: string };
 }
 export const emptyChatDraft = (): ChatDraft => ({ content: "", mentions: [], entities: [], attachments: [], reply: null, clientMessageId: newUuid() });
 interface ChatUiState {

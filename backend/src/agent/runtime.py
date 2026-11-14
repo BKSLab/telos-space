@@ -64,6 +64,7 @@ from pydantic_ai.usage import RunUsage
 
 from src.agent.aris import ArisMode
 from src.agent.capabilities import WORKFLOWS, Workflow, workflow_for_tool
+from src.agent.chat_context import shrink_chat_text
 from src.agent.context import AgentContextBudget, compact_action, encode, estimate_tokens
 from src.agent.progress import CHECK_WRITE, THINKING, ProgressReporter, describe_call
 from src.agent.tools import (
@@ -122,6 +123,10 @@ class ArisAnswer(BaseModel):
             "fragment_handle прочитанного фрагмента, который нужно показать рядом с ответом. "
             "Если фрагмента нет — source_handle основной задачи или документа. Только handle из текущих результатов."
         ),
+    )
+    message_references: list[str] = Field(
+        default_factory=list, max_length=20,
+        description="message_reference_handle прочитанных сообщений для точных цитат. Сервер проверяет текст/автора/время; цитаты не составляй в Markdown самостоятельно.",
     )
 
 
@@ -560,6 +565,8 @@ class ArisRuntime:
                 break
             if _compact_oldest_result(messages, keep_from=last_request):
                 continue
+            if _shrink_chat_returns(messages):
+                continue
             try:
                 shrunk = AgentContextBudget(
                     system_prompt=deps.system_prompt,
@@ -573,6 +580,10 @@ class ArisRuntime:
             if encode(deps.content) == before:
                 break
         _replace_prompt(messages, encode(deps.content))
+        if deps.budget.tokens(deps.content) + _traffic_tokens(messages) > limit:
+            from pydantic_ai.exceptions import UsageLimitExceeded
+
+            raise UsageLimitExceeded("Обязательный контекст и чтения превышают бюджет. Сузьте период или размер страницы.")
         return messages
 
 
@@ -740,6 +751,20 @@ def _traffic_tokens(messages: list[ModelMessage]) -> int:
             elif isinstance(message, ModelResponse):
                 total += estimate_tokens(getattr(part, "content", "") or "")
     return total
+
+
+def _shrink_chat_returns(messages: list[ModelMessage]) -> bool:
+    """Последняя страница истории тоже ограничена, без удаления её сообщений/ссылок."""
+    for index, message in enumerate(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        for position, part in enumerate(message.parts):
+            if isinstance(part, ToolReturnPart) and isinstance(part.content, dict) and shrink_chat_text(part.content):
+                parts = list(message.parts)
+                parts[position] = dataclass_replace(part, content=part.content)
+                messages[index] = dataclass_replace(message, parts=parts)
+                return True
+    return False
 
 
 def _compact_oldest_result(messages: list[ModelMessage], *, keep_from: int) -> bool:

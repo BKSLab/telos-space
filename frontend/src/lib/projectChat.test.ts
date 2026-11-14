@@ -1,9 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyChatMessage, chatAuthorName, isTaskMove, mergeChatMessages, taskMoveText, type ChatEvent, type ChatMessage, type ChatTaskMove } from "@/lib/projectChat";
+import { applyChatMessage, chatAuthorName, isTaskMove, mergeChatMessages, redactChangedChatReferences, taskMoveText, type ChatEvent, type ChatMessage, type ChatTaskMove } from "@/lib/projectChat";
 import { ProjectChatTransport } from "@/lib/projectChatTransport";
 
 const row = (patch: Partial<ChatMessage> = {}): ChatMessage => ({
     id: 1, chat_id: 1, project_id: 1, seq: 1, author_type: "USER", author: { id: 1, username: "anna", display_name: "Анна" }, client_message_id: "a", content: "Сообщение", revision: 1, created_at: "2026-09-21T10:00:00Z", edited_at: null, deleted_at: null, reply: null, mentions: [], entities: [], attachments: [], reactions: [], ...patch,
+});
+
+it("скрывает цитату только изменённого источника того же чата до серверной перепроверки", () => {
+    const source = row({ revision: 2 });
+    const reference = { kind: "project_chat" as const, chat_id: 1, message_id: 1, project_id: 1, project_key: "DEMO", author_id: 1, author_name: "Анна", created_at: source.created_at,
+        revision: 1, content_hash: "verified", quote: "Старое условие", start: 0, end: 14, offset_unit: "unicode_codepoints" as const, state: "available" as const };
+    const answer = row({ id: 5, content: "Сводка договорённостей", author_type: "AGENT", agent: { name: "Арис", status: "completed", error: null, requester: null, request_message_id: 4, sources: [], actions: [],
+        message_references: [reference, { ...reference, chat_id: 2 }] } });
+    const history = { messages: [source, answer], has_more: false, event_cursor: 2 };
+    const changed = redactChangedChatReferences(history, source);
+    expect(changed.messages[1].content).toBe(answer.content);
+    expect(changed.messages[1].agent?.message_references?.[0]).toMatchObject({ state: "edited", quote: "" });
+    expect(changed.messages[1].agent?.message_references?.[1]).toEqual({ ...reference, chat_id: 2 });
+    expect(history.messages[1].agent?.message_references?.[0].quote).toBe("Старое условие");
+    const deleted = redactChangedChatReferences(changed, { ...source, revision: 3, deleted_at: source.created_at });
+    expect(deleted.messages[1].agent?.message_references?.[0]).toMatchObject({ state: "deleted", quote: "" });
+    expect(redactChangedChatReferences(history, { ...source, revision: 1 })).toBe(history);
 });
 
 describe("переносы и авторы чата", () => {

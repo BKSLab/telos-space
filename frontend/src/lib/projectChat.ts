@@ -1,5 +1,5 @@
 /** Общий контракт HTTP/WS. Серверный seq задаёт порядок внутри проекта. */
-import type { AgentToolRun, KnowledgeSource } from "@/lib/types";
+import type { AgentToolRun, ChatMessageReference, KnowledgeSource } from "@/lib/types";
 import { ARIS_NAME } from "@/lib/aris";
 
 export type ChatEntityType = "TASK" | "DOCUMENT" | "RISK" | "MILESTONE" | "WBS_NODE";
@@ -27,12 +27,13 @@ export interface ChatAgentState {
     requester: ChatUser | null;
     request_message_id: number;
     sources: KnowledgeSource[];
+    message_references?: ChatMessageReference[];
     actions: AgentToolRun[];
 }
 export interface ChatMessageBody {
     content: string; mentions: number[]; entities: ChatEntityRef[]; attachment_ids: string[];
 }
-export interface ChatMessageCreate extends ChatMessageBody { client_message_id: string; reply_to_message_id: number | null }
+export interface ChatMessageCreate extends ChatMessageBody { client_message_id: string; reply_to_message_id: number | null; timezone: string }
 export interface ChatMessage {
     id: number; chat_id: number; project_id: number; seq: number; author_type: ChatAuthorType;
     author: ChatUser | null; client_message_id: string; content: string; revision: number;
@@ -121,6 +122,26 @@ export function applyChatMessage(history: ChatHistory | undefined, message: Chat
         ...row, reply: { id: message.id, seq: message.seq, author_type: message.author_type, author: message.author, content: message.deleted_at ? "Сообщение удалено" : message.content.slice(0, 240), deleted: Boolean(message.deleted_at) },
     } : row);
     return { messages, has_more: history?.has_more ?? false, event_cursor: Math.max(history?.event_cursor ?? 0, message.eventSeq ?? 0), initialized: history?.initialized ?? false };
+}
+
+/** Событие источника сразу скрывает прежнюю цитату до серверной гидратации истории. */
+export function redactChangedChatReferences(history: ChatHistory, source: ChatMessage): ChatHistory {
+    let changed = false;
+    const messages = history.messages.map(message => {
+        if (!message.agent?.message_references?.length) return message;
+        let rowChanged = false;
+        const message_references = message.agent.message_references.map(reference => {
+            if (reference.state === "unavailable" || reference.kind !== "project_chat" || reference.project_id !== source.project_id
+                || reference.chat_id !== source.chat_id || reference.message_id !== source.id
+                || (source.revision <= reference.revision && !(source.deleted_at && source.revision === reference.revision))) return reference;
+            const state = source.deleted_at ? "deleted" as const : "edited" as const;
+            if (reference.state === state && reference.quote === "") return reference;
+            changed = rowChanged = true;
+            return { ...reference, state, quote: "" };
+        });
+        return rowChanged ? { ...message, agent: { ...message.agent, message_references } } : message;
+    });
+    return changed ? { ...history, messages } : history;
 }
 
 /** Сообщение Ариса в чате проекта. */

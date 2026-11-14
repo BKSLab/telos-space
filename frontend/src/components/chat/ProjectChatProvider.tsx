@@ -5,7 +5,7 @@ import { MessageSquare, X } from "lucide-react";
 import { api, apiUrl, ApiError, queryKeys } from "@/lib/api";
 import { useCurrentUser } from "@/lib/useAuth";
 import { ProjectChatContext, type ProjectChatContextValue } from "@/lib/useProjectChat";
-import { applyChatMessage, chatAuthorName, chatEntityKey, chatKeys, chatPath, isAgentThinking, isTaskMove, taskMoveText, type ChatAck, type ChatConnectionState, type ChatEntity, type ChatEntityRef, type ChatEvent, type ChatEventPage, type ChatHistory, type ChatMessage, type ChatMessagePage, type ChatTaskMoveNotice, type ProjectChat } from "@/lib/projectChat";
+import { applyChatMessage, chatAuthorName, chatEntityKey, chatKeys, chatPath, isAgentThinking, isTaskMove, redactChangedChatReferences, taskMoveText, type ChatAck, type ChatConnectionState, type ChatEntity, type ChatEntityRef, type ChatEvent, type ChatEventPage, type ChatHistory, type ChatMessage, type ChatMessagePage, type ChatTaskMoveNotice, type ProjectChat } from "@/lib/projectChat";
 import { ProjectChatTransport } from "@/lib/projectChatTransport";
 import { IconButton } from "@/components/ui/Button";
 
@@ -82,6 +82,16 @@ export function ProjectChatProvider({ projectId, projectKey, children, chatVisib
             const message = event.data.message;
             if (message) {
                 client.setQueriesData<ChatHistory>({ queryKey: chatKeys.messages(projectId, userId) }, (old) => applyChatMessage(old, { ...message, eventSeq: event.seq }));
+                if (event.type === "message.updated" || event.type === "message.deleted") {
+                    let referencesChanged = false;
+                    client.setQueriesData<ChatHistory>({ queryKey: chatKeys.messages(projectId, userId) }, old => {
+                        if (!old) return old;
+                        const next = redactChangedChatReferences(old, message);
+                        if (next !== old) referencesChanged = true;
+                        return next;
+                    });
+                    if (referencesChanged) void client.invalidateQueries({ queryKey: chatKeys.messages(projectId, userId) });
+                }
                 if (event.type.startsWith("message.")) {
                     searchChanged = true;
                     client.setQueriesData<InfiniteData<ChatMessagePage>>({ queryKey: chatKeys.search(projectId, userId) }, (old) => old && ({ ...old, pages: old.pages.map((page) => ({ ...page, messages: page.messages.filter((row) => row.id !== message.id || !message.deleted_at).map((row) => row.id === message.id ? message : row) })) }));

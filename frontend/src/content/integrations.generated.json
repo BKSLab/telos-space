@@ -2137,6 +2137,125 @@
       "write": false
     },
     {
+      "description": "Конкретное сообщение, его attachments и до5 соседей с каждой стороны. Страницы текста до8000символов, next_content_offset продолжает чтение. quote выбирает точный прочитанный фрагмент для проверенной цитаты; message_reference_handle укажи в итоговом message_references.",
+      "group": "tasks",
+      "id": "mcp-action-00d501302b0bc7c3",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "Конкретное сообщение, соседние реплики и точный фрагмент для цитаты.",
+        "properties": {
+          "after_count": {
+            "default": 0,
+            "description": "Сколько соседних реплик после сообщения прочитать в пределах текущего вопроса.",
+            "examples": [
+              3
+            ],
+            "maximum": 5,
+            "minimum": 0,
+            "title": "After Count",
+            "type": "integer"
+          },
+          "before_count": {
+            "default": 0,
+            "description": "Сколько соседних реплик перед сообщением прочитать.",
+            "examples": [
+              3
+            ],
+            "maximum": 5,
+            "minimum": 0,
+            "title": "Before Count",
+            "type": "integer"
+          },
+          "chat_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ID текущего диалога; null — серверный контекст.",
+            "examples": [
+              1
+            ],
+            "title": "Chat Id"
+          },
+          "max_chars": {
+            "default": 8000,
+            "description": "Максимум символов страницы; next_content_offset продолжает чтение.",
+            "examples": [
+              4000
+            ],
+            "maximum": 8000,
+            "minimum": 1,
+            "title": "Max Chars",
+            "type": "integer"
+          },
+          "message_id": {
+            "description": "ID из chat_context или telos_list_chat_messages.",
+            "examples": [
+              12
+            ],
+            "exclusiveMinimum": 0,
+            "title": "Message Id",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Начало страницы полного текста в Unicode codepoints.",
+            "examples": [
+              0
+            ],
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Дословный фрагмент уже прочитанного сообщения для проверенной цитаты; сервер сверяет текст.",
+            "examples": [
+              "Исправлю завтра."
+            ],
+            "title": "Quote"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "title": "ChatMessageInput",
+        "type": "object"
+      },
+      "kind": "action",
+      "name": "telos_get_chat_message",
+      "needsProject": false,
+      "ownerOnly": false,
+      "projectOptional": true,
+      "requiresConfirmation": false,
+      "scopes": [
+        "projects:read",
+        "agent:ask"
+      ],
+      "summary": "Прочитать сообщение переписки",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
       "description": "Страница текста документа по document_ref; next_offset указывает продолжение, фрагмент доступен для цитирования.",
       "group": "documents",
       "id": "mcp-action-3cebbb95e2823f71",
@@ -2538,31 +2657,85 @@
       "write": false
     },
     {
-      "description": "Файлы текущего чата, включая старые сообщения: имя, UUID, статус подготовки и короткий фрагмент. q ищет по имени; next_offset продолжает историю. Черновики и другие диалоги закрыты.",
+      "description": "История текущего чата с авторами, датами и вложениями внутри сообщений. До50 сообщений; before_message_id/after_message_id и next_* продолжают чтение, query ищет текст либо буквальное имя вложения, date_from/date_to и author_user_id фильтруют. Дни в timezone вопроса. Для ответа на найденную тему читай соседние реплики.",
       "group": "tasks",
-      "id": "mcp-action-e9048ef83367b28b",
+      "id": "mcp-action-49985621947ea425",
       "inputSchema": {
         "additionalProperties": false,
+        "description": "История одного серверного диалога с курсором и пересечением фильтров.",
         "properties": {
-          "limit": {
-            "default": 20,
-            "description": "Размер страницы файлов.",
-            "maximum": 50,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "default": 0,
-            "description": "Смещение страницы файлов.",
-            "minimum": 0,
-            "title": "Offset",
-            "type": "integer"
-          },
-          "q": {
+          "after_message_id": {
             "anyOf": [
               {
-                "maxLength": 200,
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Вернуть сообщения позже этого ID, исключая сам якорь.",
+            "examples": [
+              10
+            ],
+            "title": "After Message Id"
+          },
+          "author_user_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Локальный ID автора из сообщений/участников; имя само по себе неоднозначно.",
+            "examples": [
+              2
+            ],
+            "title": "Author User Id"
+          },
+          "before_message_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Вернуть сообщения раньше этого ID, исключая сам якорь.",
+            "examples": [
+              40
+            ],
+            "title": "Before Message Id"
+          },
+          "chat_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ID текущего чата из chat_context; null выбирает его автоматически.",
+            "examples": [
+              1
+            ],
+            "title": "Chat Id"
+          },
+          "date_from": {
+            "anyOf": [
+              {
+                "format": "date",
                 "type": "string"
               },
               {
@@ -2570,15 +2743,64 @@
               }
             ],
             "default": null,
-            "description": "Часть исходного имени файла; null — последние файлы текущего чата.",
-            "title": "Q"
+            "description": "Первый календарный день включительно в timezone вопроса.",
+            "examples": [
+              "2026-11-12"
+            ],
+            "title": "Date From"
+          },
+          "date_to": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Последний календарный день включительно в timezone вопроса.",
+            "examples": [
+              "2026-11-12"
+            ],
+            "title": "Date To"
+          },
+          "limit": {
+            "default": 15,
+            "description": "Максимум сообщений страницы.",
+            "examples": [
+              15
+            ],
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Полнотекстовый поиск по сообщениям либо буквальное имя вложения; фильтры применяются совместно.",
+            "examples": [
+              "баг"
+            ],
+            "title": "Query"
           }
         },
-        "title": "ChatFilesInput",
+        "title": "ChatMessagesInput",
         "type": "object"
       },
       "kind": "action",
-      "name": "telos_list_chat_files",
+      "name": "telos_list_chat_messages",
       "needsProject": false,
       "ownerOnly": false,
       "projectOptional": true,
@@ -2587,7 +2809,7 @@
         "projects:read",
         "agent:ask"
       ],
-      "summary": "Найти файлы переписки",
+      "summary": "Найти сообщения переписки",
       "tokens": [
         "READ",
         "WRITE"
@@ -3824,7 +4046,7 @@
         "additionalProperties": false,
         "properties": {
           "file_id": {
-            "description": "UUID из uploaded_files или telos_list_chat_files; не путь и не ссылка.",
+            "description": "UUID из attachments конкретного сообщения chat_context или инструментов истории; не путь и не ссылка.",
             "format": "uuid",
             "title": "File Id",
             "type": "string"
@@ -7206,6 +7428,25 @@
             ],
             "description": "Читать реплики раньше этого ID.",
             "title": "Before Id"
+          }
+        },
+        {
+          "description": "Прочитать сообщение этого диалога и соседние реплики; несовместимо с before_id.",
+          "in": "query",
+          "name": "around_message_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Прочитать сообщение этого диалога и соседние реплики; несовместимо с before_id.",
+            "title": "Around Message Id"
           }
         },
         {
@@ -16239,6 +16480,25 @@
             ],
             "description": "Читать реплики раньше этого ID.",
             "title": "Before Id"
+          }
+        },
+        {
+          "description": "Прочитать сообщение этого диалога и соседние реплики; несовместимо с before_id.",
+          "in": "query",
+          "name": "around_message_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Прочитать сообщение этого диалога и соседние реплики; несовместимо с before_id.",
+            "title": "Around Message Id"
           }
         },
         {
@@ -36311,6 +36571,16 @@
                 "default": null,
                 "description": "ID открытой задачи.",
                 "title": "Task Id"
+              },
+              "timezone": {
+                "default": "UTC",
+                "description": "Часовой пояс IANA пользователя.",
+                "examples": [
+                  "Europe/Samara"
+                ],
+                "maxLength": 64,
+                "title": "Timezone",
+                "type": "string"
               }
             },
             "required": [
@@ -41061,6 +41331,14 @@
           "title": "Id",
           "type": "integer"
         },
+        "message_references": {
+          "description": "Проверяемые цитаты сообщений диалога.",
+          "items": {
+            "$ref": "#/components/schemas/ChatMessageReferenceSchema"
+          },
+          "title": "Message References",
+          "type": "array"
+        },
         "page_context": {
           "anyOf": [
             {
@@ -41197,6 +41475,16 @@
           ],
           "description": "ID открытой задачи.",
           "title": "Task Id"
+        },
+        "timezone": {
+          "default": "UTC",
+          "description": "Часовой пояс IANA пользователя.",
+          "examples": [
+            "Europe/Samara"
+          ],
+          "maxLength": 64,
+          "title": "Timezone",
+          "type": "string"
         }
       },
       "required": [
@@ -46327,6 +46615,14 @@
           "description": "Причина ошибки; текст ошибки уже в content.",
           "title": "Error"
         },
+        "message_references": {
+          "description": "Проверенные цитаты сообщений этого чата.",
+          "items": {
+            "$ref": "#/components/schemas/ChatMessageReferenceSchema"
+          },
+          "title": "Message References",
+          "type": "array"
+        },
         "name": {
           "description": "Имя агента для людей — «Арис».",
           "title": "Name",
@@ -46682,6 +46978,16 @@
             }
           ],
           "title": "Reply To Message Id"
+        },
+        "timezone": {
+          "default": "UTC",
+          "description": "Часовой пояс IANA инициатора ответа.",
+          "examples": [
+            "Europe/Samara"
+          ],
+          "maxLength": 64,
+          "title": "Timezone",
+          "type": "string"
         }
       },
       "required": [
@@ -46779,6 +47085,188 @@
         "event_cursor"
       ],
       "title": "ChatMessagePage",
+      "type": "object"
+    },
+    "ChatMessageReferenceSchema": {
+      "additionalProperties": false,
+      "description": "Серверный снимок источника и точного диапазона Unicode.",
+      "properties": {
+        "author_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Локальный автор; null у Ариса или удалённого участника.",
+          "examples": [
+            1
+          ],
+          "title": "Author Id"
+        },
+        "author_name": {
+          "description": "Имя автора из серверных данных.",
+          "examples": [
+            "Андрей Иванов"
+          ],
+          "title": "Author Name",
+          "type": "string"
+        },
+        "chat_id": {
+          "description": "ID чата или личного диалога в указанном kind.",
+          "examples": [
+            1
+          ],
+          "exclusiveMinimum": 0.0,
+          "title": "Chat Id",
+          "type": "integer"
+        },
+        "content_hash": {
+          "description": "SHA256 полного UTF-8 текста источника.",
+          "examples": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "created_at": {
+          "description": "Время отправки источника.",
+          "examples": [
+            "2026-11-12T10:00:00Z"
+          ],
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "end": {
+          "description": "Конец цитаты, не включая позицию.",
+          "examples": [
+            16
+          ],
+          "minimum": 0.0,
+          "title": "End",
+          "type": "integer"
+        },
+        "kind": {
+          "description": "Вид переписки.",
+          "enum": [
+            "project_chat",
+            "conversation"
+          ],
+          "examples": [
+            "project_chat"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "message_id": {
+          "description": "ID исходного сообщения.",
+          "examples": [
+            12
+          ],
+          "exclusiveMinimum": 0.0,
+          "title": "Message Id",
+          "type": "integer"
+        },
+        "offset_unit": {
+          "const": "unicode_codepoints",
+          "default": "unicode_codepoints",
+          "description": "Единица смещений исходного текста.",
+          "examples": [
+            "unicode_codepoints"
+          ],
+          "title": "Offset Unit",
+          "type": "string"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Проект источника; null в общем личном диалоге.",
+          "examples": [
+            1
+          ],
+          "title": "Project Id"
+        },
+        "project_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Текущий ключ проекта для навигации.",
+          "examples": [
+            "TELOS"
+          ],
+          "title": "Project Key"
+        },
+        "quote": {
+          "description": "Проверенная дословная цитата; скрыта у недоступного источника.",
+          "examples": [
+            "Исправлю завтра."
+          ],
+          "maxLength": 2000,
+          "title": "Quote",
+          "type": "string"
+        },
+        "revision": {
+          "description": "Версия сообщения при чтении.",
+          "examples": [
+            1
+          ],
+          "minimum": 1.0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "start": {
+          "description": "Начало цитаты в Unicode codepoints.",
+          "examples": [
+            0
+          ],
+          "minimum": 0.0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "state": {
+          "default": "available",
+          "description": "Актуальное состояние оригинала при показе ответа.",
+          "enum": [
+            "available",
+            "edited",
+            "deleted",
+            "unavailable"
+          ],
+          "examples": [
+            "available"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "chat_id",
+        "message_id",
+        "author_name",
+        "created_at",
+        "revision",
+        "content_hash",
+        "quote",
+        "start",
+        "end"
+      ],
+      "title": "ChatMessageReferenceSchema",
       "type": "object"
     },
     "ChatMessageView": {
@@ -48764,6 +49252,15 @@
         "answer": {
           "title": "Answer",
           "type": "string"
+        },
+        "message_references": {
+          "description": "Проверенные цитаты сообщений текущей переписки; не знания проекта.",
+          "items": {
+            "$ref": "#/components/schemas/ChatMessageReferenceSchema"
+          },
+          "maxItems": 20,
+          "title": "Message References",
+          "type": "array"
         },
         "sources": {
           "items": {

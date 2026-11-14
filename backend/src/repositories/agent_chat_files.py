@@ -15,6 +15,7 @@ from src.db.models.chat_attachments import ChatAttachment
 from src.db.models.chat_file_texts import ChatFileText
 from src.db.models.chat_messages import ChatMessage
 from src.db.models.project_chats import ProjectChat
+from src.db.models.projects import Project
 from src.repositories.chat_base import ChatRepository
 
 
@@ -31,11 +32,14 @@ class AgentChatFilesRepository(ChatRepository):
                 AgentConversation.channel,
                 AgentConversation.api_key_id,
                 question.id.label("upper_bound"),
+                question.id.label("question_id"),
+                Project.key.label("project_key"),
                 AgentMessage.status,
                 AgentMessage.run_id,
             )
             .select_from(AgentMessage)
             .join(AgentConversation, AgentConversation.id == AgentMessage.conversation_id)
+            .outerjoin(Project, Project.id == AgentConversation.project_id)
             .join(
                 question,
                 and_(
@@ -62,10 +66,13 @@ class AgentChatFilesRepository(ChatRepository):
                 ChatAgentTurn.chat_id.label("scope_id"),
                 ChatAgentTurn.project_id,
                 ChatMessage.seq.label("upper_bound"),
+                ChatMessage.id.label("question_id"),
+                Project.key.label("project_key"),
                 ChatAgentTurn.status,
                 ChatAgentTurn.run_id,
             )
             .select_from(ChatAgentTurn)
+            .join(Project, Project.id == ChatAgentTurn.project_id)
             .join(
                 ChatMessage,
                 and_(

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import type { AgentToolRun, AgentFile, KnowledgeSource, AgentPageContext } from "../src/lib/types";
+import type { AgentToolRun, AgentFile, AgentMessage, ChatMessageReference, KnowledgeSource } from "../src/lib/types";
 import { delayedDraftUpload } from "./support/draftUploadMock";
 
 async function expectAgentCardAccent(page: Page, card: Locator) {
@@ -43,6 +43,53 @@ async function openProjectPersonal(page: Page, key = "DEMO") {
     await expect(page).toHaveURL(new RegExp(`/projects/${key}/conversations(?:\\?conversation=\\d+)?$`));
     await expect(page.getByRole("textbox", { name: "Вопрос Арису по проекту", exact: true })).toBeEnabled();
 }
+
+test.describe("проверяемые цитаты личной переписки", () => {
+    test.use({ timezoneId: "Europe/Samara" });
+    for (const projectPrivate of [false, true]) {
+        test(`цитата открывает старое сообщение, скрывает прежние версии и передаёт timezone: ${projectPrivate ? "project private" : "personal"}`, async ({ page }, info) => {
+            const control = await installProjectApi(page);
+            await page.setViewportSize({ width: projectPrivate ? 390 : 1440, height: 1000 });
+            const quote = "😀 Согласовано:\nотправить результат в пятницу.";
+            const stamp = "2026-11-14T09:15:00Z";
+            const source: AgentMessage = { id: 1, conversation_id: 1, request_id: "source", role: "user", content: `Условие: ${quote}`, sources: [], status: "completed", error: null, created_at: stamp };
+            const reference: ChatMessageReference = { kind: "conversation", chat_id: 1, message_id: 1, project_id: projectPrivate ? 1 : null, project_key: projectPrivate ? "DEMO" : null, author_id: 1, author_name: "Анна Иванова", created_at: stamp, revision: 1, content_hash: "c".repeat(64), quote, start: 9, end: 9 + Array.from(quote).length, offset_unit: "unicode_codepoints", state: "available" };
+            const answer: AgentMessage = { ...source, id: 80, request_id: "answer", role: "assistant", content: "Нашёл подтверждённую договорённость.", message_references: [reference] };
+            const fillers = Array.from({ length: 60 }, (_, index): AgentMessage => ({ ...source, id: index + 2, request_id: `later-${index}`, content: `Позднее сообщение ${index + 1}` }));
+            const conversationId = control.seedConversation(projectPrivate ? 1 : null, [source, ...fillers, answer]);
+            const path = projectPrivate ? "/projects/DEMO/conversations" : "/chat";
+            await page.goto(`${path}?conversation=${conversationId}`);
+            const citations = page.getByRole("region", { name: "Цитаты сообщений", exact: true });
+            await expect(citations.locator("blockquote")).toHaveText(quote);
+            expect(await citations.locator("blockquote").textContent()).toBe(quote);
+            await expect(citations.getByText("Анна Иванова", { exact: true })).toBeVisible();
+            await expect(citations.locator("time")).toHaveText("14.11.2026, 13:15");
+            await page.screenshot({ path: info.outputPath("verified-citation.png"), animations: "disabled" });
+            await citations.getByRole("link", { name: "Открыть сообщение", exact: true }).click();
+            await expect(page).toHaveURL(`${new URL(path, "http://127.0.0.1:4179")}?conversation=${conversationId}&message=1`);
+            const target = page.locator('[data-chat-message="1"][data-highlighted="true"]');
+            await expect(target).toBeVisible();
+            await expect(target).toBeFocused();
+            expect(control.historyRequests.some(params => params.get("around_message_id") === "1")).toBe(true);
+            await page.screenshot({ path: info.outputPath("quoted-message.png"), animations: "disabled" });
+            await page.getByRole("button", { name: "К последним сообщениям", exact: true }).click();
+            await expect(citations).toBeVisible();
+            for (const state of ["edited", "deleted", "unavailable"] as const) {
+                control.histories.get(conversationId)!.at(-1)!.message_references = [{ ...reference, state }];
+                await page.reload();
+                await expect(citations.getByRole("status")).toContainText({ edited: "Сообщение изменено", deleted: "Сообщение удалено", unavailable: "Сообщение недоступно" }[state]);
+                await expect(citations.locator("blockquote")).toHaveCount(0);
+                expect(await citations.textContent()).not.toContain(quote);
+            }
+            const input = page.getByRole("textbox", { name: projectPrivate ? "Вопрос Арису по проекту" : "Вопрос Арису", exact: true });
+            await input.fill("Что обсуждали сегодня?");
+            await page.getByRole("button", { name: projectPrivate ? "Спросить" : "Отправить Арису (Enter)", exact: true }).click();
+            await expect.poll(() => control.submissions.length).toBe(1);
+            expect(control.submissions[0].page_context).toMatchObject({ route: path, project_key: projectPrivate ? "DEMO" : null, task_id: null, timezone: "Europe/Samara" });
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+        });
+    }
+});
 
 test("личный draft upload не блокирует ввод и удаляется после отмены до Send", async ({ page }) => {
     const control = await installProjectApi(page);
@@ -116,7 +163,7 @@ test("единое окно личного Ариса сохраняет чер�
     await expect(page.getByText("Руководитель проекта — Анна Иванова.", { exact: true })).toBeVisible();
     expect(control.submissions).toHaveLength(1);
     expect(control.submissions[0].file_ids).toEqual(["f918d205-2ced-48eb-85f4-19b8e55ef361"]);
-    expect(control.submissions[0].page_context).toEqual({ route: "/chat", project_key: null, task_id: null });
+    expect(control.submissions[0].page_context).toEqual({ route: "/chat", project_key: null, task_id: null, timezone: await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC") });
     await expect(page).toHaveURL(/\/team$/);
 });
 
@@ -178,10 +225,19 @@ async function installProjectApi(page: Page) {
     const stamp = "2026-09-21T10:00:00Z";
     const user = { id: 1, username: "anna", first_name: "Анна", last_name: "Иванова", middle_name: null, is_active: true, has_avatar: false };
     const project = { id: 1, owner_id: 1, key: "DEMO", name: "Знания проекта", description_md: "Паспорт", description_sections: null, due_date_has_been_set: false, status: "ACTIVE", color: "#7299cc", icon: null, start_date: null, due_date: null, order_index: 0, created_at: stamp, updated_at: stamp };
-    type Message = { id: number; conversation_id: number; request_id: string; role: string; content: string; sources: object[]; status: string; error: string | null; created_at: string; actions?: AgentToolRun[]; files?: AgentFile[]; page_context?: AgentPageContext };
+    type Message = AgentMessage;
     const conversations: { id: number; project_id: number | null; title: string; created_at: string; updated_at: string }[] = [];
     const messages = new Map<number, Message[]>();
-    const control = { projects: [project], answer: "Руководитель проекта — Анна Иванова.", sources: null as KnowledgeSource[] | null, pending: false, fail: false, submissions: [] as Record<string, unknown>[], attempts: [] as { path: string; body: Record<string, unknown> }[], dropResponses: 0, action: null as AgentToolRun | null, decisions: [] as Record<string, unknown>[] };
+    const control = { projects: [project], answer: "Руководитель проекта — Анна Иванова.", sources: null as KnowledgeSource[] | null, pending: false, fail: false, submissions: [] as Record<string, unknown>[], attempts: [] as { path: string; body: Record<string, unknown> }[], dropResponses: 0, action: null as AgentToolRun | null, decisions: [] as Record<string, unknown>[],
+        historyRequests: [] as URLSearchParams[], histories: messages,
+        seedConversation(projectId: number | null, items: AgentMessage[]) {
+            const id = conversations.length + 1;
+            conversations.push({ id, project_id: projectId, title: "Исходная переписка", created_at: stamp, updated_at: stamp });
+            messages.set(id, items.map(item => ({ ...item, conversation_id: id })));
+            messageId = Math.max(messageId, ...items.map(item => item.id));
+            return id;
+        },
+    };
     const uploaded: AgentFile = { id: "f918d205-2ced-48eb-85f4-19b8e55ef361", original_name: "acceptance.md", content_type: "text/markdown", size: 12, created_at: stamp };
     let messageId = 0;
     await page.route("https://fonts.googleapis.com/**", route => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
@@ -233,6 +289,8 @@ async function installProjectApi(page: Page) {
                 return reply(message, 202);
             }
             if (method === "GET") {
+                const params = new URL(route.request().url()).searchParams;
+                control.historyRequests.push(params);
                 const assistant = rows.at(-1);
                 if (assistant?.status === "queued" && !control.pending) {
                     Object.assign(assistant, control.fail ? { status: "failed", error: "Не удалось подготовить ответ. Можно повторить запрос." } : {
@@ -241,7 +299,13 @@ async function installProjectApi(page: Page) {
                     });
                     if (control.action && !assistant.actions) assistant.actions = [structuredClone(control.action)];
                 }
-                return reply({ items: rows, next_before_id: null });
+                const around = Number(params.get("around_message_id"));
+                const before = Number(params.get("before_id")) || Infinity;
+                const all = rows.filter(item => item.id < before);
+                const index = around ? all.findIndex(item => item.id === around) : all.length;
+                if (around && index < 0) return reply({ detail: "Сообщение недоступно" }, 404);
+                const items = around ? all.slice(Math.max(0, index - 10), index + 11) : all.slice(-30);
+                return reply({ items, next_before_id: items.length && all[0]?.id !== items[0].id ? items[0].id : null });
             }
             const data = route.request().postDataJSON();
             control.attempts.push({ path, body: data });
@@ -291,7 +355,7 @@ test("чат восстанавливает ожидающий ответ пос
     await sourceCard.press("Enter");
     await expect(page).toHaveURL(/\/projects\/DEMO\/team$/);
     expect(control.submissions).toHaveLength(1);
-    expect(Object.keys(control.submissions[0]).sort()).toEqual(["content", "file_ids", "request_id"]);
+    expect(Object.keys(control.submissions[0]).sort()).toEqual(["content", "file_ids", "page_context", "request_id"]);
     expect(errors).toEqual([]);
 });
 
