@@ -1,5 +1,6 @@
 """Сокращение текста переписки с сохранением сообщений и их структурных связей."""
 
+from copy import deepcopy
 
 
 def is_chat_message(value) -> bool:
@@ -78,8 +79,7 @@ def chat_receipt(value: dict) -> dict | None:
     def visit(item):
         if is_chat_message(item):
             messages.append({key: item[key] for key in (
-                "id", "chat_id", "kind", "author_id", "author_name", "created_at", "revision",
-                "content_hash", "message_reference_handle", "reply_to_message_id", "entity_references",
+                "id", "chat_id", "kind", "message_reference_handle", "entity_references",
             ) if key in item})
         elif isinstance(item, dict):
             for child in item.values():
@@ -97,5 +97,76 @@ def chat_receipt(value: dict) -> dict | None:
             "has_more", "next_before_message_id", "next_after_message_id", "applied_filters",
         }},
         "context_compacted": True,
-        "notice": "Текст прочитанных сообщений сокращён. Их ссылки сохранены; детали перечитай инструментом истории.",
+        "notice": "Прежнее чтение сокращено до ID и ссылок. Цитаты сохранены сервером; текст, автора и дату перечитай инструментом истории.",
     }
+
+
+def compact_chat_result(value: dict) -> dict | None:
+    """Убирает повторные служебные поля tool DTO; исходный chat_context не меняет."""
+    if value.get("chat_metadata_compacted") or value.get("context_compacted"):
+        return None
+    found = False
+
+    def project(item):
+        nonlocal found
+        if is_chat_message(item):
+            found = True
+            result = {key: deepcopy(child) for key, child in item.items() if key not in {
+                "project_id", "project_key", "content_hash",
+            }}
+            for key in ("reply_to_message_id", "next_content_offset"):
+                if result.get(key) is None:
+                    result.pop(key, None)
+            if not result.get("entity_references"):
+                result.pop("entity_references", None)
+            if not result.get("content_offset"):
+                result.pop("content_offset", None)
+            if not result.get("text_truncated"):
+                result.pop("text_truncated", None)
+                if result.get("content_total_chars") == len(result["content"]):
+                    result.pop("content_total_chars", None)
+            return result
+        if isinstance(item, dict):
+            return {key: project(child) for key, child in item.items()}
+        if isinstance(item, list):
+            return [project(child) for child in item]
+        return item
+
+    result = project(value)
+    if not found:
+        return None
+    result["chat_metadata_compacted"] = True
+    result["notice"] = "Повторные поля проекта и hash убраны из чтения; сервер хранит полный снимок цитаты по message_reference_handle."
+    return result
+
+
+def shrink_chat_page(value: dict) -> bool:
+    """Сокращает model-only страницу, сохраняя непрерывное дочитывание в обе стороны."""
+    candidates = []
+
+    def visit(item):
+        if isinstance(item, dict):
+            rows = item.get("items")
+            if isinstance(rows, list) and len(rows) > 1 and all(is_chat_message(row) for row in rows) and isinstance(item.get("applied_filters"), dict):
+                candidates.append((len(rows), item))
+            else:
+                for child in item.values():
+                    visit(child)
+        elif isinstance(item, list):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    if not candidates:
+        return False
+    _, page = max(candidates, key=lambda pair: pair[0])
+    rows = page["items"]
+    keep = max(1, len(rows) // 2)
+    after = page["applied_filters"].get("after_message_id") is not None
+    page["items"] = rows[:keep] if after else rows[-keep:]
+    page["items_omitted"] = page.get("items_omitted", 0) + len(rows) - keep
+    page["has_more"] = True
+    page["next_after_message_id"] = page["items"][-1]["id"] if after else None
+    page["next_before_message_id"] = None if after else page["items"][0]["id"]
+    page["notice"] = "Страница сокращена для контекста модели. Продолжи по next_* с теми же applied_filters; непрочитанные сообщения не пропущены."
+    return True

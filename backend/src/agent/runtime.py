@@ -64,7 +64,7 @@ from pydantic_ai.usage import RunUsage
 
 from src.agent.aris import ArisMode
 from src.agent.capabilities import WORKFLOWS, Workflow, workflow_for_tool
-from src.agent.chat_context import shrink_chat_text
+from src.agent.chat_context import compact_chat_result, shrink_chat_page, shrink_chat_text
 from src.agent.context import AgentContextBudget, compact_action, encode, estimate_tokens
 from src.agent.progress import CHECK_WRITE, THINKING, ProgressReporter, describe_call
 from src.agent.tools import (
@@ -728,8 +728,12 @@ def _fit_result(result: dict[str, Any], max_tokens: int) -> dict[str, Any]:
     """Один результат не съедает бюджет целиком: длинные списки и тексты сокращаются."""
     if estimate_tokens(encode(result)) <= max_tokens:
         return result
-    value = deepcopy(result)
+    value = compact_chat_result(result) or deepcopy(result)
     while estimate_tokens(encode(value)) > max_tokens:
+        if shrink_chat_text(value):
+            continue
+        if shrink_chat_page(value):
+            continue
         if AgentContextBudget._shrink_lists(value):
             continue
         if AgentContextBudget._shrink_text(value):
@@ -759,9 +763,12 @@ def _shrink_chat_returns(messages: list[ModelMessage]) -> bool:
         if not isinstance(message, ModelRequest):
             continue
         for position, part in enumerate(message.parts):
-            if isinstance(part, ToolReturnPart) and isinstance(part.content, dict) and shrink_chat_text(part.content):
+            if not isinstance(part, ToolReturnPart) or not isinstance(part.content, dict):
+                continue
+            projection = compact_chat_result(part.content)
+            if projection is not None or shrink_chat_text(part.content) or shrink_chat_page(part.content):
                 parts = list(message.parts)
-                parts[position] = dataclass_replace(part, content=part.content)
+                parts[position] = dataclass_replace(part, content=projection if projection is not None else part.content)
                 messages[index] = dataclass_replace(message, parts=parts)
                 return True
     return False
