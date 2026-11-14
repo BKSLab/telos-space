@@ -42,7 +42,7 @@ export type FileCategory =
 
 const IMAGE_EXTENSIONS = new Set(["avif", "bmp", "gif", "jpeg", "jpg", "png", "webp"]);
 const WORD_EXTENSIONS = new Set(["doc", "docx", "odt", "rtf"]);
-const SHEET_EXTENSIONS = new Set(["csv", "ods", "xls", "xlsx"]);
+const SHEET_EXTENSIONS = new Set(["csv", "ods", "xls", "xlsm", "xlsx"]);
 const PRESENTATION_EXTENSIONS = new Set(["odp", "ppt", "pptx"]);
 const ARCHIVE_EXTENSIONS = new Set(["7z", "gz", "rar", "tar", "zip"]);
 const TEXT_EXTENSIONS = new Set(["log", "md", "txt"]);

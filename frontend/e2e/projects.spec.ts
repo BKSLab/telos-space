@@ -138,3 +138,76 @@ test("первое назначение без причины, конфликт 
     expect(state.history).toHaveLength(1);
     expect(state.errors).toEqual([]);
 });
+
+for (const width of [1440, 390, 320]) {
+    test(`оформление проекта: модалка, круглые цвета и отмена на ${width}px`, async ({ page }, testInfo) => {
+        await page.setViewportSize({ width, height: 900 });
+        const state = await mockProjects(page);
+        await page.goto("/projects/new");
+        await page.getByLabel("Название", { exact: true }).fill("Мой длинный проект — оформление и документы");
+        const trigger = page.getByRole("button", { name: "Оформление проекта", exact: true });
+        await trigger.click();
+        const dialog = page.getByRole("dialog", { name: "Оформление проекта" });
+        await expect(dialog).toBeVisible();
+        await dialog.evaluate(async element => {
+            await Promise.all((element.parentElement?.getAnimations() ?? []).map(animation => animation.finished));
+        });
+        const bounds = await dialog.boundingBox();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+        const icons = dialog.getByRole("region", { name: "Иконки набора" }).getByRole("button");
+        await expect(icons).toHaveCount(19); // 18 иконок и действие сброса.
+        const colors = dialog.getByRole("region", { name: "Цвет проекта" }).getByRole("button");
+        await expect(colors).toHaveCount(8);
+        for (const button of await colors.all()) {
+            const target = await button.boundingBox();
+            expect(target!.width).toBeGreaterThanOrEqual(44);
+            expect(target!.height).toBe(target!.width);
+        }
+        for (const swatch of await dialog.getByTestId("project-color-swatch").all()) {
+            const box = await swatch.boundingBox();
+            expect(box!.height).toBe(box!.width);
+            expect(box!.height).toBe(24);
+        }
+        await dialog.getByRole("button", { name: "Запуск", exact: true }).click();
+        await dialog.getByRole("button", { name: "Цвет #a371f7" }).click();
+        await page.screenshot({ path: testInfo.outputPath(`appearance-${width}.png`), fullPage: true });
+        await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+        await expect(dialog).toHaveCount(0);
+        await expect(page.getByLabel("Название", { exact: true })).toHaveValue("Мой длинный проект — оформление и документы");
+        await expect(trigger).toBeFocused();
+        await trigger.click();
+        await expect(dialog.getByRole("button", { name: "Запуск", exact: true })).toHaveAttribute("aria-pressed", "false");
+        await dialog.getByRole("button", { name: "Запуск", exact: true }).click();
+        await dialog.getByRole("button", { name: "Цвет #a371f7" }).click();
+        await dialog.getByRole("button", { name: "Применить", exact: true }).click();
+        await expect(trigger).toContainText("Запуск");
+        await trigger.click();
+        await expect(dialog.getByRole("button", { name: "Запуск", exact: true })).toHaveAttribute("aria-pressed", "true");
+        await expect(dialog.getByRole("button", { name: "Цвет #a371f7" })).toHaveAttribute("aria-pressed", "true");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toHaveCount(0);
+        expect(state.errors).toEqual([]);
+    });
+}
+
+test("картинка нового проекта: локальное превью применяется и отменяется без потери формы", async ({ page }, testInfo) => {
+    const state = await mockProjects(page);
+    await page.goto("/projects/new");
+    await page.getByLabel("Название", { exact: true }).fill("Проект с логотипом");
+    const trigger = page.getByRole("button", { name: "Оформление проекта", exact: true });
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "Оформление проекта" });
+    const file = { name: "logo.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=", "base64") };
+    await dialog.getByLabel("Файл картинки проекта").setInputFiles(file);
+    await expect(dialog.getByTestId("icon-picker-pending")).toHaveJSProperty("naturalWidth", 1);
+    await dialog.getByRole("button", { name: "Применить", exact: true }).click();
+    await expect(trigger).toContainText("Свой логотип");
+    await trigger.click();
+    await dialog.getByRole("button", { name: "Убрать картинку", exact: true }).click();
+    await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+    await expect(trigger.getByTestId("icon-picker-pending")).toBeVisible();
+    await expect(page.getByLabel("Название", { exact: true })).toHaveValue("Проект с логотипом");
+    await page.screenshot({ path: testInfo.outputPath("project-with-pending-logo.png"), fullPage: true });
+    expect(state.errors).toEqual([]);
+});

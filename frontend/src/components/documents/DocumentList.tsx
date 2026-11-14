@@ -3,7 +3,7 @@ import { formatFullDate } from "@/lib/dates";
 import { documentProcessingLabel } from "@/lib/documents";
 import { fileTypeLabel, formatFileSize } from "@/lib/files";
 import type { DocumentListItem } from "@/lib/types";
-import { FileTypeIcon } from "@/components/files/FileTypeIcon";
+import { DocumentThumbnail } from "./DocumentThumbnail";
 import { DocumentDialog } from "./DocumentView";
 
 export function DocumentList({ documents, onOpen, actions, projectKey }: {
@@ -29,7 +29,7 @@ export function DocumentRow({ document, onOpen, actions }: { document: DocumentL
     return <div className="flex min-w-0 items-center gap-1 pr-1">
         <button type="button" aria-label={`Открыть документ ${document.title}`} onClick={onOpen}
             className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent">
-            <FileTypeIcon file={file} className="h-9 w-9" />
+            <DocumentThumbnail document={document} file={file} />
             <span className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="truncate text-[13px] font-medium text-primary" title={document.title}>{document.title}</span>
                 {document.caption && <span className="line-clamp-1 break-words text-[12px] text-secondary">{document.caption}</span>}

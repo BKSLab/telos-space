@@ -145,6 +145,14 @@ export const PROJECT_ICONS: readonly ProjectIconOption[] = [
 
 const BY_NAME = new Map(PROJECT_ICONS.map((option) => [option.name, option]));
 
+/** Компактный выбор; полный справочник выше продолжает отображать сохранённые иконки. */
+const PICKER_NAMES = new Set([
+    "folder", "folder-kanban", "target", "rocket", "lightbulb", "code",
+    "database", "bot", "globe", "users", "handshake", "headset",
+    "book-open", "flask-conical", "briefcase", "chart-column", "shield-check", "package",
+]);
+export const PROJECT_PICKER_ICONS = PROJECT_ICONS.filter(option => PICKER_NAMES.has(option.name));
+
 export function lucideIconValue(name: string): string {
     return `${LUCIDE_ICON_PREFIX}${name}`;
 }

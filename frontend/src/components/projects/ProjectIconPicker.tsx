@@ -1,277 +1,182 @@
 import { useEffect, useRef, useState } from "react";
-import { ImageUp, Loader2, X } from "lucide-react";
+import { Check, ImageUp, Loader2, Palette, X } from "lucide-react";
 import { api, endpoints } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import {
-    findProjectIcon,
-    iconImageProblem,
-    lucideIconValue,
-    PROJECT_ICONS,
-    projectEmoji,
-} from "@/lib/projectIcons";
-import type { Project } from "@/lib/types";
-import { useToast } from "@/lib/toast";
+import { findProjectIcon, iconImageProblem, lucideIconValue, PROJECT_PICKER_ICONS, projectEmoji } from "@/lib/projectIcons";
+import { PROJECT_COLORS, type Project } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
-import { Popover } from "@/components/ui/Popover";
+import { Modal } from "@/components/ui/Modal";
 import { ProjectIcon } from "@/components/projects/ProjectIcon";
 
 export const ICON_IMAGE_HINT = "PNG, JPG или WebP до 2 МБ";
 
+interface Appearance { icon: string; color: string }
 interface ProjectIconPickerProps {
-    /** Значение поля `icon`: `lucide:<имя>`, эмодзи или пустая строка. */
     value: string;
     color: string;
-    onChange: (icon: string) => void;
-    /** Сохранённый проект: только у него можно загрузить свою картинку. */
+    onChange: (appearance: Appearance) => void;
     project?: Pick<Project, "id" | "icon_image_version">;
-    /** Картинка загружена или убрана — сервер вернул обновлённый проект. */
     onProjectChange?: (project: Project) => void;
-    /**
-     * Проекта ещё нет (форма создания): выбранная картинка держится на странице и
-     * загружается сразу после создания. Без этого колбэка картинку выбрать нельзя.
-     */
     pendingImage?: File | null;
     onPendingImageChange?: (file: File | null) => void;
     disabled?: boolean;
 }
 
-/**
- * Выбор иконки проекта: сетка иконок набора цветом проекта, эмодзи (старый
- * формат) и своя картинка. Иконка сохраняется вместе с формой, а картинка —
- * сразу при загрузке: у неё отдельный адрес и проверка на сервере.
- */
-export function ProjectIconPicker({
-    value,
-    color,
-    onChange,
-    project,
-    onProjectChange,
-    pendingImage,
-    onPendingImageChange,
-    disabled = false,
-}: ProjectIconPickerProps) {
-    const toast = useToast();
-    const fileInput = useRef<HTMLInputElement>(null);
-    const [busy, setBusy] = useState(false);
-    const selected = findProjectIcon(value);
-    const emoji = projectEmoji(value) ?? "";
-    // Предпросмотр выбранного до создания файла: адрес заводится при выборе и освобождается при смене,
-    // удалении и уходе со страницы.
-    const [preview, setPreview] = useState<{ file: File; url: string } | null>(null);
-    const previewRef = useRef(preview);
+/** Object URL принадлежит конкретному смонтированному preview и освобождается вместе с ним. */
+function PendingImage({ file, className }: { file: File; className: string }) {
+    const image = useRef<HTMLImageElement>(null);
     useEffect(() => {
-        previewRef.current = preview;
-    }, [preview]);
-    useEffect(() => () => {
-        if (previewRef.current) URL.revokeObjectURL(previewRef.current.url);
-    }, []);
-    const pendingUrl = !project && pendingImage && preview?.file === pendingImage ? preview.url : null;
+        const target = image.current;
+        const url = URL.createObjectURL(file);
+        if (target) target.src = url;
+        return () => {
+            URL.revokeObjectURL(url);
+            if (target?.getAttribute("src") === url) target.removeAttribute("src");
+        };
+    }, [file]);
+    return <img ref={image} alt="" aria-hidden="true" className={className} data-testid="icon-picker-pending" />;
+}
 
-    function choosePending(file: File | null) {
-        if (preview) URL.revokeObjectURL(preview.url);
-        setPreview(file ? { file, url: URL.createObjectURL(file) } : null);
-        onPendingImageChange?.(file);
+export function ProjectIconPicker(props: ProjectIconPickerProps) {
+    const [open, setOpen] = useState(false);
+    const selected = findProjectIcon(props.value);
+    const hasImage = Boolean(props.project?.icon_image_version || props.pendingImage);
+    return <>
+        <Button onClick={() => setOpen(true)} disabled={props.disabled} aria-haspopup="dialog" aria-expanded={open}
+            aria-label="Оформление проекта" className="h-auto min-h-11 max-w-full justify-start gap-3 px-3 py-2">
+            <span className="grid size-8 shrink-0 place-items-center rounded-[6px] bg-surface/70" data-testid="icon-picker-preview">
+                {props.pendingImage && !props.project
+                    ? <PendingImage file={props.pendingImage} className="size-8 rounded-[6px] object-cover" />
+                    : <ProjectIcon project={{ id: props.project?.id ?? 0, color: props.color, icon: props.value || null,
+                        icon_image_version: props.project?.icon_image_version }} size={24} />}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                <span className="truncate text-[13px]">{hasImage ? "Свой логотип" : selected?.label ?? (projectEmoji(props.value) ? "Эмодзи" : "Цвет проекта")}</span>
+                <span className="text-[11px] text-muted">Логотип, иконка и цвет</span>
+            </span>
+            <Palette size={16} className="shrink-0 text-muted" aria-hidden="true" />
+        </Button>
+        {open && <AppearanceDialog {...props} onClose={() => setOpen(false)} />}
+    </>;
+}
+
+function AppearanceDialog({ value, color, onChange, project, onProjectChange, pendingImage, onPendingImageChange, onClose }: ProjectIconPickerProps & { onClose: () => void }) {
+    const [draft, setDraft] = useState<Appearance>({ icon: value, color });
+    const [file, setFile] = useState<File | null>(pendingImage ?? null);
+    const [removeSaved, setRemoveSaved] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const saving = useRef(false);
+    const input = useRef<HTMLInputElement>(null);
+    const selected = findProjectIcon(draft.icon);
+    const emoji = projectEmoji(draft.icon) ?? "";
+    const icons = selected && !PROJECT_PICKER_ICONS.some(option => option.name === selected.name)
+        ? [selected, ...PROJECT_PICKER_ICONS] : PROJECT_PICKER_ICONS;
+    const hasImage = Boolean(file || (project?.icon_image_version && !removeSaved));
+    const canPickImage = Boolean(project || onPendingImageChange);
+    const previewProject = { id: project?.id ?? 0, color: draft.color, icon: draft.icon || null,
+        icon_image_version: removeSaved ? null : project?.icon_image_version };
+
+    function chooseImage(chosen: File) {
+        const problem = iconImageProblem(chosen);
+        if (problem) { setError(problem); return; }
+        setFile(chosen);
+        setError(null);
     }
-    const hasImage = Boolean(project?.icon_image_version) || Boolean(pendingUrl);
-    const canPickImage = Boolean(project) || Boolean(onPendingImageChange);
 
-    async function uploadImage(file: File) {
-        const problem = iconImageProblem(file);
-        if (problem) {
-            toast.error(`${problem} Нужна картинка: ${ICON_IMAGE_HINT}.`);
-            return;
-        }
-        if (!project) {
-            choosePending(file);
-            return;
-        }
-        const body = new FormData();
-        body.append("file", file);
+    async function apply() {
+        if (saving.current) return;
+        saving.current = true;
         setBusy(true);
+        setError(null);
         try {
-            const saved = await api.postForm<Project>(endpoints.projectIconImage(project.id), body);
-            onProjectChange?.(saved);
-            toast.success("Картинка проекта загружена");
-        } catch (error) {
-            toast.error((error as Error).message);
-        } finally {
-            setBusy(false);
-        }
-    }
-
-    async function removeImage() {
-        if (!project) {
-            choosePending(null);
-            return;
-        }
-        setBusy(true);
-        try {
-            const saved = await api.delete<Project>(endpoints.projectIconImage(project.id));
-            onProjectChange?.(saved);
-            toast.success("Картинка убрана — проект снова показывает иконку");
-        } catch (error) {
-            toast.error((error as Error).message);
-        } finally {
-            setBusy(false);
-        }
-    }
-
-    // Как иконку покажет тема: бордовый #7C1623 на тёмном поповере иначе почти не виден (lib/dataColor.ts).
-    const shownColor = color;
-    return (
-        <Popover
-            label="Иконка проекта"
-            align="start"
-            width={332}
-            disabled={disabled}
-            triggerClassName="h-9 gap-2 px-2.5"
-            trigger={
-                <>
-                    <span className="grid size-5 place-items-center" data-testid="icon-picker-preview">
-                        {pendingUrl ? (
-                            <img src={pendingUrl} alt="" aria-hidden="true" className="size-[18px] rounded-[4px] object-cover" data-testid="icon-picker-pending" />
-                        ) : (
-                            <ProjectIcon
-                                project={{
-                                    id: project?.id ?? 0,
-                                    color,
-                                    icon: value || null,
-                                    icon_image_version: project?.icon_image_version,
-                                }}
-                                size={18}
-                                dotClassName="size-2.5"
-                            />
-                        )}
-                    </span>
-                    <span className="text-[13px]">
-                        {hasImage ? "Своя картинка" : selected?.label ?? (emoji ? "Эмодзи" : "Без иконки")}
-                    </span>
-                </>
+            if (project && file) {
+                const body = new FormData(); body.append("file", file);
+                const saved = await api.postForm<Project>(endpoints.projectIconImage(project.id), body);
+                onProjectChange?.(saved);
+            } else if (project && removeSaved && project.icon_image_version) {
+                const saved = await api.delete<Project>(endpoints.projectIconImage(project.id));
+                onProjectChange?.(saved);
+            } else if (!project) {
+                onPendingImageChange?.(file);
             }
-        >
-            {({ close }) => (
-                <div className="flex flex-col gap-3">
-                    {hasImage && (
-                        <p className="text-[12px] text-muted">
-                            Сейчас показывается своя картинка. Выбранная иконка вернётся, если её убрать.
-                        </p>
-                    )}
-                    <div
-                        role="group"
-                        aria-label="Иконки набора"
-                        className="icon-picker-grid grid grid-cols-8 gap-1"
-                    >
-                        {PROJECT_ICONS.map(({ name, label, Icon }) => {
-                            const isSelected = selected?.name === name;
-                            return (
-                                <button
-                                    key={name}
-                                    type="button"
-                                    title={label}
-                                    aria-label={label}
-                                    aria-pressed={isSelected}
-                                    onClick={() => {
-                                        onChange(lucideIconValue(name));
-                                        close();
-                                    }}
-                                    className={cn(
-                                        "touch-target grid size-8 place-items-center rounded-[6px] transition-colors duration-[var(--duration-fast)]",
-                                        "hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1",
-                                        isSelected && "ring-2 ring-offset-1 ring-offset-app",
-                                    )}
-                                    style={
-                                        isSelected
-                                            ? { backgroundColor: `color-mix(in srgb, ${shownColor} 14%, transparent)`, ["--tw-ring-color" as string]: shownColor }
-                                            : undefined
-                                    }
-                                >
-                                    <Icon size={16} strokeWidth={2} style={{ color: shownColor }} aria-hidden="true" />
-                                </button>
-                            );
-                        })}
-                    </div>
+            onChange(draft);
+            onClose();
+        } catch (cause) {
+            setError((cause as Error).message || "Не удалось сохранить картинку. Повторите попытку.");
+        } finally {
+            saving.current = false;
+            setBusy(false);
+        }
+    }
 
-                    <div className="flex items-center gap-2">
-                        <Input
-                            aria-label="Эмодзи вместо иконки"
-                            title="Можно вписать эмодзи вместо иконки из набора"
-                            placeholder="или эмодзи 🚀"
-                            maxLength={8}
-                            value={emoji}
-                            onChange={(event) => onChange(event.target.value)}
-                            className="h-8 flex-1"
-                        />
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            title="Убрать иконку: проект будет отмечен цветной точкой"
-                            disabled={!value}
-                            onClick={() => {
-                                onChange("");
-                                close();
-                            }}
-                        >
-                            Без иконки
-                        </Button>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5 border-t border-line pt-3">
-                        <span className="text-xs font-medium text-secondary">Своя картинка</span>
-                        {canPickImage ? (
-                            <>
-                                <div className="flex flex-wrap gap-2">
-                                    <input
-                                        ref={fileInput}
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp"
-                                        className="sr-only"
-                                        tabIndex={-1}
-                                        aria-label="Файл картинки проекта"
-                                        onChange={(event) => {
-                                            const file = event.target.files?.[0];
-                                            event.target.value = "";
-                                            if (file) void uploadImage(file);
-                                        }}
-                                    />
-                                    <Button
-                                        size="sm"
-                                        icon={busy ? <Loader2 size={14} className="animate-spin motion-reduce:animate-none" /> : <ImageUp size={14} />}
-                                        title={
-                                            project
-                                                ? "Загрузить свою картинку: она заменит иконку в меню, списках и шапке проекта"
-                                                : "Выбрать свою картинку: загрузится сразу после создания проекта и заменит иконку"
-                                        }
-                                        disabled={busy || disabled}
-                                        onClick={() => fileInput.current?.click()}
-                                    >
-                                        {hasImage ? "Заменить картинку" : project ? "Загрузить картинку" : "Выбрать картинку"}
-                                    </Button>
-                                    {hasImage && (
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            icon={<X size={14} />}
-                                            title="Убрать картинку: проект снова покажет иконку или цветную точку"
-                                            disabled={busy || disabled}
-                                            onClick={() => void removeImage()}
-                                        >
-                                            Убрать картинку
-                                        </Button>
-                                    )}
-                                </div>
-                                <span className="text-[12px] text-muted">
-                                    {project ? `${ICON_IMAGE_HINT}. Сохраняется сразу.` : `${ICON_IMAGE_HINT}. Загрузится сразу после создания проекта.`}
-                                </span>
-                            </>
-                        ) : (
-                            <span className="text-[12px] text-muted">
-                                Загрузить свою картинку ({ICON_IMAGE_HINT}) можно в настройках после создания проекта.
-                            </span>
-                        )}
-                    </div>
+    return <Modal title="Оформление проекта" description="Загрузите свой логотип или выберите иконку и цвет."
+        isOpen size="md" isDismissable={!busy} onOpenChange={isOpen => { if (!isOpen && !saving.current) onClose(); }}
+        footer={<><Button onClick={onClose} disabled={busy}>Отмена</Button>
+            <Button variant="primary" onClick={() => void apply()} disabled={busy}
+                icon={busy ? <Loader2 size={14} className="animate-spin motion-reduce:animate-none" /> : undefined}>
+                {busy ? "Сохранение…" : "Применить"}</Button></>}>
+        <fieldset disabled={busy} className="flex min-w-0 flex-col gap-5">
+            <div className="flex min-w-0 items-center gap-4 rounded-[var(--radius-card)] border border-line-subtle bg-surface/40 p-4">
+                <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-[10px] border border-line-subtle bg-surface" data-testid="appearance-preview">
+                    {file ? <PendingImage key={`${file.name}:${file.lastModified}`} file={file} className="size-16 object-cover" />
+                        : <ProjectIcon project={previewProject} size={48} />}
+                </span>
+                <span className="flex min-w-0 flex-col gap-1">
+                    <span className="text-[13px] font-medium text-primary">{hasImage ? "Свой логотип" : selected?.label ?? (emoji ? "Эмодзи" : "Цвет проекта")}</span>
+                    <span className="text-[12px] text-muted">Так проект будет выглядеть в списках и шапке.</span>
+                </span>
+            </div>
+            {canPickImage && <section className="flex flex-col gap-2" aria-label="Своя картинка">
+                <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" tabIndex={-1}
+                    aria-label="Файл картинки проекта" onChange={event => {
+                        const chosen = event.target.files?.[0]; event.target.value = "";
+                        if (chosen) chooseImage(chosen);
+                    }} />
+                <div className="flex flex-wrap gap-2">
+                    <Button icon={<ImageUp size={15} />} onClick={() => input.current?.click()}>
+                        {hasImage ? "Заменить картинку" : "Выбрать картинку"}</Button>
+                    {hasImage && <Button variant="ghost" icon={<X size={14} />} onClick={() => {
+                        setFile(null); setRemoveSaved(true); setError(null);
+                    }}>Убрать картинку</Button>}
                 </div>
-            )}
-        </Popover>
-    );
+                <p className="text-[12px] text-muted">{ICON_IMAGE_HINT}. {project ? "Картинка сохранится при применении." : "Картинка загрузится после создания проекта."}</p>
+                {hasImage && <p className="text-[12px] text-muted">Картинка показывается вместо иконки. После её удаления вернётся выбранная иконка.</p>}
+            </section>}
+            {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+            <section className="flex min-w-0 flex-col gap-2" aria-label="Иконки набора">
+                <h3 className="text-xs font-medium text-secondary">Иконка</h3>
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(44px,1fr))] gap-1.5">
+                    {icons.map(({ name, label, Icon }) => {
+                        const chosen = selected?.name === name;
+                        return <button key={name} type="button" title={label} aria-label={label} aria-pressed={chosen}
+                            onClick={() => setDraft({ ...draft, icon: lucideIconValue(name) })}
+                            className={cn("relative grid size-11 place-items-center rounded-[8px] border text-secondary transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                                chosen ? "border-accent bg-accent-soft" : "border-line-subtle bg-surface/30")}
+                            style={chosen ? { color: draft.color } : undefined}>
+                            <Icon size={22} strokeWidth={1.8} aria-hidden="true" />
+                            {chosen && <Check size={10} className="absolute right-0.5 top-0.5 text-primary" aria-hidden="true" />}
+                        </button>;
+                    })}
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <Input aria-label="Эмодзи вместо иконки" placeholder="Свой эмодзи" maxLength={8} value={emoji}
+                        onChange={event => setDraft({ ...draft, icon: event.target.value })} className="h-9 min-w-0 flex-1 basis-32" />
+                    <Button variant="ghost" onClick={() => setDraft({ ...draft, icon: "" })} disabled={!draft.icon}>Без иконки</Button>
+                </div>
+            </section>
+            <section className="flex flex-col gap-2" aria-label="Цвет проекта">
+                <h3 className="text-xs font-medium text-secondary">Цвет проекта</h3>
+                <div className="flex flex-wrap gap-1">
+                    {PROJECT_COLORS.map(shade => <button key={shade} type="button" aria-label={`Цвет ${shade}`} aria-pressed={draft.color === shade}
+                        onClick={() => setDraft({ ...draft, color: shade })}
+                        className="grid size-11 shrink-0 place-items-center rounded-[8px] hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                        <span data-testid="project-color-swatch" className={cn("grid size-6 shrink-0 place-items-center rounded-full", draft.color === shade && "ring-2 ring-primary ring-offset-2 ring-offset-surface")}
+                            style={{ backgroundColor: shade }}>{draft.color === shade && <Check size={14} strokeWidth={2.5} className="text-black/80" aria-hidden="true" />}</span>
+                    </button>)}
+                </div>
+            </section>
+        </fieldset>
+    </Modal>;
 }

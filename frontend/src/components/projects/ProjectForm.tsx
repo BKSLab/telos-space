@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { cn } from "@/lib/cn";
-import { PROJECT_COLORS, PROJECT_STATUS_LABELS } from "@/lib/types";
+import { PROJECT_STATUS_LABELS } from "@/lib/types";
 import type { Project, ProjectStatus } from "@/lib/types";
 import { PROJECT_KEY_PATTERN, type ProjectFormValues } from "@/lib/projectForm";
 import { ProjectIconPicker } from "@/components/projects/ProjectIconPicker";
@@ -136,31 +135,9 @@ export function ProjectForm({ values, onChange, lockKey = false, requireDeadline
                 </Field>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-[120px_1fr]">
-                <Field label="Иконка">{() => <ProjectIconPicker value={values.icon} color={values.color} onChange={icon => update({ icon })} disabled={disabled} project={project} onProjectChange={onProjectChange} pendingImage={pendingImage} onPendingImageChange={onPendingImageChange} />}</Field>
-
-                <fieldset className="flex flex-col gap-1.5">
-                    <legend className="mb-1.5 text-xs font-medium text-secondary">Цвет</legend>
-                    <div className="flex flex-wrap gap-2">
-                        {PROJECT_COLORS.map((color) => (
-                            <button
-                                key={color}
-                                type="button"
-                                aria-label={`Цвет ${color}`}
-                                aria-pressed={values.color === color}
-                                onClick={() => update({ color })}
-                                style={{ backgroundColor: color }}
-                                className={cn(
-                                    "size-6 rounded-full transition-[box-shadow] duration-[var(--duration-fast)]",
-                                    values.color === color
-                                        ? "ring-2 ring-primary ring-offset-2 ring-offset-app"
-                                        : "ring-1 ring-line-strong",
-                                )}
-                            />
-                        ))}
-                    </div>
-                </fieldset>
-            </div>
+            <Field label="Оформление проекта">{() => <ProjectIconPicker value={values.icon} color={values.color}
+                onChange={appearance => update(appearance)} disabled={disabled} project={project}
+                onProjectChange={onProjectChange} pendingImage={pendingImage} onPendingImageChange={onPendingImageChange} />}</Field>
         </fieldset>
     );
 }
