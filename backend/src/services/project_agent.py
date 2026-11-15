@@ -851,9 +851,14 @@ class ProjectAgentService:
             # хотя их компактный ответ может не дублировать entity_type.
             if value.get("source_id") in catalog.sources:
                 source = catalog.sources[value["source_id"]]
-                excerpt = (value.get("matching_chunks") or [{}])[0].get("text") or value.get(
-                    "text", ""
-                )
+                chunks = value.get("matching_chunks")
+                excerpt = next(
+                    (chunk["text"] for chunk in chunks
+                     if isinstance(chunk, dict) and isinstance(chunk.get("text"), str) and chunk["text"]),
+                    "",
+                ) if isinstance(chunks, list) else ""
+                if not excerpt and isinstance(value.get("text"), str):
+                    excerpt = value["text"]
                 record = citation(source, excerpt=excerpt, score=value.get("score"))
                 fragment_data = value.get("reference")
                 if isinstance(fragment_data, dict):
