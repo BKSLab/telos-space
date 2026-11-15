@@ -27,10 +27,12 @@ from tests.integration.repositories.test_agent_conversations_repository import (
 from tests.integration.repositories.test_agent_conversations_repository import read, send, start
 from tests.integration.repositories.test_agent_project_actions import actions_env as actions_env
 from tests.integration.repositories.test_agent_project_actions import invoke, result, task
+from tests.integration.test_agent_chat_files import reader
 
 
 async def test_file_is_private_until_sent_then_attaches_original_bytes_once(actions_env):
     env = actions_env
+    env.actions.chat_files = reader(env, env.files)
     files = AgentFilesService(scope=env.actions.scope)
     conversation = await start(env)
     arguments = dict(project_id=1, user_id=1, conversation_id=conversation.id)
@@ -55,14 +57,30 @@ async def test_file_is_private_until_sent_then_attaches_original_bytes_once(acti
     with pytest.raises(AgentFileConflictError):
         await files.delete_draft(**arguments, file_id=uploaded.id)
     request_id = uuid4()
-    first = await invoke(env, "telos_attach_uploaded_file", call, request_id=request_id)
-    assert first == await invoke(env, "telos_attach_uploaded_file", call, request_id=request_id)
+    copies = []
+
+    async def copy_during_active_answer(**kwargs):
+        context = kwargs["execution"]
+        first = await invoke(
+            env, "telos_attach_uploaded_file", call, request_id=request_id, context=context
+        )
+        assert first == await invoke(
+            env, "telos_attach_uploaded_file", call, request_id=request_id, context=context
+        )
+        with pytest.raises(AgentToolAccessError):
+            await invoke(
+                env, "telos_attach_uploaded_file", call,
+                context=replace(context, user_id=2),
+            )
+        copies.append(first)
+        return KnowledgeAnswerSchema(answer="Оригинал прикреплён.", sources=[])
+
+    env.responder.ask.side_effect = copy_during_active_answer
+    await env.service.process_next()
+    first = copies[0]
     assert result(first)["document"]["original"]["size"] == len(binary)
     copied_files = list((env.files / "tasks").rglob("*.pdf"))
     assert len(copied_files) == 1 and copied_files[0].read_bytes() == binary
-    with pytest.raises(AgentToolOperationError):
-        await invoke(env, "telos_attach_uploaded_file", call, context=replace(env.context, user_id=2))
-    await env.service.process_next()
     assert env.responder.ask.await_args.kwargs["uploaded_files"][0]["id"] == str(uploaded.id)
     assert (await read(env, conversation.id)).items[0].files[0].id == uploaded.id
     other = await start(env)

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.core.settings import Settings
 from src.db.session import async_session_factory
+from src.dependencies.chat_files import bind_agent_chat_files_service
 from src.dependencies.document_catalog import build_bound_document_catalog_service
 from src.dependencies.settings import SettingsDep
 from src.dependencies.storage import TaskAttachmentStorageDep
@@ -413,6 +414,9 @@ def build_agent_project_tool_scope(
                                 tokens_repository=ApiTokensRepository(session),
                                 api_keys_repository=ApiKeysRepository(session),
                                 invite_code=settings.auth.registration_invite_code.get_secret_value(),
+                            ),
+                            bind_chat_files=lambda source: bind_agent_chat_files_service(
+                                source, session=session, settings=settings
                             ),
                         )
                     finally:

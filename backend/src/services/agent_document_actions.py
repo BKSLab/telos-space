@@ -12,7 +12,7 @@ from src.schemas import project_tool_inputs as inputs
 from src.schemas.document_catalog import DocumentCreateRequestSchema, DocumentUpdateRequestSchema
 from src.schemas.document_references import DocumentFragmentSchema
 from src.services.agent_action_helpers import checked_task
-from src.services.agent_files import uploaded_content
+from src.services.agent_chat_file_actions import file_context
 from src.services.agent_tool_scope import AgentProjectToolScope
 from src.storage.agent_tool_files import read_local_file
 from src.utils.document_refs import decode_document_ref
@@ -51,9 +51,13 @@ def _request_id(ctx, operation, args):
 async def attach_uploaded_file(
     db: AgentProjectToolScope, ctx: AgentToolContext, args: inputs.UploadedAttachmentInput
 ) -> dict:
-    """Прикрепляет к задаче копию отправленного участником файла."""
+    """Копирует оригинал sent-файла из точной переписки активного ответа в задачу."""
     await checked_task(db, ctx, args.task_id)
-    metadata, content = await uploaded_content(db, file_id=args.file_id, user_id=ctx.user_id)
+    if db.chat_files is None:
+        raise AgentToolConflictError("Чтение оригинала файла переписки не подключено.")
+    metadata, content = await db.chat_files.read_original(
+        context=file_context(ctx), file_id=args.file_id
+    )
     item = await _catalog(db).upload(
         user_id=ctx.user_id, owner_task_id=args.task_id,
         request_id=_request_id(ctx, "attach_uploaded_file", args), principal=ctx.principal,

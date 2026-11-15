@@ -7,7 +7,12 @@ from src.agent.tools import AgentToolContext
 from src.exceptions.agent_tools import AgentToolArgumentsError, AgentToolConflictError
 from src.exceptions.projects import ProjectNotFoundError
 from src.schemas import project_tool_inputs as inputs
-from src.services.agent_action_helpers import checked_comment, checked_task, page
+from src.services.agent_action_helpers import (
+    checked_comment,
+    checked_task,
+    page,
+    task_document_listing,
+)
 from src.services.agent_tool_scope import AgentProjectToolScope
 from src.services.project_query import StageRefDto, resolve_stage_reference
 from src.services.tasks import build_task_key
@@ -90,7 +95,11 @@ async def get_task(
     """
     task_id = args.task_id or await _task_id_by_key(db, ctx, args.task_key or "")
     task = await checked_task(db, ctx, task_id)
-    result = {"task": task.model_dump(mode="json"), "source_id": f"task:{task.id}"}
+    result = {
+        "task": task.model_dump(mode="json"),
+        "source_id": f"task:{task.id}",
+        "documents": task_document_listing(task.id),
+    }
     stage = next(
         (row for row in await db.stages.get_stage_list(ctx.project_id) if row.id == task.stage_id),
         None,

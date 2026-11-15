@@ -173,9 +173,12 @@ class AgentActionsService:
             logger.info("✅ Инструмент %s: %s, действие=%s.", name, state, row.id)
             return response
 
-    @staticmethod
-    async def _invoke(definition, db, actor, parameters):
+    async def _invoke(self, definition, db, actor, parameters):
         """Рабочая очередь подписывает эффект проверенным инициатором операции."""
+        if definition.name == "telos_attach_uploaded_file":
+            if self.chat_files is None or db.bind_chat_files is None:
+                raise AgentToolAccessError("Чтение оригинала файла переписки не подключено.")
+            db = replace(db, chat_files=db.bind_chat_files(self.chat_files))
         current = current_request_actor()
         token = set_request_actor(
             RequestActor(

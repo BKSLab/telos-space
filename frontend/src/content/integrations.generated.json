@@ -288,14 +288,14 @@
       "write": true
     },
     {
-      "description": "Копирует в задачу файл, отправленный участником в личном чате. file_id берётся из uploaded_files; пути и ссылки не принимаются.",
+      "description": "Копирует оригинал отправленного файла текущей переписки в документы задачи. file_id — UUID из attachments сообщения chat_context или истории; после создания задачи используй её выданный task_id. Пути и ссылки не принимаются.",
       "group": "tasks",
       "id": "mcp-action-ab39ecd5276b1cc9",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
           "file_id": {
-            "description": "ID файла из uploaded_files, ранее отправленного участником.",
+            "description": "UUID отправленного файла из attachments конкретного сообщения текущего chat_context или его истории; не document_ref, путь или URL.",
             "format": "uuid",
             "title": "File Id",
             "type": "string"
@@ -2256,7 +2256,7 @@
       "write": false
     },
     {
-      "description": "Страница текста документа по document_ref; next_offset указывает продолжение, фрагмент доступен для цитирования.",
+      "description": "Читает сохранённый Markdown или извлечённый текст файла по document_ref из каталога задачи/проекта. next_offset продолжает текст; состояния извлечения объясняют пустое представление. Фрагмент доступен для цитирования.",
       "group": "documents",
       "id": "mcp-action-3cebbb95e2823f71",
       "inputSchema": {
@@ -2428,7 +2428,7 @@
       "write": false
     },
     {
-      "description": "Полная задача по task_id или ключу KEY-12: стадия с названием, участники, чек-лист, revision и updated_at. По ключу искать задачу через telos_list_tasks не нужно.",
+      "description": "Полная задача по task_id или ключу KEY-12: стадия, участники, чек-лист, revision. Документы читаются отдельно: telos_list_documents(task_id), затем telos_get_document. По ключу искать задачу через telos_list_tasks не нужно.",
       "group": "aris",
       "id": "mcp-action-badc01a73297d2af",
       "inputSchema": {
@@ -2939,7 +2939,7 @@
       "write": false
     },
     {
-      "description": "Постраничный каталог всех документов проекта и задач с поиском и фильтрами.",
+      "description": "Документы проекта и задач: собственные загрузки/Markdown и связанные документы. Для документов конкретной задачи передай task_id и scope=all; next_offset продолжает перечень. Текст читает telos_get_document.",
       "group": "documents",
       "id": "mcp-action-8b5cf20517cbc7d9",
       "inputSchema": {
@@ -3040,7 +3040,7 @@
               }
             ],
             "default": null,
-            "description": "Документы конкретной задачи текущего проекта.",
+            "description": "Документы конкретной задачи: собственные и связанные. Используй scope=all.",
             "title": "Task Id"
           }
         },

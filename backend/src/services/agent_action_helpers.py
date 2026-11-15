@@ -23,6 +23,15 @@ def page(items: Sequence[BaseModel], args: PageInput) -> dict[str, Any]:
     }
 
 
+def task_document_listing(task_id: int) -> dict[str, Any]:
+    """Отдельное чтение каталога: отсутствие вложений в TaskSchema не означает пустой список."""
+    return {
+        "loaded": False,
+        "tool": "telos_list_documents",
+        "arguments": {"task_id": task_id, "scope": "all"},
+    }
+
+
 async def checked_task(
     db: AgentProjectToolScope, ctx: AgentToolContext, task_id: int
 ) -> TaskSchema:

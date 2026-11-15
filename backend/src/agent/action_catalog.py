@@ -88,11 +88,10 @@ PROJECT_ACTIONS = (
     ProjectAction(
         "telos_attach_uploaded_file",
         "Прикрепить файл к задаче",
-        "Копирует в задачу файл, отправленный участником в личном чате. file_id берётся из uploaded_files; пути и ссылки не принимаются.",
+        "Копирует оригинал отправленного файла текущей переписки в документы задачи. file_id — UUID из attachments сообщения chat_context или истории; после создания задачи используй её выданный task_id. Пути и ссылки не принимаются.",
         p.UploadedAttachmentInput,
         documents.attach_uploaded_file,
-        # Файлы приходят только в личном виджете; в общем чате загрузок Арису нет.
-        modes=WIDGET_MODES,
+        modes=ALL_MODES,
         project_optional=True,
     ),
     ProjectAction(
@@ -154,8 +153,8 @@ PROJECT_ACTIONS = (
     ProjectAction(
         "telos_get_task",
         "Прочитать задачу",
-        "Полная задача по task_id или ключу KEY-12: стадия с названием, участники, чек-лист, "
-        "revision и updated_at. По ключу искать задачу через telos_list_tasks не нужно.",
+        "Полная задача по task_id или ключу KEY-12: стадия, участники, чек-лист, revision. "
+        "Документы читаются отдельно: telos_list_documents(task_id), затем telos_get_document. По ключу искать задачу через telos_list_tasks не нужно.",
         p.TaskLookupInput,
         tasks.get_task,
         mutating=False,
@@ -316,7 +315,7 @@ PROJECT_ACTIONS = (
     ProjectAction(
         "telos_list_documents",
         "Найти документы",
-        "Постраничный каталог всех документов проекта и задач с поиском и фильтрами.",
+        "Документы проекта и задач: собственные загрузки/Markdown и связанные документы. Для документов конкретной задачи передай task_id и scope=all; next_offset продолжает перечень. Текст читает telos_get_document.",
         p.DocumentListInput,
         documents.list_documents,
         mutating=False,
@@ -326,7 +325,7 @@ PROJECT_ACTIONS = (
     ProjectAction(
         "telos_get_document",
         "Прочитать документ",
-        "Страница текста документа по document_ref; next_offset указывает продолжение, фрагмент доступен для цитирования.",
+        "Читает сохранённый Markdown или извлечённый текст файла по document_ref из каталога задачи/проекта. next_offset продолжает текст; состояния извлечения объясняют пустое представление. Фрагмент доступен для цитирования.",
         p.DocumentReadInput,
         documents.get_document,
         mutating=False,

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from src.services.agent_chat_files import AgentChatFilesService
     from src.services.document_catalog import DocumentCatalogService
 
 from src.repositories.agent_conversations import AgentConversationsRepository
@@ -83,6 +84,8 @@ class AgentProjectToolScope:
     api_keys: ApiKeysRepository | None = None
     auth: AuthService | None = None
     document_catalog: DocumentCatalogService | None = None
+    chat_files: AgentChatFilesService | None = None
+    bind_chat_files: Callable[[AgentChatFilesService], AgentChatFilesService] | None = None
 
 
 AgentProjectToolScopeFactory = Callable[[], AbstractAsyncContextManager[AgentProjectToolScope]]

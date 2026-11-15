@@ -29,6 +29,31 @@ from src.services.auth import AuthService
 from src.storage.task_attachments import TaskAttachmentStorage
 
 
+def _build_chat_files_scope(*, session: AsyncSession, settings: Settings) -> AgentChatFilesScope:
+    """Одна SQL-сессия для всех свежих проверок пользователя, контекста и оригинала."""
+    users = UsersRepository(session)
+    return AgentChatFilesScope(
+        files=AgentChatFilesRepository(session),
+        texts=ChatFileTextsRepository(session),
+        users=users,
+        auth=AuthService(
+            users_repository=users,
+            tokens_repository=ApiTokensRepository(session),
+            api_keys_repository=ApiKeysRepository(session),
+            invite_code=settings.auth.registration_invite_code.get_secret_value(),
+        ),
+        access=AccessService(
+            members_repository=ProjectMembersRepository(session),
+            tasks_repository=TasksRepository(session),
+            stages_repository=ProjectStagesRepository(session),
+            documents_repository=DocumentsRepository(session),
+            comments_repository=TaskCommentsRepository(session),
+            links_repository=DocumentLinksRepository(session),
+        ),
+        unit_of_work=UnitOfWork(session),
+    )
+
+
 def build_agent_chat_files_scope(
     *, session_factory: async_sessionmaker[AsyncSession], settings: Settings
 ) -> AgentChatFilesScopeFactory:
@@ -37,29 +62,30 @@ def build_agent_chat_files_scope(
     @asynccontextmanager
     async def scope() -> AsyncIterator[AgentChatFilesScope]:
         async with session_factory() as session:
-            users = UsersRepository(session)
-            yield AgentChatFilesScope(
-                files=AgentChatFilesRepository(session),
-                texts=ChatFileTextsRepository(session),
-                users=users,
-                auth=AuthService(
-                    users_repository=users,
-                    tokens_repository=ApiTokensRepository(session),
-                    api_keys_repository=ApiKeysRepository(session),
-                    invite_code=settings.auth.registration_invite_code.get_secret_value(),
-                ),
-                access=AccessService(
-                    members_repository=ProjectMembersRepository(session),
-                    tasks_repository=TasksRepository(session),
-                    stages_repository=ProjectStagesRepository(session),
-                    documents_repository=DocumentsRepository(session),
-                    comments_repository=TaskCommentsRepository(session),
-                    links_repository=DocumentLinksRepository(session),
-                ),
-                unit_of_work=UnitOfWork(session),
-            )
+            yield _build_chat_files_scope(session=session, settings=settings)
 
     return scope
+
+
+def bind_agent_chat_files_service(
+    source: AgentChatFilesService, *, session: AsyncSession, settings: Settings
+) -> AgentChatFilesService:
+    """Сохраняет весь reader-путь внутри UoW записи, не занимая второе соединение."""
+
+    @asynccontextmanager
+    async def scope() -> AsyncIterator[AgentChatFilesScope]:
+        yield _build_chat_files_scope(session=session, settings=settings)
+
+    return AgentChatFilesService(
+        scope=scope,
+        agent_storage=source.agent_storage,
+        chat_storage=source.chat_storage,
+        vision=source.vision,
+        max_text_chars=source.max_text_chars,
+        lease_seconds=source.lease_seconds,
+        poll_seconds=source.poll_seconds,
+        wait_seconds=source.wait_seconds,
+    )
 
 
 def build_agent_chat_files_service(

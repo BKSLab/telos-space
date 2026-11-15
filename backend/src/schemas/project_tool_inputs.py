@@ -321,10 +321,16 @@ class DocumentListInput(PageInput):
 
     q: str | None = Field(None, max_length=200, description="Название, примечание или содержимое.")
     scope: Literal["all", "project", "tasks"] = Field("all", description="Все, без задач или связанные с задачами.")
-    task_id: int | None = Field(None, gt=0, description="Документы конкретной задачи текущего проекта.")
+    task_id: int | None = Field(None, gt=0, description="Документы конкретной задачи: собственные и связанные. Используй scope=all.")
     source_kind: Literal["text", "upload"] | None = Field(None, description="Созданный текст или загруженный оригинал.")
     format: str | None = Field(None, max_length=20, description="Формат без точки, например md или pdf.")
     processing: Literal["all", "pending", "ready", "failed"] = Field("all", description="Состояние обработки документа.")
+
+    @model_validator(mode="after")
+    def compatible_task_scope(self) -> "DocumentListInput":
+        if self.task_id is not None and self.scope == "project":
+            raise ValueError("Для документов задачи укажи scope=all: scope=project исключает документы, связанные с задачами.")
+        return self
 
 
 class DocumentCreateInput(ToolInput):
@@ -373,7 +379,7 @@ class TextAttachmentInput(TaskInput):
 
 
 class UploadedAttachmentInput(TaskInput):
-    file_id: UUID = Field(description="ID файла из uploaded_files, ранее отправленного участником.")
+    file_id: UUID = Field(description="UUID отправленного файла из attachments конкретного сообщения текущего chat_context или его истории; не document_ref, путь или URL.")
 
 
 class MilestoneCreateInput(MilestoneCreateSchema, ToolInput):

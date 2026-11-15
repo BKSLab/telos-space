@@ -1,4 +1,4 @@
-"""Приватные загрузки и копирование выбранного участником файла в задачу."""
+"""Приватные загрузки диалогов и удаление неотправленных черновиков."""
 
 from contextlib import asynccontextmanager
 from uuid import UUID, uuid4
@@ -96,23 +96,3 @@ class AgentFilesService:
             raise AgentFileValidationError(str(error)) from error
         except (RepositoryError, TaskAttachmentStorageError) as error:
             raise AgentFilesServiceError(str(error)) from error
-
-
-async def uploaded_content(db, *, file_id: UUID, user_id: int) -> tuple[AgentFileSchema, bytes]:
-    """Возвращает байты только отправленного файла собственного диалога виджета."""
-    row = await db.uploads.get(file_id)
-    if row is None or row.message_id is None:
-        raise AgentFileNotFoundError("Файл ещё не отправлен участником.")
-    conversation = await db.conversations.get_owned(row.conversation_id, user_id)
-    if conversation is None:
-        raise AgentFileNotFoundError("Файл принадлежит другому пользователю.")
-    if conversation.project_id is not None:
-        await db.access.ensure_project_access(project_id=conversation.project_id, user_id=user_id)
-    try:
-        # Ограничиваем и повторное чтение, если файл был изменён извне.
-        content = await db.upload_storage.read(
-            row.storage_key, limit=TaskAttachmentsService.MAX_FILE_SIZE
-        )
-    except TaskAttachmentStorageError as error:
-        raise AgentFilesServiceError("Не удалось прочитать загрузку.") from error
-    return AgentFileSchema.model_validate(row), content

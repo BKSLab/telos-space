@@ -58,7 +58,7 @@ from src.prompts.project_agent import (
     PROJECT_AGENT_API_BASE_PROMPT,
     PROJECT_AGENT_WRITE_INTENT_PROMPT,
 )
-from src.schemas.document_catalog import DocumentCatalogItemSchema
+from src.schemas.document_catalog import DocumentCatalogItemSchema, DocumentTextPageSchema
 from src.schemas.document_references import DocumentFragmentSchema
 from src.schemas.knowledge import (
     KnowledgeAnswerSchema,
@@ -664,11 +664,18 @@ class ProjectAgentService:
         )
         registry = _SourceRegistry()
         directly_read_tasks: set[str] = set()
+        project_document_scopes: dict[str, int] = {}
 
         async def register_personal(_tool, result):
             if _tool.name in {"telos_list_chat_messages", "telos_get_chat_message"}:
                 chat_references.register(result)
-            self._register_personal_views(result, registry)
+            self._register_personal_views(
+                result,
+                registry,
+                project_document_scopes=project_document_scopes
+                if _tool.name == PROJECT_ACTION_TOOL
+                else None,
+            )
             if _tool.name == "telos_get_any_task" and result.get("source_handle"):
                 directly_read_tasks.add(result["source_handle"])
 
@@ -694,6 +701,30 @@ class ProjectAgentService:
             selected = []
             seen_sources = set()
             handles = [*output.source_ids, *([output.primary_reference or fallback_task] if output.primary_reference or fallback_task else [])]
+            selected_references = {}
+            for handle in handles:
+                source = registry.resolve_reference(handle)
+                if source and source.document_ref:
+                    is_primary = bool(primary and primary.source_id == source.source_id)
+                    selected_references.setdefault(
+                        source.document_ref,
+                        primary.reference if is_primary else source.reference,
+                    )
+            checked_documents = {}
+            # Текст ответа может использовать чтения даже при пустых source_ids.
+            # Поэтому доступ проверяется для всех project DTO, увиденных моделью.
+            for document_ref, document_project_id in project_document_scopes.items():
+                kind, identifier = decode_document_ref(document_ref)
+                source_handle = registry.get_handle(f"{kind}:{identifier}")
+                source = registry.resolve(source_handle) if source_handle else None
+                if source is None:
+                    raise AgentAnswerError("Доступ к документу изменился. Повторите вопрос.")
+                checked_documents[document_ref] = await self._checked_personal_document(
+                    tool_context,
+                    source,
+                    project_id=document_project_id,
+                    reference=selected_references.get(document_ref, source.reference),
+                )
             for handle in handles:
                 source = registry.resolve_reference(handle)
                 if source is None or source.source_id in seen_sources:
@@ -710,20 +741,17 @@ class ProjectAgentService:
                     continue
                 if not source.document_ref:
                     continue
-                current = await self.tools.execute(tool_context, AgentToolRequest(
-                    name="telos_get_document", arguments={"document_ref": source.document_ref, "max_chars": 500}
-                ))
-                try:
-                    document = DocumentCatalogItemSchema.model_validate(current.get("document"))
-                except ValueError:
-                    continue
-                if document.ownership.project_id is not None:
-                    continue
                 is_primary = bool(primary and primary.source_id == source.source_id)
+                reference = primary.reference if is_primary else source.reference
+                document = checked_documents.get(source.document_ref)
+                if document is None:
+                    document = await self._checked_personal_document(
+                        tool_context, source, project_id=None, reference=reference,
+                    )
                 selected.append(source.model_copy(update={
                     "title": document.title,
                     "is_primary": is_primary,
-                    "reference": primary.reference if is_primary else source.reference,
+                    "reference": reference,
                 }))
                 seen_sources.add(source.source_id)
             answer = output.answer.strip() or ("" if selected or message_references else (
@@ -755,6 +783,61 @@ class ProjectAgentService:
                     default=str,
                 ),
             )
+
+    async def _checked_personal_document(
+        self,
+        context: AgentToolContext,
+        source: KnowledgeSourceSchema,
+        *,
+        project_id: int | None,
+        reference: DocumentFragmentSchema | None,
+    ) -> DocumentCatalogItemSchema:
+        """Повторяет ACL и точное чтение выбранного server range до публикации ответа."""
+        document_request = AgentToolRequest(
+            name="telos_get_document",
+            arguments={
+                "document_ref": source.document_ref,
+                "offset": reference.start if reference else 0,
+                "max_chars": min(8000, max(500, len(reference.quote))) if reference else 500,
+            },
+        )
+        if project_id is not None:
+            async with self.scope() as db:
+                project = await self._require_project(db, project_id=project_id)
+            document_request = AgentToolRequest(
+                name=PROJECT_ACTION_TOOL,
+                arguments={
+                    "project_key": project.key,
+                    "name": document_request.name,
+                    "arguments": document_request.arguments,
+                },
+            )
+        current = await self.tools.execute(context, document_request)
+        try:
+            document = DocumentCatalogItemSchema.model_validate(current.get("document"))
+            page = DocumentTextPageSchema.model_validate(current)
+        except ValueError as error:
+            raise AgentAnswerError("Доступ к документу изменился. Повторите вопрос.") from error
+        if (
+            document.ref != source.document_ref
+            or current.get("source_id") != source.source_id
+            or document.ownership.project_id != project_id
+        ):
+            raise AgentAnswerError("Доступ к документу изменился. Повторите вопрос.")
+        if reference and (
+            not document.text.available
+            or reference.document_ref != document.ref
+            or reference.content_hash != document.text.content_hash
+            or reference.rendition != document.text.rendition
+            or page.ref != document.ref
+            or page.content_hash != reference.content_hash
+            or page.rendition != reference.rendition
+            or page.offset != reference.start
+            or reference.end > page.total_chars
+            or page.text[:len(reference.quote)] != reference.quote
+        ):
+            raise AgentAnswerError("Документ изменился после чтения. Повторите вопрос.")
+        return document
 
     def task_link_template(self) -> str | None:
         """Адрес карточки задачи в интерфейсе с местом для ключа; None без APP_PUBLIC_URL."""
@@ -817,8 +900,13 @@ class ProjectAgentService:
         )
 
     @staticmethod
-    def _register_personal_views(value, registry) -> None:
-        """Личные документы подтверждает общий сервис; приватные загрузки не источники."""
+    def _register_personal_views(
+        value,
+        registry,
+        *,
+        project_document_scopes: dict[str, int] | None = None,
+    ) -> None:
+        """Project DTO допускает только результат wrapper, не вложенные пользовательские данные."""
         if isinstance(value, dict):
             task_source = ProjectAgentService._personal_task_source(value)
             if task_source is not None:
@@ -830,7 +918,16 @@ class ProjectAgentService:
                     kind, identifier = decode_document_ref(document.ref)
                 except ValueError:
                     document = None
-                if document and document.ownership.project_id is None and value["source_id"] == f"{kind}:{identifier}":
+                if (
+                    document
+                    and (
+                        document.ownership.project_id is None
+                        or project_document_scopes is not None
+                    )
+                    and value["source_id"] == f"{kind}:{identifier}"
+                ):
+                    if project_document_scopes is not None and document.ownership.project_id is not None:
+                        project_document_scopes[document.ref] = document.ownership.project_id
                     record = KnowledgeSourceSchema(
                         source_id=value["source_id"], entity_type=kind, entity_id=identifier,
                         title=document.title, task_id=document.ownership.owner_task_id,
@@ -854,10 +951,16 @@ class ProjectAgentService:
                     registry.update(record.source_id, **changes)
             for key, item in list(value.items()):
                 if key not in {"properties", "dialog_history"}:
-                    ProjectAgentService._register_personal_views(item, registry)
+                    ProjectAgentService._register_personal_views(
+                        item,
+                        registry,
+                        project_document_scopes=project_document_scopes if key == "items" else None,
+                    )
         elif isinstance(value, list):
             for item in value:
-                ProjectAgentService._register_personal_views(item, registry)
+                ProjectAgentService._register_personal_views(
+                    item, registry, project_document_scopes=project_document_scopes,
+                )
 
     @staticmethod
     def _elapsed_ms(started_at: float) -> float:

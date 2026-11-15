@@ -7,7 +7,7 @@
 from src.agent.tools import AgentToolContext
 from src.exceptions.agent_tools import AgentToolAccessError
 from src.schemas import project_tool_inputs as inputs
-from src.services.agent_action_helpers import page
+from src.services.agent_action_helpers import page, task_document_listing
 from src.services.agent_tool_scope import AgentProjectToolScope
 
 # Сколько проектов обходит поиск задач: дальше — уточнить запрос или проект.
@@ -23,7 +23,7 @@ def _compact(item: dict) -> dict:
 
 def _task_payload(task) -> dict:
     data = task.model_dump(mode="json")
-    result = {"task": data}
+    result = {"task": data, "documents": task_document_listing(task.id)}
     result["source_id"] = f"task:{task.id}"
     return result
 

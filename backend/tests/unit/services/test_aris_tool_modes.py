@@ -31,7 +31,8 @@ def test_chat_mode_has_no_personal_or_cross_project_tools_and_personal_mode_no_r
     widget = names(tools, ArisMode.WIDGET_PROJECT)
     personal = names(tools, ArisMode.WIDGET_PERSONAL)
     personal_actions = {item.name for item in PERSONAL_ACTIONS}
-    assert not chat & (personal_actions | {"telos_run_project_action", "telos_attach_uploaded_file"})
+    assert not chat & (personal_actions | {"telos_run_project_action"})
+    assert "telos_attach_uploaded_file" in chat
     assert {"telos_list_tasks", "telos_read_source", "telos_get_tool_schemas"} <= chat
     assert personal_actions | {"telos_run_project_action", "telos_attach_uploaded_file", "telos_list_tasks"} <= widget
     assert personal_actions | {"telos_run_project_action", "telos_get_tool_schemas"} <= personal

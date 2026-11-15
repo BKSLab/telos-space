@@ -724,8 +724,6 @@ def build_project_tool_executor(
         # записи вопроса и права ключа проверяются здесь, как у прямого вызова.
         if definition.mutating and not (context.can_write and context.allows(definition.name)):
             return {"error": "Текущий запрос не разрешает изменения проекта."}
-        if definition.name == "telos_attach_uploaded_file":
-            return {"error": "Файл прикрепляется только в проекте страницы."}
         try:
             project_id = await query.resolve_project_id(project_key=parameters.project_key)
         except ServiceError:
