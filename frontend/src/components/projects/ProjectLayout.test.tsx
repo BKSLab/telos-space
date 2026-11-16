@@ -37,6 +37,8 @@ it("оставляет одну активную вкладку чата и со
     expect(navigation.queryByRole("link", { name: "Пульс" })).toBeNull();
     expect(navigation.queryByRole("link", { name: "Агент" })).toBeNull();
     expect(navigation.getByRole("link", { name: "Структура" }).getAttribute("href")).toBe("/projects/DEMO/structure");
+    expect(navigation.getByRole("link", { name: "Задачи" }).getAttribute("href")).toBe("/projects/DEMO/tasks");
+    expect(navigation.queryByRole("link", { name: "Канбан" })).toBeNull();
     expect(screen.getByText("Общая переписка")).toBeTruthy();
     client.clear();
 });

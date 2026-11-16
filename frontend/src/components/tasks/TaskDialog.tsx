@@ -36,6 +36,7 @@ import { TaskRiskSection } from "@/components/risks/TaskRiskSection";
 import { TaskChecklistSection } from "@/components/tasks/TaskChecklistSection";
 import { TaskReportSection } from "@/components/tasks/TaskReportSection";
 import { TaskTitleEditor } from "@/components/tasks/TaskTitleEditor";
+import { CopyTaskTitleButton } from "@/components/tasks/CopyTaskTitleButton";
 import { TransferTaskDialog } from "@/components/tasks/TransferTaskDialog";
 import { LocalUserSelect } from "@/components/tasks/LocalUserSelect";
 import { isClosedStatus, TASK_STATUS_LABELS, TASK_STATUS_ORDER, taskKind } from "@/lib/tasks";
@@ -254,8 +255,9 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
 
     const header = task ? (
         <div className="flex min-w-0 flex-col gap-1.5">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="font-mono text-[11px] text-muted">{task.key}</span>
+                <CopyTaskTitleButton key={`${task.key} ${task.title}`} taskKey={task.key} title={task.title} />
                 <PriorityBadge priority={task.priority} showLow />
             </div>
             <TaskTitleEditor title={task.title} revision={task.revision} canEdit saving={updateMutation.isPending} error={updateErrorMessage}

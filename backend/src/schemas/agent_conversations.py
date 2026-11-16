@@ -32,7 +32,7 @@ class AgentPageContextSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     route: str = Field(
-        max_length=500, description="Маршрут страницы фронта, например /projects/PROJ/board."
+        max_length=500, description="Маршрут страницы фронта, например /projects/PROJ/tasks."
     )
     timezone: str = Field("UTC", max_length=64, description="Часовой пояс IANA пользователя.", examples=["Europe/Samara"])
     _validate_timezone = field_validator("timezone")(validate_timezone)

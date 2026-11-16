@@ -36824,7 +36824,7 @@
                 "title": "Project Key"
               },
               "route": {
-                "description": "Маршрут страницы фронта, например /projects/PROJ/board.",
+                "description": "Маршрут страницы фронта, например /projects/PROJ/tasks.",
                 "maxLength": 500,
                 "title": "Route",
                 "type": "string"
@@ -41729,7 +41729,7 @@
           "title": "Project Key"
         },
         "route": {
-          "description": "Маршрут страницы фронта, например /projects/PROJ/board.",
+          "description": "Маршрут страницы фронта, например /projects/PROJ/tasks.",
           "maxLength": 500,
           "title": "Route",
           "type": "string"

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import { queryKeys } from "@/lib/api";
+import * as clipboard from "@/lib/clipboard";
 import type { Task, TaskUpdate, UserSummary } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
 import { TaskDialog } from "./TaskDialog";
@@ -78,6 +79,28 @@ afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
 });
+
+it("копирует полное сохранённое название из общей карточки, включая успешное переименование", async () => {
+    const copy = vi.spyOn(clipboard, "copyText").mockResolvedValue(undefined);
+    const title = `Проверить Unicode 🧭 — ${"длинное название задачи ".repeat(14)}финал`;
+    const { user, state, updateCache } = setup({ ...task, title });
+    const button = await screen.findByRole("button", { name: "Скопировать ключ и название" });
+    await user.click(button);
+    expect(copy).toHaveBeenLastCalledWith(`${task.key} ${title}`);
+
+    await user.click(screen.getByRole("button", { name: "Переименовать задачу" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Название задачи" }), { target: { value: "Несохранённый черновик" } });
+    await user.click(button);
+    expect(copy).toHaveBeenLastCalledWith(`${task.key} ${title}`);
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+    await screen.findByRole("heading", { name: "Несохранённый черновик" });
+    await user.click(screen.getByRole("button", { name: "Скопировать ключ и название" }));
+    expect(copy).toHaveBeenLastCalledWith(`${task.key} ${state.task.title}`);
+
+    await updateCache({ key: "NEW-6", title: "Сервер обновил название 日本語", revision: 3 });
+    await user.click(screen.getByRole("button", { name: "Скопировать ключ и название" }));
+    expect(copy).toHaveBeenLastCalledWith("NEW-6 Сервер обновил название 日本語");
+}, 15_000);
 
 it("сохраняет описание с версией открытия, удерживает черновик при 409 и принимает новую версию после повторного открытия", async () => {
     const { state, client, patches, updateCache, user } = setup();

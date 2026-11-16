@@ -34,7 +34,7 @@ async function openKanban(page: Page) {
         Object.assign(task, body);
         return route.fulfill({ headers, json: task });
     });
-    await page.goto("/projects/DEMO/board");
+    await page.goto("/projects/DEMO/tasks");
     const sourceColumn = page.getByRole("region", { name: "Колонка Запланировано", exact: true });
     const targetColumn = page.getByRole("region", { name: "Колонка В работе", exact: true });
     const emptyColumn = page.getByRole("region", { name: "Колонка Готово", exact: true });
@@ -90,7 +90,7 @@ test("drag показывает вставку в конец, а drop сохра
     expect(await dropzone.evaluate(element => getComputedStyle(element).backgroundImage)).toContain("linear-gradient");
     await expectStageColors(columns);
     await expect(page.getByRole("heading", { name: state.tasks[0].title, exact: true })).toHaveCount(2);
-    await expect(page.getByText("Высокий", { exact: true })).toHaveCount(2);
+    await expect(page.locator(".surface-card").getByText("Высокий", { exact: true })).toHaveCount(2);
     await expect(page.getByTitle(/^Срок: .*2030/)).toHaveCount(2);
     expect(state.writes).toEqual([]);
     await info.attach("kanban-drag-target", {

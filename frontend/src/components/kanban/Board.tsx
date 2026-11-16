@@ -26,6 +26,7 @@ interface BoardProps {
     projectId: number;
     stages: ProjectStage[];
     tasks: Task[];
+    allTasks?: Task[];
     search: string;
     selectedTaskId: number | null;
     onTaskOpen: (taskId: number) => void;
@@ -41,6 +42,7 @@ export function Board({
     projectId,
     stages,
     tasks,
+    allTasks = tasks,
     search,
     selectedTaskId,
     onTaskOpen,
@@ -130,7 +132,7 @@ export function Board({
     function moveToStage(taskId: number, targetStageId: number) {
         const task = tasks.find(item => item.id === taskId);
         if (!task || task.stage_id === targetStageId || !stages.some(stage => stage.id === targetStageId) || moveMutation.isPending) return;
-        const destination = tasksByStage.get(targetStageId) ?? [];
+        const destination = allTasks.filter(item => item.stage_id === targetStageId);
         const maxPosition = destination.reduce((max, item) => Math.max(max, item.position), 0);
         moveMutation.mutate({
             taskId: task.id,

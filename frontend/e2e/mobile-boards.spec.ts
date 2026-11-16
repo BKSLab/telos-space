@@ -113,7 +113,7 @@ test("мобильный канбан: выбор стадии и перенос
         Object.assign(task, body);
         return route.fulfill({ headers, json: task });
     });
-    await page.goto("/projects/DEMO/board");
+    await page.goto("/projects/DEMO/tasks");
     await page.getByLabel("Стадия задачи DEMO-1", { exact: true }).selectOption("2");
     await expect.poll(() => state.writes.some(write => write.path === "/tasks/100/stage-placement" && JSON.stringify(write.body) === JSON.stringify({ stage_id: 2, position: 6000 }))).toBe(true);
     await page.getByRole("button", { name: "Следующая стадия" }).tap();

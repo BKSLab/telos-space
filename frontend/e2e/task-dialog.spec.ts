@@ -71,11 +71,10 @@ test("на телефоне разделы прокручиваются, вло�
     await expect(card).toBeVisible();
     await expect(card.getByRole("tablist", { name: "Разделы задачи" })).toHaveAttribute("aria-orientation", "horizontal");
     await expect(card.getByRole("tab", { name: "Связи", exact: true })).toHaveCount(0);
-    const box = await card.boundingBox();
-    expect(box!.x).toBeLessThanOrEqual(1);
-    expect(box!.y).toBeLessThanOrEqual(1);
-    expect(Math.abs(box!.width - 390)).toBeLessThanOrEqual(2);
-    expect(Math.abs(box!.height - 844)).toBeLessThanOrEqual(2);
+    await expect.poll(async () => {
+        const box = await card.boundingBox();
+        return Boolean(box && box.x <= 1 && box.y <= 1 && Math.abs(box.width - 390) <= 2 && Math.abs(box.height - 844) <= 2);
+    }).toBe(true);
     await card.getByRole("tab", { name: "История", exact: true }).click();
     await expect(card.getByRole("tabpanel", { name: "История", exact: true })).toBeVisible();
     await card.getByRole("tab", { name: "Документы", exact: true }).click();

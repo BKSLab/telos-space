@@ -10,8 +10,7 @@ import { ProjectLayout } from "@/components/projects/ProjectLayout";
 import { PortfolioPage } from "@/routes/PortfolioPage";
 import { NewProjectPage } from "@/routes/NewProjectPage";
 import { ProjectTeamPage } from "@/routes/ProjectTeamPage";
-import { BoardPage } from "@/routes/BoardPage";
-import { TasksListPage } from "@/routes/TasksListPage";
+import { TasksPage } from "@/routes/TasksPage";
 import { ProjectDocumentsPage } from "@/routes/ProjectDocumentsPage";
 import { DocumentDetailPage } from "@/routes/DocumentDetailPage";
 import { ProjectSettingsPage } from "@/routes/ProjectSettingsPage";
@@ -100,8 +99,7 @@ function ProtectedApp() {
                             <Route path="/projects/:projectKey" element={<ProjectLayout />}>
                                 <Route index element={<ProjectOverviewPage />} />
                                 <Route path="team" element={<ProjectTeamPage />} />
-                                <Route path="board" element={<BoardPage />} />
-                                <Route path="tasks" element={<TasksListPage />} />
+                                <Route path="tasks" element={<TasksPage />} />
                                 <Route path="risks" element={<ProjectRisksPage />} />
                                 <Route
                                     path="calendar"

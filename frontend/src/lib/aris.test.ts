@@ -28,7 +28,7 @@ describe("имя агента", () => {
 
 describe("pageContext", () => {
     it("берёт проект из адреса и открытую задачу", () => {
-        expect(pageContext("/projects/DEMO/board", "", 12)).toEqual({ route: "/projects/DEMO/board", project_key: "DEMO", task_id: 12 });
+        expect(pageContext("/projects/DEMO/tasks", "", 12)).toEqual({ route: "/projects/DEMO/tasks", project_key: "DEMO", task_id: 12 });
     });
     it("задачу из ?task=, «new» — не проект", () => {
         expect(pageContext("/my-tasks", "?task=7", null)).toMatchObject({ project_key: null, task_id: 7 });

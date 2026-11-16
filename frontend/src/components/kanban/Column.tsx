@@ -1,5 +1,6 @@
 import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
+import type { CSSProperties } from "react";
 import type { ProjectStage, Task } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { StatusDot } from "@/components/ui/Badge";
@@ -56,8 +57,7 @@ interface ColumnProps {
 }
 
 /**
- * Колонка доски: лёгкая шапка со счётчиком и цветным маркером стадии.
- * Колонка не заливается цветом статуса (раздел 7 дизайн-гайда).
+ * Цвет стадии мягко тонирует фон; прокрутка карточек не перемещает градиент.
  */
 export function Column({ stage, tasks, activeStageId, selectedTaskId, onTaskOpen, riskCounts, stages, moving, onMoveTask }: ColumnProps) {
     const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -67,6 +67,7 @@ export function Column({ stage, tasks, activeStageId, selectedTaskId, onTaskOpen
         <section
             aria-label={`Колонка ${stage.name}`}
             data-stage-id={stage.id}
+            style={{ "--kanban-stage-color": stage.color } as CSSProperties}
             className="kanban-column flex shrink-0 flex-col"
         >
             <header className="mb-2.5 flex items-center gap-2 px-2">
@@ -80,11 +81,11 @@ export function Column({ stage, tasks, activeStageId, selectedTaskId, onTaskOpen
             <div
                 ref={setNodeRef}
                 className={cn(
-                    "scrollbar-thin flex min-h-40 flex-1 flex-col gap-2.5 overflow-y-auto rounded-[var(--radius-panel)] p-2",
+                    "scrollbar-thin flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto rounded-[var(--radius-panel)] p-2",
                     "border transition-[background-color,border-color] duration-[var(--duration-fast)]",
                     isDropTarget
                         ? "brand-kanban-target"
-                        : "border-line-subtle bg-app/20",
+                        : "kanban-column-surface border-line-subtle",
                 )}
             >
                 {tasks.map((task) => (

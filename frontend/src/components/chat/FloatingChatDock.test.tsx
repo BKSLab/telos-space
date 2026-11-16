@@ -24,7 +24,7 @@ function Dock({ routeProject = project, userId = 1, fullPage = false, availableP
     const selectedProject = availableProjects.find((item) => item.id === selectedId) ?? routeProject ?? undefined;
     return <FloatingChatDock project={selectedProject} routeProject={routeProject ?? undefined} projects={availableProjects} userId={userId} fullPage={fullPage} panel={panel} />;
 }
-function setup(props: Parameters<typeof Dock>[0] = {}, path = "/projects/DEMO/board?task=42&confirm=action-id#context") {
+function setup(props: Parameters<typeof Dock>[0] = {}, path = "/projects/DEMO/tasks?task=42&confirm=action-id#context") {
     render(<MemoryRouter initialEntries={[path]}><Dock {...props} /><Location /></MemoryRouter>);
 }
 

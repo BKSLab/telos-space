@@ -90,9 +90,10 @@ test("акцент следует за активной вкладкой, AI-к�
     const state = mockState();
     await installMockApi(page, state);
     await page.route("https://fonts.gstatic.com/**", route => route.abort());
-    await page.goto("/projects/DEMO/board");
-    const board = page.getByRole("link", { name: "Канбан", exact: true });
-    const tasks = page.getByRole("link", { name: "Задачи", exact: true });
+    await page.goto("/projects/DEMO/tasks");
+    const views = page.getByRole("navigation", { name: "Представление задач" });
+    const board = views.getByRole("link", { name: "Канбан", exact: true });
+    const tasks = views.getByRole("link", { name: "Список", exact: true });
     await expect(board).toHaveAttribute("aria-current", "page");
     expect(await board.evaluate(element => getComputedStyle(element, "::after").backgroundImage)).toContain("linear-gradient");
     await tasks.click();
