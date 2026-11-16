@@ -99,6 +99,56 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }
     });
 }
 
+test("плотный канбан: прозрачный фон карточек сохраняет контраст, выбор и системные режимы", async ({ page }, info) => {
+    await page.setViewportSize({ width: 1616, height: 1000 });
+    const state = mockState();
+    state.stages = [
+        { ...state.stages[0], id: 1, name: "Бэклог", color: "#8b949e", order_index: 0 },
+        { ...state.stages[0], id: 2, name: "В работе", color: "#58a6ff", order_index: 1 },
+        { ...state.stages[0], id: 3, name: "Тестирование", color: "#d29922", order_index: 2 },
+        { ...state.stages[0], id: 4, name: "Готово", color: "#3fb950", order_index: 3, is_done_stage: true },
+    ];
+    state.tasks = state.stages.flatMap(stage => Array.from({ length: 5 }, (_, index) => ({
+        ...state.tasks[0], id: stage.id * 100 + index, stage_id: stage.id, key: `DEMO-${stage.id * 10 + index}`,
+        title: `Проверить документы и согласовать результат ${index + 1}`,
+        description_md: "Уточнить ожидаемый результат, проверить изменения и подготовить проект к следующему этапу.",
+        last_comment: "Результат проверки сохранён; детали доступны в карточке задачи.",
+        position: (index + 1) * 1000,
+    })));
+    await installMockApi(page, state);
+    await page.goto("/projects/DEMO/tasks");
+    const column = page.getByRole("region", { name: "Колонка В работе", exact: true });
+    const card = column.locator(".surface-card").first();
+    const heading = card.getByRole("heading", { level: 3 });
+    await expect(card).toBeVisible();
+    await expect(card).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(card).toHaveCSS("opacity", "1");
+    expect(await card.evaluate(element => getComputedStyle(element).backgroundImage)).toContain("linear-gradient(135deg");
+    const textColor = await heading.evaluate(element => getComputedStyle(element).color);
+    const controlColor = await card.locator("select").evaluate(element => getComputedStyle(element).backgroundColor);
+    await info.attach("kanban-dense-transparency", { body: await page.screenshot({ path: info.outputPath("kanban-dense-transparency.png") }), contentType: "image/png" });
+
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-transparency", value: "reduce" }] });
+    expect(await page.evaluate(() => matchMedia("(prefers-reduced-transparency: reduce)").matches)).toBe(true);
+    await expect(card).toHaveCSS("background-image", "none");
+    const opaqueBackground = await card.evaluate(element => getComputedStyle(element).backgroundColor);
+    expect(opaqueBackground).not.toBe("rgba(0, 0, 0, 0)");
+    await expect(heading).toHaveCSS("color", textColor);
+    await expect(card.locator("select")).toHaveCSS("background-color", controlColor);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+
+    await heading.click();
+    const dialog = page.getByRole("dialog", { name: "Задача DEMO-20", exact: true });
+    await expect(dialog).toBeVisible();
+    expect(await card.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
+    await dialog.getByRole("button", { name: "Закрыть задачу", exact: true }).click();
+    await expect(card).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await page.emulateMedia({ forcedColors: "active" });
+    await expect(card).toHaveCSS("background-image", "none");
+    expect(state.errors).toEqual([]);
+});
+
 test.describe("нативное копирование задачи на HTTP", () => {
     test.describe.configure({ mode: "serial" });
     test("асинхронный отказ копирования сохраняет фокус для клавиатурного повтора", async ({ page }) => {

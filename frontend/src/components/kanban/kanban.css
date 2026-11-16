@@ -6,11 +6,25 @@
 .kanban-column-surface {
   background-color: var(--surface-workspace);
   background-image: linear-gradient(135deg,
-    color-mix(in srgb, var(--kanban-stage-color) 10%, transparent),
-    color-mix(in srgb, var(--kanban-stage-color) 2.5%, transparent));
+    color-mix(in srgb, var(--kanban-stage-color) 11%, transparent),
+    color-mix(in srgb, var(--kanban-stage-color) 2.75%, transparent));
+}
+.kanban-column .kanban-card-surface {
+  background-color: transparent;
+  background-image:
+    linear-gradient(180deg, rgb(255 255 255 / 0.025), transparent 64px),
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--surface-interactive) 85%, transparent),
+      color-mix(in srgb, var(--surface-interactive) 65%, transparent));
+}
+@media (prefers-reduced-transparency: reduce) {
+  .kanban-column .kanban-card-surface {
+    background-color: var(--surface-interactive);
+    background-image: none;
+  }
 }
 @media (forced-colors: active) {
-  .kanban-column-surface { background: Canvas; }
+  .kanban-column-surface, .kanban-column .kanban-card-surface { background: Canvas; }
 }
 .kanban-card-stage { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; color: var(--color-text-muted); font-size: 11px; }
 .kanban-card-stage select { min-width: 0; flex: 1; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control); background: var(--surface-control); color: var(--color-text-secondary); padding: 4px 6px; }

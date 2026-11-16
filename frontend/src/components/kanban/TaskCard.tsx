@@ -66,6 +66,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
             {...dragHandleProps}
             className={cn(
                 "surface-card group rounded-[var(--radius-card)] border shadow-card",
+                !isSelected && !isDragging && "kanban-card-surface",
                 "transition-[background-color,border-color,box-shadow,transform]",
                 "duration-[var(--duration-normal)] ease-[var(--ease-standard)]",
                 "focus-within:border-accent/55 focus-within:shadow-selected",
