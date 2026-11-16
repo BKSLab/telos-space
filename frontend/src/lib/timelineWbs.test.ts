@@ -26,7 +26,7 @@ function task(id: number, nodeId: number | null, done = false): CalendarTask {
         is_due_soon: !done,
         risk_level: done ? null : "medium",
         risk_reasons: [],
-        updated_at: "2026-09-02T00:00:00Z",
+        updated_at: "2026-09-02T00:00:00Z", revision: 1,
     };
 }
 

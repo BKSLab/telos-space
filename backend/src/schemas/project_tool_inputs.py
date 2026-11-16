@@ -433,6 +433,14 @@ class ScenarioApplyInput(ToolInput):
     changes: list[ScenarioApplyChangeInput] = Field(
         min_length=1, max_length=250, description="Изменения и версии из результата preview."
     )
+    date_change_reason: str | None = Field(
+        None,
+        max_length=2000,
+        description=(
+            "Общая причина изменения назначенных дат. Бери из поручения пользователя; "
+            "если её нет, уточни причину перед применением, не придумывай."
+        ),
+    )
 
 
 class RiskCreateInput(ProjectRiskCreateSchema, ToolInput):

@@ -20,7 +20,6 @@ import { CalendarSidePanel } from "@/components/calendar/CalendarSidePanel";
 import { CalendarTask } from "@/components/calendar/CalendarTask";
 import { CalendarToolbar } from "@/components/calendar/CalendarToolbar";
 import { ColorModeSelect } from "@/components/calendar/ColorModeSelect";
-import { DeadlineDialog } from "@/components/calendar/DeadlineDialog";
 import { IcsSubscribePopover } from "@/components/calendar/IcsSubscribePopover";
 import { PortfolioTimeline } from "@/components/calendar/PortfolioTimeline";
 import { TimelineGrid } from "@/components/calendar/TimelineGrid";
@@ -28,6 +27,7 @@ import { UnscheduledList } from "@/components/calendar/UnscheduledList";
 import { CalendarGridView, type GridEnv } from "@/components/calendar/grid/CalendarGridView";
 import { gridGrabDate } from "@/components/calendar/grid/gridHelpers";
 import { CreatePersonalTaskDialog } from "@/components/tasks/CreatePersonalTaskDialog";
+import { TaskDatesDialog } from "@/components/tasks/TaskDatesDialog";
 import { IconButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
 import { Popover } from "@/components/ui/Popover";
@@ -57,6 +57,7 @@ import {
 import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from "@/lib/tasks";
 import { plural } from "@/lib/plural";
 import { useToast } from "@/lib/toast";
+import type { TaskDateValues } from "@/lib/taskDates";
 import type {
     CalendarGridTask,
     CalendarStage,
@@ -174,6 +175,7 @@ function MyTasksCalendar() {
     const [createDate, setCreateDate] = useState<string | null>(null);
     const [activeTask, setActiveTask] = useState<CalendarGridTask | null>(null);
     const [deadlineTask, setDeadlineTask] = useState<CalendarGridTask | null>(null);
+    const [initialDates, setInitialDates] = useState<TaskDateValues | undefined>();
     const statusFilter = searchParams.get("status") ?? "";
     const priorityFilter = searchParams.get("priority") ?? "";
     const projectFilter = searchParams.get("project") ?? "";
@@ -214,8 +216,8 @@ function MyTasksCalendar() {
     const projectsQuery = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()) });
 
     const datesMutation = useMutation({
-        mutationFn: ({ taskId, dueDate, startDate }: { taskId: number; dueDate: string | null; startDate: string | null }) =>
-            api.patch<Task>(endpoints.task(taskId), { due_date: dueDate, start_date: startDate }),
+        mutationFn: ({ taskId, dueDate, startDate, dateChangeReason, expectedRevision }: { taskId: number; dueDate: string | null; startDate: string | null; dateChangeReason?: string; expectedRevision: number }) =>
+            api.patch<Task>(endpoints.task(taskId), { expected_revision: expectedRevision, due_date: dueDate, start_date: startDate, ...(dateChangeReason && { date_change_reason: dateChangeReason }) }),
         onMutate: async ({ taskId, dueDate, startDate }) => {
             await Promise.all([queryClient.cancelQueries({ queryKey: calendarKey }), queryClient.cancelQueries({ queryKey: unscheduledKey })]);
             const previousCalendar = queryClient.getQueryData<MyCalendar>(calendarKey);
@@ -244,18 +246,28 @@ function MyTasksCalendar() {
             if (context?.previousUnscheduled) queryClient.setQueryData(unscheduledKey, context.previousUnscheduled);
             toast.error(`Не удалось изменить даты: ${(error as Error).message}`);
         },
-        onSuccess: () => toast.success("Плановые даты задачи обновлены."),
+        onSuccess: () => {
+            setDeadlineTask(null);
+            toast.success("Плановые даты задачи обновлены.");
+        },
         onSettled: (_data, _error, variables) => {
             queryClient.invalidateQueries({ queryKey: ["me", "calendar"] });
             queryClient.invalidateQueries({ queryKey: ["projects"] });
             queryClient.invalidateQueries({ queryKey: queryKeys.task(variables.taskId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.taskActivity(variables.taskId) });
         },
     });
+
+    function openDatesDialog(task: CalendarGridTask, dates?: TaskDateValues) {
+        datesMutation.reset();
+        setInitialDates(dates);
+        setDeadlineTask(task);
+    }
 
     function changeDates(task: CalendarGridTask, dates: { startDate?: string | null; dueDate: string | null }) {
         const startDate = dates.startDate === undefined ? task.start_date : dates.startDate;
         if (task.due_date === dates.dueDate && task.start_date === startDate) return;
-        datesMutation.mutate({ taskId: task.id, dueDate: dates.dueDate, startDate });
+        openDatesDialog(task, { startDate, dueDate: dates.dueDate });
     }
 
     function setFilter(name: string, value: string) {
@@ -351,7 +363,7 @@ function MyTasksCalendar() {
         canDrag: () => !isPhone && !isTouch,
         showSource: true,
         onOpenTask: setSelectedTaskId,
-        onScheduleTask: setDeadlineTask,
+        onScheduleTask: openDatesDialog,
         onCreate: setCreateDate,
         onOpenPeriod: (scale, value) => viewState.setGridScale(scale, value),
     };
@@ -483,7 +495,7 @@ function MyTasksCalendar() {
                                 selectedDate={date}
                                 onSelectDate={(value, scale) => viewState.setGridScale(scale, value)}
                                 onOpenTask={setSelectedTaskId}
-                                onScheduleTask={(task) => setDeadlineTask(taskById.get(task.id) ?? null)}
+                                onScheduleTask={(task) => openDatesDialog(taskById.get(task.id) ?? task)}
                                 onResizeTask={(task, edge, delta) => {
                                     const original = taskById.get(task.id);
                                     const resized = original ? resizeTaskInterval(original, edge, delta) : null;
@@ -510,7 +522,7 @@ function MyTasksCalendar() {
                                             hasMore={unscheduledQuery.hasNextPage}
                                             isLoadingMore={unscheduledQuery.isFetchingNextPage}
                                             onOpenTask={setSelectedTaskId}
-                                            onScheduleTask={setDeadlineTask}
+                                            onScheduleTask={openDatesDialog}
                                             onLoadMore={() => void unscheduledQuery.fetchNextPage()}
                                         />
                                     ),
@@ -528,15 +540,14 @@ function MyTasksCalendar() {
                 </DragOverlay>
             </DndContext>
             {deadlineTask && (
-                <DeadlineDialog
+                <TaskDatesDialog
                     key={deadlineTask.id}
-                    task={deadlineTask as unknown as CalendarTaskModel}
+                    task={deadlineTask}
+                    initialDates={initialDates}
                     isSaving={datesMutation.isPending}
+                    error={(datesMutation.error as Error | null)?.message}
                     onClose={() => setDeadlineTask(null)}
-                    onSave={(startDate, dueDate) => {
-                        changeDates(deadlineTask, { startDate, dueDate });
-                        setDeadlineTask(null);
-                    }}
+                    onSave={(dates) => datesMutation.mutate({ taskId: deadlineTask.id, ...dates, expectedRevision: deadlineTask.revision })}
                 />
             )}
             {createDate !== null && (

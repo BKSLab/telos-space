@@ -107,7 +107,16 @@ class TaskActivityRepository:
                 .join(Task, Task.id == TaskActivity.task_id)
                 .where(
                     Task.project_id == project_id,
-                    TaskActivity.event_type == TaskActivityEventType.DUE_DATE_CHANGED,
+                    (
+                        (TaskActivity.event_type == TaskActivityEventType.DUE_DATE_CHANGED)
+                        | (
+                            (TaskActivity.event_type == TaskActivityEventType.DATES_CHANGED)
+                            & func.split_part(TaskActivity.from_value, "; завершение: ", 2)
+                            .is_distinct_from(
+                                func.split_part(TaskActivity.to_value, "; завершение: ", 2)
+                            )
+                        )
+                    ),
                 )
                 .order_by(TaskActivity.created_at.desc(), TaskActivity.id.desc())
                 .limit(limit)
@@ -130,6 +139,7 @@ class TaskActivityRepository:
         event_type: TaskActivityEventType,
         from_value: str | None,
         to_value: str | None,
+        reason: str | None = None,
     ) -> TaskActivity:
         """Сохраняет событие истории задачи.
 
@@ -138,6 +148,7 @@ class TaskActivityRepository:
             event_type: Тип события.
             from_value: Предыдущее значение.
             to_value: Новое значение.
+            reason: Причина изменения назначенных дат или None.
 
         Returns:
             Сохранённое событие.
@@ -154,6 +165,7 @@ class TaskActivityRepository:
                 event_type=event_type,
                 from_value=from_value,
                 to_value=to_value,
+                reason=reason,
                 actor_user_id=actor.user_id if actor else None,
                 actor_name=actor.name if actor else None,
                 via_api_key_label=actor.via_api_key_label if actor else None,

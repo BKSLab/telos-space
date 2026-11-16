@@ -1,11 +1,11 @@
 import { UserIdentity } from "@/components/users/UserIdentity";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlignLeft, FileText, FolderInput, History, Link2, ListChecks, MessageSquare, Paperclip, Pencil, Users } from "lucide-react";
+import { AlignLeft, CalendarDays, FileText, FolderInput, History, Link2, ListChecks, MessageSquare, Paperclip, Pencil, Users } from "lucide-react";
 import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { formatDateTime, toDateInputValue } from "@/lib/dates";
+import { formatDateTime, formatFullDate } from "@/lib/dates";
 import type {
     ProjectMember,
     ProjectStage,
@@ -23,7 +23,7 @@ import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 import { Button, IconButton } from "@/components/ui/Button";
 import { DrawerSection } from "@/components/ui/Drawer";
 import { Modal } from "@/components/ui/Modal";
-import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { Field, Select, Textarea } from "@/components/ui/Field";
 import { PriorityBadge, StatusDot } from "@/components/ui/Badge";
 import { DueDate } from "@/components/ui/DueDate";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
@@ -38,6 +38,7 @@ import { TaskReportSection } from "@/components/tasks/TaskReportSection";
 import { TaskTitleEditor } from "@/components/tasks/TaskTitleEditor";
 import { CopyTaskTitleButton } from "@/components/tasks/CopyTaskTitleButton";
 import { TransferTaskDialog } from "@/components/tasks/TransferTaskDialog";
+import { TaskDatesDialog } from "@/components/tasks/TaskDatesDialog";
 import { LocalUserSelect } from "@/components/tasks/LocalUserSelect";
 import { isClosedStatus, TASK_STATUS_LABELS, TASK_STATUS_ORDER, taskKind } from "@/lib/tasks";
 import { transferDeniedHint } from "@/lib/taskTransfer";
@@ -57,8 +58,6 @@ const SECTIONS = [
     { id: "history", label: "История", icon: History },
 ] as const;
 type TaskSection = typeof SECTIONS[number]["id"];
-type TaskDateField = "start_date" | "due_date";
-type TaskDateDraft = { value: string; revision: number | undefined; changed: boolean };
 const PANEL_CLASS = "scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-auto outline-none data-[inert]:hidden data-[focus-visible]:outline-2 data-[focus-visible]:-outline-offset-2 data-[focus-visible]:outline-accent/70";
 const TASK_CONFLICT_MESSAGE = "Задача уже изменена. Правки остались в черновике. Сверьте актуальные данные перед повторным сохранением.";
 
@@ -66,6 +65,7 @@ const EVENT_LABELS: Record<TaskActivity["event_type"], string> = {
     STAGE_CHANGED: "Стадия",
     DUE_DATE_CHANGED: "Срок",
     START_DATE_CHANGED: "Начало",
+    DATES_CHANGED: "Сроки изменены",
     BASELINE_CHANGED: "Baseline",
     DESCRIPTION_CHANGED: "Описание изменено",
     PRIORITY_CHANGED: "Приоритет",
@@ -116,7 +116,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
     const [isEditingDescription, setIsEditingDescription] = useState(false);
     const [descriptionDraft, setDescriptionDraft] = useState("");
     const [descriptionRevision, setDescriptionRevision] = useState<number | undefined>();
-    const [dateDrafts, setDateDrafts] = useState<Partial<Record<TaskDateField, TaskDateDraft>>>({});
+    const [datesTask, setDatesTask] = useState<Task | null>(null);
     const visibleCardRef = useRef<HTMLDivElement>(null);
     const reportTabRef = useRef<HTMLDivElement>(null);
     const [reportComment, setReportComment] = useState<TaskComment | null>(null);
@@ -190,9 +190,6 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
         onSuccess: (updated, data) => {
             queryClient.setQueryData(queryKeys.task(taskId), updated);
             if ("description_md" in data) setIsEditingDescription(false);
-            for (const field of ["start_date", "due_date"] as const) {
-                if (field in data) clearDateDraft(field);
-            }
             invalidateTask();
         },
         onError: error => {
@@ -200,27 +197,18 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
         },
     });
 
-    function clearDateDraft(field: TaskDateField) {
-        setDateDrafts(current => {
-            const next = { ...current };
-            delete next[field];
-            return next;
-        });
-    }
-
-    function beginDateEdit(field: TaskDateField) {
-        setDateDrafts(current => current[field] ? current : {
-            ...current,
-            [field]: { value: toDateInputValue(task?.[field] ?? null), revision: task?.revision, changed: false },
-        });
-    }
-
-    function changeDate(field: TaskDateField, value: string) {
-        const draft = dateDrafts[field];
-        const revision = draft ? draft.revision : task?.revision;
-        setDateDrafts(current => ({ ...current, [field]: { value, revision, changed: true } }));
-        updateMutation.mutate({ [field]: value || null, expected_revision: revision });
-    }
+    const datesMutation = useMutation({
+        mutationFn: (data: TaskUpdate) => api.patch<Task>(endpoints.task(taskId), data),
+        retry: false,
+        onSuccess: updated => {
+            queryClient.setQueryData(queryKeys.task(taskId), updated);
+            setDatesTask(null);
+            invalidateTask();
+        },
+        onError: error => {
+            if (error instanceof ApiError && error.status === 409) invalidateTask();
+        },
+    });
 
     const updateErrorMessage = updateMutation.error instanceof ApiError && updateMutation.error.status === 409
         ? TASK_CONFLICT_MESSAGE : updateMutation.error?.message;
@@ -352,34 +340,15 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                             )}
                                         </Field>
 
-                                        <Field label="Начало">
-                                            {(id) => (
-                                                <Input
-                                                    id={id}
-                                                    type="date"
-                                                    value={dateDrafts.start_date?.value ?? toDateInputValue(task.start_date)}
-                                                    max={task.due_date ?? undefined}
-                                                    disabled={updateMutation.isPending}
-                                                    onFocus={() => beginDateEdit("start_date")}
-                                                    onBlur={() => { if (!dateDrafts.start_date?.changed) clearDateDraft("start_date"); }}
-                                                    onChange={event => changeDate("start_date", event.target.value)}
-                                                />
-                                            )}
-                                        </Field>
-
-                                        <Field label="Завершение">
-                                            {(id) => (
-                                                <Input
-                                                    id={id}
-                                                    type="date"
-                                                    value={dateDrafts.due_date?.value ?? toDateInputValue(task.due_date)}
-                                                    min={task.start_date ?? undefined}
-                                                    disabled={updateMutation.isPending}
-                                                    onFocus={() => beginDateEdit("due_date")}
-                                                    onBlur={() => { if (!dateDrafts.due_date?.changed) clearDateDraft("due_date"); }}
-                                                    onChange={event => changeDate("due_date", event.target.value)}
-                                                />
-                                            )}
+                                        <Field label="Сроки" className="sm:col-span-2">
+                                            {id => <Button id={id} variant="secondary" className="h-auto w-full justify-start py-2.5 text-left"
+                                                aria-label="Изменить сроки" icon={<CalendarDays size={16} aria-hidden="true" />}
+                                                onClick={() => { datesMutation.reset(); setDatesTask({ ...task }); }}>
+                                                <span className="flex min-w-0 flex-wrap gap-x-6 gap-y-1 font-normal">
+                                                    <span><span className="text-muted">Начало: </span>{task.start_date ? formatFullDate(task.start_date) : "не задано"}</span>
+                                                    <span><span className="text-muted">Завершение: </span>{task.due_date ? formatFullDate(task.due_date) : "не задано"}</span>
+                                                </span>
+                                            </Button>}
                                         </Field>
 
                                     </div>
@@ -547,6 +516,7 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                                             <span className="ml-1">{event.to_value}</span>
                                                         )}
                                                     </p>
+                                                    {event.reason && <p className="mt-1.5 whitespace-pre-wrap break-words text-secondary">Причина: {event.reason}</p>}
                                                     {event.actor_name && <p className="text-[11px] text-muted"><UserIdentity userId={event.actor_user_id} name={event.actor_name} />{event.via_api_key_label ? ` · через ${event.via_api_key_label}` : ""}</p>}
                                                     <time
                                                         dateTime={event.created_at}
@@ -566,6 +536,15 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                         </div>
                     </Tabs>
                     {moveDialogOpen && <TransferTaskDialog task={task} kind={kind} onClose={() => setMoveDialogOpen(false)} onMoved={() => { invalidateTask(); if (projectId) queryClient.invalidateQueries({ queryKey: queryKeys.wbs(projectId) }); }} />}
+                    {datesTask && <TaskDatesDialog task={datesTask} isSaving={datesMutation.isPending}
+                        error={datesMutation.error instanceof ApiError && datesMutation.error.status === 409 ? TASK_CONFLICT_MESSAGE : datesMutation.error?.message}
+                        onClose={() => { setDatesTask(null); datesMutation.reset(); }}
+                        onSave={({ startDate, dueDate, dateChangeReason }) => datesMutation.mutate({
+                            start_date: startDate,
+                            due_date: dueDate,
+                            expected_revision: datesTask.revision,
+                            ...(dateChangeReason && { date_change_reason: dateChangeReason }),
+                        })} />}
                 </div>
             )}
         </Modal>

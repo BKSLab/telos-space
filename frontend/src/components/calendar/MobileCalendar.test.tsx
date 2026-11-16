@@ -29,7 +29,7 @@ const task: CalendarGridTask = {
     id: 7, key: "TEST-7", title: "Подготовить документы для поездки", stage_id: 1, priority: "MEDIUM", assignee: null,
     start_date: "2026-11-03", due_date: "2026-11-03", baseline_start_date: null, baseline_due_date: null, drift_days: null,
     is_done: false, is_overdue: false, is_due_soon: false, risk_level: null, risk_reasons: [],
-    updated_at: "2026-11-03T10:00:00Z", wbs_node_id: null,
+    updated_at: "2026-11-03T10:00:00Z", revision: 1, wbs_node_id: null,
 };
 
 function environment(): GridEnv {

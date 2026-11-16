@@ -392,6 +392,15 @@ class TaskUpdateSchema(BaseModel):
         description="Новая дата завершения или null для очистки.",
         examples=["2026-09-12"],
     )
+    date_change_reason: str | None = Field(
+        None,
+        max_length=2000,
+        description=(
+            "Причина изменения или снятия уже назначенной даты; первое назначение "
+            "каждой отсутствующей даты и повтор тех же значений причины не требуют."
+        ),
+        examples=["Согласование с заказчиком перенесено на следующую неделю."],
+    )
 
 
 class TaskStagePlacementSchema(BaseModel):

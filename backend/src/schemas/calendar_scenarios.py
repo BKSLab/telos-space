@@ -101,6 +101,12 @@ class ScenarioApplyRequestSchema(BaseModel):
     """Подтверждённый результат preview для атомарного применения."""
 
     changes: list[ScenarioApplyChangeSchema] = Field(..., min_length=1, max_length=250)
+    date_change_reason: str | None = Field(
+        None,
+        max_length=2000,
+        description="Общая причина изменения или снятия назначенных дат всех задач сценария.",
+        examples=["Перенос поставки оборудования и зависимых задач."],
+    )
 
     @model_validator(mode="after")
     def validate_unique_tasks(self):

@@ -111,7 +111,6 @@ class _TransferPlan:
     stage: ProjectStage | None = None
     status: TaskStatus | None = None
     completed_at: datetime | None = None
-    due_date: date | None = None
     people: list[tuple[TaskParticipantRole, User]] = field(default_factory=list)
     members_by_user: dict[int, int] = field(default_factory=dict)
     outsiders: list[User] = field(default_factory=list)
@@ -428,8 +427,6 @@ class TaskTransfersService:
             "position": position,
             "assignee": _name(plan.executor),
         }
-        if plan.due_date is not None:
-            fields["due_date"] = plan.due_date
         return fields
 
     async def _relocate(self, task: Task, plan: _TransferPlan, fields: dict) -> int:

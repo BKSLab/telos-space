@@ -84,6 +84,7 @@ async def apply_calendar_scenario(
         return await service.apply(
             project_id,
             [item.model_dump() for item in data.changes],
+            date_change_reason=data.date_change_reason,
         )
     except ScenarioErrors as error:
         logger.info("⚠️ Apply сценария проекта id=%s отклонён: %s.", project_id, error.detail)

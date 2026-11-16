@@ -27,7 +27,6 @@ import { CalendarSidePanel } from "@/components/calendar/CalendarSidePanel";
 import { CalendarTask } from "@/components/calendar/CalendarTask";
 import { CalendarToolbar, Segmented } from "@/components/calendar/CalendarToolbar";
 import { ColorModeSelect } from "@/components/calendar/ColorModeSelect";
-import { DeadlineDialog } from "@/components/calendar/DeadlineDialog";
 import { DependencyDialog } from "@/components/calendar/DependencyDialog";
 import { DependencyPanel } from "@/components/calendar/DependencyPanel";
 import { MilestoneDialog } from "@/components/calendar/MilestoneDialog";
@@ -50,6 +49,7 @@ import { TimelineLegend } from "@/components/calendar/gantt/TimelineLegend";
 import { CalendarGridView, type GridEnv } from "@/components/calendar/grid/CalendarGridView";
 import { gridGrabDate, shortDate } from "@/components/calendar/grid/gridHelpers";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
+import { TaskDatesDialog } from "@/components/tasks/TaskDatesDialog";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Field";
 import { Popover } from "@/components/ui/Popover";
@@ -157,8 +157,10 @@ interface ExportJob {
 
 interface TaskDatesVariables {
     taskId: number;
+    expectedRevision: number;
     dueDate: string | null;
     startDate?: string | null;
+    dateChangeReason?: string;
 }
 
 export function ProjectCalendarPage() {
@@ -203,6 +205,7 @@ export function ProjectCalendarPage() {
     const [isScenarioMode, setScenarioMode] = useState(false);
     const [scenarioInputs, setScenarioInputs] = useState<ScenarioChangeInput[]>([]);
     const [scenarioPreview, setScenarioPreview] = useState<ScenarioPreview | null>(null);
+    const [scenarioReason, setScenarioReason] = useState("");
     const scenarioRevision = useRef(0);
     const stageFilter = searchParams.get("stage") ?? "";
     const priorityFilter = searchParams.get("priority") ?? "";
@@ -304,10 +307,12 @@ export function ProjectCalendarPage() {
     });
 
     const deadlineMutation = useMutation({
-        mutationFn: ({ taskId, dueDate, startDate }: TaskDatesVariables) =>
+        mutationFn: ({ taskId, dueDate, startDate, dateChangeReason, expectedRevision }: TaskDatesVariables) =>
             api.patch<Task>(endpoints.task(taskId), {
+                expected_revision: expectedRevision,
                 due_date: dueDate,
                 ...(startDate !== undefined && { start_date: startDate }),
+                ...(dateChangeReason && { date_change_reason: dateChangeReason }),
             }),
         onMutate: async ({ taskId, dueDate, startDate }: TaskDatesVariables) => {
             await Promise.all([
@@ -492,8 +497,10 @@ export function ProjectCalendarPage() {
     const schedule = useGanttSchedule({
         projectId: project.id,
         dependencies: calendarQuery.data?.dependencies ?? [],
-        calendarTasks: calendarQuery.data?.tasks ?? [],
-        projectTasks: tasksQuery.data,
+        saveDates: (taskId, dates, expectedRevision) => deadlineMutation.mutateAsync({ taskId, expectedRevision, ...dates }),
+        isSavingDates: deadlineMutation.isPending,
+        fixTaskBaseline: (taskId) => baselineMutation.mutateAsync(taskId),
+        isFixingBaseline: baselineMutation.isPending,
         createDependency: (data) => createDependencyMutation.mutate(data),
     });
     const previewScenarioMutation = useMutation({
@@ -514,8 +521,9 @@ export function ProjectCalendarPage() {
         },
     });
     const applyScenarioMutation = useMutation({
-        mutationFn: (preview: ScenarioPreview) =>
+        mutationFn: ({ preview, dateChangeReason }: { preview: ScenarioPreview; dateChangeReason?: string }) =>
             api.post<ScenarioApplyResult>(endpoints.projectCalendarScenarioApply(project.id), {
+                ...(dateChangeReason && { date_change_reason: dateChangeReason }),
                 changes: preview.changes.map((change) => ({
                     task_id: change.task_id,
                     start_date: change.proposed.start_date,
@@ -528,6 +536,7 @@ export function ProjectCalendarPage() {
             setScenarioMode(false);
             setScenarioInputs([]);
             setScenarioPreview(null);
+            setScenarioReason("");
             queryClient.invalidateQueries({ queryKey: ["projects", project.id] });
             queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
             for (const taskId of result.task_ids) {
@@ -737,6 +746,7 @@ export function ProjectCalendarPage() {
         setScenarioMode(false);
         setScenarioInputs([]);
         setScenarioPreview(null);
+        setScenarioReason("");
         setDeadlineTask(null);
     }
 
@@ -751,7 +761,7 @@ export function ProjectCalendarPage() {
         previewScenarioMutation.mutate({ revision, changes });
     }
 
-    function changeDates(task: CalendarGridTask, dates: Omit<TaskDatesVariables, "taskId">) {
+    function changeDates(task: CalendarGridTask, dates: Omit<TaskDatesVariables, "taskId" | "expectedRevision">) {
         const startDate = dates.startDate === undefined ? task.start_date : dates.startDate;
         if (task.due_date === dates.dueDate && task.start_date === startDate) {
             return;
@@ -770,10 +780,12 @@ export function ProjectCalendarPage() {
             if (isPhone) togglePanel(true);
             return;
         }
-        const save = () => deadlineMutation.mutate({ taskId: task.id, ...dates });
-        // Шкала: перенос с конфликтом у зависящих задач — спросить «сдвинуть и N следующих?».
-        if (view === "timeline" && schedule.proposeShift(task, startDate, dates.dueDate, save)) return;
-        save();
+        schedule.changeDates(task, { startDate, dueDate: dates.dueDate });
+    }
+
+    function openDatesDialog(task: CalendarGridTask) {
+        if (isScenarioMode) setDeadlineTask(taskWithScenario(task) as CalendarTaskModel);
+        else schedule.openDates(task);
     }
 
     function handleDragStart(event: DragStartEvent) {
@@ -873,7 +885,7 @@ export function ProjectCalendarPage() {
         canDrag: () => access.canEdit && !isPhone && !isTouch,
         showSource: false,
         onOpenTask: setSelectedTaskId,
-        onScheduleTask: access.canEdit ? (task) => setDeadlineTask(taskWithScenario(task as CalendarTaskModel)) : undefined,
+        onScheduleTask: access.canEdit ? openDatesDialog : undefined,
         onCreate: access.canEdit ? setCreateDate : undefined,
         onOpenPeriod: (scale, value) => openGrid(scale, value),
     };
@@ -981,7 +993,7 @@ export function ProjectCalendarPage() {
                     selectedDate={date}
                     onSelectDate={(value, scale) => openGrid(scale, value)}
                     onOpenTask={setSelectedTaskId}
-                    onScheduleTask={(task) => setDeadlineTask(taskWithScenario(task))}
+                    onScheduleTask={openDatesDialog}
                     onResizeTask={resizeTask}
                     colorMode={colorMode}
                     labelWidth={labelWidth}
@@ -1188,14 +1200,11 @@ export function ProjectCalendarPage() {
                                         preview={scenarioPreview}
                                         isPreviewing={previewScenarioMutation.isPending}
                                         isApplying={applyScenarioMutation.isPending}
+                                        dateChangeReason={scenarioReason}
+                                        onReasonChange={setScenarioReason}
                                         onCancel={stopScenario}
-                                        onApply={() => {
-                                            if (
-                                                scenarioPreview &&
-                                                window.confirm(`Применить изменения к ${scenarioPreview.changes.length} задачам?`)
-                                            ) {
-                                                applyScenarioMutation.mutate(scenarioPreview);
-                                            }
+                                        onApply={(dateChangeReason) => {
+                                            if (scenarioPreview) applyScenarioMutation.mutate({ preview: scenarioPreview, dateChangeReason });
                                         }}
                                     />
                                 ) : undefined
@@ -1267,7 +1276,7 @@ export function ProjectCalendarPage() {
                                             hasMore={unscheduledQuery.hasNextPage}
                                             isLoadingMore={unscheduledQuery.isFetchingNextPage}
                                             onOpenTask={setSelectedTaskId}
-                                            onScheduleTask={(task) => setDeadlineTask(task as CalendarTaskModel)}
+                                            onScheduleTask={openDatesDialog}
                                             onLoadMore={() => void unscheduledQuery.fetchNextPage()}
                                         />
                                     ),
@@ -1305,23 +1314,16 @@ export function ProjectCalendarPage() {
                 </div>
             )}
             {deadlineTask && (
-                <DeadlineDialog
+                <TaskDatesDialog
                     key={`${deadlineTask.id}:${deadlineTask.start_date ?? "none"}:${deadlineTask.due_date ?? "none"}`}
                     task={deadlineTask}
                     isSaving={deadlineMutation.isPending || baselineMutation.isPending}
+                    requireReason={false}
                     onClose={() => setDeadlineTask(null)}
-                    onSave={(startDate, dueDate) => {
-                        changeDates(deadlineTask, { startDate, dueDate });
+                    onSave={(dates) => {
+                        changeDates(deadlineTask, dates);
                         setDeadlineTask(null);
                     }}
-                    onFixBaseline={
-                        isScenarioMode
-                            ? undefined
-                            : () => {
-                                  baselineMutation.mutate(deadlineTask.id);
-                                  setDeadlineTask(null);
-                              }
-                    }
                 />
             )}
             {milestoneDialog && (

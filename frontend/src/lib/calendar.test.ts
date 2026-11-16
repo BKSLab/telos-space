@@ -65,7 +65,7 @@ describe("calendar date-only helpers", () => {
             is_due_soon: true,
             risk_level: "medium",
             risk_reasons: [],
-            updated_at: "2026-09-02T00:00:00Z",
+            updated_at: "2026-09-02T00:00:00Z", revision: 1,
         } satisfies Omit<CalendarTask, "due_date">;
         const grouped = tasksByDate([
             { ...base, due_date: "2026-09-02" },
@@ -96,7 +96,7 @@ describe("calendar date-only helpers", () => {
             is_due_soon: true,
             risk_level: "medium",
             risk_reasons: [],
-            updated_at: "2026-09-02T00:00:00Z",
+            updated_at: "2026-09-02T00:00:00Z", revision: 1,
         };
 
         const changed = rescheduleCalendarTask(task, "2026-09-01", "2026-09-02");
@@ -145,7 +145,7 @@ describe("calendar date-only helpers", () => {
             is_due_soon: true,
             risk_level: "medium",
             risk_reasons: [],
-            updated_at: "2026-09-02T00:00:00Z",
+            updated_at: "2026-09-02T00:00:00Z", revision: 1,
         };
 
         expect(taskInterval(task)?.durationDays).toBe(4);
@@ -175,7 +175,7 @@ describe("calendar date-only helpers", () => {
             is_due_soon: true,
             risk_level: "medium",
             risk_reasons: [],
-            updated_at: "2026-09-02T00:00:00Z",
+            updated_at: "2026-09-02T00:00:00Z", revision: 1,
         } satisfies CalendarTask;
 
         expect(resizeTaskInterval(task, "start", -2)).toEqual({
@@ -221,7 +221,7 @@ describe("calendar date-only helpers", () => {
             is_due_soon: false,
             risk_level: "medium",
             risk_reasons: [],
-            updated_at: "2026-09-02T00:00:00Z",
+            updated_at: "2026-09-02T00:00:00Z", revision: 1,
         } satisfies CalendarTask;
 
         expect(tasksByDate([task]).get("2026-09-03")).toEqual([task]);

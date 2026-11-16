@@ -262,6 +262,7 @@ export interface CalendarWbsNode {
 export interface CalendarTask {
     executor?: UserSummary | null;
     id: number;
+    revision: number;
     key: string;
     title: string;
     start_date: string | null;
@@ -446,6 +447,7 @@ export interface TaskUpdate {
     observer_ids?: number[] | null;
     start_date?: string | null;
     due_date?: string | null;
+    date_change_reason?: string | null;
 }
 
 export type TaskActivityEventType =
@@ -453,6 +455,7 @@ export type TaskActivityEventType =
     | "STAGE_CHANGED"
     | "DUE_DATE_CHANGED"
     | "START_DATE_CHANGED"
+    | "DATES_CHANGED"
     | "BASELINE_CHANGED"
     | "DESCRIPTION_CHANGED"
     | "PRIORITY_CHANGED"
@@ -470,6 +473,7 @@ export interface TaskActivity {
     event_type: TaskActivityEventType;
     from_value: string | null;
     to_value: string | null;
+    reason: string | null;
     created_at: string;
 }
 

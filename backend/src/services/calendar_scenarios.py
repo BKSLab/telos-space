@@ -15,7 +15,12 @@ from src.exceptions.milestones import MilestonesRepositoryError
 from src.exceptions.projects import ProjectNotFoundError, ProjectsRepositoryError
 from src.exceptions.task_activity import TaskActivityRepositoryError
 from src.exceptions.task_dependencies import TaskDependenciesRepositoryError
-from src.exceptions.tasks import TaskDateRangeError, TaskNotFoundError, TasksRepositoryError
+from src.exceptions.tasks import (
+    TaskDateChangeReasonError,
+    TaskDateRangeError,
+    TaskNotFoundError,
+    TasksRepositoryError,
+)
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
 from src.repositories.milestones import MilestonesRepository
 from src.repositories.projects import ProjectsRepository
@@ -32,6 +37,7 @@ from src.schemas.calendar_scenarios import (
     ScenarioPreviewResponseSchema,
     ScenarioTaskDatesSchema,
 )
+from src.services.task_dates import task_dates_value, validate_date_change_reason
 from src.services.tasks import build_task_key
 
 logger = logging.getLogger(__name__)
@@ -140,14 +146,16 @@ class CalendarScenarioService:
             )
             raise CalendarServiceError(str(error)) from error
 
-    async def apply(self, project_id: int, changes: list[dict]) -> ScenarioApplyResponseSchema:
+    async def apply(
+        self, project_id: int, changes: list[dict], *, date_change_reason: str | None = None
+    ) -> ScenarioApplyResponseSchema:
         """Повторно проверяет версии и применяет даты одной транзакцией."""
         started = perf_counter()
         try:
             project = await self.projects_repository.get_by_id(project_id)
             if project is None:
                 raise ProjectNotFoundError(project_id=project_id)
-            tasks = await self.tasks_repository.get_by_project(project_id)
+            tasks = await self.tasks_repository.get_by_project(project_id, for_update=True)
             tasks_by_id = {task.id: task for task in tasks}
             self._ensure_tasks_exist(tasks_by_id, changes)
             if any(
@@ -179,10 +187,26 @@ class CalendarScenarioService:
                 for task_id, item in proposed.items()
                 if _dates_changed(tasks_by_id[task_id], item)
             ]
+            reasons = {
+                task_id: validate_date_change_reason(
+                    previous_start=tasks_by_id[task_id].start_date,
+                    previous_due=tasks_by_id[task_id].due_date,
+                    next_start=proposed[task_id].start_date,
+                    next_due=proposed[task_id].due_date,
+                    reason=date_change_reason,
+                )
+                for task_id in changed_ids
+            }
             for task_id in changed_ids:
                 task = tasks_by_id[task_id]
                 item = proposed[task_id]
-                await self._record_date_changes(task, item)
+                await self.activity_repository.save(
+                    task_id=task.id,
+                    event_type=TaskActivityEventType.DATES_CHANGED,
+                    from_value=task_dates_value(task.start_date, task.due_date),
+                    to_value=task_dates_value(item.start_date, item.due_date),
+                    reason=reasons[task_id],
+                )
                 await self.tasks_repository.update(
                     task,
                     {"start_date": item.start_date, "due_date": item.due_date},
@@ -205,7 +229,18 @@ class CalendarScenarioService:
                 project_id,
                 exc_info=True,
             )
+            await self.unit_of_work.rollback()
             raise CalendarServiceError(str(error)) from error
+
+        except (
+            TaskDateChangeReasonError,
+            TaskDateRangeError,
+            TaskNotFoundError,
+            CalendarScenarioConflictError,
+            CalendarScenarioVersionConflictError,
+        ):
+            await self.unit_of_work.rollback()
+            raise
 
     @staticmethod
     def _ensure_tasks_exist(tasks_by_id: dict[int, Task], changes: list[dict]) -> None:
@@ -218,22 +253,6 @@ class CalendarScenarioService:
                 and item["start_date"] > item["due_date"]
             ):
                 raise TaskDateRangeError()
-
-    async def _record_date_changes(self, task: Task, proposed: ProposedDates) -> None:
-        if task.start_date != proposed.start_date:
-            await self.activity_repository.save(
-                task_id=task.id,
-                event_type=TaskActivityEventType.START_DATE_CHANGED,
-                from_value=_date_value(task.start_date),
-                to_value=_date_value(proposed.start_date),
-            )
-        if task.due_date != proposed.due_date:
-            await self.activity_repository.save(
-                task_id=task.id,
-                event_type=TaskActivityEventType.DUE_DATE_CHANGED,
-                from_value=_date_value(task.due_date),
-                to_value=_date_value(proposed.due_date),
-            )
 
 
 def _build_proposed_dates(*, changes, tasks_by_id, dependencies, project_key):
@@ -396,7 +415,3 @@ def _to_normalized_change(*, task, proposed, project_key):
 
 def _dates_changed(task, proposed):
     return task.start_date != proposed.start_date or task.due_date != proposed.due_date
-
-
-def _date_value(value: date | None) -> str | None:
-    return value.isoformat() if value is not None else None

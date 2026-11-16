@@ -40,7 +40,7 @@ function task(key: string, start: string | null, due: string | null, extra: Part
         is_due_soon: false,
         risk_level: null,
         risk_reasons: [],
-        updated_at: "2026-09-01T00:00:00Z",
+        updated_at: "2026-09-01T00:00:00Z", revision: 1,
         ...extra,
     };
 }

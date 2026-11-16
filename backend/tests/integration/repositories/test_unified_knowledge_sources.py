@@ -137,6 +137,13 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
                 from_value="Заготовка",
                 to_value="Приёмка",
             ),
+            TaskActivity(
+                task_id=task.id,
+                event_type="DATES_CHANGED",
+                from_value="начало: 2026-11-16; завершение: 2026-11-20",
+                to_value="начало: 2026-11-17; завершение: 2026-11-21",
+                reason="Проверено нефритосогласование",
+            ),
             ProjectMilestone(
                 project_id=project.id,
                 title="Первый релиз",
@@ -193,7 +200,14 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
             "content_hash": "a" * 64,
         }
     )
-    catalog = build_catalog(project.id, await repository.get_project_rows(project.id))
+    rows = await repository.get_project_rows(project.id)
+    reason_row = next(row for row in rows["task_activity"] if row["event_type"] == "DATES_CHANGED")
+    assert reason_row["reason"] == "Проверено нефритосогласование"
+    catalog = build_catalog(project.id, rows)
+    reason_source = catalog.sources[f"activity:{reason_row['id']}"]
+    assert reason_source.properties["reason"] == "Проверено нефритосогласование"
+    assert "нефритосогласование" in reason_source.text
+    assert reason_source.parent_source_id == f"task:{task.id}"
     assert {source.kind for source in catalog.sources.values()} == set(SourceType)
     for query, kind in [
         (project.name, "project"),
@@ -201,6 +215,7 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
         (node.title, "wbs_node"),
         ("Первый релиз", "milestone"),
         ("Заготовка", "activity"),
+        ("нефритосогласование", "activity"),
         ("зебропакет", "task"),
         ("кварцопоставку", "sticker"),
         ("кедросхему", "document"),
@@ -216,6 +231,7 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
         hits = await repository.search(project.id, query)
         assert any(hit["source_id"].startswith(kind + ":") for hit in hits), (query, hits)
     assert not await repository.search(project.id, "секретопортфель")
+    assert not await repository.search(project.id + 1000, "нефритосогласование")
     links = catalog.sources[f"task:{task.id}"].relations
     assert {link["relation"] for link in links} >= {
         "has_risk",

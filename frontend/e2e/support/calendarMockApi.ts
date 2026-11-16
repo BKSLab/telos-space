@@ -63,7 +63,9 @@ export async function installMockApi(page: Page, state: MockState) {
             if (method === "DELETE") return route.fulfill({ status: 204, headers });
             return reply({ exists: state.icsIssued, created_at: state.icsIssued ? stamp : null, ...(method === "POST" && { url: "http://tracker.test/api/v1/ics/cal_demo.ics" }) });
         }
-        if (path === "/users/me/calendar/unscheduled") return reply({ items: [], next_cursor: null });
+        if (path === "/users/me/calendar/unscheduled") return reply({ items: state.tasks
+            .filter(task => task.start_date === null && task.due_date === null)
+            .map(task => ({ ...calendarTask(task), source: { kind: "PROJECT", id: 1, key: "DEMO", name: state.projects[0].name, color: state.projects[0].color }, state: "IN_PROGRESS", state_label: "В работе" })), next_cursor: null });
         if (path === "/users/me/calendar") return reply({ tasks: [
             { ...calendarTask(state.tasks[0]), source: { kind: "PROJECT", id: 1, key: "DEMO", name: state.projects[0].name, color: state.projects[0].color }, state: "IN_PROGRESS", state_label: "В работе" },
             { ...calendarTask(state.tasks[1]), id: 200, key: "T-1", title: "Личная подготовка к поездке", wbs_node_id: null, stage_id: null, start_date: iso(0), due_date: iso(1), source: { kind: "PERSONAL", id: null, key: null, name: null, color: null }, state: "NEW", state_label: "Новая" },
@@ -87,7 +89,7 @@ export async function installMockApi(page: Page, state: MockState) {
         const schedule = handleSchedule(state, projectId, rest, method, url, body);
         if (schedule) return reply(schedule.json, schedule.status);
         if (rest === "/calendar/workload") return reply(projectWorkload(state, url.searchParams.get("date_from") ?? iso(-14), url.searchParams.get("date_to") ?? iso(30)));
-        if (rest === "/calendar/unscheduled") return reply({ items: [], next_cursor: null });
+        if (rest === "/calendar/unscheduled") return reply({ items: state.tasks.filter(task => task.start_date === null && task.due_date === null).map(calendarTask), next_cursor: null });
         if (rest === "/calendar") return reply({
             range: { date_from: url.searchParams.get("date_from"), date_to: url.searchParams.get("date_to"), today: iso(0) },
             project: { start_date: state.projects[0].start_date, due_date: state.projects[0].due_date },
@@ -108,7 +110,7 @@ function calendarTask(task: Task) {
         baseline_start_date: null, baseline_due_date: null, drift_days: null, stage_id: task.stage_id,
         wbs_node_id: task.wbs_node_id, priority: task.priority, assignee: task.assignee, is_done: task.stage_id === 4,
         is_overdue: task.due_date !== null && task.due_date < iso(0) && task.stage_id !== 4,
-        is_due_soon: false, risk_level: null, risk_reasons: [], updated_at: stamp,
+        is_due_soon: false, risk_level: null, risk_reasons: [], updated_at: stamp, revision: task.revision,
     };
 }
 

@@ -2,6 +2,43 @@ import { expect, test } from "@playwright/test";
 import { installMockApi, mockState } from "./support/taskMockApi";
 import { stamp } from "./support/mockApi";
 
+for (const width of [1440, 390]) {
+    test(`перенос сроков требует причину и сохраняет один запрос (${width}px)`, async ({ page }, info) => {
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+        const state = mockState();
+        state.tasks[0].start_date = "2026-11-19";
+        state.tasks[0].due_date = "2026-11-21";
+        state.tasks[0].revision = 3;
+        await installMockApi(page, state);
+        await page.goto("/my-tasks?task=100");
+        const card = page.getByRole("dialog", { name: "Задача DEMO-1", exact: true });
+        const opener = card.getByRole("button", { name: "Изменить сроки", exact: true });
+        await opener.click();
+        const dates = page.getByRole("dialog", { name: "Изменить сроки", exact: true });
+        await dates.getByLabel("Начало", { exact: true }).fill("2026-11-21");
+        await dates.getByLabel("Завершение", { exact: true }).fill("2026-11-24");
+        const save = dates.getByRole("button", { name: "Сохранить сроки", exact: true });
+        await expect(save).toBeDisabled();
+        expect(state.writes.filter(write => write.method === "PATCH")).toEqual([]);
+        await dates.getByRole("textbox", { name: /Причина изменения/ }).fill("  Ждём согласование макета  ");
+        await expect(save).toBeEnabled();
+        await expect.poll(() => dates.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath(`task-dates-${width}.png`) });
+        await save.click();
+        await expect(dates).toHaveCount(0);
+        const writes = state.writes.filter(write => write.method === "PATCH");
+        expect(writes).toHaveLength(1);
+        expect(writes[0].body).toEqual({ start_date: "2026-11-21", due_date: "2026-11-24", date_change_reason: "Ждём согласование макета", expected_revision: 3 });
+        await expect(opener).toBeFocused();
+        await opener.click();
+        await dates.getByLabel("Завершение", { exact: true }).fill("2026-11-26");
+        await dates.getByRole("button", { name: "Отмена", exact: true }).click();
+        expect(state.tasks[0].due_date).toBe("2026-11-24");
+        expect(state.writes.filter(write => write.method === "PATCH")).toHaveLength(1);
+        expect(state.errors).toEqual([]);
+    });
+}
+
 test("задача открывается по центру, разделы доступны с клавиатуры, черновики сохраняются", async ({ page }, info) => {
     const state = mockState();
     await installMockApi(page, state);

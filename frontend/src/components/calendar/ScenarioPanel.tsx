@@ -1,5 +1,7 @@
 import { AlertTriangle, ArrowRight, Beaker, Check, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Field, Textarea } from "@/components/ui/Field";
+import { requiresTaskDateChangeReason } from "@/lib/taskDates";
 import type { ScenarioPreview } from "@/lib/types";
 
 function datesLabel(startDate: string | null, dueDate: string | null): string {
@@ -12,7 +14,9 @@ interface ScenarioPanelProps {
     preview: ScenarioPreview | null;
     isPreviewing: boolean;
     isApplying: boolean;
-    onApply: () => void;
+    dateChangeReason: string;
+    onReasonChange: (reason: string) => void;
+    onApply: (dateChangeReason?: string) => void;
     onCancel: () => void;
 }
 
@@ -21,9 +25,14 @@ export function ScenarioPanel({
     preview,
     isPreviewing,
     isApplying,
+    dateChangeReason,
+    onReasonChange,
     onApply,
     onCancel,
 }: ScenarioPanelProps) {
+    const reasonRequired = preview?.changes.some((change) => requiresTaskDateChangeReason(change.current, {
+        startDate: change.proposed.start_date, dueDate: change.proposed.due_date,
+    })) ?? false;
     return (
         <aside className="material-glass rounded-[var(--radius-panel)] border border-ai-border p-3 shadow-panel">
             <div className="mb-2 flex items-center gap-2">
@@ -103,6 +112,14 @@ export function ScenarioPanel({
                 </>
             )}
 
+            {reasonRequired && (
+                <div className="mt-3">
+                    <Field label="Причина изменения (обязательно)" hint="Одна причина сохранится в истории каждой перенесённой задачи.">
+                        {id => <Textarea id={id} required rows={3} maxLength={2000} value={dateChangeReason} disabled={isApplying}
+                            onChange={event => onReasonChange(event.target.value)} />}
+                    </Field>
+                </div>
+            )}
             <div className="mt-3 flex gap-2">
                 <Button
                     variant="ghost"
@@ -118,8 +135,8 @@ export function ScenarioPanel({
                     variant="primary"
                     size="sm"
                     icon={<Check size={12} />}
-                    disabled={!preview?.can_apply || isPreviewing || isApplying}
-                    onClick={onApply}
+                    disabled={!preview?.can_apply || preview.changes.length === 0 || isPreviewing || isApplying || (reasonRequired && !dateChangeReason.trim())}
+                    onClick={() => onApply(reasonRequired ? dateChangeReason.trim() : undefined)}
                     className="flex-1"
                 >
                     {isApplying ? "Применение…" : "Apply"}

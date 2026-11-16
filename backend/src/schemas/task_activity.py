@@ -27,6 +27,11 @@ class ActivitySchema(BaseModel):
         description="Новое значение.",
         examples=["В работе"],
     )
+    reason: str | None = Field(
+        None,
+        description="Причина изменения дат; null при первом назначении или в прежних событиях.",
+        examples=["Перенос поставки оборудования."],
+    )
     actor_user_id: int | None = Field(
         None,
         description="Кто выполнил изменение; null — автор не записан (старые события).",
