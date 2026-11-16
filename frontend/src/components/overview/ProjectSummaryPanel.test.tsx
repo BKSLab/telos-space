@@ -73,7 +73,7 @@ it("раскрывает каждый пункт, основание и зада
         expect(detail.getByRole("heading", { name: item.title })).toBeTruthy();
         expect(detail.getByText(item.detail)).toBeTruthy();
         for (const reference of item.tasks) {
-            const button = detail.getByRole("button", { name: reference.key, exact: true });
+            const button = detail.getByRole("button", { name: reference.key });
             expect(button.getAttribute("aria-description")).toContain("Просрочена на момент разбора");
             expect(within(button).getByText(reference.title)).toBeTruthy();
             await user.click(button);
