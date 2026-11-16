@@ -5,6 +5,73 @@ import { installMockApi, mockState } from "./support/taskMockApi";
 test.use({ trace: "off" });
 
 for (const width of [1440, 390, 320]) {
+    test(`срок и исполнитель занимают разные строки, контуры иконок используют цвета темы при ${width}px`, async ({ page }, info) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.clock.setFixedTime(new Date("2026-11-16T12:00:00+04:00"));
+        const state = mockState();
+        const executor = { ...state.me, last_name: "Барабанщиков-Кирилловский", first_name: "Кирилл", middle_name: "Александрович" };
+        const executorName = `${executor.last_name} ${executor.first_name} ${executor.middle_name}`;
+        state.stages.push({ ...state.stages[0], id: 2, name: "Готово", order_index: 1, is_done_stage: true });
+        const base = { ...state.tasks[0], description_md: null, last_comment: null };
+        state.tasks = [
+            { ...base, title: "Согласовать дату с исполнителем", due_date: "2026-11-28", comments_count: 12,
+                participants: [{ id: 1, role: "EXECUTOR", user: executor }] },
+            { ...base, id: 101, number: 2, key: "DEMO-2", title: "Просроченная задача", due_date: "2026-11-15" },
+            { ...base, id: 102, number: 3, key: "DEMO-3", title: "Завершённая задача", stage_id: 2, due_date: "2026-11-15" },
+            { ...base, id: 103, number: 4, key: "DEMO-4", title: "Только исполнитель", due_date: null, comments_count: 0,
+                participants: [{ id: 2, role: "EXECUTOR", user: executor }] },
+        ];
+        await installMockApi(page, state);
+        await page.goto("/projects/DEMO/tasks");
+        const card = page.getByRole("heading", { name: state.tasks[0].title, exact: true }).locator("..");
+        const date = card.locator('[title^="Срок:"]');
+        const name = card.getByText(executorName, { exact: true });
+        const comments = card.locator('[title="Комментариев: 12"]');
+        await expect(date).toBeVisible();
+        await expect(name).toBeVisible();
+        const dateBox = await date.boundingBox();
+        const nameBox = await name.boundingBox();
+        const commentsBox = await comments.boundingBox();
+        expect(nameBox!.y).toBeGreaterThanOrEqual(dateBox!.y + dateBox!.height);
+        expect(Math.abs(commentsBox!.y - dateBox!.y)).toBeLessThan(4);
+        expect(await name.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+        await expect(name).toHaveCSS("white-space", "normal");
+        await expect(name).toHaveCSS("text-overflow", "clip");
+        const lineCount = await date.locator(".font-mono").evaluate(element => {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            return range.getClientRects().length;
+        });
+        expect(lineCount).toBe(1);
+        const themeColor = async (token: string) => card.evaluate((element, token) => {
+            const probe = document.createElement("span");
+            probe.style.color = `var(${token})`;
+            element.append(probe);
+            const color = getComputedStyle(probe).color;
+            probe.remove();
+            return color;
+        }, token);
+        const accent = await themeColor("--color-accent");
+        await expect(date).toHaveCSS("color", accent);
+        await expect(date.locator("svg")).toHaveCSS("stroke", accent);
+        await expect(comments.locator("svg")).toHaveCSS("stroke", accent);
+        await expect(comments.locator("svg")).toHaveCSS("fill", "none");
+        const overdue = page.getByRole("heading", { name: "Просроченная задача", exact: true }).locator("..").locator('[title^="Срок:"]');
+        await expect(overdue).toHaveCSS("color", await themeColor("--color-danger"));
+        await expect(overdue).toHaveAttribute("title", /просрочен/);
+        const completed = page.getByRole("heading", { name: "Завершённая задача", exact: true }).locator("..").locator('[title^="Срок:"]');
+        await expect(completed).toHaveCSS("color", await themeColor("--color-text-muted"));
+        await expect(completed).not.toHaveAttribute("title", /просрочен/);
+        const executorOnly = page.getByRole("heading", { name: "Только исполнитель", exact: true }).locator("..");
+        await expect(executorOnly.getByText(executorName, { exact: true })).toBeVisible();
+        await expect(executorOnly.locator('[title^="Срок:"], [title^="Комментариев:"]')).toHaveCount(0);
+        await page.screenshot({ path: info.outputPath(`task-card-footer-${width}.png`) });
+        expect(state.errors).toEqual([]);
+        expect(state.writes).toEqual([]);
+    });
+}
+
+for (const width of [1440, 390, 320]) {
     test(`общая вкладка задач: виды, фильтры и ссылки при ${width}px`, async ({ page }, info) => {
         await page.setViewportSize({ width, height: 900 });
         const state = mockState();

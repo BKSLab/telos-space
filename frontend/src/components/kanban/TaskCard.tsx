@@ -124,22 +124,24 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                     <p className="truncate text-[11px] text-disabled">{breadcrumb}</p>
                 )}
 
-                {(task.due_date !== null || task.comments_count > 0 || task.assignee || executor) && (
-                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                {(task.due_date !== null || task.comments_count > 0) && (
+                    <div className="flex w-full min-w-0 items-center justify-between gap-2 pt-0.5">
                         <DueDate value={task.due_date} isDone={isDone} />
-                        <div className="flex items-center gap-2.5 text-[11px] text-muted">
-                            {(task.assignee || executor) && <UserIdentity user={executor} name={executor ? undefined : task.assignee} className="max-w-full" />}
-                            {task.comments_count > 0 && (
-                                <span
-                                    className="inline-flex items-center gap-1"
-                                    title={`Комментариев: ${task.comments_count}`}
-                                >
-                                    <MessageSquare size={11} aria-hidden="true" />
-                                    {task.comments_count}
-                                </span>
-                            )}
-                        </div>
+                        {task.comments_count > 0 && (
+                            <span
+                                className="ml-auto inline-flex shrink-0 items-center gap-1 text-[11px] text-muted"
+                                title={`Комментариев: ${task.comments_count}`}
+                            >
+                                <MessageSquare size={11} className="shrink-0 text-accent" aria-hidden="true" />
+                                {task.comments_count}
+                            </span>
+                        )}
                     </div>
+                )}
+                {(task.assignee || executor) && (
+                    <UserIdentity user={executor} name={executor ? undefined : task.assignee}
+                        className="w-full items-start text-[11px] text-muted"
+                        nameClassName="overflow-visible text-clip whitespace-normal break-words" />
                 )}
             </button>
             {stages && onMove && (
