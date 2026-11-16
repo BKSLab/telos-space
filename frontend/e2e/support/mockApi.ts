@@ -76,6 +76,7 @@ export async function installMockApi(page: Page, state: MockState) {
             if(rest==="")return reply(state.projects.find(project=>project.id===id));
             if(rest.startsWith("/aris/conversations")){const result=handleAris(state,rest,method,body);return reply(result.json,result.status??200);}
             if(rest==="/members")return reply(state.members);
+            if(rest==="/context-history")return reply({items:[],total:0,offset:Number(url.searchParams.get("offset")??0),limit:Number(url.searchParams.get("limit")??20),has_more:false,next_offset:null});
             if(rest==="/tasks")return reply(state.tasks);
             if(rest==="/stages")return reply(state.stages);
             if(rest==="/wbs")return reply({nodes:[],tasks:state.tasks,stats:{total_nodes:0,total_tasks:state.tasks.length,assigned_tasks:0,unassigned_tasks:state.tasks.length,done_tasks:0,overdue_tasks:0}});

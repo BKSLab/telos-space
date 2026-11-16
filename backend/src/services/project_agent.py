@@ -76,7 +76,6 @@ from src.utils.document_refs import decode_document_ref
 
 logger = logging.getLogger(__name__)
 
-PROJECT_DESCRIPTION_LIMIT = 400
 TEXT_FRAGMENT_LIMIT = 1200
 SOURCE_EXCERPT_LIMIT = 500
 #: Канал ответа внешнему клиенту.
@@ -1174,6 +1173,8 @@ class ProjectAgentService:
         Остальное (сводки, просрочки, календарь, риски) агент читает сам
         инструментами — раньше это подкладывал планировщик до старта агента.
         """
+        from src.utils.project_context import compact_project_context
+
         project_source = KnowledgeSourceSchema(
             source_id=f"project:{project.id}",
             entity_type="project",
@@ -1189,7 +1190,16 @@ class ProjectAgentService:
                 "status": getattr(project.status, "value", str(project.status)),
                 "start_date": str(project.start_date) if project.start_date else None,
                 "due_date": str(project.due_date) if project.due_date else None,
-                "description": (project.description_md or "")[:PROJECT_DESCRIPTION_LIMIT],
+                "context_revision": getattr(project, "context_revision", 0) or 0,
+                "context": compact_project_context(
+                    sections=getattr(project, "description_sections", None),
+                    description_md=project.description_md,
+                    revision=getattr(project, "context_revision", 0) or 0,
+                ),
+                "context_read": {
+                    "tool": "telos_read_source",
+                    "arguments": {"source_id": f"project:{project.id}"},
+                },
             },
             "stages": [
                 {"name": stage.name[:255], "is_done_stage": stage.is_done_stage} for stage in stages

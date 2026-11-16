@@ -1,6 +1,7 @@
 import type { Project, ProjectDescription, ProjectStatus, ProjectUpdate } from "@/lib/types";
 import { PROJECT_COLORS } from "@/lib/types";
 import { parseDateOnly } from "@/lib/dates";
+import { EMPTY_PROJECT_DESCRIPTION, PROJECT_CONTEXT_FIELDS, projectDescription } from "@/lib/projectContext";
 
 export interface ProjectFormValues {
     key: string;
@@ -17,7 +18,7 @@ export interface ProjectFormValues {
 export const EMPTY_PROJECT_FORM: ProjectFormValues = {
     key: "",
     name: "",
-    description_sections: { problem: "", goal: "", expected_result: "", additional: "" },
+    description_sections: { ...EMPTY_PROJECT_DESCRIPTION },
     status: "PLANNING",
     color: PROJECT_COLORS[0],
     icon: "",
@@ -32,9 +33,7 @@ export function toProjectFormValues(project: Project): ProjectFormValues {
     return {
         key: project.key,
         name: project.name,
-        description_sections: project.description_sections ?? {
-            problem: "", goal: "", expected_result: "", additional: project.description_md ?? "",
-        },
+        description_sections: projectDescription(project),
         status: project.status,
         color: project.color,
         icon: project.icon ?? "",
@@ -60,15 +59,50 @@ export function toProjectPayload(values: ProjectFormValues) {
 
 /** Код проекта участвует в номерах задач, поэтому у существующего проекта он не меняется. */
 export function toProjectUpdatePayload(values: ProjectFormValues, project?: Project): ProjectUpdate {
-    const { key, ...rest } = toProjectPayload(values);
+    const { key, description_sections, ...rest } = toProjectPayload(values);
     void key;
-    if (project && rest.due_date === project.due_date) {
-        const { due_date, ...unchangedDeadline } = rest;
-        void due_date;
-        return unchangedDeadline;
+    if (!project) return { ...rest, description_sections };
+    const original = toProjectPayload(toProjectFormValues(project));
+    const changed = Object.fromEntries(Object.entries(rest).filter(([field, value]) =>
+        JSON.stringify(value) !== JSON.stringify(original[field as keyof typeof original]),
+    )) as ProjectUpdate;
+    const sections: Partial<ProjectDescription> = {};
+    for (const [field] of PROJECT_CONTEXT_FIELDS) {
+        const value = canonicalProjectSection(description_sections[field]);
+        if (value !== canonicalProjectSection(original.description_sections[field])) sections[field] = value;
     }
-    if (project) return { ...rest, expected_due_date: project.due_date, due_date_comment: values.due_date_comment.trim() };
-    return rest;
+    if (Object.keys(sections).length > 0) {
+        changed.description_sections = sections;
+        changed.expected_context_revision = project.context_revision ?? 0;
+    }
+    if (Object.hasOwn(changed, "due_date")) {
+        changed.expected_due_date = project.due_date;
+        changed.due_date_comment = values.due_date_comment.trim();
+    }
+    return changed;
+}
+
+/** Pydantic str_strip_whitespace удаляет Unicode White_Space, но сохраняет BOM. */
+function canonicalProjectSection(value: string | undefined): string {
+    return (value ?? "").replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
+}
+
+/** После явного выбора пользователя переносит его правки поверх свежих данных. */
+export function rebaseProjectFormValues(draft: ProjectFormValues, previous: Project, current: Project): ProjectFormValues {
+    const latest = toProjectFormValues(current);
+    const changes = toProjectUpdatePayload(draft, previous);
+    const retained = Object.fromEntries(Object.entries(draft).filter(([field]) =>
+        field !== "description_sections" && Object.hasOwn(changes, field),
+    ));
+    const sections = { ...latest.description_sections };
+    for (const [field] of PROJECT_CONTEXT_FIELDS) {
+        if (Object.hasOwn(changes.description_sections ?? {}, field)) {
+            sections[field] = changes.description_sections?.[field] ?? "";
+        }
+    }
+    const rebased = { ...latest, ...retained, description_sections: sections };
+    if (current.due_date !== previous.due_date) rebased.due_date_comment = "";
+    return rebased;
 }
 
 export function isProjectFormValid(values: ProjectFormValues): boolean {

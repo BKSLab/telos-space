@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 from datetime import date, timedelta
 
 from src.db.models.knowledge_index_jobs import KnowledgeEntityType
@@ -9,11 +10,13 @@ from src.exceptions.boards import BoardsRepositoryError
 from src.exceptions.knowledge import KnowledgeEventsServiceError
 from src.exceptions.project_stages import ProjectStagesRepositoryError
 from src.exceptions.projects import (
+    ProjectContextConflictError,
     ProjectDeadlineConflictError,
     ProjectKeyAlreadyExistsRepositoryError,
     ProjectKeyConflictError,
     ProjectMemberUserNotFoundError,
     ProjectNotFoundError,
+    ProjectOwnerRequiredError,
     ProjectsRepositoryError,
     ProjectsServiceError,
     ProjectValidationError,
@@ -31,6 +34,8 @@ from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.repositories.users import UsersRepository
 from src.schemas.projects import (
+    ProjectContextHistoryPageSchema,
+    ProjectContextHistorySchema,
     ProjectDeadlineChangeSchema,
     ProjectDefaultsSchema,
     ProjectDescriptionSchema,
@@ -42,6 +47,7 @@ from src.services.board_defaults import ensure_default_board
 from src.services.knowledge_events import KnowledgeEvents
 from src.storage.task_attachments import TaskAttachmentStorage
 from src.utils.deadlines import DUE_SOON_DAYS, is_task_due_soon, is_task_overdue
+from src.utils.project_context import PROJECT_CONTEXT_FIELD_NAMES, project_context_values
 from src.utils.project_description import compose_project_description
 
 logger = logging.getLogger(__name__)
@@ -174,6 +180,7 @@ class ProjectsService:
             payload["start_date"] = payload.get("start_date") or date.today()
             self._validate_period(payload["start_date"], payload.get("due_date"))
             payload["due_date_has_been_set"] = payload.get("due_date") is not None
+            payload["context_revision"] = 1
             order_index = await self.projects_repository.get_max_order_index() + 1
             project = await self.projects_repository.save(
                 data={**payload, "owner_id": owner_id, "order_index": order_index}
@@ -206,6 +213,27 @@ class ProjectsService:
                 )
             if payload.get("due_date") is not None:
                 await self._record_deadline(project.id, None, payload["due_date"], owner_id, None)
+            await self._record_context(
+                project_id=project.id,
+                revision=1,
+                sections=payload.get("description_sections"),
+                description_md=payload.get("description_md"),
+                user_id=owner_id,
+                is_initial=True,
+                changed_fields=(
+                    [
+                        name
+                        for name, value in project_context_values(
+                            payload.get("description_sections"), None
+                        ).items()
+                        if value
+                    ]
+                    if payload.get("description_sections") is not None
+                    else ["description_md"]
+                    if payload.get("description_md")
+                    else []
+                ),
+            )
             await self.knowledge_events.reindex_project(project.id)
             if self.boards_repository is not None:
                 await ensure_default_board(
@@ -251,7 +279,37 @@ class ProjectsService:
             )
             if project is None:
                 raise ProjectNotFoundError(project_id=project_id)
-            payload = self._description_payload(data)
+            if project.owner_id != updated_by_user_id:
+                raise ProjectOwnerRequiredError()
+            previous_sections = deepcopy(getattr(project, "description_sections", None))
+            previous_md = project.description_md
+            payload = self._description_payload(
+                data,
+                current_sections=previous_sections,
+                current_description_md=previous_md,
+                merge_sections=True,
+            )
+            expected_revision = payload.pop("expected_context_revision", None)
+            revision = int(getattr(project, "context_revision", 0) or 0)
+            if expected_revision is not None and expected_revision != revision:
+                raise ProjectContextConflictError()
+            if "context_revision" in payload:
+                raise ProjectValidationError("Версию паспорта определяет сервер.")
+            next_sections = payload.get("description_sections", previous_sections)
+            next_md = payload.get("description_md", previous_md)
+            old_values = project_context_values(previous_sections, previous_md)
+            new_values = project_context_values(next_sections, next_md)
+            context_changed = old_values != new_values or (previous_md or None) != (next_md or None)
+            changed_fields = [
+                name for name in PROJECT_CONTEXT_FIELD_NAMES if old_values[name] != new_values[name]
+            ]
+            if (previous_sections is None and next_sections is None or not changed_fields) and (
+                previous_md or None
+            ) != (next_md or None):
+                changed_fields = ["description_md"]
+            if not context_changed:
+                payload.pop("description_sections", None)
+                payload.pop("description_md", None)
             comment = (payload.pop("due_date_comment", None) or "").strip() or None
             has_expected_date = "expected_due_date" in payload
             expected_date = payload.pop("expected_due_date", None)
@@ -270,7 +328,37 @@ class ProjectsService:
                     project_id, project.due_date, new_due_date, updated_by_user_id, comment
                 )
                 payload["due_date_has_been_set"] = True
+            payload = {
+                name: value
+                for name, value in payload.items()
+                if getattr(project, name, None) != value
+            }
+            if context_changed:
+                if revision == 0:
+                    await self.projects_repository.append_context_history(
+                        {
+                            "project_id": project_id,
+                            "revision": 0,
+                            "description_sections": previous_sections,
+                            "description_md": previous_md,
+                            "changed_by_user_id": None,
+                            "changed_by_name": None,
+                            "is_initial": True,
+                            "changed_fields": [],
+                        }
+                    )
+                payload["context_revision"] = revision + 1
             updated = await self.projects_repository.update(project=project, data=payload)
+            if context_changed:
+                await self._record_context(
+                    project_id=project_id,
+                    revision=revision + 1,
+                    sections=next_sections,
+                    description_md=next_md,
+                    user_id=updated_by_user_id,
+                    is_initial=False,
+                    changed_fields=changed_fields,
+                )
             if "key" in payload:
                 await self.knowledge_events.reindex_project(project_id)
             elif PROJECT_POINT_FIELDS.intersection(payload):
@@ -283,6 +371,7 @@ class ProjectsService:
             return ProjectSchema.model_validate(updated)
         except ProjectKeyAlreadyExistsRepositoryError as error:
             logger.warning("⚠️ Конфликт кода проекта %s.", error.key)
+            await self.unit_of_work.rollback()
             raise ProjectKeyConflictError(key=error.key) from error
         except RepositoryErrors as error:
             logger.error("❌ Ошибка обновления проекта id=%s.", project_id, exc_info=True)
@@ -302,6 +391,80 @@ class ProjectsService:
         except RepositoryErrors as error:
             logger.exception("❌ Не удалось получить историю срока проекта id=%s.", project_id)
             raise ProjectsServiceError(str(error)) from error
+
+    async def get_context_history(
+        self,
+        project_id: int,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> ProjectContextHistoryPageSchema:
+        """Читает метаданные истории в уже проверенной области доступа проекта.
+
+        Args:
+            project_id: Доступный проект.
+            limit: Размер страницы от 1 до 50.
+            offset: Число пропущенных записей.
+        Returns:
+            История без полных snapshots и указатель продолжения.
+        Raises:
+            ProjectNotFoundError: Проект удалён или отсутствует.
+            ProjectValidationError: Непригодная пагинация.
+            ProjectsServiceError: Историю прочитать не удалось.
+        """
+        if not 1 <= limit <= 50 or offset < 0:
+            raise ProjectValidationError("История допускает limit от 1 до 50 и offset от 0.")
+        try:
+            if await self.projects_repository.get_by_id(project_id) is None:
+                raise ProjectNotFoundError(project_id)
+            total = await self.projects_repository.count_context_history(project_id)
+            rows = await self.projects_repository.get_context_history(
+                project_id, limit=limit, offset=offset
+            )
+            items = [ProjectContextHistorySchema.model_validate(row) for row in rows]
+            has_more = offset + len(items) < total
+            return ProjectContextHistoryPageSchema(
+                items=items,
+                total=total,
+                offset=offset,
+                limit=limit,
+                has_more=has_more,
+                next_offset=offset + len(items) if has_more else None,
+            )
+        except RepositoryErrors as error:
+            raise ProjectsServiceError(str(error)) from error
+
+    async def _record_context(
+        self,
+        *,
+        project_id: int,
+        revision: int,
+        sections: dict | None,
+        description_md: str | None,
+        user_id: int,
+        is_initial: bool,
+        changed_fields: list[str],
+    ) -> None:
+        """Добавляет полный снимок и серверного автора в текущую бизнес-транзакцию."""
+        user = await self.users_repository.get_by_id(user_id)
+        if user is None or user.id != user_id:
+            raise ProjectValidationError("Не удалось определить автора изменения паспорта.")
+        name = (
+            " ".join(part for part in (user.last_name, user.first_name, user.middle_name) if part)
+            or user.username
+        )
+        await self.projects_repository.append_context_history(
+            {
+                "project_id": project_id,
+                "revision": revision,
+                "description_sections": deepcopy(sections),
+                "description_md": description_md,
+                "changed_by_user_id": user.id,
+                "changed_by_name": name,
+                "is_initial": is_initial,
+                "changed_fields": changed_fields,
+            }
+        )
 
     async def _record_deadline(
         self,
@@ -336,11 +499,42 @@ class ProjectsService:
             raise ProjectValidationError("Окончание проекта не может быть раньше начала.")
 
     @staticmethod
-    def _description_payload(data: dict) -> dict:
-        """Поддерживает структурированную форму и старый контракт description_md."""
+    def _description_payload(
+        data: dict,
+        *,
+        current_sections: dict | None = None,
+        current_description_md: str | None = None,
+        merge_sections: bool = False,
+    ) -> dict:
+        """Объединяет PATCH с прочитанным под блокировкой паспортом до нормализации."""
         payload = dict(data)
         if payload.get("description_sections") is not None:
-            sections = ProjectDescriptionSchema.model_validate(payload["description_sections"])
+            supplied = payload["description_sections"]
+            updates = (
+                supplied.model_dump(exclude_unset=True)
+                if isinstance(supplied, ProjectDescriptionSchema)
+                else supplied
+            )
+            preserved = {}
+            if merge_sections:
+                if not updates:
+                    payload.pop("description_sections", None)
+                    payload.pop("description_md", None)
+                    return payload
+                current = (
+                    dict(current_sections)
+                    if current_sections is not None
+                    else {"additional": current_description_md or ""}
+                )
+                merged = {**current, **updates}
+                preserved = {name: value for name, value in current.items() if name not in updates}
+            else:
+                merged = updates
+            sections = ProjectDescriptionSchema.model_validate(merged)
+            if preserved:
+                # Все поля проверены схемой. Только неприсланные строки возвращаем
+                # без str_strip_whitespace, чтобы PATCH не переписал старые байты.
+                sections = sections.model_copy(update=preserved)
             payload["description_sections"] = sections.model_dump()
             payload["description_md"] = compose_project_description(sections)
         elif "description_md" in payload:

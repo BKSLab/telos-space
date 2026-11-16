@@ -49,35 +49,59 @@ async def create_project(
     key: Annotated[str, ProjectCreateSchema.model_fields["key"]],
     name: Annotated[str, ProjectCreateSchema.model_fields["name"]],
     request_id: Annotated[
-        UUID, Field(description="Стабильный UUID создания; повторяйте его и исходные аргументы при сетевом сбое.")
+        UUID,
+        Field(
+            description="Стабильный UUID создания; повторяйте его и исходные аргументы при сетевом сбое."
+        ),
     ],
     description_sections: Annotated[
         ProjectDescriptionSchema | None,
-        Field(description="Блоки problem, goal, expected_result, additional. Имеют приоритет перед description_md."),
+        Field(
+            description="Единые поля паспорта: problem, goal, expected_result, additional, audience, capabilities, boundaries, constraints, glossary, decisions, open_questions. Имеют приоритет перед description_md."
+        ),
     ] = None,
-    description_md: Annotated[str | None, ProjectCreateSchema.model_fields["description_md"]] = None,
+    description_md: Annotated[
+        str | None, ProjectCreateSchema.model_fields["description_md"]
+    ] = None,
     member_usernames: Annotated[
         list[str] | None,
-        Field(max_length=100, description="Точные логины участников; владелец включается автоматически."),
+        Field(
+            max_length=100,
+            description="Точные логины участников; владелец включается автоматически.",
+        ),
     ] = None,
-    stages: Annotated[list[StageCreateSchema] | None, ProjectCreateSchema.model_fields["stages"]] = None,
-    status: Annotated[ProjectStatus, ProjectCreateSchema.model_fields["status"]] = ProjectStatus.PLANNING,
+    stages: Annotated[
+        list[StageCreateSchema] | None, ProjectCreateSchema.model_fields["stages"]
+    ] = None,
+    status: Annotated[
+        ProjectStatus, ProjectCreateSchema.model_fields["status"]
+    ] = ProjectStatus.PLANNING,
     color: Annotated[str, ProjectCreateSchema.model_fields["color"]] = "#58a6ff",
     icon: Annotated[str | None, ProjectCreateSchema.model_fields["icon"]] = None,
     start_date: Annotated[date | None, ProjectCreateSchema.model_fields["start_date"]] = None,
     due_date: Annotated[date | None, ProjectCreateSchema.model_fields["due_date"]] = None,
     actor: Annotated[
-        str | None, Field(description="Только логин владельца ключа; владелец проекта определяется сервером.")
+        str | None,
+        Field(description="Только логин владельца ключа; владелец проекта определяется сервером."),
     ] = None,
 ) -> dict:
     """Применяет общий с REST сценарий создания и возвращает durable-результат."""
     try:
-        data = ProjectCreateSchema.model_validate({
-            "key": key, "name": name,
-            "description_sections": description_sections, "description_md": description_md,
-            "member_usernames": member_usernames or [], "stages": stages, "status": status,
-            "color": color, "icon": icon, "start_date": start_date, "due_date": due_date,
-        })
+        data = ProjectCreateSchema.model_validate(
+            {
+                "key": key,
+                "name": name,
+                "description_sections": description_sections,
+                "description_md": description_md,
+                "member_usernames": member_usernames or [],
+                "stages": stages,
+                "status": status,
+                "color": color,
+                "icon": icon,
+                "start_date": start_date,
+                "due_date": due_date,
+            }
+        )
     except ValidationError as error:
         raise ToolError(describe_validation_error(error, ProjectCreateSchema)) from error
     async with tool_context(context, require_write=True) as tools:
@@ -86,8 +110,10 @@ async def create_project(
         links = build_links(tools.settings.app.app_public_url)
     try:
         result = await creation.create(
-            actor_user_id=user_id, bearer_secret=bearer_secret_of(context),
-            data=data, request_id=request_id,
+            actor_user_id=user_id,
+            bearer_secret=bearer_secret_of(context),
+            data=data,
+            request_id=request_id,
         )
     except ApplicationError as error:
         raise ToolError(error.detail) from error
@@ -139,12 +165,16 @@ async def get_latest_project_summary(
         project_id = await resolve_project(tools, project_key)
         actions = tools.services.actions
         actor = AgentToolContext(
-            project_id=project_id, user_id=tools.principal.user_id, can_write=False,
+            project_id=project_id,
+            user_id=tools.principal.user_id,
+            can_write=False,
             principal=tools.principal,
         )
     try:
         return await actions.execute(
-            context=actor, name="telos_get_latest_project_summary", arguments={},
+            context=actor,
+            name="telos_get_latest_project_summary",
+            arguments={},
         )
     except AgentToolsServiceError as error:
         raise ToolError(error.detail) from error
@@ -263,7 +293,9 @@ async def execute_project_tool(
                     raise ToolError("Пользователь вызова изменился.")
                 if not action_allowed(current.principal, name):
                     raise ToolError(ACTION_CLOSED_FOR_KEYS)
-                actor = replace(actor, principal=current.principal, can_write=current.principal.can_write)
+                actor = replace(
+                    actor, principal=current.principal, can_write=current.principal.can_write
+                )
             decided = await actions.decide(
                 context=actor, action_id=UUID(action["id"]), decision=decision
             )

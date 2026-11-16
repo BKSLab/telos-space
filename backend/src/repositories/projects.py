@@ -1,10 +1,10 @@
 import logging
 
-from sqlalchemy import Result, func, select, update
+from sqlalchemy import Result, func, insert, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models.projects import Project
+from src.db.models.projects import Project, ProjectContextHistory
 from src.exceptions.projects import (
     ProjectKeyAlreadyExistsRepositoryError,
     ProjectsRepositoryError,
@@ -215,6 +215,85 @@ class ProjectsRepository:
             await self.db_session.rollback()
             logger.error("❌ Не удалось удалить проект id=%s.", project.id, exc_info=True)
             raise ProjectsRepositoryError(f"Ошибка удаления проекта id={project.id}.") from error
+
+    async def append_context_history(self, data: dict) -> None:
+        """Добавляет полный снимок в общую транзакцию без изменения прежних строк.
+
+        Args:
+            data: Серверная версия, автор, поля и полный текст снимка.
+        Raises:
+            ProjectsRepositoryError: Снимок сохранить не удалось.
+        """
+        try:
+            await self.db_session.execute(insert(ProjectContextHistory).values(**data))
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise ProjectsRepositoryError(
+                "Не удалось сохранить версию паспорта проекта."
+            ) from error
+
+    async def get_context_history(
+        self,
+        project_id: int,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[dict]:
+        """Читает страницу неизменяемых снимков по убыванию версии.
+
+        Args:
+            project_id: Проект истории.
+            limit: Размер страницы.
+            offset: Число пропущенных снимков.
+        Returns:
+            Метаданные снимков без выгрузки полного исторического текста.
+        Raises:
+            ProjectsRepositoryError: Историю прочитать не удалось.
+        """
+        try:
+            result = await self.db_session.execute(
+                select(
+                    ProjectContextHistory.revision,
+                    ProjectContextHistory.changed_by_user_id,
+                    ProjectContextHistory.changed_by_name,
+                    ProjectContextHistory.created_at,
+                    ProjectContextHistory.is_initial,
+                    ProjectContextHistory.changed_fields,
+                )
+                .where(ProjectContextHistory.project_id == project_id)
+                .order_by(ProjectContextHistory.revision.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            return [dict(row) for row in result.mappings().all()]
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise ProjectsRepositoryError(
+                "Не удалось прочитать историю паспорта проекта."
+            ) from error
+
+    async def count_context_history(self, project_id: int) -> int:
+        """Считает версии SQL-агрегатом без выгрузки полного текста.
+
+        Args:
+            project_id: Проект истории.
+        Returns:
+            Число сохранённых снимков.
+        Raises:
+            ProjectsRepositoryError: Подсчитать версии не удалось.
+        """
+        try:
+            result = await self.db_session.execute(
+                select(func.count())
+                .select_from(ProjectContextHistory)
+                .where(ProjectContextHistory.project_id == project_id)
+            )
+            return int(result.scalar_one())
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise ProjectsRepositoryError(
+                "Не удалось подсчитать версии паспорта проекта."
+            ) from error
 
     async def get_by_ids(self, project_ids: set[int]) -> list[Project]:
         """Возвращает проекты по набору идентификаторов.

@@ -177,10 +177,22 @@ def test_presenter_keys_are_frozen() -> None:
         "due_date",
         "description",
         "description_meta",
+        "context_revision",
+        "context",
         "total_tasks",
         "stages",
     }
     assert result["stages"] == [{"name": "В работе", "is_done_stage": False, "task_count": 3}]
+    assert result["context_revision"] == 0
+    assert result["context"] == {
+        "revision": 0,
+        "fields": {"additional": "Описание проекта."},
+        "unknown_fields": [
+            "problem", "goal", "expected_result", "audience", "capabilities",
+            "boundaries", "constraints", "glossary", "decisions", "open_questions",
+        ],
+        "truncated_fields": [],
+    }
     # Карточка задачи в списке сохраняет свои ключи и формат ключа задачи.
     result = task_summary(_task())
 

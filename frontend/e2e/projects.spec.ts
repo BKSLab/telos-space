@@ -25,12 +25,13 @@ async function mockProjects(page: Page, initial = baseProject) {
         const request = route.request();
         const path = new URL(request.url()).pathname;
         const method = request.method();
-        const headers = { "access-control-allow-origin": "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS" };
+        const headers = { "access-control-allow-origin": request.headers()["origin"] ?? "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS" };
         const reply = (json: unknown, status = 200) => route.fulfill({ status, json, headers });
         if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
         if (path.endsWith("/auth/me")) return reply(user);
         if (path.endsWith("/projects/defaults")) return reply({ stages: defaults });
         if (path.endsWith("/deadline-history")) return reply(state.history);
+        if (path.endsWith("/context-history")) return reply({ items: [], total: 0, offset: 0, limit: 20, has_more: false, next_offset: null });
         if (path.endsWith("/members")) return reply([{ id: 1, project_id: 1, role: "OWNER", user, created_at: timestamp }]);
         if (path.endsWith("/stages")) return reply(state.stages);
         if (path.endsWith("/stats")) return reply({ project_id: 1, total_tasks: 0, done_tasks: 0, in_progress_tasks: 0, overdue_tasks: 0, due_soon_tasks: 0, unassigned_tasks: 0, completion_rate: 0, next_due_date: null, stage_breakdown: [] });
@@ -54,7 +55,14 @@ async function mockProjects(page: Page, initial = baseProject) {
                     changed_by_user_id: 1, changed_by_name: "Иванова Вера", created_at: timestamp });
                 state.project.due_date_has_been_set = true;
             }
-            state.project = { ...state.project, ...body };
+            const { description_sections, ...metadata } = body;
+            state.project = { ...state.project, ...metadata };
+            if (description_sections !== undefined) {
+                state.project.description_sections = description_sections === null ? null : {
+                    problem: "", goal: "", expected_result: "", additional: state.project.description_md ?? "",
+                    ...state.project.description_sections, ...description_sections,
+                };
+            }
             return reply(state.project);
         }
         if (path === "/api/v1/projects") return reply([state.project]);
@@ -132,6 +140,9 @@ test("первое назначение без причины, конфликт 
     await page.getByLabel("Причина изменения срока", { exact: true }).fill("Старое обоснование");
     state.conflict = true;
     await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+    await expect(page.getByText(/Ваш черновик сохранён/)).toBeVisible();
+    await expect(page.getByLabel("Причина изменения срока", { exact: true })).toHaveValue("Старое обоснование");
+    await page.getByRole("button", { name: "Продолжить с моими правками" }).click();
     await expect(page.getByText("Предыдущий срок: 2026-11-01.", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Причина изменения срока", { exact: true })).toHaveValue("");
     await expect(page.getByRole("button", { name: "Сохранить", exact: true })).toBeDisabled();

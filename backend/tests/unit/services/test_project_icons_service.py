@@ -29,6 +29,7 @@ def setup_service(tmp_path):
         status=ProjectStatus.ACTIVE,
         color="#58a6ff",
         order_index=0,
+        context_revision=0,
         created_at=stamp,
         updated_at=stamp,
         due_date_has_been_set=False,

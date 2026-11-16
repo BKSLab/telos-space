@@ -2337,7 +2337,7 @@
       "write": false
     },
     {
-      "description": "Паспорт, статистика и история сроков текущего проекта.",
+      "description": "Текущий паспорт с context_revision, короткими полями context, явными пробелами и сокращениями; статистика и история сроков. Полный паспорт дочитывается telos_read_source по source_id проекта.",
       "group": "projects",
       "id": "mcp-action-3d1c68a6eed229f7",
       "inputSchema": {
@@ -5095,7 +5095,7 @@
       "write": true
     },
     {
-      "description": "Паспорт, настройки и срок проекта; перенос срока требует причины и expected_due_date.",
+      "description": "Паспорт, настройки и срок проекта. Передавай только меняемые разделы description_sections; пропущенные сохраняются, пустая строка очищает поле. Сокращённое поле перед изменением дочитай через telos_read_source. Для изменения прочитанного паспорта передай expected_context_revision; пробелы не выдумывай. Перенос срока требует причины и expected_due_date. Ответ содержит короткий текущий context, полный текст читает telos_read_source.",
       "group": "projects",
       "id": "mcp-action-513c21a8ca8e5f5e",
       "inputSchema": {
@@ -5110,16 +5110,58 @@
                 "title": "Additional",
                 "type": "string"
               },
+              "audience": {
+                "default": "",
+                "description": "Для кого создаётся проект и кому он нужен.",
+                "title": "Audience",
+                "type": "string"
+              },
+              "boundaries": {
+                "default": "",
+                "description": "Что входит и не входит в проект.",
+                "title": "Boundaries",
+                "type": "string"
+              },
+              "capabilities": {
+                "default": "",
+                "description": "Какие возможности уже работают и чем подтверждены.",
+                "title": "Capabilities",
+                "type": "string"
+              },
+              "constraints": {
+                "default": "",
+                "description": "Ограничения и обязательные условия.",
+                "title": "Constraints",
+                "type": "string"
+              },
+              "decisions": {
+                "default": "",
+                "description": "Принятые решения и основания выбора.",
+                "title": "Decisions",
+                "type": "string"
+              },
               "expected_result": {
                 "default": "",
                 "description": "Что будет готово и как проверить завершение.",
                 "title": "Expected Result",
                 "type": "string"
               },
+              "glossary": {
+                "default": "",
+                "description": "Термины и их значения в этом проекте.",
+                "title": "Glossary",
+                "type": "string"
+              },
               "goal": {
                 "default": "",
                 "description": "Что должно измениться благодаря проекту.",
                 "title": "Goal",
+                "type": "string"
+              },
+              "open_questions": {
+                "default": "",
+                "description": "Неизвестное и вопросы без принятого решения.",
+                "title": "Open Questions",
                 "type": "string"
               },
               "problem": {
@@ -5225,6 +5267,23 @@
             "default": null,
             "description": "Причина пересмотра уже назначенного срока окончания.",
             "title": "Due Date Comment"
+          },
+          "expected_context_revision": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Версия из открытой формы; проверяется под блокировкой перед изменением паспорта.",
+            "examples": [
+              3
+            ],
+            "title": "Expected Context Revision"
           },
           "expected_due_date": {
             "anyOf": [
@@ -15153,6 +15212,19 @@
           },
           "description": "Обновлённый проект."
         },
+        "403": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Недостаточно прав."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Недостаточно прав для этой операции."
+        },
         "404": {
           "content": {
             "application/json": {
@@ -23158,6 +23230,170 @@
       },
       "scopes": null,
       "summary": "Поиск по чату",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ]
+    },
+    {
+      "access": "authenticated",
+      "description": "Возвращает версии, серверных авторов и изменённые поля. Полный исторический текст в метаданные не включается; дата прежнего baseline означает время его фиксации.",
+      "group": "projects",
+      "id": "api-f3cc43186e00338a",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/context-history",
+      "operationId": "getProjectContextHistory",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Размер страницы истории.",
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "default": 20,
+            "description": "Размер страницы истории.",
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "Число пропущенных версий.",
+          "in": "query",
+          "name": "offset",
+          "required": false,
+          "schema": {
+            "default": 0,
+            "description": "Число пропущенных версий.",
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/context-history",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectContextHistoryPageSchema"
+              }
+            }
+          },
+          "description": "Страница истории паспорта без полного текста снимков."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "examples": {
+                "domain": {
+                  "summary": "Доменная валидация",
+                  "value": {
+                    "detail": "Ошибка валидации."
+                  }
+                },
+                "request": {
+                  "summary": "Валидация параметров FastAPI",
+                  "value": {
+                    "detail": [
+                      {
+                        "loc": [
+                          "body",
+                          "title"
+                        ],
+                        "msg": "Field required",
+                        "type": "missing"
+                      }
+                    ]
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpValidationErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Внутренняя ошибка."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Внутренняя ошибка обработки запроса."
+        }
+      },
+      "scopes": [
+        "projects:read"
+      ],
+      "summary": "Получить историю паспорта проекта",
       "tokens": [
         "READ",
         "WRITE"
@@ -37116,16 +37352,58 @@
                 "title": "Additional",
                 "type": "string"
               },
+              "audience": {
+                "default": "",
+                "description": "Для кого создаётся проект и кому он нужен.",
+                "title": "Audience",
+                "type": "string"
+              },
+              "boundaries": {
+                "default": "",
+                "description": "Что входит и не входит в проект.",
+                "title": "Boundaries",
+                "type": "string"
+              },
+              "capabilities": {
+                "default": "",
+                "description": "Какие возможности уже работают и чем подтверждены.",
+                "title": "Capabilities",
+                "type": "string"
+              },
+              "constraints": {
+                "default": "",
+                "description": "Ограничения и обязательные условия.",
+                "title": "Constraints",
+                "type": "string"
+              },
+              "decisions": {
+                "default": "",
+                "description": "Принятые решения и основания выбора.",
+                "title": "Decisions",
+                "type": "string"
+              },
               "expected_result": {
                 "default": "",
                 "description": "Что будет готово и как проверить завершение.",
                 "title": "Expected Result",
                 "type": "string"
               },
+              "glossary": {
+                "default": "",
+                "description": "Термины и их значения в этом проекте.",
+                "title": "Glossary",
+                "type": "string"
+              },
               "goal": {
                 "default": "",
                 "description": "Что должно измениться благодаря проекту.",
                 "title": "Goal",
+                "type": "string"
+              },
+              "open_questions": {
+                "default": "",
+                "description": "Неизвестное и вопросы без принятого решения.",
+                "title": "Open Questions",
                 "type": "string"
               },
               "problem": {
@@ -37245,7 +37523,7 @@
               }
             ],
             "default": null,
-            "description": "Блоки problem, goal, expected_result, additional. Имеют приоритет перед description_md."
+            "description": "Единые поля паспорта: problem, goal, expected_result, additional, audience, capabilities, boundaries, constraints, glossary, decisions, open_questions. Имеют приоритет перед description_md."
           },
           "due_date": {
             "anyOf": [
@@ -51623,6 +51901,172 @@
       "title": "ProjectChatView",
       "type": "object"
     },
+    "ProjectContextHistoryPageSchema": {
+      "description": "Страница метаданных истории, от новых версий к старым.",
+      "properties": {
+        "has_more": {
+          "description": "Есть ли следующая страница.",
+          "title": "Has More",
+          "type": "boolean"
+        },
+        "items": {
+          "description": "Снимки без их полного текста.",
+          "items": {
+            "$ref": "#/components/schemas/ProjectContextHistorySchema"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "limit": {
+          "description": "Размер страницы.",
+          "maximum": 50.0,
+          "minimum": 1.0,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "next_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Смещение продолжения или null.",
+          "title": "Next Offset"
+        },
+        "offset": {
+          "description": "Пропущено записей.",
+          "minimum": 0.0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "total": {
+          "description": "Всего сохранённых версий.",
+          "minimum": 0.0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "items",
+        "total",
+        "offset",
+        "limit",
+        "has_more",
+        "next_offset"
+      ],
+      "title": "ProjectContextHistoryPageSchema",
+      "type": "object"
+    },
+    "ProjectContextHistorySchema": {
+      "description": "Метаданные неизменяемого снимка без полного исторического текста.",
+      "properties": {
+        "changed_by_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Серверный снимок имени автора либо неизвестный автор.",
+          "title": "Changed By Name"
+        },
+        "changed_by_user_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ID автора, определённый сервером; null для неизвестного автора исходного состояния.",
+          "title": "Changed By User Id"
+        },
+        "changed_fields": {
+          "description": "Изменённые поля паспорта; description_md обозначает свободный Markdown.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Changed Fields",
+          "type": "array"
+        },
+        "created_at": {
+          "description": "Время фиксации снимка; для прежнего baseline не является исторической датой его написания.",
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "is_initial": {
+          "description": "Исходный снимок: новое создание или сохранённое прежнее состояние.",
+          "title": "Is Initial",
+          "type": "boolean"
+        },
+        "revision": {
+          "description": "Версия сохранённого паспорта.",
+          "minimum": 0.0,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "revision",
+        "changed_by_user_id",
+        "changed_by_name",
+        "created_at",
+        "is_initial",
+        "changed_fields"
+      ],
+      "title": "ProjectContextHistorySchema",
+      "type": "object"
+    },
+    "ProjectContextSchema": {
+      "description": "Ограниченная проекция текущего паспорта, вычисляемая сервером.",
+      "properties": {
+        "fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Только заполненные превью полей, до 160 символов каждое.",
+          "title": "Fields",
+          "type": "object"
+        },
+        "revision": {
+          "description": "Серверная версия паспорта; 0 — прежнее состояние.",
+          "minimum": 0.0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "truncated_fields": {
+          "description": "Поля, чьё превью сокращено; полный текст читается отдельно.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Truncated Fields",
+          "type": "array"
+        },
+        "unknown_fields": {
+          "description": "Незаполненные поля без выдуманных значений.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Unknown Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "revision",
+        "fields",
+        "unknown_fields",
+        "truncated_fields"
+      ],
+      "title": "ProjectContextSchema",
+      "type": "object"
+    },
     "ProjectCreateSchema": {
       "description": "Тело запроса для создания проекта.",
       "example": {
@@ -51879,16 +52323,58 @@
           "title": "Additional",
           "type": "string"
         },
+        "audience": {
+          "default": "",
+          "description": "Для кого создаётся проект и кому он нужен.",
+          "title": "Audience",
+          "type": "string"
+        },
+        "boundaries": {
+          "default": "",
+          "description": "Что входит и не входит в проект.",
+          "title": "Boundaries",
+          "type": "string"
+        },
+        "capabilities": {
+          "default": "",
+          "description": "Какие возможности уже работают и чем подтверждены.",
+          "title": "Capabilities",
+          "type": "string"
+        },
+        "constraints": {
+          "default": "",
+          "description": "Ограничения и обязательные условия.",
+          "title": "Constraints",
+          "type": "string"
+        },
+        "decisions": {
+          "default": "",
+          "description": "Принятые решения и основания выбора.",
+          "title": "Decisions",
+          "type": "string"
+        },
         "expected_result": {
           "default": "",
           "description": "Что будет готово и как проверить завершение.",
           "title": "Expected Result",
           "type": "string"
         },
+        "glossary": {
+          "default": "",
+          "description": "Термины и их значения в этом проекте.",
+          "title": "Glossary",
+          "type": "string"
+        },
         "goal": {
           "default": "",
           "description": "Что должно измениться благодаря проекту.",
           "title": "Goal",
+          "type": "string"
+        },
+        "open_questions": {
+          "default": "",
+          "description": "Неизвестное и вопросы без принятого решения.",
+          "title": "Open Questions",
           "type": "string"
         },
         "problem": {
@@ -52770,6 +53256,18 @@
           "title": "Color",
           "type": "string"
         },
+        "context": {
+          "$ref": "#/components/schemas/ProjectContextSchema",
+          "description": "Компактный текущий контекст с явными пробелами и сокращениями.",
+          "readOnly": true
+        },
+        "context_revision": {
+          "default": 0,
+          "description": "Актуальная серверная версия паспорта.",
+          "minimum": 0.0,
+          "title": "Context Revision",
+          "type": "integer"
+        },
         "created_at": {
           "description": "Дата создания проекта.",
           "examples": [
@@ -52939,7 +53437,8 @@
         "color",
         "order_index",
         "created_at",
-        "updated_at"
+        "updated_at",
+        "context"
       ],
       "title": "ProjectSchema",
       "type": "object"
@@ -53226,6 +53725,22 @@
           ],
           "description": "Причина пересмотра уже назначенного срока окончания.",
           "title": "Due Date Comment"
+        },
+        "expected_context_revision": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Версия из открытой формы; проверяется под блокировкой перед изменением паспорта.",
+          "examples": [
+            3
+          ],
+          "title": "Expected Context Revision"
         },
         "expected_due_date": {
           "anyOf": [

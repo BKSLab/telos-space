@@ -20,6 +20,7 @@ import { OverviewTaskRow } from "@/components/dashboard/TaskRow";
 import { ProjectSummaryPanel } from "@/components/overview/ProjectSummaryPanel";
 import { StageBreakdown } from "@/components/overview/OverviewBreakdown";
 import { ProjectPeopleSummary } from "@/components/projects/ProjectPeopleSummary";
+import { ProjectContextGaps } from "@/components/projects/ProjectContextGaps";
 
 const DEADLINES_PREVIEW = 5;
 
@@ -131,6 +132,7 @@ export function ProjectOverviewPage() {
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[16px] font-semibold text-primary [&::-webkit-details-marker]:hidden">О проекте<ChevronDown size={18} className="text-muted group-open:rotate-180" aria-hidden="true" /></summary>
                     <div className="mt-4 flex flex-col gap-4 [&_dl]:text-[14px]">
                         <ProjectPeopleSummary project={project} />
+                        <ProjectContextGaps project={project} />
                         {project.description_md ? <Description markdown={project.description_md} /> : <p className="text-[14px] text-muted">Описание проекта пока не заполнено.</p>}
                         <dl className="flex flex-wrap gap-x-6 gap-y-3 border-t border-line-subtle pt-4 text-[12px]">
                             {project.start_date && <div><dt className="text-muted">Старт</dt><dd className="mt-1 text-secondary">{formatDayMonth(project.start_date)}</dd></div>}

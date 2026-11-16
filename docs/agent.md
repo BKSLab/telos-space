@@ -528,7 +528,7 @@ HTTP и агент используют общий `AnalyticsReportReader.get_la
 
 ## Бюджеты и проверяемые ограничения
 
-По умолчанию: `AGENT_CONCURRENCY=2` на процесс, `AGENT_POLL_SECONDS=1`, `AGENT_TURN_TIMEOUT_SECONDS=600`, `AGENT_TOOL_ROUNDS=8`, `AGENT_CONTEXT_TOKENS=12000`, `AGENT_HISTORY_TOKENS=1200`, `AGENT_RETRIEVAL_LIMIT=5`, `AGENT_HISTORY_MESSAGES=10`. Внешний ask ждёт до `AGENT_ASK_WAIT_SECONDS=25`, затем возвращает ID и состояние для polling.
+По умолчанию: `AGENT_CONCURRENCY=2` на процесс, `AGENT_POLL_SECONDS=1`, `AGENT_TURN_TIMEOUT_SECONDS=600`, `AGENT_TOOL_ROUNDS=8`, `AGENT_CONTEXT_TOKENS=12000`, `AGENT_HISTORY_TOKENS=1200`, `AGENT_RETRIEVAL_LIMIT=5`, `AGENT_HISTORY_MESSAGES=15`. Внешний ask ждёт до `AGENT_ASK_WAIT_SECONDS=25`, затем возвращает ID и состояние для polling.
 
 На нативную загрузку наборов допускаются ещё два шага, состоящих только из
 загрузчиков. Предметный бюджет и предел восьми вызовов за шаг сохраняются;

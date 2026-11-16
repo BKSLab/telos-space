@@ -10,6 +10,7 @@ from src.knowledge.retrieval import reciprocal_rank_fusion
 from src.schemas.document_references import DocumentFragmentSchema
 from src.schemas.knowledge import KnowledgeReadRequest, KnowledgeSourceSchema
 from src.utils.document_refs import document_text_hash, encode_document_ref
+from src.utils.project_context import compact_project_context
 
 DOCUMENT_SOURCE_TYPES = {SourceType.DOCUMENT, SourceType.ATTACHMENT, SourceType.PROJECT_FILE}
 DOCUMENT_FRAGMENT_MAX_CHARS = 800
@@ -46,8 +47,9 @@ def _view_fragment(source: ProjectSource, *, offset: int, end: int) -> dict | No
     base = source.document_text_start
     start = max(offset - base, 0)
     fragment = document_fragment(
-        source, start=start,
-        end=min(end - base, len(source.document_text), start + DOCUMENT_FRAGMENT_MAX_CHARS)
+        source,
+        start=start,
+        end=min(end - base, len(source.document_text), start + DOCUMENT_FRAGMENT_MAX_CHARS),
     )
     return fragment.model_dump(mode="json") if fragment else None
 
@@ -85,6 +87,13 @@ def source_view(source: ProjectSource, *, offset: int = 0, max_chars: int = 1200
         fragment = _view_fragment(source, offset=offset, end=end)
         if fragment:
             result["reference"] = fragment
+    if source.kind is SourceType.PROJECT:
+        result["context_revision"] = source.properties.get("context_revision", 0)
+        result["context"] = compact_project_context(
+            sections=source.properties.get("description_sections"),
+            description_md=source.properties.get("description_md"),
+            revision=result["context_revision"],
+        )
     return result
 
 
@@ -135,6 +144,13 @@ def source_brief(source: ProjectSource, *, offset: int = 0) -> dict:
     }
     if is_document:
         result["summary_status"] = "ready" if source.summary else "pending"
+    if source.kind is SourceType.PROJECT:
+        result["context_revision"] = source.properties.get("context_revision", 0)
+        result["context"] = compact_project_context(
+            sections=source.properties.get("description_sections"),
+            description_md=source.properties.get("description_md"),
+            revision=result["context_revision"],
+        )
     if source.kind in {SourceType.ATTACHMENT, SourceType.PROJECT_FILE}:
         extraction = source.properties.get("extraction", {})
         result["extraction_status"] = extraction.get("status", "pending")
@@ -148,7 +164,9 @@ def source_brief(source: ProjectSource, *, offset: int = 0) -> dict:
     if source.kind in DOCUMENT_SOURCE_TYPES:
         result["document_ref"] = encode_document_ref(source.kind.value, source.entity_id)
         if not source.summary:
-            fragment = _view_fragment(source, offset=offset, end=min(offset + 400, len(source.text)))
+            fragment = _view_fragment(
+                source, offset=offset, end=min(offset + 400, len(source.text))
+            )
             if fragment:
                 result["reference"] = fragment
     return result
@@ -167,7 +185,8 @@ def citation(
         score=score,
         task_id=int(payload["task_id"]) if payload["task_id"] else None,
         document_ref=encode_document_ref(source.kind.value, source.entity_id)
-        if source.kind in DOCUMENT_SOURCE_TYPES else None,
+        if source.kind in DOCUMENT_SOURCE_TYPES
+        else None,
         related_source_ids=payload["related_source_ids"][:30],
     )
 

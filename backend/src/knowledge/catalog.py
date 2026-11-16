@@ -96,7 +96,7 @@ POLICIES = (
         "self",
         SourceType.PROJECT,
         "Проект",
-        "id owner_id key name description_md status start_date due_date description_sections due_date_has_been_set created_at updated_at",
+        "id owner_id key name description_md status start_date due_date description_sections context_revision due_date_has_been_set created_at updated_at",
         "description_md",
         "name",
     ),
@@ -211,13 +211,21 @@ POLICIES = (
         "created_at",
     ),
     # Связи входят в граф обоих концов; голые идентификаторы не образуют embeddings.
-    policy("document_links", "task", None, "Документ задачи", "id document_id project_file_id task_id"),
     policy(
-        "task_comment_attachments", "task", None, "Вложение комментария",
+        "document_links", "task", None, "Документ задачи", "id document_id project_file_id task_id"
+    ),
+    policy(
+        "task_comment_attachments",
+        "task",
+        None,
+        "Вложение комментария",
         "comment_id attachment_id task_id",
     ),
     policy(
-        "task_comment_documents", "task", None, "Документ комментария",
+        "task_comment_documents",
+        "task",
+        None,
+        "Документ комментария",
         "id comment_id task_id document_id project_file_id document_link_id",
     ),
     policy("project_sticker_task_links", "task", None, "Стикер задачи", "sticker_id task_id"),
@@ -264,6 +272,7 @@ POLICIES = (
 POLICY_BY_TABLE = {item.table: item for item in POLICIES}
 POLICY_BY_TYPE = {item.kind: item for item in POLICIES if item.kind}
 EXCLUDED_TABLES = {
+    "project_context_history": "Неизменяемые исторические snapshots; актуальные знания читают единственный текущий паспорт проекта, история выдаётся отдельно по тем же правам.",
     "chat_file_texts": "Тексты приватных и командных файлов доступны только в точном контексте переписки, без проектного Qdrant.",
     "document_submissions": "Квитанции повторов; документы индексируются по исходной сущности.",
     "document_index_states": "Производное состояние обработки документов, не самостоятельные знания.",
@@ -533,7 +542,9 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             }
             title = str(row.get(rule.title_field) or rule.label).strip()
             if rule.kind in {SourceType.ATTACHMENT, SourceType.PROJECT_FILE}:
-                title = str(row.get("display_title") or row.get(rule.title_field) or rule.label).strip()
+                title = str(
+                    row.get("display_title") or row.get(rule.title_field) or rule.label
+                ).strip()
             if rule.title_field in rule.semantic:
                 # Стикер/комментарий уже входит в текст целиком; коротко только название.
                 title = title[:200]
@@ -588,7 +599,9 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
                 if extracted.get("text"):
                     document_text = extracted["text"]
                     document_rendition = "extracted_text"
-                    document_text_start = len("\n\n".join(text_parts)) + 2 + len("## Содержимое файла\n")
+                    document_text_start = (
+                        len("\n\n".join(text_parts)) + 2 + len("## Содержимое файла\n")
+                    )
                     text_parts.append(f"## Содержимое файла\n{extracted['text']}")
                 else:
                     properties["extraction"].setdefault("status", "pending")
@@ -605,7 +618,13 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             if rule.kind is SourceType.WBS_NODE and row.get("parent_id"):
                 parent = f"wbs_node:{row['parent_id']}"
             source = ProjectSource(
-                project_id, rule.kind, row["id"], title, "\n\n".join(text_parts), properties, parent,
+                project_id,
+                rule.kind,
+                row["id"],
+                title,
+                "\n\n".join(text_parts),
+                properties,
+                parent,
                 document_text=document_text,
                 document_rendition=document_rendition,
                 document_text_start=document_text_start,
@@ -629,7 +648,8 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
                 catalog.link(f"risk:{row['id']}", f"member:{member['id']}", "owned_by", "owns_risk")
     for row in rows.get("document_links", []):
         document_source_id = (
-            f"document:{row['document_id']}" if row.get("document_id")
+            f"document:{row['document_id']}"
+            if row.get("document_id")
             else f"project_file:{row.get('project_file_id')}"
         )
         catalog.link(
@@ -681,7 +701,11 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             "attached_to_comment",
         )
     for row in rows.get("task_comment_documents", []):
-        target = f"document:{row['document_id']}" if row.get("document_id") else f"project_file:{row.get('project_file_id')}"
+        target = (
+            f"document:{row['document_id']}"
+            if row.get("document_id")
+            else f"project_file:{row.get('project_file_id')}"
+        )
         catalog.link(
             f"comment:{row['comment_id']}", target, "attached_document", "attached_to_comment"
         )

@@ -24,9 +24,7 @@ class ProjectMemberAlreadyExistsRepositoryError(ProjectsRepositoryError):
         self.project_id = project_id
         self.user_id = user_id
         super().__init__(
-            error_details=(
-                f"Пользователь id={user_id} уже входит в проект id={project_id}."
-            )
+            error_details=(f"Пользователь id={user_id} уже входит в проект id={project_id}.")
         )
 
 
@@ -65,6 +63,26 @@ class ProjectDeadlineConflictError(ProjectsServiceError):
 
     status_code = status.HTTP_409_CONFLICT
     detail = "Срок проекта уже изменён. Обновите данные и повторите изменение."
+
+    def __init__(self):
+        super().__init__(error_details=self.detail)
+
+
+class ProjectContextConflictError(ProjectsServiceError):
+    """Паспорт изменился после чтения его версии."""
+
+    status_code = status.HTTP_409_CONFLICT
+    detail = "Паспорт проекта уже изменён. Обновите данные и повторите изменение."
+
+    def __init__(self):
+        super().__init__(error_details=self.detail)
+
+
+class ProjectOwnerRequiredError(ProjectsServiceError):
+    """Редактирование проекта доступно только его актуальному владельцу."""
+
+    status_code = status.HTTP_403_FORBIDDEN
+    detail = "Изменять проект может только его владелец."
 
     def __init__(self):
         super().__init__(error_details=self.detail)

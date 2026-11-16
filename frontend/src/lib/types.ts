@@ -76,6 +76,38 @@ export interface ProjectDescription {
     goal: string;
     expected_result: string;
     additional: string;
+    audience?: string;
+    capabilities?: string;
+    boundaries?: string;
+    constraints?: string;
+    glossary?: string;
+    decisions?: string;
+    open_questions?: string;
+}
+
+export interface ProjectContextSummary {
+    revision: number;
+    fields: Record<string, string>;
+    unknown_fields: string[];
+    truncated_fields: string[];
+}
+
+export interface ProjectContextRevision {
+    revision: number;
+    changed_by_user_id: number | null;
+    changed_by_name: string | null;
+    created_at: string;
+    is_initial: boolean;
+    changed_fields: string[];
+}
+
+export interface ProjectContextHistoryPage {
+    items: ProjectContextRevision[];
+    total: number;
+    offset: number;
+    limit: number;
+    has_more: boolean;
+    next_offset: number | null;
 }
 
 export interface ProjectDeadlineChange {
@@ -92,6 +124,8 @@ export interface Project {
     id: number;
     owner_id?: number | null;
     description_sections?: ProjectDescription | null;
+    context_revision?: number;
+    context?: ProjectContextSummary;
     due_date_has_been_set?: boolean;
     key: string;
     name: string;
@@ -124,10 +158,12 @@ export interface ProjectCreate {
     member_usernames?: string[];
 }
 
-export type ProjectUpdate = Partial<ProjectCreate> & {
+export type ProjectUpdate = Omit<Partial<ProjectCreate>, "description_sections"> & {
+    description_sections?: Partial<ProjectDescription> | null;
     order_index?: number;
     due_date_comment?: string;
     expected_due_date?: string | null;
+    expected_context_revision?: number;
 };
 
 export interface StageBreakdown {

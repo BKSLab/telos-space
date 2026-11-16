@@ -49,7 +49,7 @@ from .project_members import ProjectMember, ProjectRole
 from .project_milestones import ProjectMilestone, ProjectMilestoneStatus
 from .project_risks import ProjectRisk
 from .project_stages import ProjectStage
-from .projects import Project, ProjectStatus
+from .projects import Project, ProjectContextHistory, ProjectStatus
 from .task_activity import TaskActivity, TaskActivityEventType
 from .task_attachments import TaskAttachment
 from .task_comment_attachments import TaskCommentAttachment
@@ -106,6 +106,7 @@ __all__ = [
     "KnowledgeIndexOperation",
     "KnowledgeIndexStatus",
     "Project",
+    "ProjectContextHistory",
     "ProjectDeadlineChange",
     "ProjectMember",
     "ProjectMilestone",

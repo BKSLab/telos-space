@@ -1,11 +1,12 @@
 import re
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from src.db.models.projects import ProjectStatus
 from src.schemas.project_stages import StageCreateSchema
 from src.schemas.users import USERNAME_PATTERN
+from src.utils.project_context import compact_project_context
 
 KEY_PATTERN = r"^[A-Za-z][A-Za-z0-9]{1,9}$"
 LUCIDE_ICON_PATTERN = r"^lucide:[a-z0-9]+(?:-[a-z0-9]+)*$"
@@ -44,6 +45,60 @@ class ProjectDescriptionSchema(BaseModel):
     goal: str = Field("", description="Что должно измениться благодаря проекту.")
     expected_result: str = Field("", description="Что будет готово и как проверить завершение.")
     additional: str = Field("", description="Дополнительные сведения и договорённости.")
+    audience: str = Field("", description="Для кого создаётся проект и кому он нужен.")
+    capabilities: str = Field("", description="Какие возможности уже работают и чем подтверждены.")
+    boundaries: str = Field("", description="Что входит и не входит в проект.")
+    constraints: str = Field("", description="Ограничения и обязательные условия.")
+    glossary: str = Field("", description="Термины и их значения в этом проекте.")
+    decisions: str = Field("", description="Принятые решения и основания выбора.")
+    open_questions: str = Field("", description="Неизвестное и вопросы без принятого решения.")
+
+
+class ProjectContextSchema(BaseModel):
+    """Ограниченная проекция текущего паспорта, вычисляемая сервером."""
+
+    revision: int = Field(ge=0, description="Серверная версия паспорта; 0 — прежнее состояние.")
+    fields: dict[str, str] = Field(
+        description="Только заполненные превью полей, до 160 символов каждое."
+    )
+    unknown_fields: list[str] = Field(description="Незаполненные поля без выдуманных значений.")
+    truncated_fields: list[str] = Field(
+        description="Поля, чьё превью сокращено; полный текст читается отдельно."
+    )
+
+
+class ProjectContextHistorySchema(BaseModel):
+    """Метаданные неизменяемого снимка без полного исторического текста."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    revision: int = Field(ge=0, description="Версия сохранённого паспорта.")
+    changed_by_user_id: int | None = Field(
+        description="ID автора, определённый сервером; null для неизвестного автора исходного состояния."
+    )
+    changed_by_name: str | None = Field(
+        description="Серверный снимок имени автора либо неизвестный автор."
+    )
+    created_at: datetime = Field(
+        description="Время фиксации снимка; для прежнего baseline не является исторической датой его написания."
+    )
+    is_initial: bool = Field(
+        description="Исходный снимок: новое создание или сохранённое прежнее состояние."
+    )
+    changed_fields: list[str] = Field(
+        description="Изменённые поля паспорта; description_md обозначает свободный Markdown."
+    )
+
+
+class ProjectContextHistoryPageSchema(BaseModel):
+    """Страница метаданных истории, от новых версий к старым."""
+
+    items: list[ProjectContextHistorySchema] = Field(description="Снимки без их полного текста.")
+    total: int = Field(ge=0, description="Всего сохранённых версий.")
+    offset: int = Field(ge=0, description="Пропущено записей.")
+    limit: int = Field(ge=1, le=50, description="Размер страницы.")
+    has_more: bool = Field(description="Есть ли следующая страница.")
+    next_offset: int | None = Field(description="Смещение продолжения или null.")
 
 
 class ProjectDeadlineChangeSchema(BaseModel):
@@ -76,6 +131,23 @@ class ProjectSchema(BaseModel):
     description_sections: ProjectDescriptionSchema | None = Field(
         None, description="Блоки паспорта проекта."
     )
+    context_revision: int = Field(
+        default=0, ge=0, description="Актуальная серверная версия паспорта."
+    )
+
+    @computed_field(description="Компактный текущий контекст с явными пробелами и сокращениями.")
+    @property
+    def context(self) -> ProjectContextSchema:
+        return ProjectContextSchema.model_validate(
+            compact_project_context(
+                sections=self.description_sections.model_dump()
+                if self.description_sections
+                else None,
+                description_md=self.description_md,
+                revision=self.context_revision,
+            )
+        )
+
     due_date_has_been_set: bool = Field(
         False, description="Срок окончания уже назначался; пересмотр требует причины."
     )
@@ -231,6 +303,12 @@ class ProjectUpdateSchema(BaseModel):
     model_config = ConfigDict(json_schema_extra={"example": {"status": "ACTIVE"}})
 
     description_sections: ProjectDescriptionSchema | None = None
+    expected_context_revision: int | None = Field(
+        default=None,
+        ge=0,
+        description="Версия из открытой формы; проверяется под блокировкой перед изменением паспорта.",
+        examples=[3],
+    )
     due_date_comment: str | None = Field(
         None, max_length=5000, description="Причина пересмотра уже назначенного срока окончания."
     )

@@ -39,13 +39,13 @@ from src.services.db_scope import ProjectAgentScope
 from src.services.knowledge_events import KnowledgeEvents
 from src.services.project_agent import (
     EMPTY_ANSWER,
-    PROJECT_DESCRIPTION_LIMIT,
     ProjectAgentConfig,
     ProjectAgentService,
     WriteIntent,
     retrieval_query,
 )
 from src.services.project_query import ProjectQueryService
+from src.utils.project_context import PROJECT_CONTEXT_PREVIEW_CHARS
 from tests.unit.knowledge.agent_models import LegacyOutput as AgentOutput
 from tests.unit.knowledge.agent_models import legacy_model
 
@@ -848,16 +848,18 @@ async def test_agent_never_fabricates_or_trusts_source_labels() -> None:
 
 @pytest.mark.asyncio
 async def test_agent_bounds_the_context_it_sends_to_the_model() -> None:
-    """Описание проекта обрезается, SQL-контекст ограничен, пользовательский текст экранируется в JSON."""
+    """Паспорт показывает ограниченные поля и пробелы, SQL-контекст ограничен, пользовательский текст экранируется в JSON."""
 
     service, project, runtime, db = build_service()
-    project.description_md = "x" * (PROJECT_DESCRIPTION_LIMIT + 500)
+    project.description_md = "x" * (PROJECT_CONTEXT_PREVIEW_CHARS + 500)
 
     await service.ask(project_id=project.id, question="Что известно?", history=[])
 
     payload = json.loads(runtime.llm_client.get_structured_response.await_args.kwargs["content"])
-    description = payload["current_postgres_state"]["project"]["description"]
-    assert len(description) == PROJECT_DESCRIPTION_LIMIT
+    project_context = payload["current_postgres_state"]["project"]["context"]
+    assert project_context["fields"] == {"additional": "x" * PROJECT_CONTEXT_PREVIEW_CHARS}
+    assert project_context["truncated_fields"] == ["additional"]
+    assert "goal" in project_context["unknown_fields"]
 
     service, project, runtime, db = build_service()
     task = db.tasks.search_ranked.return_value[0]

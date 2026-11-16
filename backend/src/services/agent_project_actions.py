@@ -4,8 +4,19 @@ from src.agent.tools import AgentToolContext
 from src.exceptions.agent_tools import AgentToolAccessError, AgentToolConflictError
 from src.schemas import project_tool_inputs as inputs
 from src.schemas.project_risks import ProjectRiskFilters
+from src.schemas.projects import ProjectSchema
 from src.services.agent_action_helpers import page
 from src.services.agent_tool_scope import AgentProjectToolScope
+
+
+def _compact_project(project: ProjectSchema) -> dict:
+    """Сохраняет метаданные и bounded context, полный паспорт читает source-reader."""
+    result = project.model_dump(mode="json", exclude={"description_md", "description_sections"})
+    result["context_read"] = {
+        "tool": "telos_read_source",
+        "arguments": {"source_id": f"project:{project.id}"},
+    }
+    return result
 
 
 async def get_project(
@@ -13,7 +24,7 @@ async def get_project(
 ) -> dict:
     """Читает паспорт, статистику и историю сроков проекта."""
     return {
-        "project": (await db.projects.get_project(ctx.project_id)).model_dump(mode="json"),
+        "project": _compact_project(await db.projects.get_project(ctx.project_id)),
         "statistics": (await db.projects.get_project_stats(ctx.project_id)).model_dump(mode="json"),
         "deadline_history": [
             item.model_dump(mode="json")
@@ -76,7 +87,7 @@ async def update_project(
     item = await db.projects.update_project(
         ctx.project_id, args.model_dump(exclude_unset=True), updated_by_user_id=ctx.user_id
     )
-    return {"project": item.model_dump(mode="json"), "source_id": f"project:{ctx.project_id}"}
+    return {"project": _compact_project(item), "source_id": f"project:{ctx.project_id}"}
 
 
 async def list_members(

@@ -1,10 +1,22 @@
-from src.schemas.projects import ProjectDescriptionSchema
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.schemas.projects import ProjectDescriptionSchema
 
 DESCRIPTION_BLOCKS = (
     ("problem", "Проблема"),
     ("goal", "Цель"),
     ("expected_result", "Ожидаемый результат"),
     ("additional", "Дополнительно"),
+    ("audience", "Аудитория"),
+    ("capabilities", "Возможности"),
+    ("boundaries", "Границы"),
+    ("constraints", "Ограничения"),
+    ("glossary", "Термины"),
+    ("decisions", "Решения"),
+    ("open_questions", "Открытые вопросы"),
 )
 
 

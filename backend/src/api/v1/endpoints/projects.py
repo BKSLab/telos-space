@@ -1,9 +1,11 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from src.api.v1.responses import (
     CONFLICT_RESPONSE,
+    FORBIDDEN_RESPONSE,
     NOT_FOUND_RESPONSE,
     SERVER_ERROR_RESPONSE,
     VALIDATION_RESPONSE,
@@ -17,6 +19,7 @@ from src.dependencies.auth import PrincipalDep, require_write_scope
 from src.dependencies.services import ProjectsServiceDep
 from src.exceptions.projects import ProjectsServiceError
 from src.schemas.projects import (
+    ProjectContextHistoryPageSchema,
     ProjectCreateSchema,
     ProjectDeadlineChangeSchema,
     ProjectDefaultsSchema,
@@ -204,13 +207,14 @@ async def get_project_stats(
 
 @router.patch(
     path="/{project_id}",
-    dependencies=[Depends(require_project_access), Depends(require_write_scope)],
+    dependencies=[Depends(require_project_ownership), Depends(require_write_scope)],
     status_code=status.HTTP_200_OK,
     summary="Изменить проект",
     description="Обновляет паспорт проекта. После первого назначения срока любое изменение окончания требует due_date_comment и записывается в историю.",
     operation_id="updateProject",
     response_description="Обновлённый проект.",
     responses={
+        403: FORBIDDEN_RESPONSE,
         404: NOT_FOUND_RESPONSE,
         409: CONFLICT_RESPONSE,
         422: VALIDATION_RESPONSE,
@@ -248,6 +252,40 @@ async def update_project(
         return result
     except ProjectsServiceError as error:
         logger.exception("❌ Ошибка PATCH /projects/%s. Детали: %s", project_id, error)
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
+
+
+@router.get(
+    path="/{project_id}/context-history",
+    dependencies=[Depends(require_project_access)],
+    response_model=ProjectContextHistoryPageSchema,
+    summary="Получить историю паспорта проекта",
+    description="Возвращает версии, серверных авторов и изменённые поля. Полный исторический текст в метаданные не включается; дата прежнего baseline означает время его фиксации.",
+    operation_id="getProjectContextHistory",
+    response_description="Страница истории паспорта без полного текста снимков.",
+    responses={404: NOT_FOUND_RESPONSE, 422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
+)
+async def get_project_context_history(
+    project_id: ProjectIdPath,
+    service: ProjectsServiceDep,
+    limit: Annotated[int, Query(ge=1, le=50, description="Размер страницы истории.")] = 20,
+    offset: Annotated[int, Query(ge=0, description="Число пропущенных версий.")] = 0,
+) -> ProjectContextHistoryPageSchema:
+    """Читает метаданные версий для участника доступного проекта.
+
+    Args:
+        project_id: Проект, доступ к которому проверен общей зависимостью.
+        service: Доменный сервис проекта.
+        limit: Размер страницы до 50 записей.
+        offset: Число пропущенных записей.
+    Returns:
+        Метаданные истории и ссылка на следующую страницу через offset.
+    Raises:
+        HTTPException: Проект отсутствует или историю прочитать не удалось.
+    """
+    try:
+        return await service.get_context_history(project_id, limit=limit, offset=offset)
+    except ProjectsServiceError as error:
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
 
 
