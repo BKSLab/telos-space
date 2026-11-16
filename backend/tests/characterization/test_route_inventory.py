@@ -7,6 +7,34 @@ from fastapi.routing import APIRoute
 from main import app
 
 FROZEN_ROUTES: set[tuple[str, str]] = {
+    ('DELETE', '/api/v1/projects/{project_id}/git/connections/{connection_id}'),
+    ('DELETE', '/api/v1/projects/{project_id}/git/tasks/{task_id}/links/{link_id}'),
+    ('GET', '/api/v1/projects/{project_id}/git/connections'),
+    ('GET', '/api/v1/projects/{project_id}/git/connections/{connection_id}'),
+    ('GET', '/api/v1/projects/{project_id}/git/connections/{connection_id}/compare'),
+    ('GET', '/api/v1/projects/{project_id}/git/connections/{connection_id}/file'),
+    ('GET', '/api/v1/projects/{project_id}/git/connections/{connection_id}/tree'),
+    ('GET', '/api/v1/projects/{project_id}/git/map'),
+    ('GET', '/api/v1/projects/{project_id}/git/search'),
+    ('GET', '/api/v1/projects/{project_id}/git/tasks/{task_id}/candidates'),
+    ('GET', '/api/v1/projects/{project_id}/git/tasks/{task_id}/links'),
+    ('GET', '/api/v1/projects/{project_id}/knowledge/map'),
+    ('GET', '/api/v1/projects/{project_id}/knowledge/map/claims/{claim_id}'),
+    ('GET', '/api/v1/projects/{project_id}/knowledge/map/status'),
+    ('GET', '/api/v1/projects/{project_id}/web-research/status'),
+    ('PATCH', '/api/v1/projects/{project_id}/git/connections/{connection_id}'),
+    ('POST', '/api/v1/projects/{project_id}/git/connections'),
+    ('POST', '/api/v1/projects/{project_id}/git/connections/{connection_id}/events'),
+    ('POST', '/api/v1/projects/{project_id}/git/connections/{connection_id}/sync'),
+    ('POST', '/api/v1/projects/{project_id}/git/tasks/{task_id}/links'),
+    ('POST', '/api/v1/projects/{project_id}/git/tasks/{task_id}/links/{link_id}/refresh'),
+    ('POST', '/api/v1/projects/{project_id}/knowledge/map/refresh'),
+    ('POST', '/api/v1/projects/{project_id}/web-research/documents'),
+    ('POST', '/api/v1/projects/{project_id}/web-research/pages'),
+    ('POST', '/api/v1/projects/{project_id}/web-research/read'),
+    ('POST', '/api/v1/projects/{project_id}/web-research/search'),
+    ('POST', '/api/v1/projects/{project_id}/web-research/topics'),
+    ('PUT', '/api/v1/projects/{project_id}/git/connections/{connection_id}/credential'),
     ('DELETE', '/api/v1/aris/conversations/{conversation_id}/files/{file_id}'),
     ('DELETE', '/api/v1/boards/{board_id}'),
     ('DELETE', '/api/v1/boards/{board_id}/shapes/{shape_id}'),
@@ -220,6 +248,9 @@ PUBLIC_ROUTES: set[tuple[str, str]] = {
 
 # Управление токенами закрыто для самих токенов: только сессия интерфейса.
 SESSION_ONLY_ROUTES: set[tuple[str, str]] = {
+    ("POST", "/api/v1/projects/{project_id}/web-research/topics"),
+    ("POST", "/api/v1/projects/{project_id}/web-research/pages"),
+    ("PUT", "/api/v1/projects/{project_id}/git/connections/{connection_id}/credential"),
     ("POST", "/api/v1/users/me/api-keys"),
     ("PATCH", "/api/v1/users/me/api-keys/{key_id}"),
     ("POST", "/api/v1/users/me/calendar/ics-token"),
@@ -233,6 +264,8 @@ SESSION_ONLY_ROUTES: set[tuple[str, str]] = {
 
 # POST, которые ничего не меняют: расчёт, предпросмотр и поиск.
 READ_ONLY_POST_ROUTES: set[tuple[str, str]] = {
+    ("POST", "/api/v1/projects/{project_id}/web-research/search"),
+    ("POST", "/api/v1/projects/{project_id}/web-research/read"),
     ("POST", "/api/v1/aris/requests"),
     ("POST", "/api/v1/projects/{project_id}/chat/entities/resolve"),
     ("POST", "/api/v1/projects/{project_id}/risks/field-suggestion"),
@@ -244,6 +277,9 @@ READ_ONLY_POST_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/projects/{project_id}/knowledge/ask"),
 }
 
+SIGNED_ROUTES: set[tuple[str, str]] = {
+    ("POST", "/api/v1/projects/{project_id}/git/connections/{connection_id}/events"),
+}
 
 def _actual_routes() -> set[tuple[str, str]]:
     """Собирает фактический инвентарь маршрутов приложения."""
@@ -274,13 +310,14 @@ def test_non_get_routes_are_fully_classified() -> None:
     не решил, нужен ли ему scope записи. Такой пробел должен ломать сборку.
     """
     non_get = {(method, path) for method, path in FROZEN_ROUTES if method != "GET"}
-    explicit = PUBLIC_ROUTES | SESSION_ONLY_ROUTES | READ_ONLY_POST_ROUTES
+    groups = (PUBLIC_ROUTES, SESSION_ONLY_ROUTES, READ_ONLY_POST_ROUTES, SIGNED_ROUTES)
+    explicit = set().union(*groups)
 
     overlap = [
         pair
         for pair in explicit
         if sum(
-            pair in group for group in (PUBLIC_ROUTES, SESSION_ONLY_ROUTES, READ_ONLY_POST_ROUTES)
+            pair in group for group in groups
         )
         > 1
     ]
@@ -290,8 +327,8 @@ def test_non_get_routes_are_fully_classified() -> None:
     )
 
     mutations = non_get - explicit
-    assert len(non_get) == 123, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
-    assert len(mutations) == 102, f"Изменилось число доменных мутаций: {len(mutations)}"
+    assert len(non_get) == 138, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
+    assert len(mutations) == 111, f"Изменилось число доменных мутаций: {len(mutations)}"
 
 
 def test_every_route_has_unique_method_and_path() -> None:

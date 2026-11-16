@@ -7,7 +7,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serial
 from src.schemas.agent_files import AgentFileSchema
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.chat_references import ChatMessageReferenceSchema
-from src.schemas.knowledge import KnowledgeSourceSchema
+from src.schemas.knowledge import (
+    AssertionReferenceSchema,
+    ExternalSourceReferenceSchema,
+    KnowledgeSourceSchema,
+)
 from src.utils.timezones import validate_timezone
 
 MAX_BOARD_SELECTION = 200
@@ -34,7 +38,12 @@ class AgentPageContextSchema(BaseModel):
     route: str = Field(
         max_length=500, description="Маршрут страницы фронта, например /projects/PROJ/tasks."
     )
-    timezone: str = Field("UTC", max_length=64, description="Часовой пояс IANA пользователя.", examples=["Europe/Samara"])
+    timezone: str = Field(
+        "UTC",
+        max_length=64,
+        description="Часовой пояс IANA пользователя.",
+        examples=["Europe/Samara"],
+    )
     _validate_timezone = field_validator("timezone")(validate_timezone)
     project_key: str | None = Field(
         None, max_length=32, description="Ключ проекта открытой страницы."
@@ -76,7 +85,9 @@ class AgentConversationSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(description="ID диалога.")
-    project_id: int | None = Field(None, description="Фиксированный проект диалога; null — общий помощник.")
+    project_id: int | None = Field(
+        None, description="Фиксированный проект диалога; null — общий помощник."
+    )
     title: str = Field(description="Название по первому вопросу участника.")
     created_at: datetime = Field(description="Время создания диалога.")
     updated_at: datetime = Field(description="Время последнего изменения диалога.")
@@ -132,7 +143,11 @@ class AgentMessageSchema(BaseModel):
     role: Literal["user", "assistant"] = Field(description="Автор: участник или агент.")
     content: str = Field(description="Текст вопроса или готового ответа.")
     sources: list[KnowledgeSourceSchema] = Field(description="Проверенные источники ответа.")
-    message_references: list[ChatMessageReferenceSchema] = Field(default_factory=list, description="Проверяемые цитаты сообщений диалога.")
+    external_sources: list[ExternalSourceReferenceSchema] = Field(default_factory=list)
+    assertion_references: list[AssertionReferenceSchema] = Field(default_factory=list)
+    message_references: list[ChatMessageReferenceSchema] = Field(
+        default_factory=list, description="Проверяемые цитаты сообщений диалога."
+    )
     actions: list[AgentToolRunSchema] = Field(
         default_factory=list,
         description="Сохранённые действия и запросы подтверждения этого ответа.",

@@ -25,6 +25,7 @@ from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeSourceSchema
 from src.schemas.project_chats import ChatMessageCreate
 from src.services.agent_actions import AgentActionsService
 from src.services.aris_chat import ArisChatConfig, ArisChatService
+from src.services.context_evidence import HIDDEN_CONTEXT_ANSWER
 from src.services.project_agent import ProjectAgentService
 
 
@@ -161,8 +162,9 @@ async def test_history_refreshes_terminal_reply_committed_after_reading_placehol
     if outcome == "failed":
         assert reply.content.startswith("Не получилось ответить") and reply.agent.sources == []
     elif outcome == "card_only":
-        assert reply.content == ""
-        assert [source.source_id for source in reply.agent.sources] == ["project:1"]
+        # Legacy mock-card содержит identity, но не source version proof.
+        assert reply.content == HIDDEN_CONTEXT_ANSWER and reply.agent.sources == []
+        assert reply.agent.requires_context_validation is False
     else:
         assert reply.content == "В проекте две задачи." and reply.agent.sources == []
 

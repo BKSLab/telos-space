@@ -35,7 +35,7 @@ export interface CatalogEntry {
     method?: string;
     path?: string;
     operationId?: string;
-    access?: "public" | "subscription" | "session" | "authenticated";
+    access?: "public" | "subscription" | "session" | "authenticated" | "signature";
     scopes: string[] | null;
     scopeRule?: string;
     tokens: string[];

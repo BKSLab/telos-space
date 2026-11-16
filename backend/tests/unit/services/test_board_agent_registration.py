@@ -43,6 +43,8 @@ def test_catalog_registers_project_and_widget_only_personal_variants():
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id == "ProjectAction"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
         ):
             entries[node.args[0].value] = node
     for name in (

@@ -6,6 +6,7 @@ import logging
 import secrets
 from dataclasses import dataclass, replace
 from datetime import date
+from functools import wraps
 from time import perf_counter
 from typing import Any
 
@@ -34,7 +35,7 @@ from src.db.models.knowledge_index_jobs import (
 )
 from src.db.models.projects import Project
 from src.exceptions.ai import AgentAnswerError, AiProviderError
-from src.exceptions.base import RepositoryError
+from src.exceptions.base import RepositoryError, ServiceError
 from src.exceptions.clients import ClientError
 from src.exceptions.knowledge import (
     KnowledgeDisabledError,
@@ -71,6 +72,14 @@ from src.schemas.tasks import TaskSchema
 from src.services.agent_cards import source_card
 from src.services.agent_chat_history import AgentChatHistoryService
 from src.services.agent_chat_reference_registry import ChatReferenceRegistry
+from src.services.agent_context_tools import AgentContextToolsService
+from src.services.context_evidence import (
+    ContextEvidence,
+    ContextEvidenceService,
+    document_signature,
+    source_signature,
+    task_signature,
+)
 from src.services.db_scope import ProjectAgentScope, ProjectAgentScopeFactory
 from src.utils.document_refs import decode_document_ref
 
@@ -95,6 +104,22 @@ class WriteIntent(BaseModel):
     write_intent: bool = False
 
 
+def _git_read_budget(operation):
+    """Один server-owned бюджет на generation и publication, включая retries."""
+
+    @wraps(operation)
+    async def run(self, *args, **kwargs):
+        if self.context_tools is None:
+            return await operation(self, *args, **kwargs)
+        async with self.context_tools.git.read_budget() as budget:
+            answer = await operation(self, *args, **kwargs)
+            if answer._context_evidence is not None:
+                answer._context_evidence[0].git_budget = budget
+            return answer
+
+    return run
+
+
 def retrieval_query(question: str, history: list[KnowledgeChatMessageSchema]) -> str:
     """Запрос стартового поиска: вопрос, а в продолжении беседы — ещё и прошлый вопрос.
 
@@ -113,6 +138,7 @@ class _SourceRegistry:
     """Связывает реальные source_id с непредсказуемыми хэндлами одного запроса."""
 
     def __init__(self) -> None:
+        self.evidence = ContextEvidence()
         self.nonce = secrets.token_hex(8)
         self._by_handle: dict[str, KnowledgeSourceSchema] = {}
         self._handle_by_source_id: dict[str, str] = {}
@@ -198,6 +224,7 @@ class ProjectAgentService:
         tools: AgentToolExecutor,
         agent_model: Model,
         chat_history: AgentChatHistoryService | None = None,
+        context_tools: AgentContextToolsService | None = None,
     ) -> None:
         """Создаёт Арис.
 
@@ -219,6 +246,7 @@ class ProjectAgentService:
         self.tools = tools
         self.agent_model = agent_model
         self.chat_history = chat_history
+        self.context_tools = context_tools
         self._runtime: ArisRuntime | None = None
 
     @property
@@ -228,6 +256,7 @@ class ProjectAgentService:
             self._runtime = ArisRuntime(model=self.agent_model, executor=self.tools)
         return self._runtime
 
+    @_git_read_budget
     async def ask(
         self,
         *,
@@ -297,12 +326,21 @@ class ProjectAgentService:
         # В канале API пересказ вызывающего агента запись не разрешает: без
         # дословной реплики пользователя вопрос выполняется только на чтение.
         write_possible = tool_context.can_write and (not api_channel or verbatim is not None)
-        tool_context = replace(tool_context, mode=mode, can_write=write_possible)
+        tool_context = replace(
+            tool_context, mode=mode, can_write=write_possible, request_text=question
+        )
+        if tool_context.principal is None and tool_context.user_id is not None:
+            tool_context = replace(
+                tool_context,
+                principal=ContextEvidenceService.session_principal(tool_context.user_id),
+            )
         progress = ProgressReporter(on_progress)
         deps: ArisDeps | None = None
         try:
             query = retrieval_query(question, history)
             registry = _SourceRegistry()
+            registry.evidence.policy(tool_context.origin_read_scopes)
+            registry.evidence.project(project_id)
             chat_references = ChatReferenceRegistry()
             content = {
                 "mode": mode.value,
@@ -318,8 +356,11 @@ class ProjectAgentService:
                 "uploaded_files": uploaded_files or [],
             }
             if chat_context is not None:
+                registry.evidence.register(chat_context)
                 content["chat_context"] = chat_context
-                content["current_date"] = chat_context.get("current_datetime", content["current_date"])[:10]
+                content["current_date"] = chat_context.get(
+                    "current_datetime", content["current_date"]
+                )[:10]
                 content["dialog_history"] = []
                 content.pop("uploaded_files", None)
                 chat_references.register(chat_context)
@@ -355,6 +396,18 @@ class ProjectAgentService:
                             project_id, query, phases
                         )
                         state["catalog"], state["fts_hits"] = catalog, fts_hits
+                        for source in catalog.sources.values():
+                            if (
+                                source.source_id == f"project:{project_id}"
+                                or source.kind == "stage"
+                            ):
+                                registry.evidence.internal(
+                                    project_id,
+                                    source,
+                                    projection="stage_summary"
+                                    if source.kind == "stage"
+                                    else "source",
+                                )
                         content.update(
                             retrieval_query=query,
                             current_postgres_state=self._build_postgres_context(
@@ -422,8 +475,20 @@ class ProjectAgentService:
             completed_actions: set[str] = set()
             directly_read_tasks: set[str] = set()
 
+            async def validate_before_write():
+                snapshot = KnowledgeAnswerSchema(answer="", sources=[])
+                snapshot._context_evidence = registry.evidence, tool_context.principal
+                await self.validate_answer(snapshot)
+
+            deps.before_write = validate_before_write
+
             async def register(tool: AgentTool, result: dict[str, Any]) -> None:
-                if tool.name in {"telos_list_chat_messages", "telos_get_chat_message", "telos_read_chat_file"}:
+                registry.evidence.register(result)
+                if tool.name in {
+                    "telos_list_chat_messages",
+                    "telos_get_chat_message",
+                    "telos_read_chat_file",
+                }:
                     chat_references.register(result)
                     return
                 mutating = tool.mutating or tool.name == PROJECT_ACTION_TOOL
@@ -439,7 +504,11 @@ class ProjectAgentService:
                 self._register_views(result, state["catalog"], registry)
                 if tool.name in {"telos_get_task", "telos_get_any_task"}:
                     source_id = result.get("source_id")
-                    if isinstance(source_id, str) and source_id.startswith("task:") and registry.get_handle(source_id):
+                    if (
+                        isinstance(source_id, str)
+                        and source_id.startswith("task:")
+                        and registry.get_handle(source_id)
+                    ):
                         directly_read_tasks.add(source_id)
                 if tool.name in {"telos_list_members", "telos_list_sources"}:
                     for item in result.get("items", []):
@@ -454,6 +523,16 @@ class ProjectAgentService:
                         action_id = action.get("id")
                         if isinstance(action_id, str) and action_id:
                             completed_actions.add(action_id)
+                        if self.context_tools is not None:
+                            try:
+                                await self.context_tools.evidence.revalidate_after_action(
+                                    registry.evidence, principal=tool_context.principal
+                                )
+                            except ServiceError:
+                                result["context_validation"] = {
+                                    "status": "stale",
+                                    "message": "Действие выполнено, но источники изменились; для актуального вывода нужен повторный вопрос.",
+                                }
                     state["stale"] = True
 
             deps.on_result = register
@@ -471,13 +550,19 @@ class ProjectAgentService:
                 )
                 output = run.output or ArisAnswer()
                 message_references = await chat_references.select(
-                    handles=output.message_references, history=self.chat_history, context=tool_context,
+                    handles=output.message_references,
+                    history=self.chat_history,
+                    context=tool_context,
                 )
                 requested_handles = [*output.source_ids]
                 if output.primary_reference:
                     requested_handles.append(output.primary_reference)
                 fallback_task = None
-                if run.output is not None and not requested_handles and len(directly_read_tasks) == 1:
+                if (
+                    run.output is not None
+                    and not requested_handles
+                    and len(directly_read_tasks) == 1
+                ):
                     fallback_task = registry.get_handle(next(iter(directly_read_tasks)))
                     if fallback_task:
                         requested_handles.append(fallback_task)
@@ -487,16 +572,34 @@ class ProjectAgentService:
                     checked_tasks = set()
                     for handle in requested_handles:
                         source = registry.resolve_reference(handle)
-                        if source and source.entity_type == "task" and source.entity_id not in checked_tasks:
-                            verified_task = await self.tools.execute(tool_context, AgentToolRequest(
-                                name="telos_get_task", arguments={"task_id": source.entity_id},
-                            ))
-                            if verified_task.get("error") or verified_task.get("source_id") != source.source_id:
-                                raise AgentAnswerError("Доступ к задаче изменился. Повторите вопрос.")
+                        if (
+                            source
+                            and source.entity_type == "task"
+                            and source.entity_id not in checked_tasks
+                        ):
+                            verified_task = await self.tools.execute(
+                                tool_context,
+                                AgentToolRequest(
+                                    name="telos_get_task",
+                                    arguments={"task_id": source.entity_id},
+                                ),
+                            )
+                            if (
+                                verified_task.get("error")
+                                or verified_task.get("source_id") != source.source_id
+                            ):
+                                raise AgentAnswerError(
+                                    "Доступ к задаче изменился. Повторите вопрос."
+                                )
                             checked_tasks.add(source.entity_id)
                 needs_current_document = any(
-                    source and (source.entity_type in DOCUMENT_SOURCE_TYPES or source.entity_type == "task")
-                    for source in (registry.resolve_reference(handle) for handle in requested_handles)
+                    source
+                    and (
+                        source.entity_type in DOCUMENT_SOURCE_TYPES or source.entity_type == "task"
+                    )
+                    for source in (
+                        registry.resolve_reference(handle) for handle in requested_handles
+                    )
                 )
                 if state["stale"] or needs_current_document:
                     async with self.scope() as db:
@@ -542,7 +645,15 @@ class ProjectAgentService:
                     )
                 elif not answer and not selected and not message_references:
                     answer = EMPTY_ANSWER
-                return KnowledgeAnswerSchema(answer=answer, sources=selected, message_references=message_references)
+                response = KnowledgeAnswerSchema(
+                    answer=answer,
+                    sources=selected,
+                    message_references=message_references,
+                    **registry.evidence.references(output.primary_reference),
+                )
+                response._context_evidence = (registry.evidence, tool_context.principal)
+                await self.validate_answer(response)
+                return response
             except AgentRunError as error:
                 raise AiProviderError(str(error)) from error
             except ClientError as error:
@@ -576,6 +687,7 @@ class ProjectAgentService:
                 deps.write_gate.close()
             await progress.close()
 
+    @_git_read_budget
     async def ask_personal(
         self,
         *,
@@ -617,7 +729,12 @@ class ProjectAgentService:
         question = question.strip()
         phases: dict[str, float | None] = {"write_intent": None}
         mode = ArisMode.WIDGET_PERSONAL
-        tool_context = replace(execution, project_id=None, mode=mode)
+        tool_context = replace(execution, project_id=None, mode=mode, request_text=question)
+        if tool_context.principal is None and tool_context.user_id is not None:
+            tool_context = replace(
+                tool_context,
+                principal=ContextEvidenceService.session_principal(tool_context.user_id),
+            )
         content = {
             "mode": mode.value,
             "current_date": date.today().isoformat(),
@@ -633,7 +750,9 @@ class ProjectAgentService:
         chat_references = ChatReferenceRegistry()
         if chat_context is not None:
             content["chat_context"] = chat_context
-            content["current_date"] = chat_context.get("current_datetime", content["current_date"])[:10]
+            content["current_date"] = chat_context.get("current_datetime", content["current_date"])[
+                :10
+            ]
             content["dialog_history"] = []
             content.pop("uploaded_files", None)
             chat_references.register(chat_context)
@@ -662,10 +781,14 @@ class ProjectAgentService:
             progress=ProgressReporter(on_progress),
         )
         registry = _SourceRegistry()
+        registry.evidence.policy(tool_context.origin_read_scopes)
+        if chat_context is not None:
+            registry.evidence.register(chat_context)
         directly_read_tasks: set[str] = set()
         project_document_scopes: dict[str, int] = {}
 
         async def register_personal(_tool, result):
+            registry.evidence.register(result)
             if _tool.name in {"telos_list_chat_messages", "telos_get_chat_message"}:
                 chat_references.register(result)
             self._register_personal_views(
@@ -677,8 +800,30 @@ class ProjectAgentService:
             )
             if _tool.name == "telos_get_any_task" and result.get("source_handle"):
                 directly_read_tasks.add(result["source_handle"])
+            action = result.get("action")
+            if (
+                self.context_tools is not None
+                and isinstance(action, dict)
+                and action.get("status") == "completed"
+            ):
+                try:
+                    await self.context_tools.evidence.revalidate_after_action(
+                        registry.evidence, principal=tool_context.principal
+                    )
+                except ServiceError:
+                    result["context_validation"] = {
+                        "status": "stale",
+                        "message": "Действие выполнено, но источники изменились; для актуального вывода нужен повторный вопрос.",
+                    }
 
         deps.on_result = register_personal
+
+        async def validate_before_write():
+            snapshot = KnowledgeAnswerSchema(answer="", sources=[])
+            snapshot._context_evidence = registry.evidence, tool_context.principal
+            await self.validate_answer(snapshot)
+
+        deps.before_write = validate_before_write
         run: ArisRunResult | None = None
         try:
             run = await self.runtime.run(
@@ -693,13 +838,28 @@ class ProjectAgentService:
                 return KnowledgeAnswerSchema(answer=INCOMPLETE_ANSWER, sources=[])
             output = run.output
             message_references = await chat_references.select(
-                handles=output.message_references, history=self.chat_history, context=tool_context,
+                handles=output.message_references,
+                history=self.chat_history,
+                context=tool_context,
             )
-            fallback_task = next(iter(directly_read_tasks)) if not output.source_ids and not output.primary_reference and len(directly_read_tasks) == 1 else None
+            fallback_task = (
+                next(iter(directly_read_tasks))
+                if not output.source_ids
+                and not output.primary_reference
+                and len(directly_read_tasks) == 1
+                else None
+            )
             primary = registry.resolve_reference(output.primary_reference or fallback_task)
             selected = []
             seen_sources = set()
-            handles = [*output.source_ids, *([output.primary_reference or fallback_task] if output.primary_reference or fallback_task else [])]
+            handles = [
+                *output.source_ids,
+                *(
+                    [output.primary_reference or fallback_task]
+                    if output.primary_reference or fallback_task
+                    else []
+                ),
+            ]
             selected_references = {}
             for handle in handles:
                 source = registry.resolve_reference(handle)
@@ -729,13 +889,25 @@ class ProjectAgentService:
                 if source is None or source.source_id in seen_sources:
                     continue
                 if source.entity_type == "task":
-                    current = await self.tools.execute(tool_context, AgentToolRequest(
-                        name="telos_get_any_task", arguments={"task_id": source.entity_id},
-                    ))
+                    current = await self.tools.execute(
+                        tool_context,
+                        AgentToolRequest(
+                            name="telos_get_any_task",
+                            arguments={"task_id": source.entity_id},
+                        ),
+                    )
                     verified = self._personal_task_source(current)
                     if verified is None:
                         raise AgentAnswerError("Доступ к задаче изменился. Повторите вопрос.")
-                    selected.append(verified.model_copy(update={"is_primary": bool(primary and primary.source_id == verified.source_id)}))
+                    selected.append(
+                        verified.model_copy(
+                            update={
+                                "is_primary": bool(
+                                    primary and primary.source_id == verified.source_id
+                                )
+                            }
+                        )
+                    )
                     seen_sources.add(verified.source_id)
                     continue
                 if not source.document_ref:
@@ -745,18 +917,35 @@ class ProjectAgentService:
                 document = checked_documents.get(source.document_ref)
                 if document is None:
                     document = await self._checked_personal_document(
-                        tool_context, source, project_id=None, reference=reference,
+                        tool_context,
+                        source,
+                        project_id=None,
+                        reference=reference,
                     )
-                selected.append(source.model_copy(update={
-                    "title": document.title,
-                    "is_primary": is_primary,
-                    "reference": reference,
-                }))
+                selected.append(
+                    source.model_copy(
+                        update={
+                            "title": document.title,
+                            "is_primary": is_primary,
+                            "reference": reference,
+                        }
+                    )
+                )
                 seen_sources.add(source.source_id)
-            answer = output.answer.strip() or ("" if selected or message_references else (
-                "Не удалось завершить проверку данных. Уточните вопрос."
-            ))
-            return KnowledgeAnswerSchema(answer=answer, sources=selected, message_references=message_references)
+            answer = output.answer.strip() or (
+                ""
+                if selected or message_references
+                else ("Не удалось завершить проверку данных. Уточните вопрос.")
+            )
+            response = KnowledgeAnswerSchema(
+                answer=answer,
+                sources=selected,
+                message_references=message_references,
+                **registry.evidence.references(output.primary_reference),
+            )
+            response._context_evidence = (registry.evidence, tool_context.principal)
+            await self.validate_answer(response)
+            return response
         except AgentRunError as error:
             raise AiProviderError(str(error)) from error
         except ClientError as error:
@@ -833,10 +1022,116 @@ class ProjectAgentService:
             or page.rendition != reference.rendition
             or page.offset != reference.start
             or reference.end > page.total_chars
-            or page.text[:len(reference.quote)] != reference.quote
+            or page.text[: len(reference.quote)] != reference.quote
         ):
             raise AgentAnswerError("Документ изменился после чтения. Повторите вопрос.")
         return document
+
+    async def validate_answer(self, answer: KnowledgeAnswerSchema) -> None:
+        """Вызывается перед возвратом модели и повторно перед записью очереди."""
+        if answer._context_evidence is None:
+            return
+        evidence, principal = answer._context_evidence
+        try:
+            if self.context_tools is not None:
+                if principal is None and evidence.saved.projects:
+                    raise AgentAnswerError("Пользователь ответа недоступен. Повторите вопрос.")
+                for project_id, page in evidence.web_pages:
+                    await self.context_tools.web.validate_page_grants(
+                        project_id=project_id, principal=principal, page_tokens=[page.page_token]
+                    )
+                    if page.coverage != "search_snippet":
+                        current = await self.context_tools.web.read(
+                            project_id=project_id,
+                            principal=principal,
+                            page_token=page.page_token,
+                            max_chars=8000,
+                        )
+                        if (
+                            current.content_hash != page.content_hash
+                            or current.source_id != page.source_id
+                        ):
+                            raise AgentAnswerError(
+                                "Публичный источник изменился. Повторите вопрос."
+                            )
+                async with self.context_tools.git.read_budget(evidence.git_budget) as budget:
+                    evidence.git_budget = budget
+                    await self.context_tools.evidence.validate(evidence.saved, principal=principal)
+                return
+            if (
+                evidence.saved.observations
+                or evidence.saved.git_files
+                or evidence.saved.git_changes
+                or evidence.web_pages
+            ):
+                raise AgentAnswerError("Проверка контекста не подключена.")
+            for item in evidence.saved.tasks:
+                actor = AgentToolContext(
+                    project_id=None,
+                    user_id=principal.user_id if principal else None,
+                    principal=principal,
+                    mode=ArisMode.WIDGET_PERSONAL,
+                )
+                current = await self.tools.execute(
+                    actor,
+                    AgentToolRequest(
+                        name="telos_get_any_task", arguments={"task_id": item.task_id}
+                    ),
+                )
+                if (
+                    current.get("error")
+                    or not isinstance(current.get("task"), dict)
+                    or task_signature(TaskSchema.model_validate(current["task"]), item.projection)
+                    != item.task_hash
+                ):
+                    raise AgentAnswerError("Доступ или версия задачи изменились. Повторите вопрос.")
+            for item in evidence.saved.documents:
+                kind, identifier = decode_document_ref(item.document_ref)
+                source = KnowledgeSourceSchema(
+                    source_id=f"{kind}:{identifier}",
+                    entity_type=kind,
+                    entity_id=identifier,
+                    title="Проверка текущего доступа",
+                )
+                current = await self._checked_personal_document(
+                    AgentToolContext(
+                        project_id=None,
+                        user_id=principal.user_id if principal else None,
+                        principal=principal,
+                        mode=ArisMode.WIDGET_PERSONAL,
+                    ),
+                    source,
+                    project_id=item.project_id,
+                    reference=None,
+                )
+                if document_signature(current) != item.document_hash:
+                    raise AgentAnswerError(
+                        "Доступ или версия документа изменились. Повторите вопрос."
+                    )
+            # Изолированные старые вызовы сервиса без новых adapters всё равно
+            # сверяют каждую прочитанную SQL-версию, а не только selected handles.
+            for project_id in evidence.saved.projects:
+                items = [item for item in evidence.saved.internal if item.project_id == project_id]
+                if not items:
+                    continue
+                async with self.scope() as db:
+                    await self._require_project(db, project_id=project_id)
+                    current = build_catalog(
+                        project_id, await db.sources.get_project_rows(project_id)
+                    )
+                for item in items:
+                    if item.project_id == project_id and (
+                        item.source_id not in current.sources
+                        or source_signature(current.sources[item.source_id], item.projection)
+                        != item.source_hash
+                    ):
+                        raise AgentAnswerError("Источники изменились. Повторите вопрос.")
+        except ServiceError as error:
+            if isinstance(error, AgentAnswerError):
+                raise
+            raise AgentAnswerError(
+                "Источники изменились или сейчас недоступны. Повторите вопрос."
+            ) from error
 
     def task_link_template(self) -> str | None:
         """Адрес карточки задачи в интерфейсе с местом для ключа; None без APP_PUBLIC_URL."""
@@ -846,16 +1141,38 @@ class ProjectAgentService:
     @staticmethod
     def _register_views(value, catalog, registry) -> None:
         if isinstance(value, dict):
+            report = value.get("report")
+            if isinstance(report, dict) and isinstance(report.get("task_id"), int):
+                parent = catalog.sources.get(f"task:{report['task_id']}")
+                if parent is not None:
+                    registry.evidence.internal(catalog.project_id, parent)
             # Результаты доменных инструментов тоже содержат серверный source_id,
             # хотя их компактный ответ может не дублировать entity_type.
             if value.get("source_id") in catalog.sources:
                 source = catalog.sources[value["source_id"]]
+                registry.evidence.internal(catalog.project_id, source)
+                if source.kind == "task_report" and isinstance(value.get("report"), dict):
+                    # Current-report DTO обещает текущую голову задачи. Immutable
+                    # старый отчёт остаётся в каталоге после v2/v3; parent relations
+                    # и статус задачи меняют степень подтверждения результата.
+                    parent = catalog.sources.get(source.parent_source_id)
+                    if parent is not None:
+                        registry.evidence.internal(catalog.project_id, parent)
                 chunks = value.get("matching_chunks")
-                excerpt = next(
-                    (chunk["text"] for chunk in chunks
-                     if isinstance(chunk, dict) and isinstance(chunk.get("text"), str) and chunk["text"]),
-                    "",
-                ) if isinstance(chunks, list) else ""
+                excerpt = (
+                    next(
+                        (
+                            chunk["text"]
+                            for chunk in chunks
+                            if isinstance(chunk, dict)
+                            and isinstance(chunk.get("text"), str)
+                            and chunk["text"]
+                        ),
+                        "",
+                    )
+                    if isinstance(chunks, list)
+                    else ""
+                )
                 if not excerpt and isinstance(value.get("text"), str):
                     excerpt = value["text"]
                 record = citation(source, excerpt=excerpt, score=value.get("score"))
@@ -870,7 +1187,9 @@ class ProjectAgentService:
                         if expected == fragment:
                             record.reference = fragment
                             record.excerpt = fragment.quote[:SOURCE_EXCERPT_LIMIT]
-                            value["fragment_handle"] = registry.register_fragment(source.source_id, fragment)
+                            value["fragment_handle"] = registry.register_fragment(
+                                source.source_id, fragment
+                            )
                 value["source_handle"] = registry.register(record)
                 changes = record.model_dump(exclude={"source_id", "reference"})
                 if record.reference:
@@ -895,12 +1214,20 @@ class ProjectAgentService:
         if value.get("source_id") != f"task:{task.id}":
             return None
         return KnowledgeSourceSchema(
-            source_id=value["source_id"], entity_type="task", entity_id=task.id, task_id=task.id,
-            title=f"{task.key} · {task.title}", excerpt=(task.description_md or "")[:SOURCE_EXCERPT_LIMIT] or None,
-            card=KnowledgeSourceCardSchema(key=task.key, status=task.status.value if task.status else None,
-                priority=task.priority.value, assignee=task.assignee,
+            source_id=value["source_id"],
+            entity_type="task",
+            entity_id=task.id,
+            task_id=task.id,
+            title=f"{task.key} · {task.title}",
+            excerpt=(task.description_md or "")[:SOURCE_EXCERPT_LIMIT] or None,
+            card=KnowledgeSourceCardSchema(
+                key=task.key,
+                status=task.status.value if task.status else None,
+                priority=task.priority.value,
+                assignee=task.assignee,
                 due_date=task.due_date.isoformat() if task.due_date else None,
-                summary=(task.description_md or "")[:240] or None),
+                summary=(task.description_md or "")[:240] or None,
+            ),
         )
 
     @staticmethod
@@ -912,8 +1239,14 @@ class ProjectAgentService:
     ) -> None:
         """Project DTO допускает только результат wrapper, не вложенные пользовательские данные."""
         if isinstance(value, dict):
+            if value.get("source_id") == f"task:{value.get('id')}" and "task" not in value:
+                try:
+                    registry.evidence.task(TaskSchema.model_validate(value), projection="summary")
+                except ValueError:
+                    pass
             task_source = ProjectAgentService._personal_task_source(value)
             if task_source is not None:
+                registry.evidence.task(TaskSchema.model_validate(value["task"]))
                 value["source_handle"] = registry.register(task_source)
             data = value.get("document", value)
             if value.get("source_id") and isinstance(data, dict) and data.get("ownership"):
@@ -925,16 +1258,22 @@ class ProjectAgentService:
                 if (
                     document
                     and (
-                        document.ownership.project_id is None
-                        or project_document_scopes is not None
+                        document.ownership.project_id is None or project_document_scopes is not None
                     )
                     and value["source_id"] == f"{kind}:{identifier}"
                 ):
-                    if project_document_scopes is not None and document.ownership.project_id is not None:
+                    if (
+                        project_document_scopes is not None
+                        and document.ownership.project_id is not None
+                    ):
                         project_document_scopes[document.ref] = document.ownership.project_id
+                    registry.evidence.document(document)
                     record = KnowledgeSourceSchema(
-                        source_id=value["source_id"], entity_type=kind, entity_id=identifier,
-                        title=document.title, task_id=document.ownership.owner_task_id,
+                        source_id=value["source_id"],
+                        entity_type=kind,
+                        entity_id=identifier,
+                        title=document.title,
+                        task_id=document.ownership.owner_task_id,
                         card=KnowledgeSourceCardSchema(summary=document.caption),
                     )
                     try:
@@ -944,10 +1283,17 @@ class ProjectAgentService:
                     text = value.get("text")
                     if fragment and isinstance(text, str):
                         start = fragment.start - value.get("offset", 0)
-                        if fragment.document_ref == document.ref and fragment.content_hash == value.get("content_hash") and start >= 0 and text[start:start + len(fragment.quote)] == fragment.quote:
+                        if (
+                            fragment.document_ref == document.ref
+                            and fragment.content_hash == value.get("content_hash")
+                            and start >= 0
+                            and text[start : start + len(fragment.quote)] == fragment.quote
+                        ):
                             record.reference = fragment
                             record.excerpt = fragment.quote[:SOURCE_EXCERPT_LIMIT]
-                            value["fragment_handle"] = registry.register_fragment(record.source_id, fragment)
+                            value["fragment_handle"] = registry.register_fragment(
+                                record.source_id, fragment
+                            )
                     value["source_handle"] = registry.register(record)
                     changes = record.model_dump(exclude={"source_id", "reference"})
                     if record.reference:
@@ -963,7 +1309,9 @@ class ProjectAgentService:
         elif isinstance(value, list):
             for item in value:
                 ProjectAgentService._register_personal_views(
-                    item, registry, project_document_scopes=project_document_scopes,
+                    item,
+                    registry,
+                    project_document_scopes=project_document_scopes,
                 )
 
     @staticmethod

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from src.agent.aris import ARIS_NAME, ArisMode, strip_address
+from src.agent.context import action_model_context
 from src.agent.progress import ProgressSink
 from src.agent.tools import AgentToolContext
 from src.db.models.chat_agent_turns import ChatAgentTurn
@@ -29,8 +30,13 @@ from src.exceptions.access import AccessServiceError, ResourceNotAvailableError
 from src.exceptions.ai import AiProviderError
 from src.exceptions.base import RepositoryError
 from src.schemas.agent_tools import AgentToolRunSchema
-from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeChatMessageSchema
+from src.schemas.knowledge import (
+    KnowledgeAnswerSchema,
+    KnowledgeChatMessageSchema,
+    encode_answer_sources,
+)
 from src.services.agent_chat_files import AgentChatFilesService, ChatFileContext
+from src.services.context_evidence import agent_context_budget
 from src.services.db_scope import ArisChatScope, ArisChatScopeFactory
 from src.services.project_agent import ProjectAgentService
 from src.services.tasks import user_display_name
@@ -97,9 +103,10 @@ class ArisChatService:
             return False
         logger.info("🤖 Арис отвечает в чате проекта id=%s, ход=%s.", turn.project_id, turn.id)
         try:
-            async with asyncio.timeout(self.config.turn_timeout_seconds):
-                answer = await self._generate(turn)
-            await self._finish(turn, answer=answer)
+            async with agent_context_budget(self.agent):
+                async with asyncio.timeout(self.config.turn_timeout_seconds):
+                    answer = await self._generate(turn)
+                    await self._finish(turn, answer=answer)
             logger.info("✅ Ответ Ариса в чате, ход=%s.", turn.id)
         except asyncio.CancelledError:
             try:
@@ -161,7 +168,10 @@ class ArisChatService:
                 for row in await db.participants.get_users(list(author_ids))
             }
             action_history = [
-                AgentToolRunSchema.model_validate(item).model_dump(mode="json")
+                action_model_context(
+                    AgentToolRunSchema.model_validate(item).model_dump(mode="json"),
+                    current=item.chat_turn_id == turn.id,
+                )
                 for item in await db.runs.get_for_turns([turn.id])
             ]
         actor = {"user_id": user.id, "username": user.username, "name": user_display_name(user)}
@@ -239,13 +249,15 @@ class ArisChatService:
         answer: KnowledgeAnswerSchema | None = None,
         error: str | None = None,
     ) -> None:
+        if answer is not None and answer._context_evidence is not None:
+            await self.agent.validate_answer(answer)
         async with self._scope() as db:
             active = await db.turns.get(turn.id, lock=True)
             if active is None or active.status != "processing" or active.run_id != turn.run_id:
                 return
             if await db.chats.get(turn.project_id, lock=True) is None:
                 return
-            sources = [] if answer is None else [s.model_dump(mode="json") for s in answer.sources]
+            sources = [] if answer is None else encode_answer_sources(answer)
             references = []
             if answer is not None:
                 user = await db.users.get_by_id(turn.requester_id)

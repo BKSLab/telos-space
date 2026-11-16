@@ -5,8 +5,17 @@ from src.exceptions.agent_tools import AgentToolAccessError, AgentToolConflictEr
 from src.schemas import project_tool_inputs as inputs
 from src.schemas.project_risks import ProjectRiskFilters
 from src.schemas.projects import ProjectSchema
+from src.schemas.task_formulation import TaskFormulationInput
 from src.services.agent_action_helpers import page
 from src.services.agent_tool_scope import AgentProjectToolScope
+from src.services.task_formulation import prepare_task_formulation
+
+
+async def prepare_task(
+    db: AgentProjectToolScope, ctx: AgentToolContext, args: TaskFormulationInput
+) -> dict:
+    """Возвращает предложение; хранилище задач и write-сервисы не вызываются."""
+    return prepare_task_formulation(args)
 
 
 def _compact_project(project: ProjectSchema) -> dict:

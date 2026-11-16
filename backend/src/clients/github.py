@@ -6,6 +6,8 @@ import hashlib
 import json
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -15,6 +17,7 @@ from pydantic import TypeAdapter, ValidationError
 from src.clients.retry import backoff_seconds, worst_case_seconds
 from src.exceptions.git_sources import (
     GitHubAuthenticationError,
+    GitHubBudgetExceededError,
     GitHubClientError,
     GitHubConflictError,
     GitHubForbiddenError,
@@ -28,10 +31,20 @@ from src.exceptions.git_sources import (
 )
 from src.schemas.git_sources import (
     GitBlob,
+    GitCandidatePage,
+    GitCandidateSnapshot,
+    GitCheckPage,
+    GitCheckSnapshot,
     GitCommit,
+    GitCommitDetails,
     GitComparison,
+    GitDeploymentPage,
+    GitDeploymentSnapshot,
+    GitDeploymentStatusPage,
+    GitDeploymentStatusSnapshot,
     GitFileChange,
     GitOwner,
+    GitPullRequestSnapshot,
     GitRef,
     GitRepositoryName,
     GitRepositorySnapshot,
@@ -81,6 +94,39 @@ def _numeric_header(value: str | None) -> int | None:
     return None
 
 
+def _timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if result.tzinfo is None:
+        raise ValueError("Timestamp without timezone.")
+    return result
+
+
+@dataclass(slots=True)
+class GitRequestBudget:
+    """Server-owned ledger, shared by reads and their final source revalidation."""
+
+    max_requests: int = 32
+    requests_made: int = 0
+    exhausted: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.max_requests) is not int or self.max_requests < 1 or self.requests_made != 0:
+            raise GitHubRequestError()
+
+    @property
+    def remaining(self) -> int:
+        return self.max_requests - self.requests_made
+
+    def consume(self) -> None:
+        """Count an actual attempt, including a retry, before any external I/O."""
+        if self.requests_made >= self.max_requests:
+            self.exhausted = True
+            raise GitHubBudgetExceededError()
+        self.requests_made += 1
+
+
 class GitHubClient:
     """Read-only протокол; transport, его аутентификацией и закрытием владеет DI.
 
@@ -99,6 +145,8 @@ class GitHubClient:
         max_tree_entries: int = DEFAULT_MAX_TREE_ENTRIES,
         max_compare_files: int = GITHUB_COMPARE_FILE_LIMIT,
         max_patch_chars: int = DEFAULT_MAX_PATCH_CHARS,
+        max_requests: int | None = None,
+        request_budget: GitRequestBudget | None = None,
     ) -> None:
         limits = (
             max_response_bytes,
@@ -115,6 +163,7 @@ class GitHubClient:
             or attempts not in {1, 2}
             or any(type(value) is not int or value < 1 for value in limits)
             or max_compare_files > GITHUB_COMPARE_FILE_LIMIT
+            or (max_requests is not None and (type(max_requests) is not int or max_requests < 1))
         ):
             raise GitHubRequestError()
         self.http_client = http_client
@@ -125,6 +174,9 @@ class GitHubClient:
         self.max_tree_entries = max_tree_entries
         self.max_compare_files = max_compare_files
         self.max_patch_chars = max_patch_chars
+        self.max_requests = max_requests
+        self.requests_made = 0
+        self.request_budget = request_budget
 
     @property
     def worst_case_seconds(self) -> float:
@@ -252,14 +304,222 @@ class GitHubClient:
         )
         return _parsed(lambda: self._comparison(data, base, head, paginated))
 
+    async def get_commit_details(self, owner: str, repo: str, sha: str) -> GitCommitDetails:
+        """Читает immutable commit identity и ограниченный заголовок, без авторских PII."""
+        value = _input(_SHA, sha)
+        data, _ = await self._get_json(f"{self._repository_path(owner, repo)}/commits/{value}")
+        result = _parsed(
+            lambda: GitCommitDetails(
+                sha=data["sha"],
+                tree_sha=data["commit"]["tree"]["sha"],
+                message=data["commit"]["message"][:4000],
+                message_truncated=len(data["commit"]["message"]) > 4000,
+            )
+        )
+        if result.sha != value:
+            raise GitHubResponseError()
+        return result
+
+    async def get_pull_request(self, owner: str, repo: str, number: int) -> GitPullRequestSnapshot:
+        """Читает PR; merge commit из test merge не выдаётся за состоявшийся merge."""
+        if type(number) is not int or number < 1:
+            raise GitHubRequestError()
+        data, _ = await self._get_json(f"{self._repository_path(owner, repo)}/pulls/{number}")
+        result = _parsed(
+            lambda: GitPullRequestSnapshot(
+                number=data["number"],
+                title=data["title"][:512],
+                state=data["state"],
+                merged=data["merged"],
+                head_sha=data["head"]["sha"],
+                base_sha=data["base"]["sha"],
+                merge_sha=data["merge_commit_sha"] if data["merged"] else None,
+                base_repository_id=data["base"]["repo"]["id"],
+                head_ref=data["head"]["ref"],
+                base_ref=data["base"]["ref"],
+            )
+        )
+        if result.number != number:
+            raise GitHubResponseError()
+        return result
+
+    async def list_check_runs(self, owner: str, repo: str, sha: str) -> GitCheckPage:
+        """Возвращает первую bounded страницу Checks строго выбранного SHA."""
+        value = _input(_SHA, sha)
+        data, paginated = await self._get_json(
+            f"{self._repository_path(owner, repo)}/commits/{value}/check-runs",
+            params={"per_page": "100", "page": "1", "filter": "latest"},
+        )
+
+        def build():
+            items = tuple(
+                GitCheckSnapshot(
+                    id=item["id"],
+                    name=item["name"][:512],
+                    sha=item["head_sha"],
+                    status=item["status"],
+                    conclusion=item["conclusion"],
+                    updated_at=_timestamp(item.get("completed_at") or item.get("started_at")),
+                    provider_type="check_run",
+                )
+                for item in data["check_runs"]
+            )
+            if (
+                len(items) > 100
+                or any(item.sha != value for item in items)
+                or type(data["total_count"]) is not int
+                or data["total_count"] < len(items)
+            ):
+                raise ValueError("Invalid check identity.")
+            return GitCheckPage(
+                items=items,
+                total=data["total_count"],
+                complete=not paginated and len(items) == data["total_count"],
+            )
+
+        return _parsed(build)
+
+    async def get_commit_statuses(self, owner: str, repo: str, sha: str) -> GitCheckPage:
+        """Читает legacy CI statuses того же SHA, не приравнивая отсутствие CI к success."""
+        value = _input(_SHA, sha)
+        data, paginated = await self._get_json(
+            f"{self._repository_path(owner, repo)}/commits/{value}/status",
+            params={"per_page": "100", "page": "1"},
+        )
+
+        def build():
+            if _SHA.validate_python(data["sha"]) != value:
+                raise ValueError("Invalid status identity.")
+            items = tuple(
+                GitCheckSnapshot(
+                    id=item["id"],
+                    name=item["context"][:512],
+                    sha=value,
+                    status=item["state"],
+                    conclusion=None,
+                    updated_at=_timestamp(item.get("updated_at")),
+                    provider_type="commit_status",
+                )
+                for item in data["statuses"]
+            )
+            if (
+                len(items) > 100
+                or type(data["total_count"]) is not int
+                or data["total_count"] < len(items)
+            ):
+                raise ValueError("Invalid status count.")
+            return GitCheckPage(
+                items=items,
+                total=data["total_count"],
+                complete=not paginated and len(items) == data["total_count"],
+            )
+
+        return _parsed(build)
+
+    async def list_deployments(
+        self, owner: str, repo: str, *, limit: int = 10
+    ) -> GitDeploymentPage:
+        """Читает bounded deployments всех SHA, чтобы увидеть rollback/замену среды."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise GitHubRequestError()
+        data, paginated = await self._get_json(
+            f"{self._repository_path(owner, repo)}/deployments",
+            params={"per_page": str(limit), "page": "1"},
+        )
+
+        def build():
+            if not isinstance(data, list) or len(data) > limit:
+                raise ValueError("Invalid deployments.")
+            items = tuple(
+                GitDeploymentSnapshot(
+                    id=item["id"],
+                    sha=item["sha"],
+                    environment=item["environment"],
+                    created_at=_timestamp(item["created_at"]),
+                )
+                for item in data
+            )
+            return GitDeploymentPage(items=items, complete=not paginated)
+
+        return _parsed(build)
+
+    async def list_deployment_statuses(
+        self, owner: str, repo: str, deployment_id: int
+    ) -> GitDeploymentStatusPage:
+        """Текущий status deployment берётся из фактической первой страницы, без log_url."""
+        if type(deployment_id) is not int or deployment_id < 1:
+            raise GitHubRequestError()
+        data, paginated = await self._get_json(
+            f"{self._repository_path(owner, repo)}/deployments/{deployment_id}/statuses",
+            params={"per_page": "100", "page": "1"},
+        )
+
+        def build():
+            if not isinstance(data, list) or len(data) > 100:
+                raise ValueError("Invalid deployment statuses.")
+            items = tuple(
+                GitDeploymentStatusSnapshot(
+                    id=item["id"],
+                    state=item["state"],
+                    environment=item.get("environment"),
+                    created_at=_timestamp(item["created_at"]),
+                )
+                for item in data
+            )
+            return GitDeploymentStatusPage(items=items, complete=not paginated)
+
+        return _parsed(build)
+
+    async def list_change_candidates(
+        self, owner: str, repo: str, *, sha: str, kind: str
+    ) -> GitCandidatePage:
+        """Только bounded suggested candidates; сами branch/PR/commit не создают task links."""
+        path = self._repository_path(owner, repo)
+        value = _input(_SHA, sha)
+        if kind not in {"commit", "pull_request"}:
+            raise GitHubRequestError()
+        endpoint = f"{path}/commits" if kind == "commit" else f"{path}/pulls"
+        params = {
+            "per_page": "30",
+            "page": "1",
+            **(
+                {"sha": value}
+                if kind == "commit"
+                else {"state": "all", "sort": "updated", "direction": "desc"}
+            ),
+        }
+        data, paginated = await self._get_json(endpoint, params=params)
+
+        def build():
+            if not isinstance(data, list) or len(data) > 30:
+                raise ValueError("Invalid candidates.")
+            items = tuple(
+                GitCandidateSnapshot(
+                    kind=kind,
+                    sha=item["sha"] if kind == "commit" else item["head"]["sha"],
+                    title=(item["commit"]["message"] if kind == "commit" else item["title"])[:2000],
+                    pull_number=item["number"] if kind == "pull_request" else None,
+                    branch=item["head"]["ref"] if kind == "pull_request" else None,
+                )
+                for item in data
+            )
+            return GitCandidatePage(items=items, complete=not paginated)
+
+        return _parsed(build)
+
     @staticmethod
     def _repository_path(owner: str, repo: str) -> str:
         return f"/repos/{_input(_OWNER, owner)}/{_input(_REPOSITORY, repo)}"
 
     async def _get_json(
         self, path: str, *, params: dict[str, str] | None = None
-    ) -> tuple[dict[str, Any], bool]:
+    ) -> tuple[dict[str, Any] | list[Any], bool]:
         for attempt in range(1, self.attempts + 1):
+            if self.max_requests is not None and self.requests_made >= self.max_requests:
+                raise GitHubBudgetExceededError()
+            if self.request_budget is not None:
+                self.request_budget.consume()
+            self.requests_made += 1
             failure: GitHubClientError | None = None
             try:
                 # httpx timeout ограничивает отдельные IO-фазы, поэтому нужен и wall deadline.
@@ -281,7 +541,7 @@ class GitHubClient:
                         else:
                             content = await self._read_response(response)
                             data = json.loads(content.decode("utf-8"))
-                            if not isinstance(data, dict):
+                            if not isinstance(data, (dict, list)):
                                 raise GitHubResponseError()
                             has_next_page = any(
                                 "next" in link.get("rel", "").lower().split()

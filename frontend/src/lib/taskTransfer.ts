@@ -29,5 +29,6 @@ export function transferLossesText(losses: TaskTransferLosses & { wbs_placements
     return [count(losses.dependencies, "зависимость", "зависимости", "зависимостей"),
         count(losses.document_links, "связь с документом", "связи с документами", "связей с документами"),
         count(losses.risks, "риск", "риска", "рисков"), count(losses.board_stickers, "стикер доски", "стикера доски", "стикеров доски"),
-        count(losses.wbs_placements ?? 0, "размещение в ИСР", "размещения в ИСР", "размещений в ИСР")].filter(Boolean).join(", ");
+        count(losses.wbs_placements ?? 0, "размещение в ИСР", "размещения в ИСР", "размещений в ИСР"),
+        count(losses.git_links, "Git-привязка", "Git-привязки", "Git-привязок")].filter(Boolean).join(", ");
 }

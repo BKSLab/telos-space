@@ -8,6 +8,7 @@ globals: дублёры передаются так же, как в прилож
 
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -16,9 +17,11 @@ import pytest
 
 from src.db.models.knowledge_index_jobs import KnowledgeEntityType, KnowledgeIndexOperation
 from src.exceptions.clients import VectorStoreClientError
+from src.knowledge.project_map import MAP_JOB_ENTITY_ID
 from src.knowledge.worker import KnowledgeWorker, WorkerConfig
 from src.services.knowledge_index import KnowledgeIndexService, PreparedIndexAction
 from src.services.knowledge_queue import JobOutcome, KnowledgeQueueService
+from src.services.project_knowledge_updates import ProjectKnowledgeUpdatesService
 
 CONFIG = WorkerConfig(
     poll_seconds=0.01,
@@ -76,6 +79,7 @@ def make_worker(
     queue: KnowledgeQueueService | None = None,
     runtime: object | None = None,
     config: WorkerConfig = CONFIG,
+    map_updates: ProjectKnowledgeUpdatesService | None = None,
 ) -> tuple[KnowledgeWorker, ScopeTracker]:
     """Собирает worker с наблюдаемыми зависимостями."""
     tracker = ScopeTracker(service or AsyncMock(spec=KnowledgeIndexService))
@@ -88,8 +92,37 @@ def make_worker(
             payload_indexes_backfill_pending=False,
             qdrant_client=SimpleNamespace(backfill_payload_indexes=AsyncMock()),
         ),
+        map_updates=map_updates or AsyncMock(spec=ProjectKnowledgeUpdatesService),
     )
     return worker, tracker
+
+
+async def test_map_stage_runs_without_semantic_clients_and_map_only_job_never_calls_them():
+    for semantic_enabled in (False, True):
+        service = AsyncMock(spec=KnowledgeIndexService)
+        queue = AsyncMock(spec=KnowledgeQueueService)
+        work = job(1)
+        work.entity_id = MAP_JOB_ENTITY_ID
+        queue.claim_next_batch.return_value = [work]
+        updates = AsyncMock(spec=ProjectKnowledgeUpdatesService)
+        worker, tracker = make_worker(service=service, queue=queue, map_updates=updates,
+            config=replace(CONFIG, semantic_enabled=semantic_enabled))
+        assert await worker._process_next()
+        updates.process_project.assert_awaited_once_with(1)
+        service.prepare.assert_not_awaited()
+        assert tracker.opened == 0
+        assert queue.finish.await_args.args[0] == [JobOutcome(job_id=1, chunks_count=0)]
+    # Смешанная project batch сохраняет semantic source work после map marker.
+    queue = AsyncMock(spec=KnowledgeQueueService)
+    marker, source_job = job(1), job(2)
+    marker.entity_id = MAP_JOB_ENTITY_ID
+    queue.claim_next_batch.return_value = [marker, source_job]
+    service = AsyncMock(spec=KnowledgeIndexService)
+    service.prepare.return_value = action(2)
+    service.execute_prepared.return_value = 2
+    worker, _ = make_worker(service=service, queue=queue)
+    await worker._process_next()
+    service.prepare.assert_awaited_once_with(source_job)
 
 
 def test_worker_config_is_taken_from_settings_once() -> None:
@@ -100,6 +133,7 @@ def test_worker_config_is_taken_from_settings_once() -> None:
             knowledge_embedding_batch_size=16,
             knowledge_index_max_attempts=4,
             knowledge_job_retention_days=14,
+            knowledge_enabled=True,
         )
     )
 

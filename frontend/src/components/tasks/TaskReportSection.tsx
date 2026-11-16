@@ -10,6 +10,7 @@ import { formatDateTime } from "@/lib/dates";
 import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 
 interface Report {
+    id: number | null;
     task_id: number;
     revision: number;
     body_md: string;

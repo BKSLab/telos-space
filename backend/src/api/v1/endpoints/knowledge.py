@@ -77,7 +77,12 @@ async def ask_project_agent(
             project_id=project_id,
             question=data.question,
             history=data.history,
-            execution=AgentToolContext(project_id=project_id, user_id=principal.user_id),
+            execution=AgentToolContext(
+                project_id=project_id,
+                user_id=principal.user_id,
+                principal=principal,
+                origin_read_scopes=frozenset({"knowledge:read"}),
+            ),
         )
     except (KnowledgeServiceError, AiProviderError, AgentAnswerError) as error:
         logger.exception("❌ Арис проекта id=%s не ответил.", project_id)

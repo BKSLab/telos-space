@@ -42,7 +42,6 @@ router = APIRouter(
 
 @router.post(
     "/{conversation_id}/actions/{action_id}/decision",
-    dependencies=[Depends(require_write_scope)],
     response_model=AgentToolRunSchema,
     summary="Принять решение по действию агента",
     description="Выполняет либо отклоняет сохранённое действие текущего участника. Параметры нельзя подменить при подтверждении; после решения чат продолжает ответ.",
@@ -81,7 +80,10 @@ async def decide_agent_action(
     try:
         result = await service.decide(
             context=AgentToolContext(
-                project_id=project_id, user_id=principal.user_id, can_write=True
+                project_id=project_id,
+                user_id=principal.user_id,
+                can_write=principal.can_write,
+                principal=principal,
             ),
             conversation_id=conversation_id,
             action_id=action_id,

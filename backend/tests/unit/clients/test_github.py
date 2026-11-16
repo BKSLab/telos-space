@@ -11,9 +11,10 @@ import httpx
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from src.clients.github import GITHUB_API_VERSION, GitHubClient
+from src.clients.github import GITHUB_API_VERSION, GitHubClient, GitRequestBudget
 from src.exceptions.git_sources import (
     GitHubAuthenticationError,
+    GitHubBudgetExceededError,
     GitHubConflictError,
     GitHubForbiddenError,
     GitHubLimitError,
@@ -625,3 +626,164 @@ async def test_immutable_snapshots_and_constructor_limits_have_explicit_contract
         ):
             with pytest.raises(GitHubRequestError):
                 GitHubClient(http_client=transport, **limits)
+
+
+async def test_pr_uses_actual_merge_only_and_rejects_unverified_merged_identity():
+    payload = {
+        "number": 7,
+        "title": "A change",
+        "state": "open",
+        "merged": False,
+        "merge_commit_sha": HEAD_SHA,
+        "head": {"sha": COMMIT_SHA, "ref": "feature"},
+        "base": {"sha": TREE_SHA, "ref": "main", "repo": {"id": 12345}},
+    }
+    requests = []
+
+    def reply(request):
+        requests.append(request)
+        return httpx.Response(200, json=payload)
+
+    client = build_client(reply)
+    async with client.http_client:
+        opened = await client.get_pull_request(OWNER, REPO, 7)
+        assert opened.merge_sha is None and opened.head_sha == COMMIT_SHA
+        payload.update(merged=True, state="closed")
+        merged = await client.get_pull_request(OWNER, REPO, 7)
+        assert merged.merge_sha == HEAD_SHA
+        payload["merge_commit_sha"] = None
+        with pytest.raises(GitHubResponseError):
+            await client.get_pull_request(OWNER, REPO, 7)
+        payload.update(number=8, merged=False)
+        with pytest.raises(GitHubResponseError):
+            await client.get_pull_request(OWNER, REPO, 7)
+    assert all(
+        request.method == "GET"
+        and request.url.host == "api.github.com"
+        and request.url.path.endswith("/pulls/7")
+        for request in requests
+    )
+
+
+async def test_checks_statuses_and_commit_details_prove_requested_sha_and_pagination():
+    check = {
+        "id": 1,
+        "name": "Tests",
+        "head_sha": COMMIT_SHA,
+        "status": "completed",
+        "conclusion": "failure",
+        "completed_at": "2026-11-16T10:00:00Z",
+    }
+    payload = {"total_count": 2, "check_runs": [check]}
+    client = build_client(lambda request: httpx.Response(200, json=payload))
+    async with client.http_client:
+        page = await client.list_check_runs(OWNER, REPO, COMMIT_SHA)
+        assert (
+            not page.complete
+            and page.items[0].sha == COMMIT_SHA
+            and page.items[0].conclusion == "failure"
+        )
+        check["head_sha"] = HEAD_SHA
+        with pytest.raises(GitHubResponseError):
+            await client.list_check_runs(OWNER, REPO, COMMIT_SHA)
+    payload = {"sha": HEAD_SHA, "total_count": 0, "statuses": []}
+    client = build_client(lambda request: httpx.Response(200, json=payload))
+    async with client.http_client:
+        with pytest.raises(GitHubResponseError):
+            await client.get_commit_statuses(OWNER, REPO, COMMIT_SHA)
+        payload["sha"] = COMMIT_SHA
+        assert (await client.get_commit_statuses(OWNER, REPO, COMMIT_SHA)).complete
+    payload = {
+        "sha": HEAD_SHA,
+        "commit": {"tree": {"sha": TREE_SHA}, "message": "Title\n" + "x" * 5000},
+    }
+    client = build_client(lambda request: httpx.Response(200, json=payload))
+    async with client.http_client:
+        with pytest.raises(GitHubResponseError):
+            await client.get_commit_details(OWNER, REPO, COMMIT_SHA)
+        payload["sha"] = COMMIT_SHA
+        commit = await client.get_commit_details(OWNER, REPO, COMMIT_SHA)
+        assert len(commit.message) == 4000 and commit.message_truncated
+
+
+async def test_deployment_pages_expose_real_sha_and_status_without_following_provider_urls():
+    requests = []
+    payload = [
+        {
+            "id": 9,
+            "sha": HEAD_SHA,
+            "environment": "production",
+            "created_at": "2026-11-16T10:00:00Z",
+            "statuses_url": "https://untrusted.test/secret",
+        }
+    ]
+
+    def reply(request):
+        requests.append(request)
+        return httpx.Response(
+            200, json=payload, headers={"Link": '<https://untrusted.test/next>; rel="next"'}
+        )
+
+    client = build_client(reply)
+    async with client.http_client:
+        page = await client.list_deployments(OWNER, REPO)
+        assert page.items[0].sha == HEAD_SHA and not page.complete
+        payload = [
+            {
+                "id": 10,
+                "state": "inactive",
+                "environment": "production",
+                "created_at": "2026-11-16T11:00:00Z",
+                "log_url": "http://127.0.0.1/private",
+            }
+        ]
+        statuses = await client.list_deployment_statuses(OWNER, REPO, 9)
+        assert statuses.items[0].state == "inactive" and not statuses.complete
+        assert "log_url" not in statuses.model_dump_json()
+    assert len(requests) == 2 and all(
+        request.url.host == "api.github.com" and request.method == "GET" for request in requests
+    )
+    assert all(request.url.params["page"] == "1" for request in requests)
+
+
+async def test_request_budget_counts_actual_attempts_and_never_crosses_batch_limit():
+    requests = []
+
+    def reply(request):
+        requests.append(request)
+        return (
+            httpx.Response(503)
+            if len(requests) == 1
+            else httpx.Response(200, json=repository_payload())
+        )
+
+    client = build_client(reply, max_requests=2)
+    async with client.http_client:
+        await client.get_repository(OWNER, REPO)
+        with pytest.raises(GitHubBudgetExceededError):
+            await client.get_repository(OWNER, REPO)
+    assert client.requests_made == len(requests) == 2
+
+
+async def test_shared_budget_survives_distinct_clients_and_counts_retries():
+    ledger = GitRequestBudget(max_requests=3)
+    requests = []
+
+    def reply(request):
+        requests.append(request)
+        return (
+            httpx.Response(503)
+            if len(requests) == 1
+            else httpx.Response(200, json=repository_payload())
+        )
+
+    for _ in range(2):
+        client = build_client(reply, request_budget=ledger)
+        async with client.http_client:
+            await client.get_repository(OWNER, REPO)
+    assert ledger.requests_made == 3 and ledger.remaining == 0
+    client = build_client(reply, request_budget=ledger)
+    async with client.http_client:
+        with pytest.raises(GitHubBudgetExceededError):
+            await client.get_repository(OWNER, REPO)
+    assert ledger.exhausted and len(requests) == 3 and client.requests_made == 0

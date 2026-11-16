@@ -19,7 +19,9 @@ WORKFLOWS = (
     Workflow(
         "tasks",
         "Задачи текущего проекта: найти, прочитать, создать, изменить, стадии, чек-листы; "
-        "точный срок одной задачи; количества, распределение и просроченные задачи.",
+        "точный срок одной задачи; количества, распределение и просроченные задачи. "
+        "Помочь сформулировать задачу, подготовить черновик, задать существенный вопрос "
+        "или предложить декомпозицию большой идеи без записи.",
         frozenset(
             {
                 "telos_list_tasks",
@@ -27,6 +29,7 @@ WORKFLOWS = (
                 "telos_list_overdue_tasks",
                 "telos_get_task",
                 "telos_create_task",
+                "telos_prepare_task",
                 "telos_update_task",
                 "telos_move_task",
                 "telos_delete_task",
@@ -38,7 +41,14 @@ WORKFLOWS = (
     Workflow(
         "comments",
         "Комментарии задачи: прочитать обсуждение, добавить или изменить комментарий.",
-        frozenset({"telos_list_comments", "telos_add_comment", "telos_update_comment", "telos_delete_comment"}),
+        frozenset(
+            {
+                "telos_list_comments",
+                "telos_add_comment",
+                "telos_update_comment",
+                "telos_delete_comment",
+            }
+        ),
     ),
     Workflow(
         "documents",
@@ -63,7 +73,14 @@ WORKFLOWS = (
         "reports",
         "Сохранённый обзор/разбор проекта Ариса, последняя аналитическая сводка; "
         "опубликованные итоговые отчёты задач: наличие, чтение и новая версия.",
-        frozenset({"telos_get_latest_project_summary", "telos_list_task_reports", "telos_get_task_report", "telos_publish_task_report"}),
+        frozenset(
+            {
+                "telos_get_latest_project_summary",
+                "telos_list_task_reports",
+                "telos_get_task_report",
+                "telos_publish_task_report",
+            }
+        ),
     ),
     Workflow(
         "project",
@@ -106,7 +123,15 @@ WORKFLOWS = (
     Workflow(
         "risks",
         "Реестр зарегистрированных рисков проекта: прочитать, создать или изменить риск.",
-        frozenset({"telos_list_risks", "telos_get_risk", "telos_create_risk", "telos_update_risk", "telos_delete_risk"}),
+        frozenset(
+            {
+                "telos_list_risks",
+                "telos_get_risk",
+                "telos_create_risk",
+                "telos_update_risk",
+                "telos_delete_risk",
+            }
+        ),
     ),
     Workflow(
         "structure",
@@ -183,7 +208,45 @@ WORKFLOWS = (
         "sources",
         "Знания проекта: поиск фактов и текста по всем источникам, чтение оригиналов "
         "и связанных объектов для анализа или ответа по документам.",
-        frozenset({"telos_list_sources", "telos_read_source", "telos_list_related_sources", "telos_search_sources"}),
+        frozenset(
+            {
+                "telos_list_sources",
+                "telos_read_source",
+                "telos_list_related_sources",
+                "telos_search_sources",
+            }
+        ),
+    ),
+    Workflow(
+        "context",
+        "Отобрать достаточный контекст конкретного вопроса: компактный паспорт, карта знаний, противоречия, пробелы и адресное дочитывание evidence. Не считать пустой паспорт или отсутствие задач автоматическим блокером ясного поручения.",
+        frozenset({"telos_select_context", "telos_get_knowledge_map", "telos_get_knowledge_claim"}),
+    ),
+    Workflow(
+        "git",
+        "Доступные репозитории, версии кода, компоненты и связанные изменения задач. Точные repository/SHA/path/environment, разные PR/CI/deploy не объединяются в неподтверждённый production.",
+        frozenset(
+            {
+                "telos_list_git_connections",
+                "telos_search_git_sources",
+                "telos_read_git_file",
+                "telos_get_git_map",
+                "telos_list_task_git_links",
+            }
+        ),
+    ),
+    Workflow(
+        "web",
+        "Публичный веб после отдельного человеческого согласия на точную тему/URL. Читать/искать можно без права бизнес-записи; сохранение исследования — только явно порученная запись в документы.",
+        frozenset(
+            {
+                "telos_request_web_search",
+                "telos_request_web_page",
+                "telos_search_web",
+                "telos_read_web_page",
+                "telos_save_web_research",
+            }
+        ),
     ),
 )
 

@@ -23,7 +23,8 @@ def test_risk_includes_both_plans_and_is_a_link_not_a_task_child():
     assert chunks == source.chunks(250, 30)
 
 
-@pytest.mark.parametrize("kind", list(SourceType))
+# Git использует proof-gated service; generic SQL-каталог не читает его raw tables.
+@pytest.mark.parametrize("kind", list(POLICY_BY_TYPE))
 def test_every_semantic_source_is_validated_and_never_trusts_stale_or_foreign_text(kind):
     rows = base_rows()
     rule = POLICY_BY_TYPE[kind]

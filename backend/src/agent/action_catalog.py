@@ -4,6 +4,22 @@ from src.agent.actions import ProjectAction
 from src.agent.aris import ALL_MODES, WIDGET_MODES
 from src.schemas import board_diagrams as diagrams
 from src.schemas import project_tool_inputs as p
+from src.schemas.agent_context import (
+    ContextInput,
+    ContextPageInput,
+    GitReadInput,
+    GitSearchInput,
+    TaskGitLinksInput,
+    WebSaveInput,
+    WebTopicInput,
+)
+from src.schemas.context_selection import (
+    ContextSelectionInput,
+    KnowledgeClaimReadInput,
+    KnowledgeMapReadInput,
+)
+from src.schemas.task_formulation import TaskFormulationInput
+from src.schemas.web_research import WebReadSchema, WebSearchSchema, WebUrlApprovalSchema
 from src.services import agent_board_actions as boards
 from src.services import agent_chat_file_actions as chat_files
 from src.services import agent_chat_history_actions as chat_history
@@ -13,8 +29,120 @@ from src.services import agent_project_actions as projects
 from src.services import agent_report_actions as reports
 from src.services import agent_structure_actions as structure
 from src.services import agent_task_actions as tasks
+from src.services.agent_context_tools import context_handler
 
-PROJECT_ACTIONS = (
+CONTEXT_READ_SCOPES = frozenset({"knowledge:read", "projects:read"})
+
+CONTEXT_ACTIONS = tuple(
+    ProjectAction(
+        name,
+        title,
+        description,
+        schema,
+        context_handler=context_handler(name),
+        mutating=False,
+        required_scopes=CONTEXT_READ_SCOPES
+        | ({"tasks:read"} if name == "telos_list_task_git_links" else set()),
+        requires_confirmation=external,
+        external_effect=external,
+    )
+    for name, title, description, schema, external in (
+        (
+            "telos_select_context",
+            "Подобрать контекст вопроса",
+            "Краткий паспорт, релевантные материалы и карта с противоречиями, пробелами и адресным продолжением. provided — только дословные фрагменты текущего запроса человека. Пустой паспорт не блокирует ясное поручение. Результаты поиска не доказывают отсутствия других сведений.",
+            ContextSelectionInput,
+            False,
+        ),
+        (
+            "telos_get_knowledge_map",
+            "Прочитать карту знаний",
+            "Текущие утверждения проекта с provenance, verification, gaps и пагинацией. Карта — производное представление; прочитайте evidence перед существенным выводом. Pending/stale/partial не означает отсутствие сведений.",
+            KnowledgeMapReadInput,
+            False,
+        ),
+        (
+            "telos_get_knowledge_claim",
+            "Прочитать утверждение карты",
+            "Одно утверждение, точные версии и цитаты evidence. Требование, факт источника, анализ, предположение и открытый вопрос различаются. Done задачи не доказывает production.",
+            KnowledgeClaimReadInput,
+            False,
+        ),
+        (
+            "telos_list_git_connections",
+            "Найти репозитории проекта",
+            "Только доступные подключения проекта, их observed/indexed SHA, ref и полнота; у нескольких репозиториев нет общего SHA.",
+            ContextPageInput,
+            False,
+        ),
+        (
+            "telos_search_git_sources",
+            "Найти фрагменты кода",
+            "Ограниченные кандидаты по доступным репозиториям с repository/SHA/path. Одинаковые имена файлов и символов не объединяют репозитории; partial/inaccessible — не отсутствие кода.",
+            GitSearchInput,
+            False,
+        ),
+        (
+            "telos_read_git_file",
+            "Прочитать файл Git",
+            "Читает страницу файла конкретного подключения и immutable SHA. next_offset продолжает чтение; source_url закреплён на версии. Код — текущее состояние, не доказательство целей или работающего production.",
+            GitReadInput,
+            False,
+        ),
+        (
+            "telos_get_git_map",
+            "Прочитать карту кода",
+            "Фактические компоненты, импорты и символы с manifest каждого репозитория. Не выводит цели проекта из названий файлов.",
+            ContextInput,
+            False,
+        ),
+        (
+            "telos_list_task_git_links",
+            "Прочитать изменения задачи",
+            "Все связанные PR/commits и фактически проверенные CI/deploy с exact repository/SHA/environment. Proposed, merged, checked и deployed не взаимозаменяемы; разные PR не сливаются в один статус.",
+            TaskGitLinksInput,
+            False,
+        ),
+        (
+            "telos_request_web_search",
+            "Разрешить публичную тему поиска",
+            "Предлагает человеку точную public_topic для передачи внешнему поиску. Только после отдельного человеческого решения выдаётся topic_token. Не включай приватные данные проекта, личную переписку или credentials.",
+            WebTopicInput,
+            True,
+        ),
+        (
+            "telos_request_web_page",
+            "Разрешить публичную страницу",
+            "Предлагает человеку точный публичный URL; отдельное согласие выдаёт page_token. Не принимает произвольный URL как уже разрешённый и не выполняет сеть до решения человека.",
+            WebUrlApprovalSchema,
+            True,
+        ),
+        (
+            "telos_search_web",
+            "Найти публичные материалы",
+            "Поиск только по неизменённому topic_token после согласия человека. Поисковый snippet — кандидат, не прочитанная страница. Не отправляй сюда контекст проекта.",
+            WebSearchSchema,
+            False,
+        ),
+        (
+            "telos_read_web_page",
+            "Прочитать публичную страницу",
+            "Читает только page_token разрешённого URL или результата поиска. Полнота, время получения и content_hash относятся к этому наблюдению; внешняя страница не является установленным фактом проекта.",
+            WebReadSchema,
+            False,
+        ),
+    )
+)
+
+PROJECT_ACTIONS = CONTEXT_ACTIONS + (
+    ProjectAction(
+        "telos_save_web_research",
+        "Сохранить внешнее исследование",
+        "Явная запись прочитанной публичной страницы в существующий каталог документов. Повторно читает разрешённый URL и сверяет expected_hash; не сохраняет придуманный моделью текст.",
+        WebSaveInput,
+        context_handler=context_handler("telos_save_web_research"),
+        required_scopes=CONTEXT_READ_SCOPES | {"projects:write"},
+    ),
     ProjectAction(
         "telos_list_chat_messages",
         "Найти сообщения переписки",
@@ -172,9 +300,24 @@ PROJECT_ACTIONS = (
         mutating=False,
     ),
     ProjectAction(
+        "telos_prepare_task",
+        "Подготовить постановку задачи",
+        "Черновик, один существенный вопрос или предложение декомпозиции без записи. "
+        "Только подтверждённые сведения; неизвестное и предположения указываются явно. "
+        "Предлагаемые title/description_md/checklist подходят обычному созданию после поручения пользователя.",
+        TaskFormulationInput,
+        projects.prepare_task,
+        mutating=False,
+        needs_project=False,
+        project_optional=True,
+        modes=ALL_MODES,
+    ),
+    ProjectAction(
         "telos_create_task",
         "Создать задачу",
-        "Создание задачи, назначений и необязательного чек-листа.",
+        "Создание понятной задачи с описанием результата/приёмки и необязательным чек-листом "
+        "по ясному поручению. Не назначай неподтверждённых людей, сроки или метрики; "
+        "для обсуждения и декомпозиции используй telos_prepare_task без записи.",
         p.TaskCreateInput,
         tasks.create_task,
     ),

@@ -18,12 +18,13 @@ const LABELS: Record<string, string> = {
     sticker: "Стикер", member: "Участник", stage: "Стадия", milestone: "Веха", dependency: "Зависимость",
     risk: "Риск", attachment: "Файл", key: "Ключ", body: "Текст", user: "Сотрудник", full_name: "ФИО",
     login: "Логин", role: "Роль", status: "Статус",
+    public_topic: "Точная публичная тема", url: "Точный публичный адрес",
 };
 
 /** Служебные поля защиты от одновременной правки — человеку при решении не нужны. */
 const HIDDEN = new Set(["revision", "expected_updated_at", "expected_version", "checklist_revision", "position", "expected_body_md",
     // Служебные поля снимка объекта: номер записи и время правки человеку ничего не говорят.
-    "id", "updated_at", "created_at"]);
+    "id", "updated_at", "created_at", "topic_token", "page_token", "source_proof", "request_binding"]);
 
 /** Параметры действия человеческими подписями; служебные поля скрыты. Общий с окном подтверждения по ссылке. */
 export function Parameters({ value }: { value: unknown }) {
@@ -61,6 +62,7 @@ export function AgentActionCard({ action, project, sources, pending, onDecision,
     rules: ActionDecisionRules;
 }) {
     const { enabled, canApprove = true, canReject = true } = decisionRules;
+    const externalRelease = action.effect === "external_release";
     const disabledHint = decisionRules.disabledHint ?? DEFAULT_DISABLED_HINT;
     const status = { pending: "Ожидает решения", completed: "Выполнено", rejected: "Отклонено", failed: "Не выполнено" }[action.status];
     const Icon = { pending: Clock3, completed: CheckCircle2, rejected: XCircle, failed: CircleAlert }[action.status];
@@ -77,9 +79,9 @@ export function AgentActionCard({ action, project, sources, pending, onDecision,
             <summary className="cursor-pointer text-secondary">Параметры действия</summary>
             <div className="mt-2 max-h-64 overflow-y-auto"><Parameters value={action.arguments} /></div>
         </details>
-        {action.status === "pending" && <p className="mt-2 text-[11px] text-muted">{decisionRules.note ?? "Арис предлагает изменение. Оно выполнится только после подтверждения; отменить потом можно только вручную."}</p>}
+        {action.status === "pending" && <p className="mt-2 text-[11px] text-muted">{decisionRules.note ?? (externalRelease ? "Проверьте точную публичную тему или адрес. После разрешения они будут переданы внешнему сервису; внутренние сведения сюда добавлять не нужно." : "Арис предлагает изменение. Оно выполнится только после подтверждения; отменить потом можно только вручную.")}</p>}
         {action.status === "pending" && (canApprove || canReject) && <div className="mt-3 flex gap-2">
-            {canApprove && <Button size="sm" variant="primary" disabled={!enabled || pending} onClick={() => onDecision("approve")} title={enabled ? decisionRules.approveHint ?? "Выполнить изменение сейчас. Отменить можно только вручную" : disabledHint}>Подтвердить</Button>}
+            {canApprove && <Button size="sm" variant="primary" disabled={!enabled || pending} onClick={() => onDecision("approve")} title={enabled ? decisionRules.approveHint ?? (externalRelease ? "Разрешить отправку точной публичной темы или адреса" : "Выполнить изменение сейчас. Отменить можно только вручную") : disabledHint}>{externalRelease ? "Разрешить" : "Подтвердить"}</Button>}
             {canReject && <Button size="sm" disabled={!enabled || pending} onClick={() => onDecision("reject")} title={enabled ? "Не выполнять — данные не изменятся" : disabledHint}>Отклонить</Button>}
         </div>}
     </section>;

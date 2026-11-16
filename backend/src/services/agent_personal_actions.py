@@ -7,7 +7,7 @@
 from src.agent.tools import AgentToolContext
 from src.exceptions.agent_tools import AgentToolAccessError
 from src.schemas import project_tool_inputs as inputs
-from src.services.agent_action_helpers import page, task_document_listing
+from src.services.agent_action_helpers import page, task_document_listing, task_model_payload
 from src.services.agent_tool_scope import AgentProjectToolScope
 
 # Сколько проектов обходит поиск задач: дальше — уточнить запрос или проект.
@@ -18,13 +18,17 @@ SEARCH_PER_PROJECT = 10
 def _compact(item: dict) -> dict:
     item.pop("description_md", None)
     item.pop("checklist", None)
+    for key in ("report", "last_comment", "comments_count"):
+        item.pop(key, None)
+    item["source_id"] = f"task:{item['id']}"
     return item
 
 
 def _task_payload(task) -> dict:
-    data = task.model_dump(mode="json")
-    result = {"task": data, "documents": task_document_listing(task.id)}
-    result["source_id"] = f"task:{task.id}"
+    result = {
+        **task_model_payload(task, project_bound=False),
+        "documents": task_document_listing(task.id),
+    }
     return result
 
 
@@ -128,12 +132,6 @@ async def create_personal_task(
         created_by_user_id=ctx.user_id,
     )
     return _task_payload(task)
-
-
-
-
-
-
 
 
 async def set_task_status(

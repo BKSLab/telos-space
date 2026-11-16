@@ -13,6 +13,7 @@ vi.mock("@/lib/useAuth", () => ({ useCurrentUser: () => ({ data: { id: 1 } }) })
 vi.mock("@/components/projects/ProjectPeopleSummary", () => ({ ProjectPeopleSummary: () => null }));
 vi.mock("@/components/projects/ProjectDeadlineHistory", () => ({ ProjectDeadlineHistory: () => null }));
 vi.mock("@/components/projects/ProjectContextHistory", () => ({ ProjectContextHistory: () => null }));
+vi.mock("@/components/projects/ProjectGitSources", () => ({ ProjectGitSources: () => null }));
 vi.mock("@/routes/ProjectTeamPage", () => ({ ProjectTeamPage: () => null }));
 
 const projectA: Project = {

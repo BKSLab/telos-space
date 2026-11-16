@@ -7,6 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class TaskReportSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    id: int | None = Field(
+        default=None,
+        gt=0,
+        description="ID неизменяемой публикации отчёта; null, если версии ещё нет. Это не ID задачи.",
+        examples=[12],
+    )
     task_id: int = Field(description="ID задачи.", examples=[5])
     revision: int = Field(default=0, description="Версия; 0 — отчёта ещё нет.", examples=[1])
     body_md: str = Field(

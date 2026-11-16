@@ -6,6 +6,7 @@
 и решение по действию из беседы без проекта.
 """
 
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -22,6 +23,7 @@ from src.db.models.agent_conversations import AgentConversation
 from src.db.models.agent_messages import AgentMessage
 from src.db.models.agent_tool_runs import AgentToolRun
 from src.db.models.api_keys import ApiKey
+from src.dependencies.agent_context import build_context_evidence_service
 from src.dependencies.scopes import build_agent_conversation_scope, build_agent_project_tool_scope
 from src.exceptions.agent_conversations import AgentRequestBusyError, AgentRequestNotFoundError
 from src.repositories.agent_conversations import AgentConversationsRepository
@@ -35,6 +37,9 @@ from src.services.agent_conversations import (
 )
 from src.services.agent_requests import AgentRequestsService, RequestLinks
 from src.services.agent_routing import AgentRoutingDecision, AgentRoutingService
+from src.services.auth import ApiKeyGrant
+from src.services.context_evidence import ContextEvidence, ContextEvidenceService
+from src.services.context_results import ContextReadResult
 from src.services.project_agent import ProjectAgentService
 
 KEY_A, KEY_B = uuid4(), uuid4()
@@ -54,14 +59,33 @@ async def routing_env(postgres_container):
     async with factory() as session:
         session.add_all(
             [
-                User(id=i, username=f"user{i}", first_name="Участник", last_name=str(i), password_hash="!", is_active=True)
+                User(
+                    id=i,
+                    username=f"user{i}",
+                    first_name="Участник",
+                    last_name=str(i),
+                    password_hash="!",
+                    is_active=True,
+                )
                 for i in (1, 2)
             ]
         )
         await session.flush()
-        session.add_all([ApiKey(id=key, label="Личный клиент", key_hash="unused",
-            key_prefix=key.hex[:12], owner_user_id=1, kind="personal",
-            scopes=["agent:ask", "tasks:write"], is_active=True) for key in (KEY_A, KEY_B)])
+        session.add_all(
+            [
+                ApiKey(
+                    id=key,
+                    label="Личный клиент",
+                    key_hash="unused",
+                    key_prefix=key.hex[:12],
+                    owner_user_id=1,
+                    kind="personal",
+                    scopes=["agent:ask", "tasks:write"],
+                    is_active=True,
+                )
+                for key in (KEY_A, KEY_B)
+            ]
+        )
         session.add_all(
             [
                 Project(id=1, owner_id=1, key="CRM", name="Внедрение CRM", color="#334455"),
@@ -79,7 +103,9 @@ async def routing_env(postgres_container):
         await session.commit()
     responder = AsyncMock(spec=ProjectAgentService)
     responder.task_link_template.return_value = "https://tt.test/?task={key}"
-    responder.ask_personal.return_value = KnowledgeAnswerSchema(answer="Открытых задач нет.", sources=[])
+    responder.ask_personal.return_value = KnowledgeAnswerSchema(
+        answer="Открытых задач нет.", sources=[]
+    )
     responder.ask.return_value = KnowledgeAnswerSchema(
         answer="[CRM-5](https://tt.test/?task=CRM-5) в работе.",
         sources=[
@@ -95,6 +121,26 @@ async def routing_env(postgres_container):
     llm = AsyncMock(spec=LlmClient)
     llm.get_structured_response.return_value = ConversationMemory(summary="Раньше говорили о CRM.")
     settings = get_settings()
+    evidence = build_context_evidence_service(session_factory=factory, settings=settings)
+
+    async def respond_with_current_project_guard(**kwargs):
+        project_id, principal = kwargs["project_id"], kwargs["execution"].principal
+        observation = await evidence.capture_project(project_id=project_id, principal=principal)
+        ledger = ContextEvidence()
+        ledger.register(
+            ContextReadResult(
+                {},
+                project_id=project_id,
+                project_reads=(observation,),
+                restricted=False,
+                origin_read_scopes=frozenset({"agent:ask"}),
+            )
+        )
+        answer = responder.ask.return_value.model_copy(deep=True)
+        answer._context_evidence = ledger, principal
+        return answer
+
+    responder.ask.side_effect = respond_with_current_project_guard
     routing = AgentRoutingService(
         scope=build_agent_project_tool_scope(session_factory=factory, settings=settings),
         agent=responder,
@@ -112,6 +158,7 @@ async def routing_env(postgres_container):
     requests = AgentRequestsService(
         scope=build_agent_conversation_scope(session_factory=factory),
         links=RequestLinks("https://tt.test/"),
+        evidence=evidence,
     )
     try:
         yield SimpleNamespace(
@@ -154,12 +201,34 @@ async def ask(
     )
 
 
+async def read_result(env, *, user_id, api_key_id, request_id):
+    """The synthetic transport passes its verified current reader, like HTTP/MCP."""
+    principal = ContextEvidenceService.session_principal(user_id)
+    if api_key_id is not None:
+        async with env.factory() as db:
+            key = await db.get(ApiKey, api_key_id)
+            principal = replace(
+                principal,
+                user_id=key.owner_user_id,
+                via_api_token=True,
+                api_key=ApiKeyGrant(
+                    key_id=key.id,
+                    label=key.label,
+                    key_prefix=key.key_prefix,
+                    scopes=frozenset(key.scopes),
+                    owner_user_id=key.owner_user_id,
+                    kind=key.kind,
+                ),
+            )
+    return await env.requests.get_external_result(
+        user_id=user_id, api_key_id=api_key_id, request_id=request_id, principal=principal
+    )
+
+
 async def test_task_key_routes_to_project_with_verbatim_and_key_scopes(routing_env):
     env = routing_env
     request_id = await ask(env, "Что с задачей CRM-5?")
-    pending = await env.requests.get_external_result(
-        user_id=1, api_key_id=KEY_A, request_id=request_id
-    )
+    pending = await read_result(env, user_id=1, api_key_id=KEY_A, request_id=request_id)
     assert pending.status == "queued" and pending.write_allowed is False
     assert await env.conversations.process_next()
     call = env.responder.ask.await_args.kwargs
@@ -172,9 +241,7 @@ async def test_task_key_routes_to_project_with_verbatim_and_key_scopes(routing_e
     assert call["execution"].project_id == 1 and call["execution"].can_write is True
     # Ключ задачи дал проект без обращения к модели выбора.
     env.llm.get_structured_response.assert_not_awaited()
-    result = await env.requests.get_external_result(
-        user_id=1, api_key_id=KEY_A, request_id=request_id
-    )
+    result = await read_result(env, user_id=1, api_key_id=KEY_A, request_id=request_id)
     assert result.status == "completed" and result.project_key == "CRM"
     assert result.links[0].key == "CRM-5"
     assert result.links[0].url == "https://tt.test/?task=CRM-5"
@@ -183,7 +250,7 @@ async def test_task_key_routes_to_project_with_verbatim_and_key_scopes(routing_e
     await env.conversations.process_next()
     assert env.responder.ask.await_args.kwargs["verbatim"] == "Перенеси CRM-5 на пятницу"
     assert env.responder.ask.await_args.kwargs["history"]  # та же беседа — та же память
-    done = await env.requests.get_external_result(user_id=1, api_key_id=KEY_A, request_id=second)
+    done = await read_result(env, user_id=1, api_key_id=KEY_A, request_id=second)
     assert done.write_allowed is True and done.conversation_id == "local:chat:1"
 
 
@@ -223,9 +290,7 @@ async def test_foreign_project_is_invisible_and_ambiguity_is_clarified(routing_e
     env.responder.ask.assert_not_awaited()
     assert '"CRM"' not in seen[0] and "Внедрение CRM" not in seen[0]
     assert '"HR"' in seen[0]
-    result = await env.requests.get_external_result(
-        user_id=2, api_key_id=None, request_id=request_id
-    )
+    result = await read_result(env, user_id=2, api_key_id=None, request_id=request_id)
     assert result.status == "completed" and result.project_key is None
     assert "Уточните, о каком проекте речь" in result.answer
     assert "HR — Кадры" in result.answer and "CRM" not in result.answer.replace("CRM-5", "")
@@ -236,11 +301,9 @@ async def test_result_is_visible_only_to_its_key_and_employee(routing_env):
     request_id = await ask(env, "Что у меня горит?")
     for user_id, key in ((2, KEY_A), (1, KEY_B), (1, None)):
         with pytest.raises(AgentRequestNotFoundError):
-            await env.requests.get_external_result(
-                user_id=user_id, api_key_id=key, request_id=request_id
-            )
+            await read_result(env, user_id=user_id, api_key_id=key, request_id=request_id)
     with pytest.raises(AgentRequestNotFoundError):
-        await env.requests.get_external_result(user_id=1, api_key_id=KEY_A, request_id=uuid4())
+        await read_result(env, user_id=1, api_key_id=KEY_A, request_id=uuid4())
     # Пока ответ готовится, второй вопрос в ту же беседу не встаёт, а в другую — встаёт.
     with pytest.raises(AgentRequestBusyError) as busy:
         await ask(env, "И ещё вопрос")
@@ -280,9 +343,7 @@ async def test_pending_action_links_and_decision_in_conversation_without_project
         session.add(action)
         await session.commit()
         conversation_id = message.conversation_id
-    result = await env.requests.get_external_result(
-        user_id=1, api_key_id=KEY_A, request_id=request_id
-    )
+    result = await read_result(env, user_id=1, api_key_id=KEY_A, request_id=request_id)
     assert [item.id for item in result.pending] == [action.id]
     assert result.pending[0].confirm_url == f"https://tt.test/?confirm={action.id}"
     assert result.pending[0].task_key == "CRM-5" and result.done == []
@@ -344,9 +405,7 @@ async def test_this_task_from_page_context_routes_to_its_project_without_key(rou
     assert call["extra_context"] == {"page_context": {"route": "/projects/CRM/board", "task_id": 5}}
     # Запись по-прежнему решает дословная реплика, а не контекст.
     assert call["verbatim"] == "перенеси эту задачу" and call["execution"].can_write is True
-    result = await env.requests.get_external_result(
-        user_id=1, api_key_id=KEY_A, request_id=request_id
-    )
+    result = await read_result(env, user_id=1, api_key_id=KEY_A, request_id=request_id)
     assert result.project_key == "CRM"
 
 
@@ -366,9 +425,7 @@ async def test_foreign_page_context_gives_neither_read_nor_write(routing_env):
     await env.conversations.process_next()
     env.responder.ask.assert_not_awaited()
     assert '"HR"' not in seen[0] and '"task_id"' not in seen[0]
-    result = await env.requests.get_external_result(
-        user_id=1, api_key_id=KEY_A, request_id=request_id
-    )
+    result = await read_result(env, user_id=1, api_key_id=KEY_A, request_id=request_id)
     assert result.project_key is None and result.done == [] and result.pending == []
     # Ключ задачи в тексте главнее страницы: CRM-5 при контексте чужого HR идёт в CRM,
     # а чужой контекст до проектного агента не доходит.
@@ -393,7 +450,5 @@ async def test_missing_task_in_page_context_is_ignored(routing_env):
     await env.conversations.process_next()
     env.responder.ask.assert_not_awaited()
     assert '"task_id"' not in seen[0] and '"route": "/my-tasks"' in seen[0]
-    result = await env.requests.get_external_result(
-        user_id=1, api_key_id=KEY_A, request_id=request_id
-    )
+    result = await read_result(env, user_id=1, api_key_id=KEY_A, request_id=request_id)
     assert result.status == "completed" and result.answer == "Открытых задач нет."

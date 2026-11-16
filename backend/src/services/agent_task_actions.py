@@ -12,6 +12,7 @@ from src.services.agent_action_helpers import (
     checked_task,
     page,
     task_document_listing,
+    task_model_payload,
 )
 from src.services.agent_tool_scope import AgentProjectToolScope
 from src.services.project_query import StageRefDto, resolve_stage_reference
@@ -60,6 +61,7 @@ def _list_item(item: dict[str, Any], stages: dict[int, Any]) -> dict[str, Any]:
     """
     stage = stages.get(item.get("stage_id"))
     row = {
+        "source_id": f"task:{item['id']}",
         "id": item["id"],
         "key": item["key"],
         "title": item["title"],
@@ -73,10 +75,20 @@ def _list_item(item: dict[str, Any], stages: dict[int, Any]) -> dict[str, Any]:
     for key in _OPTIONAL_LIST_FIELDS:
         if item.get(key) not in (None, ""):
             row[key] = item[key]
-    if item.get("comments_count"):
-        row["comments_count"] = item["comments_count"]
     participants = [
-        {"role": person.get("role"), "name": " ".join(filter(None, [(person.get("user") or {}).get("last_name"), (person.get("user") or {}).get("first_name")])) or (person.get("user") or {}).get("username")}
+        {
+            "role": person.get("role"),
+            "name": " ".join(
+                filter(
+                    None,
+                    [
+                        (person.get("user") or {}).get("last_name"),
+                        (person.get("user") or {}).get("first_name"),
+                    ],
+                )
+            )
+            or (person.get("user") or {}).get("username"),
+        }
         for person in item.get("participants") or []
     ]
     if participants:
@@ -96,8 +108,7 @@ async def get_task(
     task_id = args.task_id or await _task_id_by_key(db, ctx, args.task_key or "")
     task = await checked_task(db, ctx, task_id)
     result = {
-        "task": task.model_dump(mode="json"),
-        "source_id": f"task:{task.id}",
+        **task_model_payload(task, project_bound=True),
         "documents": task_document_listing(task.id),
     }
     stage = next(
@@ -131,7 +142,8 @@ async def create_task(
     # Имена разрешаются после проверки квитанции в AgentActionsService:
     # переименование стадии или удаление участника не ломает повтор исходного запроса.
     payload = args.model_dump(
-        exclude_unset=True, exclude={"stage_name", "executor_username", "observer_usernames"},
+        exclude_unset=True,
+        exclude={"stage_name", "executor_username", "observer_usernames"},
     )
     if args.stage_name is not None:
         stages = await db.stages.get_stage_list(ctx.project_id)
@@ -143,7 +155,8 @@ async def create_task(
         username = args.executor_username.strip()
         payload["executor_id"] = (
             await db.members.resolve_member_user_id(project_id=ctx.project_id, username=username)
-            if username else None
+            if username
+            else None
         )
     if args.observer_usernames is not None:
         payload["observer_ids"] = [
@@ -155,7 +168,7 @@ async def create_task(
         payload,
         created_by_user_id=ctx.user_id,
     )
-    return {"task": task.model_dump(mode="json"), "source_id": f"task:{task.id}"}
+    return task_model_payload(task, project_bound=True)
 
 
 async def update_task(
@@ -166,7 +179,7 @@ async def update_task(
     task = await db.tasks.update_task(
         args.task_id, args.changes.model_dump(exclude_unset=True), updated_by_user_id=ctx.user_id
     )
-    return {"task": task.model_dump(mode="json"), "source_id": f"task:{task.id}"}
+    return task_model_payload(task, project_bound=True)
 
 
 async def move_task(
@@ -175,7 +188,7 @@ async def move_task(
     """Меняет стадию и положение задачи с обычной историей переходов."""
     await checked_task(db, ctx, args.task_id)
     task = await db.tasks.move_task(args.task_id, args.stage_id, args.position)
-    return {"task": task.model_dump(mode="json"), "source_id": f"task:{task.id}"}
+    return task_model_payload(task, project_bound=True)
 
 
 async def delete_task(
@@ -210,10 +223,7 @@ async def fix_baseline(
 ) -> dict:
     """Фиксирует текущие даты как baseline отдельной явной операцией."""
     await checked_task(db, ctx, args.task_id)
-    return {
-        "task": (await db.tasks.fix_baseline(args.task_id)).model_dump(mode="json"),
-        "source_id": f"task:{args.task_id}",
-    }
+    return task_model_payload(await db.tasks.fix_baseline(args.task_id), project_bound=True)
 
 
 async def list_comments(
@@ -229,7 +239,9 @@ async def add_comment(
 ) -> dict:
     """Добавляет комментарий от имени пользователя, который ведёт разговор с агентом."""
     await checked_task(db, ctx, args.task_id)
-    item = await db.comments.add_comment(task_id=args.task_id, author_id=ctx.user_id, body_md=args.body_md)
+    item = await db.comments.add_comment(
+        task_id=args.task_id, author_id=ctx.user_id, body_md=args.body_md
+    )
     return {"comment": item.model_dump(mode="json"), "source_id": f"comment:{item.id}"}
 
 
@@ -249,10 +261,6 @@ async def delete_comment(
     await checked_comment(db, ctx, args.comment_id)
     await db.comments.delete_comment(args.comment_id)
     return {"deleted": True, "comment_id": args.comment_id}
-
-
-
-
 
 
 async def _project_key(db: AgentProjectToolScope, project_id: int) -> str:

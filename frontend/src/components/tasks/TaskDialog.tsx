@@ -35,6 +35,7 @@ import { TaskPeopleFields } from "@/components/tasks/TaskPeopleFields";
 import { TaskRiskSection } from "@/components/risks/TaskRiskSection";
 import { TaskChecklistSection } from "@/components/tasks/TaskChecklistSection";
 import { TaskReportSection } from "@/components/tasks/TaskReportSection";
+import { TaskGitEvidence } from "@/components/tasks/TaskGitEvidence";
 import { TaskTitleEditor } from "@/components/tasks/TaskTitleEditor";
 import { CopyTaskTitleButton } from "@/components/tasks/CopyTaskTitleButton";
 import { TransferTaskDialog } from "@/components/tasks/TransferTaskDialog";
@@ -518,7 +519,9 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                                 </DrawerSection>
                             </TabPanel>
                             <TabPanel id="report" shouldForceMount className={PANEL_CLASS}>
-                                <DrawerSection title="Итоговый отчёт"><TaskReportSection taskId={taskId} active={selectedSection === "report"} selectedComment={reportComment} clearComment={() => setReportComment(null)} /></DrawerSection>
+                                <DrawerSection title="Итоговый отчёт"><TaskReportSection taskId={taskId} active={selectedSection === "report"} selectedComment={reportComment} clearComment={() => setReportComment(null)} />
+                                    {projectId !== undefined && <TaskGitEvidence key={`${projectId}-${taskId}`} projectId={projectId} taskId={taskId} active={selectedSection === "report"} />}
+                                </DrawerSection>
                             </TabPanel>
                             <TabPanel id="history" shouldForceMount className={PANEL_CLASS}>
                                 <DrawerSection title="История" count={activityQuery.data?.length ?? null}>

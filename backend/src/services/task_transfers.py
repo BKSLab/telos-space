@@ -456,6 +456,7 @@ class TaskTransfersService:
         """
         await self.task_transfers_repository.delete_dependencies(task_id)
         await self.task_transfers_repository.delete_document_links(task_id)
+        await self.task_transfers_repository.delete_git_links(task_id)
         await self.task_transfers_repository.unlink_risks(task_id)
         await self.task_transfers_repository.delete_sticker_links(task_id)
 
@@ -578,6 +579,7 @@ def _losses_schema(losses: TaskProjectLinks) -> TaskTransferLossesSchema:
         risks=losses.risks,
         board_stickers=losses.board_stickers,
         wbs_placements=losses.wbs_placements,
+        git_links=losses.git_links,
     )
 
 
@@ -589,6 +591,7 @@ def _losses_text(losses: TaskProjectLinks) -> str:
         (losses.risks, "рисков"),
         (losses.board_stickers, "стикеров доски"),
         (losses.wbs_placements, "размещений в ИСР"),
+        (losses.git_links, "Git-привязок"),
     ]
     return ", ".join(f"{label} — {count}" for count, label in parts if count)
 

@@ -23,10 +23,16 @@ from src.repositories.knowledge_index_jobs import KnowledgeIndexJobsRepository
 from src.repositories.knowledge_source_summaries import KnowledgeSourceSummariesRepository
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
 from src.repositories.project_files import ProjectFilesRepository
+from src.repositories.project_knowledge import ProjectKnowledgeRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.services.db_scope import KnowledgeQueueScope, KnowledgeQueueScopeFactory
 from src.services.knowledge_index import KnowledgeIndexService
 from src.services.knowledge_queue import KnowledgeQueueService
+from src.services.project_knowledge_scope import (
+    ProjectKnowledgeUpdateScope,
+    ProjectKnowledgeUpdateScopeFactory,
+)
+from src.services.project_knowledge_updates import ProjectKnowledgeUpdatesService
 from src.services.source_summaries import SourceSummariesService
 from src.storage.task_attachments import TaskAttachmentStorage
 
@@ -38,6 +44,18 @@ def build_knowledge_queue_scope(session_factory: async_sessionmaker) -> Knowledg
     async def scope() -> AsyncIterator[KnowledgeQueueScope]:
         async with session_factory() as session:
             yield KnowledgeQueueScope(jobs=KnowledgeIndexJobsRepository(session))
+
+    return scope
+
+
+def build_project_map_scope(session_factory: async_sessionmaker) -> ProjectKnowledgeUpdateScopeFactory:
+    """Map-stage закрывает сессию до CPU-разбора и повторно открывает для CAS."""
+
+    @asynccontextmanager
+    async def scope() -> AsyncIterator[ProjectKnowledgeUpdateScope]:
+        async with session_factory() as session:
+            yield ProjectKnowledgeUpdateScope(knowledge=ProjectKnowledgeRepository(session),
+                sources=KnowledgeSourcesRepository(session), unit_of_work=UnitOfWork(session))
 
     return scope
 
@@ -105,4 +123,5 @@ def build_knowledge_worker(
             runtime=runtime,
         ),
         runtime=runtime,
+        map_updates=ProjectKnowledgeUpdatesService(scope=build_project_map_scope(session_factory)),
     )

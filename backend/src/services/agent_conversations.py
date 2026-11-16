@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from src.agent.action_scopes import tools_for_scopes
 from src.agent.aris import ArisMode
-from src.agent.context import compact_dialogue_history
+from src.agent.context import action_model_context, compact_dialogue_history
 from src.agent.progress import ProgressSink
 from src.agent.tools import AgentToolContext
 from src.agent.wakeup import wake_agent_worker
@@ -43,7 +43,12 @@ from src.schemas.agent_conversations import (
 )
 from src.schemas.agent_files import AgentFileSchema
 from src.schemas.agent_tools import AgentToolRunSchema
-from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeChatMessageSchema
+from src.schemas.knowledge import (
+    KnowledgeAnswerSchema,
+    KnowledgeChatMessageSchema,
+    decode_answer_sources,
+    encode_answer_sources,
+)
 from src.services.agent_chat_files import AgentChatFilesService, ChatFileContext
 from src.services.agent_routing import AgentRoutingAnswer, AgentRoutingService
 from src.services.auth import ApiKeyGrant, Principal
@@ -52,6 +57,7 @@ from src.services.chat_message_references import (
     hydrate_message_references,
     scoped_message_references,
 )
+from src.services.context_evidence import HIDDEN_CONTEXT_ANSWER, agent_context_budget
 from src.services.db_scope import AgentConversationScope, AgentConversationScopeFactory
 from src.services.project_agent import API_CHANNEL, ProjectAgentService
 from src.services.tasks import user_display_name
@@ -210,7 +216,7 @@ class AgentConversationsService:
                 more = len(rows) > limit
             actions = await db.runs.get_for_messages([row.id for row in page])
             views = await self._message_views(db, conversation, page)
-            return AgentMessagePageSchema(
+            response = AgentMessagePageSchema(
                 items=[
                     row.model_copy(
                         update={
@@ -225,6 +231,39 @@ class AgentConversationsService:
                 ],
                 next_before_id=page[0].id if more else None,
             )
+        # Remote Git ACL может потребовать сеть: request DB checkout уже закрыт.
+        context_tools = getattr(self.agent, "context_tools", None)
+        guarded = [row for row in reversed(page) if row.role == "assistant" and row.sources]
+        checked = {}
+        if context_tools is not None:
+            checked = dict(
+                zip(
+                    [row.id for row in guarded],
+                    await context_tools.evidence.present_many(
+                        [row.sources for row in guarded], user_id=user_id
+                    ),
+                    strict=True,
+                )
+            )
+        for view in response.items:
+            original = next(row for row in page if row.id == view.id)
+            if view.role == "assistant" and original.sources:
+                if view.id in checked:
+                    public, available = checked[view.id]
+                else:
+                    public, available = (
+                        {"sources": [], "external_sources": [], "assertion_references": []},
+                        False,
+                    )
+                for name, value in public.items():
+                    setattr(view, name, value)
+                if not available:
+                    view.content, view.actions, view.message_references = (
+                        HIDDEN_CONTEXT_ANSWER,
+                        [],
+                        [],
+                    )
+        return response
 
     async def send_message(
         self,
@@ -354,9 +393,10 @@ class AgentConversationsService:
             "🤖 Арис начал ответ в виджете id=%s, диалог=%s.", message.id, message.conversation_id
         )
         try:
-            async with asyncio.timeout(self.config.turn_timeout_seconds):
-                answer, project_id = await self._generate(message)
-                await self._finish(message, answer=answer, project_id=project_id)
+            async with agent_context_budget(self.agent):
+                async with asyncio.timeout(self.config.turn_timeout_seconds):
+                    answer, project_id = await self._generate(message)
+                    await self._finish(message, answer=answer, project_id=project_id)
             logger.info("✅ Ответ агента id=%s сохранён.", message.id)
             self._schedule_memory(message)
         except asyncio.CancelledError:
@@ -427,7 +467,10 @@ class AgentConversationsService:
                 else []
             )
             action_history = [
-                AgentToolRunSchema.model_validate(item).model_dump(mode="json")
+                action_model_context(
+                    AgentToolRunSchema.model_validate(item).model_dump(mode="json"),
+                    current=item.message_id == message.id,
+                )
                 for item in await db.runs.get_for_messages(
                     [message.id, *[item.id for item in recent]]
                 )
@@ -440,7 +483,9 @@ class AgentConversationsService:
             )
         # Пересказ остаётся фоновым: следующий вопрос не ждёт его LLM.
         # Пока сводка не готова, точные выдержки сохраняют ранние факты в контексте.
-        summary = conversation.summary
+        # Старая LLM-сводка не хранит provenance использованных источников.
+        # Проверенный хвост не доказывает права на материал из ранних реплик.
+        summary = ""
         history = (
             earlier_history + [self._history(item) for item in reversed(recent)]
             if self.chat_history is None
@@ -453,6 +498,9 @@ class AgentConversationsService:
             message_id=message.id,
             run_id=message.run_id,
             principal=request_principal,
+            origin_read_scopes=frozenset({"agent:ask"})
+            if conversation.channel == API_CHANNEL
+            else frozenset(),
             timezone=page_context.get("timezone", "UTC"),
         )
         chat_context = (
@@ -577,6 +625,7 @@ class AgentConversationsService:
                 run_id=message.run_id,
                 allowed_tools=allowed,
                 principal=principal,
+                origin_read_scopes=frozenset({"agent:ask"}),
                 timezone=page_context.get("timezone", "UTC"),
             ),
             action_history=action_history,
@@ -782,15 +831,7 @@ class AgentConversationsService:
             summary, through_id = current.summary, current.summary_through_id
 
     def _schedule_memory(self, message: AgentMessage) -> None:
-        """Запускает пересказ ранних реплик к следующему вопросу этой беседы."""
-        if message.conversation_id in self._memory_tasks:
-            return
-        task = asyncio.create_task(
-            self._prepare_memory(message.conversation_id, after_id=message.id),
-            name=f"aris-memory-{message.conversation_id}",
-        )
-        self._memory_tasks[message.conversation_id] = task
-        task.add_done_callback(lambda _: self._memory_tasks.pop(message.conversation_id, None))
+        """Автосводки отключены до появления полного проверяемого source provenance."""
 
     async def _prepare_memory(self, conversation_id: int, *, after_id: int) -> None:
         """Сворачивает всё, что уже не войдёт в недавнюю историю следующего вопроса.
@@ -832,6 +873,8 @@ class AgentConversationsService:
         error: str | None = None,
         project_id: int | None = None,
     ) -> None:
+        if answer is not None and answer._context_evidence is not None:
+            await self.agent.validate_answer(answer)
         async with self._scope() as db:
             if answer is not None:
                 conversation = await db.conversations.get_by_id(message.conversation_id)
@@ -880,7 +923,7 @@ class AgentConversationsService:
                 else {
                     "status": "completed",
                     "content": answer.answer.replace("\x00", ""),
-                    "sources": [source.model_dump(mode="json") for source in answer.sources],
+                    "sources": encode_answer_sources(answer),
                     "message_references": references,
                     "error": None,
                     "project_id": project_id,
@@ -1050,6 +1093,7 @@ class AgentConversationsService:
                 if hasattr(row, name)
             }
             data["message_references"] = references
+            data.update(decode_answer_sources(row.sources or []))
             result.append(AgentMessageSchema.model_validate(data))
         return result
 

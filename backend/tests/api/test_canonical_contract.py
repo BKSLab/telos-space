@@ -190,6 +190,7 @@ async def test_aris_request_scope_does_not_authorize_pending_action_decisions(
     current_principal,
 ):
     """Право задать вопрос не даёт внешнему клиенту подтвердить опасное действие."""
+    from src.dependencies.document_catalog import get_document_catalog_service
     key = ApiKeyGrant(
         key_id=uuid4(),
         label="Клиент",
@@ -214,6 +215,7 @@ async def test_aris_request_scope_does_not_authorize_pending_action_decisions(
     app.dependency_overrides.update(
         {
             get_auth_service: lambda: auth,
+            get_document_catalog_service: lambda: auth,
             get_agent_requests_service: lambda: requests,
             get_agent_actions_service: lambda: actions,
         }

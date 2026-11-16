@@ -18,6 +18,7 @@ import { ProjectForm } from "@/components/projects/ProjectForm";
 import { ProjectPeopleSummary } from "@/components/projects/ProjectPeopleSummary";
 import { ProjectDeadlineHistory } from "@/components/projects/ProjectDeadlineHistory";
 import { ProjectContextHistory } from "@/components/projects/ProjectContextHistory";
+import { ProjectGitSources } from "@/components/projects/ProjectGitSources";
 import { ProjectTeamPage } from "@/routes/ProjectTeamPage";
 import {
     isProjectFormValid,
@@ -179,6 +180,7 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
 
                 <ProjectDeadlineHistory projectId={project.id} />
                 <ProjectContextHistory projectId={project.id} />
+                <ProjectGitSources key={project.id} projectId={project.id} canEdit={canEditProject} />
                 <ProjectTeamPage embedded />
 
                 <Section title="Стадии канбана">

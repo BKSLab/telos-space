@@ -10,6 +10,7 @@ from src.utils.api_scopes import (
     SCOPE_BOARDS_READ,
     SCOPE_BOARDS_WRITE,
     SCOPE_COMMENTS_WRITE,
+    SCOPE_KNOWLEDGE_READ,
     SCOPE_PROJECTS_READ,
     SCOPE_PROJECTS_WRITE,
     SCOPE_STRUCTURE_READ,
@@ -24,9 +25,28 @@ from src.utils.api_scopes import (
 #: Действия вне таблицы закрыты для новых ключей. Токену telos_token_ они доступны
 #: по его уровню READ/WRITE; доступ к самому объекту проверяется отдельно.
 ACTION_SCOPES: dict[str, str] = {
+    **dict.fromkeys(
+        (
+            "telos_select_context",
+            "telos_get_knowledge_map",
+            "telos_get_knowledge_claim",
+            "telos_list_git_connections",
+            "telos_search_git_sources",
+            "telos_read_git_file",
+            "telos_get_git_map",
+            "telos_list_task_git_links",
+            "telos_request_web_search",
+            "telos_request_web_page",
+            "telos_search_web",
+            "telos_read_web_page",
+        ),
+        SCOPE_KNOWLEDGE_READ,
+    ),
+    "telos_save_web_research": SCOPE_PROJECTS_WRITE,
     "telos_list_chat_messages": SCOPE_AGENT_ASK,
     "telos_get_chat_message": SCOPE_AGENT_ASK,
     "telos_read_chat_file": SCOPE_AGENT_ASK,
+    "telos_prepare_task": SCOPE_AGENT_ASK,
     "telos_get_structure": SCOPE_STRUCTURE_READ,
     "telos_create_wbs_node": SCOPE_STRUCTURE_WRITE,
     "telos_update_wbs_node": SCOPE_STRUCTURE_WRITE,
@@ -97,10 +117,16 @@ ACTION_SCOPES: dict[str, str] = {
 DOCUMENT_ACTION_SCOPES = {
     "telos_list_documents": frozenset({SCOPE_PROJECTS_READ, SCOPE_TASKS_READ}),
     "telos_get_document": frozenset({SCOPE_PROJECTS_READ, SCOPE_TASKS_READ}),
-    **{name: frozenset({SCOPE_PROJECTS_WRITE, SCOPE_TASKS_WRITE}) for name in (
-        "telos_create_document", "telos_update_document", "telos_delete_document",
-        "telos_link_document", "telos_unlink_document",
-    )},
+    **{
+        name: frozenset({SCOPE_PROJECTS_WRITE, SCOPE_TASKS_WRITE})
+        for name in (
+            "telos_create_document",
+            "telos_update_document",
+            "telos_delete_document",
+            "telos_link_document",
+            "telos_unlink_document",
+        )
+    },
 }
 
 

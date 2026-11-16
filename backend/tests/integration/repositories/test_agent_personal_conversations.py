@@ -12,9 +12,13 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.clients.llm import LlmClient
+from src.clients.vision import DisabledVisionCapability
+from src.core.settings import get_settings
 from src.db.models import Base, Project, ProjectMember, User
 from src.db.models.agent_conversations import AgentConversation
 from src.db.models.agent_messages import AgentMessage
+from src.dependencies.chat_files import build_agent_chat_files_service
+from src.dependencies.chat_history import build_agent_chat_history_service
 from src.dependencies.scopes import build_agent_conversation_scope
 from src.exceptions.agent_conversations import (
     AgentConversationBusyError,
@@ -25,12 +29,15 @@ from src.repositories.agent_conversations import AgentConversationsRepository
 from src.repositories.agent_messages import AgentMessagesRepository
 from src.schemas.agent_conversations import AgentMessageCreateSchema, AgentPageContextSchema
 from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeSourceSchema
+from src.schemas.project_tool_inputs import ChatMessageInput
+from src.services.agent_chat_history_actions import get_chat_message
 from src.services.agent_conversations import (
     AgentConversationConfig,
     AgentConversationsService,
     ConversationMemory,
 )
 from src.services.project_agent import ProjectAgentService
+from tests.integration.repositories.test_agent_conversations_repository import _verify_project_reply
 
 
 @pytest_asyncio.fixture
@@ -170,6 +177,7 @@ async def test_saved_turn_survives_reopening_and_does_not_hold_database_during_m
         await running
     assert (await read(env, conversation.id)).items[-1].content == "Подходящая задача не найдена."
     env.responder.ask.side_effect = None
+    await _verify_project_reply(env)
     await send(env, conversation.id, "Давай уточним её описание")
     await env.service.process_next()
     history = env.responder.ask.await_args.kwargs["history"]
@@ -329,23 +337,27 @@ async def test_server_shutdown_persists_interruption_and_database_failure_does_n
     assert len((await read(env, conversation.id)).items) == 2
 
 
-async def test_old_history_is_summarized_and_pagination_retains_the_full_transcript(agent_env):
+async def test_no_summary_is_generated_and_pagination_retains_the_full_transcript(agent_env):
     env = agent_env
     conversation = await start(env)
     for i in range(5):
         await send(env, conversation.id, f"Вопрос об окне заказа номер {i}")
         await env.service.process_next()
-        if i < 4:
-            await asyncio.gather(*env.service._memory_tasks.values())
-    assert env.llm.get_structured_response.await_count == 2
+    env.llm.get_structured_response.assert_not_awaited()
+    assert not env.service._memory_tasks
     last = env.responder.ask.await_args.kwargs
-    assert last["memory"] == "Обсуждается проверка окна создания заказа."
-    assert len(last["history"]) == 4
+    assert last["memory"] == ""
+    history = "\n".join(item.content for item in last["history"])
+    assert all(f"Вопрос об окне заказа номер {i}" in history for i in range(4))
     args = dict(user_id=1, conversation_id=conversation.id, limit=3)
     page = await env.service.get_messages(**args, before_id=None)
     earlier = await env.service.get_messages(**args, before_id=page.next_before_id)
     assert earlier.items[-1].id < page.items[0].id
-    assert len((await read(env, conversation.id)).items) == 10
+    transcript = (await read(env, conversation.id)).items
+    assert len(transcript) == 10
+    assert [item.content for item in transcript if item.role == "user"] == [
+        f"Вопрос об окне заказа номер {i}" for i in range(5)
+    ]
     other = await start(env)
     await send(env, other.id)
     await env.service.process_next()
@@ -353,51 +365,65 @@ async def test_old_history_is_summarized_and_pagination_retains_the_full_transcr
     assert env.responder.ask.await_args.kwargs["memory"] == ""
 
 
-async def test_memory_for_the_next_question_is_prepared_after_the_answer(agent_env):
+async def test_no_background_summary_is_written_and_legacy_summary_is_not_fed_to_model(agent_env):
     env = agent_env
     conversation = await start(env)
-    for i in range(2):
-        await send(env, conversation.id, f"Вопрос об окне заказа номер {i}")
+    first = None
+    for i in range(3):
+        accepted = await send(env, conversation.id, f"Вопрос об окне заказа номер {i}")
+        first = first or accepted
         await env.service.process_next()
-        await asyncio.gather(*env.service._memory_tasks.values())
-    # Четыре реплики — ровно недавняя история: пересказывать нечего.
     env.llm.get_structured_response.assert_not_awaited()
-    await send(env, conversation.id, "Вопрос об окне заказа номер 2")
-    await env.service.process_next()
-    # Пересказ случился после ответа, в фоне, а не перед ним.
-    env.llm.get_structured_response.assert_not_awaited()
-    await asyncio.gather(*env.service._memory_tasks.values())
-    env.llm.get_structured_response.assert_awaited_once()
+    assert not env.service._memory_tasks
+    legacy_summary = "LEGACY_PRIVATE_SUMMARY_CONTROL: недоступная прежняя сводка"
     async with env.factory() as session:
         saved = await session.get(AgentConversation, conversation.id)
-        assert saved.summary == "Обсуждается проверка окна создания заказа."
-        through_id = saved.summary_through_id
-    # Следующий вопрос берёт готовую память и модель пересказа не ждёт.
+        assert saved.summary == "" and saved.summary_through_id == 0
+        repository = AgentConversationsRepository(session)
+        assert await repository.save_summary(
+            conversation.id,
+            expected_through_id=0,
+            summary=legacy_summary,
+            through_id=first.assistant_message.id,
+        )
+        await session.commit()
     await send(env, conversation.id, "Вопрос об окне заказа номер 3")
     await env.service.process_next()
-    env.llm.get_structured_response.assert_awaited_once()
-    assert env.responder.ask.await_args.kwargs["memory"] == saved.summary
-    assert len(env.responder.ask.await_args.kwargs["history"]) == 4
-    # Память продвигается только от той границы, с которой её начинали считать.
+    env.llm.get_structured_response.assert_not_awaited()
+    last = env.responder.ask.await_args.kwargs
+    assert last["memory"] == "" and legacy_summary not in str(last)
+    assert "Вопрос об окне заказа номер 2" in "\n".join(item.content for item in last["history"])
+    # Старые данные остаются в БД; CAS по-прежнему не даёт переписать другую ревизию.
     async with env.factory() as session:
         stale = AgentConversationsRepository(session)
         assert not await stale.save_summary(
             conversation.id, expected_through_id=0, summary="устарело", through_id=1
         )
         await session.rollback()
-        assert (await session.get(AgentConversation, conversation.id)).summary_through_id >= (
-            through_id
+        saved = await session.get(AgentConversation, conversation.id)
+        assert (
+            saved.summary == legacy_summary
+            and saved.summary_through_id == first.assistant_message.id
         )
 
 
-async def test_pending_memory_does_not_block_reply_or_hide_earlier_decisions(agent_env):
+async def test_early_decision_outside_recent_context_is_read_explicitly_without_legacy_summary(
+    agent_env, tmp_path
+):
     env = agent_env
-    env.service.MEMORY_FALLBACK_MESSAGES = 2
+    settings = get_settings().model_copy(deep=True)
+    settings.app.uploads_path = tmp_path
+    files = build_agent_chat_files_service(
+        session_factory=env.factory, settings=settings, vision=DisabledVisionCapability()
+    )
+    history = build_agent_chat_history_service(session_factory=env.factory, chat_files=files)
+    env.service.chat_history = history
+    env.responder.ask.return_value = KnowledgeAnswerSchema(answer="Хорошо.", sources=[])
     conversation = await start(env)
-    first = await send(env, conversation.id, "Первый этап P1 завершён, переходим к выпуску.")
+    decision = "Согласовали выпуск P1-7 на 2026-11-03. Ответственная — Анна."
+    first = await send(env, conversation.id, decision)
     await env.service.process_next()
-    await asyncio.gather(*env.service._memory_tasks.values())
-    stored_summary = "Первый этап P1 завершён; обсуждается выпуск."
+    stored_summary = "LEGACY_UNVERIFIABLE_PRIVATE_SUMMARY_CONTROL"
     async with env.factory() as session:
         await session.execute(
             update(AgentConversation)
@@ -406,53 +432,39 @@ async def test_pending_memory_does_not_block_reply_or_hide_earlier_decisions(age
         )
         await session.commit()
 
-    decision = "Согласовали выпуск P1-7 на 2026-11-03. Ответственная — Анна."
-    await send(env, conversation.id, decision)
-    await env.service.process_next()
-    await asyncio.gather(*env.service._memory_tasks.values())
     report = "Подробности проверки окна заказа.\n" * 300
     env.responder.ask.return_value = KnowledgeAnswerSchema(answer=report, sources=[])
     await send(env, conversation.id, "Подготовь подробный отчёт о проверке.")
     await env.service.process_next()
-    await asyncio.gather(*env.service._memory_tasks.values())
-    env.llm.get_structured_response.assert_not_awaited()
-
-    entered, release = asyncio.Event(), asyncio.Event()
-
-    async def summarize(**kwargs):
-        entered.set()
-        await release.wait()
-        return ConversationMemory(summary=stored_summary + " " + decision)
-
-    env.llm.get_structured_response.side_effect = summarize
     env.responder.ask.return_value = KnowledgeAnswerSchema(answer="Хорошо.", sources=[])
-    await send(env, conversation.id, "Спасибо за отчёт.")
-    await env.service.process_next()
-    pending = env.service._memory_tasks[conversation.id]
-    try:
-        await asyncio.wait_for(entered.wait(), timeout=5)
-        for question in (
-            "Напомни согласованную дату выпуска и ответственную.",
-            "Покажи ещё раз дату и ответственную за выпуск.",
-            "Что мы решили о выпуске?",
-        ):
-            await send(env, conversation.id, question)
-            assert await asyncio.wait_for(env.service.process_next(), timeout=5)
-            assert not pending.done()
-            last = env.responder.ask.await_args.kwargs
-            assert last["memory"] == stored_summary
-            assert decision in "\n".join(item.content for item in last["history"])
-            env.llm.get_structured_response.assert_awaited_once()
+    for i in range(7):
+        await send(env, conversation.id, f"Позднее обсуждение номер {i}")
+        await env.service.process_next()
+
+    async def recall(**kwargs):
+        assert kwargs["memory"] == "" and kwargs["history"] == []
+        assert stored_summary not in str(kwargs)
+        recent = kwargs["chat_context"]["messages"]
+        assert first.user_message.id not in [row["id"] for row in recent]
+        original = await get_chat_message(
+            history, kwargs["execution"], ChatMessageInput(message_id=first.user_message.id)
+        )
+        assert original["message"]["content"] == decision
+        assert original["message"]["reference"]["quote"] == decision
         assert env.engine.pool.checkedout() == 0
-        assert len(last["history"]) > env.service.config.history_messages
-        assert "часть переписки пропущена" in last["history"][0].content
-        transcript = (await read(env, conversation.id)).items
-        assert transcript[-1].status == "completed"
-        assert decision in [item.content for item in transcript]
-        assert report in [item.content for item in transcript]
-    finally:
-        release.set()
-        await pending
+        return KnowledgeAnswerSchema(answer=decision, sources=[])
+
+    env.responder.ask.side_effect = recall
+    await send(env, conversation.id, "Напомни дату выпуска и ответственную из раннего сообщения.")
+    assert await env.service.process_next()
+    env.llm.get_structured_response.assert_not_awaited()
+    assert not env.service._memory_tasks
+    transcript = (await read(env, conversation.id)).items
+    assert transcript[-1].status == "completed" and transcript[-1].content == decision
+    assert decision in [item.content for item in transcript if item.role == "user"]
+    assert report in [item.content for item in transcript]
+    async with env.factory() as session:
+        assert (await session.get(AgentConversation, conversation.id)).summary == stored_summary
 
 
 async def test_timeout_and_expired_attempts_fail_visibly_and_old_worker_cannot_finish(agent_env):

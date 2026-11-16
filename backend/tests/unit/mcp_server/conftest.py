@@ -90,6 +90,8 @@ def make_runtime() -> SimpleNamespace:
         qdrant_client=AsyncMock(),
         llm_client=AsyncMock(),
         vision=DisabledVisionCapability(),
+        web_context=AsyncMock(),
+        web_grants=AsyncMock(),
     )
 
 

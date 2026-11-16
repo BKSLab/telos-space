@@ -36,6 +36,7 @@ class SourceType(StrEnum):
     ACTIVITY = "activity"
     DEADLINE_CHANGE = "deadline_change"
     ANALYTICS_REPORT = "analytics_report"
+    GIT_FILE = "git_file"
 
 
 @dataclass(frozen=True)
@@ -272,6 +273,21 @@ POLICIES = (
 POLICY_BY_TABLE = {item.table: item for item in POLICIES}
 POLICY_BY_TYPE = {item.kind: item for item in POLICIES if item.kind}
 EXCLUDED_TABLES = {
+    "git_connections": "Credential binding и private repo: только GitSourceService с текущим Contents proof, не generic SQL reader.",
+    "git_snapshots": "Git версии и coverage выдаются через proof-gated GitSourceService.",
+    "git_files": "GitFile authoritative cache доступен только после live remote proof; raw POLICIES обошла бы upstream revoke.",
+    "git_fragments": "Производный FTS GitSourceService; тот же доказательный reader проверяет текущую привязку и доступ.",
+    "git_sync_jobs": "Checkpoint/очередь Git, не первичный источник карты.",
+    "git_deliveries": "Квитанции webhook, не источник знаний и не рекурсивный outbox.",
+    "git_changes": "PR/commit metadata требуют текущего Git proof и repository binding.",
+    "git_task_change_links": "N:N связи с Git проходят общий GitSourceService и текущие права.",
+    "project_knowledge_states": "Производная карта: поколения/состояния не становятся источником и не ставят сами себя в очередь.",
+    "project_knowledge_sources": "Поколения существующих источников; содержание читается через общий каталог.",
+    "project_knowledge_source_versions": "Metadata точных версий; выдача только через ProjectKnowledgeService с текущими generation/ACL.",
+    "project_knowledge_manifests": "Квитанции входных наборов карты, не первичные факты.",
+    "project_knowledge_claims": "Производные утверждения читаются с проверкой evidence, без рекурсивной индексации.",
+    "project_knowledge_claim_revisions": "История производных утверждений; прежний текст не выдаётся после инвалидации источника.",
+    "project_knowledge_evidence": "Проверяемые ссылки/фрагменты версий карты, не новый первичный корпус.",
     "project_context_history": "Неизменяемые исторические snapshots; актуальные знания читают единственный текущий паспорт проекта, история выдаётся отдельно по тем же правам.",
     "chat_file_texts": "Тексты приватных и командных файлов доступны только в точном контексте переписки, без проектного Qdrant.",
     "document_submissions": "Квитанции повторов; документы индексируются по исходной сущности.",
@@ -422,7 +438,7 @@ class ProjectSource:
             self.properties.get("owner_task_id")
             if self.kind is SourceType.DOCUMENT
             else self.properties.get("task_id")
-            if self.kind in {SourceType.COMMENT, SourceType.ATTACHMENT, SourceType.ACTIVITY}
+            if self.kind in {SourceType.COMMENT, SourceType.ATTACHMENT, SourceType.ACTIVITY, SourceType.TASK_REPORT}
             else None
         )
         return {

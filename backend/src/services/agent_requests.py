@@ -36,6 +36,7 @@ from src.schemas.agent_requests import (
     AgentTaskLinkSchema,
 )
 from src.services.auth import Principal
+from src.services.context_evidence import HIDDEN_CONTEXT_ANSWER, ContextEvidenceService
 from src.services.db_scope import AgentConversationScope, AgentConversationScopeFactory
 from src.utils.api_scopes import API_SCOPES
 
@@ -86,9 +87,16 @@ class AgentRequestsService:
     беседу канала api, кладёт вопрос в очередь и отдаёт результат его автору.
     """
 
-    def __init__(self, *, scope: AgentConversationScopeFactory, links: RequestLinks) -> None:
+    def __init__(
+        self,
+        *,
+        scope: AgentConversationScopeFactory,
+        links: RequestLinks,
+        evidence: ContextEvidenceService | None = None,
+    ) -> None:
         self.scope = scope
         self.links = links
+        self.evidence = evidence
 
     async def ask_external(
         self,
@@ -225,7 +233,12 @@ class AgentRequestsService:
         return request_id
 
     async def get_external_result(
-        self, *, user_id: int, api_key_id: UUID | None, request_id: UUID
+        self,
+        *,
+        user_id: int,
+        api_key_id: UUID | None,
+        request_id: UUID,
+        principal: Principal | None = None,
     ) -> AgentRequestResultSchema:
         """Возвращает состояние вопроса только тому ключу и пользователю, что его задали.
 
@@ -233,13 +246,21 @@ class AgentRequestsService:
             user_id: Пользователь запроса результата.
             api_key_id: Ключ запроса результата; None — локальная сессия или личный токен.
             request_id: ID вопроса.
+            principal: Текущие credentials HTTP/MCP; без них производные данные закрыты.
         Returns:
             Состояние, ответ, ссылки, выполненные и ожидающие решения действия.
         Raises:
             AgentRequestNotFoundError: Вопроса нет или он чужой.
             AgentConversationsServiceError: При ошибке хранения.
         """
+        if principal is not None and (
+            principal.user_id != user_id or principal_key_id(principal) != api_key_id
+        ):
+            raise AgentRequestNotFoundError(f"request_id={request_id}")
         async with self._scope() as db:
+            if principal is not None:
+                principal = await db.auth.refresh_principal(principal)
+                principal.require("agent:ask")
             message = await db.messages.get_answer_by_request(
                 request_id, user_id=user_id, api_key_id=api_key_id
             )
@@ -261,14 +282,74 @@ class AgentRequestsService:
             if message.project_id is not None:
                 project = await db.projects.get_by_id(project_id=message.project_id)
                 project_key = project.key if project else None
-        return build_request_result(
+        available = True
+        public_sources = None
+        source_projects = {
+            value
+            for value in (message.project_id, *(run.project_id for run in runs))
+            if value is not None
+        }
+        has_materials = bool(message.sources or source_projects or runs)
+        if has_materials and principal is None:
+            # Owner/key IDs locate the receipt; they do not reconstruct its reader's grants.
+            available = False
+        elif message.sources:
+            if self.evidence is None:
+                available = False
+            else:
+                # A single persisted result may depend on several private projects.
+                # The batch reader gives all its proofs one foreground Git ledger.
+                [(public, available)] = await self.evidence.present_many(
+                    [message.sources], user_id=user_id, principal=principal
+                )
+                public_sources = [item.model_dump(mode="json") for item in public["sources"]]
+        if available and principal is not None:
+            async with self._scope() as db:
+                current = await db.auth.refresh_principal(principal)
+                current.require("agent:ask")
+                try:
+                    for project_id in source_projects:
+                        await db.access.ensure_project_access(
+                            project_id=project_id, user_id=current.user_id
+                        )
+                except AccessServiceError:
+                    available = False
+        result = build_request_result(
             message=message,
             question=question,
             conversation=conversation,
             runs=runs,
             project_key=project_key,
             links=self.links,
+            source_entries=public_sources,
         )
+        if not available:
+            return result.model_copy(
+                update={
+                    "answer": HIDDEN_CONTEXT_ANSWER if result.status == "completed" else None,
+                    "error": HIDDEN_CONTEXT_ANSWER if result.status == "failed" else None,
+                    "progress": None,
+                    "project_key": None,
+                    "links": [],
+                    "done": [],
+                    "pending": [],
+                    "rejected": [],
+                }
+            )
+        if result.status != "completed":
+            # Processing/failed proposals have not passed the final publication
+            # guard. A saved action may already contain private model inputs.
+            return result.model_copy(
+                update={
+                    "progress": None,
+                    "project_key": None,
+                    "links": [],
+                    "done": [],
+                    "pending": [],
+                    "rejected": [],
+                }
+            )
+        return result
 
     async def wait_external_result(
         self,
@@ -278,6 +359,7 @@ class AgentRequestsService:
         request_id: UUID,
         timeout_seconds: float,
         poll_seconds: float = 0.25,
+        principal: Principal | None = None,
     ) -> AgentRequestResultSchema:
         """Ждёт готовности ответа не дольше ``timeout_seconds``, иначе отдаёт состояние.
 
@@ -288,7 +370,7 @@ class AgentRequestsService:
         deadline = loop.time() + max(timeout_seconds, 0)
         while True:
             result = await self.get_external_result(
-                user_id=user_id, api_key_id=api_key_id, request_id=request_id
+                user_id=user_id, api_key_id=api_key_id, request_id=request_id, principal=principal
             )
             remaining = deadline - loop.time()
             if result.status in {"completed", "failed"} or remaining <= 0:
@@ -314,12 +396,13 @@ def build_request_result(
     runs: list[AgentToolRun],
     project_key: str | None,
     links: RequestLinks,
+    source_entries: list[dict] | None = None,
 ) -> AgentRequestResultSchema:
     """Собирает ответ внешнему агенту из сохранённой реплики и журнала действий."""
     ready = message.status in {"completed", "failed"}
     task_links: dict[str, AgentTaskLinkSchema] = {}
     if message.status == "completed":
-        for source in message.sources or []:
+        for source in source_entries if source_entries is not None else message.sources or []:
             card = source.get("card") or {}
             key = card.get("key")
             if source.get("entity_type") == "task" and key and key not in task_links:

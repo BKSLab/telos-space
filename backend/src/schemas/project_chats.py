@@ -4,11 +4,15 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.chat_references import ChatMessageReferenceSchema
-from src.schemas.knowledge import KnowledgeSourceSchema
+from src.schemas.knowledge import (
+    AssertionReferenceSchema,
+    ExternalSourceReferenceSchema,
+    KnowledgeSourceSchema,
+)
 from src.utils.document_refs import decode_document_ref
 from src.utils.timezones import validate_timezone
 
@@ -42,7 +46,10 @@ class ChatEntityRef(ChatInput):
 
     @property
     def identity(self) -> tuple[str, str | int]:
-        return self.entity_type, self.document_ref if self.entity_type == "DOCUMENT" else self.entity_id
+        return (
+            self.entity_type,
+            self.document_ref if self.entity_type == "DOCUMENT" else self.entity_id,
+        )
 
 
 class ChatMessageBody(ChatInput):
@@ -73,7 +80,12 @@ class ChatMessageCreate(ChatMessageBody):
 
     client_message_id: UUID
     reply_to_message_id: PositiveId | None = None
-    timezone: str = Field("UTC", max_length=64, description="Часовой пояс IANA инициатора ответа.", examples=["Europe/Samara"])
+    timezone: str = Field(
+        "UTC",
+        max_length=64,
+        description="Часовой пояс IANA инициатора ответа.",
+        examples=["Europe/Samara"],
+    )
     _validate_timezone = field_validator("timezone")(validate_timezone)
 
 
@@ -108,7 +120,9 @@ class ChatUser(BaseModel):
     id: int
     username: str
     display_name: str
-    has_avatar: bool = Field(default=False, description="Загружена ли фотография профиля.", examples=[True])
+    has_avatar: bool = Field(
+        default=False, description="Загружена ли фотография профиля.", examples=[True]
+    )
 
 
 class ChatAttachmentView(BaseModel):
@@ -148,6 +162,10 @@ class ChatAgentView(BaseModel):
     """Состояние ответа Ариса: печатает, готов или ошибка, и его карточки."""
 
     name: str = Field(description="Имя агента для людей — «Арис».")
+    requires_context_validation: bool = Field(
+        default=False,
+        description="Broadcast не знает viewer; один history GET проверяет доступ к source-dependent ответу.",
+    )
     status: Literal["queued", "processing", "completed", "failed"] = Field(
         description="queued/processing — Арис печатает; completed — ответ; failed — ошибка."
     )
@@ -164,7 +182,11 @@ class ChatAgentView(BaseModel):
     sources: list[KnowledgeSourceSchema] = Field(
         description="Карточки сущностей проекта, подтверждающие ответ."
     )
-    message_references: list[ChatMessageReferenceSchema] = Field(default_factory=list, description="Проверенные цитаты сообщений этого чата.")
+    external_sources: list[ExternalSourceReferenceSchema] = Field(default_factory=list)
+    assertion_references: list[AssertionReferenceSchema] = Field(default_factory=list)
+    message_references: list[ChatMessageReferenceSchema] = Field(
+        default_factory=list, description="Проверенные цитаты сообщений этого чата."
+    )
     actions: list[AgentToolRunSchema] = Field(
         description="Действия ответа; pending ждёт решения в карточке."
     )
@@ -178,6 +200,7 @@ class ChatReactionView(BaseModel):
 
 
 class ChatMessageView(BaseModel):
+    _source_context: tuple | None = PrivateAttr(default=None)
     """Единая нормализованная модель сообщения для HTTP и fan-out."""
 
     id: int

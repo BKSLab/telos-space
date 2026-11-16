@@ -12,14 +12,17 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.clients.llm import LlmClient
+from src.core.settings import get_settings
 from src.db.models import Base, Project, ProjectMember, User
 from src.db.models.agent_messages import AgentMessage
+from src.dependencies.agent_context import build_context_evidence_service
 from src.dependencies.scopes import build_agent_conversation_scope
 from src.exceptions.agent_conversations import (
     AgentConversationBusyError,
     AgentConversationNotFoundError,
     AgentMessageConflictError,
 )
+from src.knowledge.catalog import build_catalog
 from src.repositories.agent_messages import AgentMessagesRepository
 from src.schemas.agent_conversations import AgentMessageCreateSchema
 from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeSourceSchema
@@ -28,6 +31,7 @@ from src.services.agent_conversations import (
     AgentConversationsService,
     ConversationMemory,
 )
+from src.services.context_evidence import ContextEvidence
 from src.services.project_agent import ProjectAgentService
 
 
@@ -128,6 +132,17 @@ async def read(env, conversation_id, **kwargs):
     )
 
 
+async def _verify_project_reply(env):
+    """Содержательная source-card fixture: настоящий PG source guard вместо доверия JSON."""
+    verifier = build_context_evidence_service(session_factory=env.factory, settings=get_settings())
+    async with verifier.scope() as db:
+        source = build_catalog(1, await db.sources.get_project_rows(1)).sources["project:1"]
+    evidence = ContextEvidence()
+    evidence.internal(1, source)
+    env.responder.ask.return_value._context_evidence = evidence, verifier.session_principal(1)
+    env.responder.context_tools = SimpleNamespace(evidence=verifier, git=verifier.git)
+
+
 async def test_saved_turn_survives_reopening_and_does_not_hold_database_during_model(agent_env):
     env = agent_env
     conversation = await start(env)
@@ -156,6 +171,7 @@ async def test_saved_turn_survives_reopening_and_does_not_hold_database_during_m
         await running
     assert (await read(env, conversation.id)).items[-1].content == "Подходящая задача не найдена."
     env.responder.ask.side_effect = None
+    await _verify_project_reply(env)
     await send(env, conversation.id, "Давай уточним её описание")
     await env.service.process_next()
     history = env.responder.ask.await_args.kwargs["history"]
@@ -287,25 +303,27 @@ async def test_server_shutdown_persists_interruption_and_database_failure_does_n
     assert len((await read(env, conversation.id)).items) == 2
 
 
-async def test_old_history_is_summarized_and_pagination_retains_the_full_transcript(agent_env):
+async def test_no_summary_is_generated_and_pagination_retains_the_full_transcript(agent_env):
     env = agent_env
     conversation = await start(env)
     for i in range(5):
-        # Сводка сохраняется фоново: проверяем короткую историю после её commit.
-        memory_task = env.service._memory_tasks.get(conversation.id)
-        if memory_task is not None:
-            await asyncio.wait_for(asyncio.shield(memory_task), timeout=5)
         await send(env, conversation.id, f"Вопрос об окне заказа номер {i}")
         await env.service.process_next()
-    assert env.llm.get_structured_response.await_count == 2
+    env.llm.get_structured_response.assert_not_awaited()
+    assert not env.service._memory_tasks
     last = env.responder.ask.await_args.kwargs
-    assert last["memory"] == "Обсуждается проверка окна создания заказа."
-    assert len(last["history"]) == 4
+    assert last["memory"] == ""
+    history = "\n".join(item.content for item in last["history"])
+    assert all(f"Вопрос об окне заказа номер {i}" in history for i in range(4))
     args = dict(project_id=1, user_id=1, conversation_id=conversation.id, limit=3)
     page = await env.service.get_messages(**args, before_id=None)
     earlier = await env.service.get_messages(**args, before_id=page.next_before_id)
     assert earlier.items[-1].id < page.items[0].id
-    assert len((await read(env, conversation.id)).items) == 10
+    transcript = (await read(env, conversation.id)).items
+    assert len(transcript) == 10
+    assert [item.content for item in transcript if item.role == "user"] == [
+        f"Вопрос об окне заказа номер {i}" for i in range(5)
+    ]
     other = await start(env)
     await send(env, other.id)
     await env.service.process_next()

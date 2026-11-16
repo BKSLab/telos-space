@@ -5,6 +5,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -78,8 +79,15 @@ async def mcp_env(agent_env, tmp_path):
             session.add(row)
             keys[user_id] = SimpleNamespace(raw=raw_key, id=row.id)
         await session.commit()
+    # Keep composition complete while rejecting any unexpected external provider call.
     state = {
-        RUNTIME_STATE_KEY: SimpleNamespace(vision=DisabledVisionCapability()),
+        RUNTIME_STATE_KEY: SimpleNamespace(
+            vision=DisabledVisionCapability(),
+            embedding_client=Mock(spec=[]),
+            qdrant_client=Mock(spec=[]),
+            web_context=Mock(spec=[]),
+            web_grants=Mock(spec=[]),
+        ),
         SETTINGS_STATE_KEY: settings,
         SESSION_FACTORY_STATE_KEY: factory,
     }
@@ -399,7 +407,7 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
             }))["result"]["tools"]
             names = {tool["name"] for tool in listing}
-            assert len(names) == 45 and all(name.startswith("telos_") for name in names)
+            assert len(names) == 58 and all(name.startswith("telos_") for name in names)
             removed_names = {"tt_" + name.removeprefix("telos_") for name in names}
             removed_names -= {"tt_ask_aris", "tt_get_aris_result"}
             removed_names |= {"tt_projects_ask", "tt_projects_result"}
@@ -412,7 +420,7 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                 "move_task", "delete_task", "add_comment", "set_task_dates", "create_milestone",
             }
             untouched = await snapshot(env)
-            assert len(removed_names) == 70 and not names & removed_names
+            assert len(removed_names) == 83 and not names & removed_names
             for removed in sorted(removed_names):
                 refused = await invoke(removed, {})
                 assert refused["result"]["isError"] is True

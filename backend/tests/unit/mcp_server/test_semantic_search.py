@@ -54,6 +54,8 @@ class RecordingRuntime:
         self.embedding_client = SimpleNamespace(get_embedding=self._embedding)
         self.qdrant_client = SimpleNamespace(search=self._search)
         self.vision = DisabledVisionCapability()
+        self.web_context = AsyncMock()
+        self.web_grants = AsyncMock()
         self._hits = hits
 
     async def _embedding(self, text: str) -> list[float]:

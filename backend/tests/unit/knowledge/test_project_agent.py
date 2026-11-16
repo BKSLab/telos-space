@@ -207,16 +207,20 @@ def build_service(*, semantic_available: bool = True):
         yield db
 
     async def current_task(_context, arguments):
-        current = next(record for record in tasks.search_ranked.return_value if record.id == arguments.task_id)
+        current = next(
+            record for record in tasks.search_ranked.return_value if record.id == arguments.task_id
+        )
         return {"source_id": f"task:{current.id}"}
 
     query_tools = build_knowledge_tool_executor(ProjectQueryService(scope=scope))
     service = ProjectAgentService(
         scope=scope,
-        tools=AgentToolExecutor([
-            *query_tools.tools.values(),
-            AgentTool("telos_get_task", "Перечитать текущую задачу", TaskInput, current_task),
-        ]),
+        tools=AgentToolExecutor(
+            [
+                *query_tools.tools.values(),
+                AgentTool("telos_get_task", "Перечитать текущую задачу", TaskInput, current_task),
+            ]
+        ),
         llm_client=llm_client,
         embedding_client=embedding_client,
         qdrant_client=qdrant_client,
@@ -310,7 +314,9 @@ async def test_task_workflow_rechecks_selected_task_without_embeddings_or_write_
     assert answer.sources[0].source_id == "task:7"
     assert step == 3
     assert handler.await_count == 2  # Первое чтение и повторный ACL перед карточкой.
-    assert db.sources.get_project_rows.await_count == 2  # База и актуальность выбранной карточки.
+    assert (
+        db.sources.get_project_rows.await_count == 3
+    )  # База, карточка и все прочитанные версии перед публикацией.
     db.sources.search.assert_awaited_once()
     clients.embedding_client.get_embedding.assert_not_awaited()
     clients.llm_client.get_structured_response.assert_not_awaited()
@@ -353,7 +359,10 @@ async def test_card_only_answer_uses_verified_fields_and_keeps_conversation_cont
     assert "Подготовить паспорт рисков" in history.content
 
 
-async def test_created_task_receives_a_handle_before_the_next_step_and_is_revalidated():
+@pytest.mark.parametrize("concurrent", [False, True])
+async def test_created_task_receives_a_handle_and_concurrent_change_requires_a_new_answer(
+    concurrent,
+):
     service, project, clients, db = build_service()
     created = Task(
         id=8,
@@ -382,7 +391,9 @@ async def test_created_task_receives_a_handle_before_the_next_step_and_is_revali
     read_task = AsyncMock(return_value={"source_id": "task:8"})
     service.tools = AgentToolExecutor(
         [
-            AgentTool("telos_create_task", "Создать задачу", TaskCreateInput, handler, mutating=True),
+            AgentTool(
+                "telos_create_task", "Создать задачу", TaskCreateInput, handler, mutating=True
+            ),
             AgentTool("telos_get_task", "Перечитать задачу", TaskInput, read_task),
         ]
     )
@@ -401,25 +412,30 @@ async def test_created_task_receives_a_handle_before_the_next_step_and_is_revali
         assert result["source_id"] == "task:8"
         handle = result["source_handle"]
         assert handle.startswith("SRC_")
-        # Финальная карточка должна учитывать изменение после выдачи handle модели.
-        created.title = "Актуальный заголовок"
+        if concurrent:
+            created.title = "Актуальный заголовок"
         return AgentOutput(answer="", source_ids=[handle, "task:8", "SRC_deadbeef_1"])
 
     clients.llm_client.get_structured_response.side_effect = respond
-    answer = await service.ask(
+    from src.exceptions.ai import AgentAnswerError
+
+    request = service.ask(
         project_id=project.id,
         question="Создай новую задачу",
         history=[],
         execution=AgentToolContext(project_id=project.id, user_id=1, can_write=True),
     )
+    if concurrent:
+        with pytest.raises(AgentAnswerError, match="Источники изменились"):
+            await request
+    else:
+        answer = await request
+        assert answer.answer == "" and answer.sources[0].source_id == "task:8"
+        assert answer.sources[0].card.key == "PROJ-13" and created.title in answer.sources[0].title
 
     handler.assert_awaited_once()
     read_task.assert_awaited_once()
     assert read_task.await_args.args[1].task_id == created.id
-    assert answer.answer == ""
-    assert [source.source_id for source in answer.sources] == ["task:8"]
-    assert "Актуальный заголовок" in answer.sources[0].title
-    assert answer.sources[0].card.key == "PROJ-13"
 
 
 @pytest.mark.parametrize(
@@ -451,7 +467,11 @@ async def test_created_task_receives_a_handle_before_the_next_step_and_is_revali
         ),
         pytest.param("telos_get_task", [None], True, 0, id="no-current-action"),
         pytest.param(
-            "telos_create_task", [{"id": "denied", "status": "completed"}], False, 0, id="write-denied"
+            "telos_create_task",
+            [{"id": "denied", "status": "completed"}],
+            False,
+            0,
+            id="write-denied",
         ),
     ],
 )
@@ -503,7 +523,9 @@ async def test_empty_final_answer_uses_only_current_completed_write_receipts(
         project_id=project.id,
         question="Выполни действие с задачей",
         history=[],
-        action_history=[{"id": "previous", "tool_name": "telos_create_task", "status": "completed"}],
+        action_history=[
+            {"id": "previous", "tool_name": "telos_create_task", "status": "completed"}
+        ],
         execution=AgentToolContext(project_id=project.id, user_id=1, can_write=True),
     )
 
@@ -931,10 +953,15 @@ async def test_agent_reads_full_source_and_links_without_holding_database_scope(
             return AgentOutput(
                 tool_calls=[
                     AgentToolRequest(
-                        name="telos_read_source", arguments={"source_id": "document:9", "offset": offset}
+                        name="telos_read_source",
+                        arguments={"source_id": "document:9", "offset": offset},
                     ),
-                    AgentToolRequest(name="telos_list_related_sources", arguments={"source_id": "task:7"}),
-                    AgentToolRequest(name="telos_read_source", arguments={"source_id": "document:999"}),
+                    AgentToolRequest(
+                        name="telos_list_related_sources", arguments={"source_id": "task:7"}
+                    ),
+                    AgentToolRequest(
+                        name="telos_read_source", arguments={"source_id": "document:999"}
+                    ),
                 ]
             )
         page, links, missing = [entry["result"] for entry in payload["read_results"]]
@@ -969,7 +996,8 @@ async def test_agent_stops_repeated_read_requests_with_explicit_incompleteness()
             WriteIntent()
             if schema is WriteIntent
             else AgentOutput(
-                answer="Проверена часть проекта.", reads=[KnowledgeReadRequest(name="telos_list_sources")]
+                answer="Проверена часть проекта.",
+                reads=[KnowledgeReadRequest(name="telos_list_sources")],
             )
         )
 

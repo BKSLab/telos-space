@@ -120,3 +120,21 @@ race, checkpoint/crash/restart, дубли/перестановка событи
 `scripts/aris_usage.py`. Эта fixture не является retrieval ground truth.
 Отсутствующий usage/тариф не означает нулевую стоимость; лимит timeout не заменяет
 измеренный baseline. Нового runner и заранее заполненных результатов здесь нет.
+
+Реализацию проверяют отдельные продуктовые наборы, например:
+
+```powershell
+.\venv\Scripts\python.exe -m pytest -q tests/unit/knowledge/test_context_runtime.py tests/unit/services/test_context_evidence.py tests/unit/services/test_context_selection.py tests/unit/services/test_git_source_service.py tests/unit/services/test_web_research.py
+.\venv\Scripts\python.exe -m pytest -q tests/api/endpoints/test_project_knowledge_api.py tests/api/endpoints/test_git_sources_api.py tests/api/endpoints/test_web_research_api.py
+.\venv\Scripts\python.exe -m pytest -q tests/integration/repositories/test_project_knowledge.py tests/integration/repositories/test_git_sources.py tests/integration/repositories/test_context_actions.py tests/integration/repositories/test_web_research_persistence.py tests/integration/test_context_delivery.py
+```
+
+Последняя команда использует настоящий PostgreSQL в Docker, в том числе для
+гонок, атомарности и повторов. Git/web HTTP и модель в этих тестах контролируемые;
+они не подтверждают живые внешние credentials или качество настоящей модели.
+Миграции проверяются в `test_project_context_migration.py`,
+`test_project_knowledge_migration.py` и `test_git_sources_migration.py`.
+Для живой оценки фиксируют текущую модель и исходный материал, фактические
+HTTP attempts/usage/cost и проверяемые исходы: изменения БД, прочитанную версию
+отчёта, отсутствие выдуманных назначений/сроков. Наличие ответа само по себе
+не считается успехом; `incomplete`, `failed` и недоступный провайдер сохраняются.

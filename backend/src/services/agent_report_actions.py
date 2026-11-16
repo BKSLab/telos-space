@@ -4,6 +4,7 @@ from src.agent.tools import AgentToolContext
 from src.db.models.api_tokens import ApiTokenScope
 from src.exceptions.agent_tools import AgentToolConflictError
 from src.schemas import project_tool_inputs as inputs
+from src.schemas.task_reports import TaskReportSchema
 from src.services.agent_action_helpers import checked_task
 from src.services.agent_task_actions import _task_id_by_key
 from src.services.agent_tool_scope import AgentProjectToolScope
@@ -29,6 +30,11 @@ def _reports(db: AgentProjectToolScope):
     return db.reports
 
 
+def _source_id(report: TaskReportSchema) -> str | None:
+    """Только опубликованная версия с текстом, без подмены ID задачей."""
+    return f"task_report:{report.id}" if report.id is not None and report.body_md.strip() else None
+
+
 async def get_task_report(
     db: AgentProjectToolScope, ctx: AgentToolContext, args: inputs.TaskReportReadInput
 ) -> dict:
@@ -40,7 +46,7 @@ async def get_task_report(
     return {
         "task_key": task.key,
         "task_title": task.title,
-        "source_id": f"task_report:{task_id}" if report.body_md.strip() else f"task:{task_id}",
+        "source_id": _source_id(report),
         "report": report.model_dump(mode="json", exclude={"body_md"}),
         "text": report.body_md[args.offset : end],
         "offset": args.offset,
@@ -59,7 +65,11 @@ async def list_task_reports(
     result = page.model_dump(mode="json")
     for item in result["items"]:
         body = item["report"].pop("body_md")
-        item["source_id"] = f"task_report:{item['task_id']}"
+        item["source_id"] = (
+            f"task_report:{item['report']['id']}"
+            if item["report"]["id"] is not None and body.strip()
+            else None
+        )
         item["preview"] = body[:400]
         item["total_chars"] = len(body)
         item["read_with"] = "telos_get_task_report"
@@ -76,7 +86,5 @@ async def publish_task_report(
     )
     return {
         "report": saved.model_dump(mode="json"),
-        "source_id": f"task_report:{args.task_id}"
-        if saved.body_md.strip()
-        else f"task:{args.task_id}",
+        "source_id": _source_id(saved),
     }

@@ -30,6 +30,12 @@ from src.schemas.chat_history import (
 )
 from src.schemas.chat_references import ChatMessageReferenceSchema
 from src.services.agent_chat_files import AgentChatFilesService, ChatFileContext, ChatFileLocation
+from src.services.context_evidence import (
+    HIDDEN_CONTEXT_ANSWER,
+    ContextEvidenceService,
+    SavedContextGuard,
+)
+from src.services.context_results import HistoryReadResult
 from src.utils.document_refs import DOCUMENT_SOURCE_KINDS, decode_document_ref, encode_document_ref
 
 
@@ -46,9 +52,54 @@ ChatHistoryScopeFactory = Callable[[], AbstractAsyncContextManager[ChatHistorySc
 class AgentChatHistoryService:
     """Читает ровно текущую переписку до вопроса активного run, без OCR и enqueue."""
 
-    def __init__(self, *, files: AgentChatFilesService, scope: ChatHistoryScopeFactory) -> None:
+    def __init__(
+        self,
+        *,
+        files: AgentChatFilesService,
+        scope: ChatHistoryScopeFactory,
+        evidence: ContextEvidenceService | None = None,
+    ) -> None:
         self.files = files
         self.scope = scope
+        self.evidence = evidence
+
+    async def _safe_rows(self, rows, context):
+        """До model context/цитирования проверяет original source guards, без DB checkout."""
+        guarded = [
+            row for row in rows if row.get("author_type") == "AGENT" and row.get("entity_sources")
+        ]
+        checked = {}
+        if self.evidence is not None:
+            checked = dict(
+                zip(
+                    [row["id"] for row in guarded],
+                    await self.evidence.present_many(
+                        [row["entity_sources"] for row in guarded],
+                        user_id=context.user_id,
+                        principal=context.principal,
+                    ),
+                    strict=True,
+                )
+            )
+        for row in rows:
+            values = row.get("entity_sources") or []
+            if row.get("author_type") != "AGENT" or not values:
+                continue
+            available = False
+            if row["id"] in checked:
+                _, available = checked[row["id"]]
+            if not available:
+                row["content"], row["entity_sources"] = HIDDEN_CONTEXT_ANSWER, []
+
+    @staticmethod
+    def _source_guards(rows):
+        return tuple(
+            SavedContextGuard.model_validate(value["guard"])
+            for row in rows
+            if row.get("author_type") == "AGENT"
+            for value in row.get("entity_sources") or []
+            if value.get("reference_type") == "context_guard"
+        )
 
     @asynccontextmanager
     async def _scope(self):
@@ -253,7 +304,11 @@ class AgentChatHistoryService:
         by_id = {message.id: message for message in messages}
         for row in rows:
             message = by_id.get(row["message_id"])
-            if message is None or len(message.entity_references) >= 20:
+            if (
+                message is None
+                or message.content == HIDDEN_CONTEXT_ANSWER
+                or len(message.entity_references) >= 20
+            ):
                 continue
             hint = AgentChatHistoryService._entity_hint(row)
             if hint is not None and hint.source_id not in {
@@ -306,6 +361,7 @@ class AgentChatHistoryService:
                 if location.kind == "project_chat"
                 else []
             )
+        await self._safe_rows(rows, context)
         current_message = self._message(current, location)
         messages = [self._message(row, location) for row in recent]
         quoted_message = self._message(quote_row, location) if quote_row else None
@@ -318,15 +374,20 @@ class AgentChatHistoryService:
         self._attachments(all_messages, attachments, priority)
         self._entity_links(all_messages, entity_links)
         await self._recheck(context, location)
-        return {
-            "current_message": current_message.model_dump(mode="json"),
-            "messages": [message.model_dump(mode="json") for message in messages],
-            "quoted_message": quoted_message.model_dump(mode="json") if quoted_message else None,
-            "chat_id": location.scope_id,
-            "kind": location.kind,
-            "timezone": context.timezone,
-            "current_datetime": datetime.now(zone).isoformat(timespec="seconds"),
-        }
+        return HistoryReadResult(
+            {
+                "current_message": current_message.model_dump(mode="json"),
+                "messages": [message.model_dump(mode="json") for message in messages],
+                "quoted_message": quoted_message.model_dump(mode="json")
+                if quoted_message
+                else None,
+                "chat_id": location.scope_id,
+                "kind": location.kind,
+                "timezone": context.timezone,
+                "current_datetime": datetime.now(zone).isoformat(timespec="seconds"),
+            },
+            guards=self._source_guards(rows),
+        )
 
     async def list_messages(
         self,
@@ -392,11 +453,12 @@ class AgentChatHistoryService:
                 if location.kind == "project_chat"
                 else []
             )
+        await self._safe_rows(rows, context)
         items = [self._message(row, location) for row in rows]
         self._attachments(items, attachments, [message.id for message in reversed(items)])
         self._entity_links(items, entity_links)
         await self._recheck(context, location)
-        return ChatHistoryPageSchema(
+        result = ChatHistoryPageSchema(
             items=items,
             has_more=has_more,
             next_before_message_id=items[0].id if has_more and after_message_id is None else None,
@@ -416,6 +478,8 @@ class AgentChatHistoryService:
                 after_message_id=after_message_id,
             ),
         )
+        result._source_guards = self._source_guards(rows)
+        return result
 
     async def get_message(
         self,
@@ -467,6 +531,7 @@ class AgentChatHistoryService:
                 if location.kind == "project_chat"
                 else []
             )
+        await self._safe_rows([row, *neighboring], context)
         message = self._message(row, location, offset=offset, max_chars=max_chars, quote=quote)
         neighbors = [self._message(item, location) for item in neighboring]
         self._attachments(
@@ -476,10 +541,13 @@ class AgentChatHistoryService:
         )
         self._entity_links([message, *neighbors], entity_links)
         await self._recheck(context, location)
-        return {
-            "message": message.model_dump(mode="json"),
-            "neighbors": [item.model_dump(mode="json") for item in neighbors],
-        }
+        return HistoryReadResult(
+            {
+                "message": message.model_dump(mode="json"),
+                "neighbors": [item.model_dump(mode="json") for item in neighbors],
+            },
+            guards=self._source_guards([row, *neighboring]),
+        )
 
     async def verify_reference(
         self, *, context: ChatFileContext, reference: ChatMessageReferenceSchema
@@ -490,6 +558,7 @@ class AgentChatHistoryService:
             raise ChatNotFoundError("Ссылка принадлежит другой переписке или проекту.")
         async with self._scope() as db:
             row = await self._get(db, location, reference.message_id)
+        await self._safe_rows([row], context)
         raw = row["content"] or ""
         if (
             reference.state != "available"

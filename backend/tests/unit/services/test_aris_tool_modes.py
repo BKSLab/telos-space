@@ -72,7 +72,9 @@ def test_personal_actions_never_leak_into_mcp_catalog():
     project_names = {item.name for item in PROJECT_ACTIONS}
     assert not project_names & {item.name for item in PERSONAL_ACTIONS}
     assert all(not item.needs_project for item in PERSONAL_ACTIONS)
-    assert all(item.needs_project for item in PROJECT_ACTIONS)
+    assert {item.name for item in PROJECT_ACTIONS if not item.needs_project} == {
+        "telos_prepare_task"
+    }
     assert all(issubclass(item.parameters, BaseModel) for item in PERSONAL_ACTIONS)
 
 

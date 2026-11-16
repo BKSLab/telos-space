@@ -77,6 +77,9 @@ export async function installMockApi(page: Page, state: MockState) {
             if(rest.startsWith("/aris/conversations")){const result=handleAris(state,rest,method,body);return reply(result.json,result.status??200);}
             if(rest==="/members")return reply(state.members);
             if(rest==="/context-history")return reply({items:[],total:0,offset:Number(url.searchParams.get("offset")??0),limit:Number(url.searchParams.get("limit")??20),has_more:false,next_offset:null});
+            if(rest==="/git/connections")return reply({items:[],total:0,offset:0,limit:20,next_offset:null});
+            if(/^\/git\/tasks\/\d+\/links$/.test(rest))return reply({project_id:id,task_id:Number(rest.split("/")[3]),items:[],partial:false});
+            if(rest==="/knowledge/map")return reply({project_id:id,generation:0,built_generation:null,status:"empty",updated_at:null,items:[],gaps:[],coverage:{sources_total:0,sources_current:0,sources_pending:0,sources_failed:0,sources_skipped:0,complete:false,claims_current:0,claims_conflicting:0,claims_stale:0,chars_processed:0,chars_total:0,reasons:[],method:"grounded_literal_v1"},total:0,offset:0,limit:20,has_more:false,next_offset:null});
             if(rest==="/tasks")return reply(state.tasks);
             if(rest==="/stages")return reply(state.stages);
             if(rest==="/wbs")return reply({nodes:[],tasks:state.tasks,stats:{total_nodes:0,total_tasks:state.tasks.length,assigned_tasks:0,unassigned_tasks:state.tasks.length,done_tasks:0,overdue_tasks:0}});

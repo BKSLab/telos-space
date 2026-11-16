@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from src.agent.aris import ARIS_NAME
 from src.schemas.agent_tools import AgentToolRunSchema
+from src.schemas.knowledge import decode_answer_sources
 from src.schemas.project_chats import (
     ChatAgentView,
     ChatAttachmentView,
@@ -18,6 +19,7 @@ from src.services.chat_message_references import (
     scoped_message_references,
 )
 from src.services.chat_scope import ChatScope
+from src.services.context_evidence import HIDDEN_CONTEXT_ANSWER, ContextEvidenceService
 
 
 def public_user(row) -> ChatUser:
@@ -63,6 +65,33 @@ def entity_view(row) -> ChatEntityView:
 
 
 class ChatPresenter:
+    def __init__(self, evidence: ContextEvidenceService | None = None) -> None:
+        self.evidence = evidence
+
+    async def reveal(self, messages, *, reader_id: int):
+        """Вызывается после закрытия DB области истории, не из broadcast publisher."""
+        guarded = [message for message in reversed(messages) if message._source_context is not None]
+        if self.evidence is None:
+            for message in guarded:
+                message.content = HIDDEN_CONTEXT_ANSWER
+                message.agent.requires_context_validation = False
+            return messages
+        verified = await self.evidence.present_many(
+            [message._source_context[1] for message in guarded], user_id=reader_id
+        )
+        for message, (public, available) in zip(guarded, verified, strict=True):
+            content, values, actions, references = message._source_context
+            message.agent.requires_context_validation = False
+            if not available:
+                message.content = HIDDEN_CONTEXT_ANSWER
+                continue
+            message.content = content
+            if message.agent is not None:
+                for name, value in public.items():
+                    setattr(message.agent, name, value)
+                message.agent.actions, message.agent.message_references = actions, references
+        return messages
+
     """Количество запросов зависит от страницы, а не от числа сообщений."""
 
     async def messages(self, db: ChatScope, rows: list) -> list[ChatMessageView]:
@@ -119,7 +148,9 @@ class ChatPresenter:
         unavailable_citations = frozenset(
             message_id
             for message_id in citation_agent_ids
-            if message_id not in citation_turns or citation_turns[message_id].status != "completed"
+            if message_id not in citation_turns
+            or citation_turns[message_id].status != "completed"
+            or citation_turns[message_id].sources
         )
         stale_reply_ids = [
             row.id
@@ -266,6 +297,29 @@ class ChatPresenter:
                     ),
                 )
             )
+        for view in result:
+            turn = turns.get(view.id)
+            if turn is not None and turn.sources:
+                view._source_context = (
+                    view.content,
+                    turn.sources,
+                    view.agent.actions,
+                    view.agent.message_references,
+                )
+                # Общий outbox не знает получателя. Он никогда не несёт приватный
+                # source-derived body; history GET проверяет именно текущего reader.
+                view.content = "Ответ Ариса готов. Проверяю доступ к источникам…"
+                view.agent.requires_context_validation = True
+                view.agent.sources, view.agent.external_sources, view.agent.assertion_references = (
+                    [],
+                    [],
+                    [],
+                )
+                view.agent.actions, view.agent.message_references = [], []
+            if view.reply and view.reply.author_type == "AGENT":
+                view.reply.content = (
+                    "Ответ Ариса: откройте оригинал для проверки актуальных источников."
+                )
         return result
 
     @staticmethod
@@ -280,7 +334,7 @@ class ChatPresenter:
             progress=turn.progress if turn.status in {"queued", "processing"} else None,
             requester=users.get(turn.requester_id),
             request_message_id=turn.request_message_id,
-            sources=turn.sources,
+            **decode_answer_sources(turn.sources or []),
             message_references=message_references or [],
             actions=actions_by_turn.get(turn.id, []),
         )

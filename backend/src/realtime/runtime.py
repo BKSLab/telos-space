@@ -163,7 +163,14 @@ def build_chat_runtime(*, settings: Settings, session_factory) -> ChatRuntime:
         invite_code=settings.auth.registration_invite_code.get_secret_value(),
         metrics=db_metrics,
     )
-    chat = ProjectChatService(scope, ChatPresenter())
+    from src.dependencies.agent_context import build_context_evidence_service
+
+    chat = ProjectChatService(
+        scope,
+        ChatPresenter(
+            build_context_evidence_service(session_factory=session_factory, settings=settings)
+        ),
+    )
     files = ChatAttachmentsService(
         chat,
         ChatAttachmentStorage(settings.app.uploads_path / "chat"),

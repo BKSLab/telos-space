@@ -2,7 +2,9 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from src.utils.action_effects import action_effect
 
 
 class AgentToolRunSchema(BaseModel):
@@ -18,6 +20,11 @@ class AgentToolRunSchema(BaseModel):
     )
     result: dict[str, Any] = Field(description="Сохранённый результат.")
     created_at: datetime = Field(description="Время запроса действия.")
+
+    @computed_field
+    @property
+    def effect(self) -> Literal["write", "external_release"]:
+        return action_effect(self.tool_name)
 
 
 class AgentToolDecisionSchema(BaseModel):
@@ -52,3 +59,8 @@ class AgentPendingActionSchema(BaseModel):
     project: AgentPendingProjectSchema = Field(description="Проект действия.")
     created_at: datetime = Field(description="Время предложения.")
     expires_at: datetime = Field(description="До какого момента можно подтвердить.")
+
+    @computed_field
+    @property
+    def effect(self) -> Literal["write", "external_release"]:
+        return action_effect(self.tool_name)

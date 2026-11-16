@@ -218,6 +218,21 @@ def result_key(request: dict, result: dict) -> str:
     return json.dumps(request, ensure_ascii=False, sort_keys=True, default=str)
 
 
+def action_model_context(action: dict, *, current: bool) -> dict:
+    """Receipt — память о действии, его старый payload не доказывает current ACL."""
+    from src.utils.action_effects import EXTERNAL_RELEASE_ACTIONS
+
+    if current and action.get("tool_name") in EXTERNAL_RELEASE_ACTIONS:
+        return action
+    return {
+        **{key: value for key, value in action.items() if key not in {"arguments", "result"}},
+        "result": {
+            "participant_decision": action.get("result", {}).get("participant_decision"),
+            "current_data": "Подробности результата перечитай актуальным доменным инструментом; квитанция подтверждает только выполненное действие.",
+        },
+    }
+
+
 def compact_action(action: dict) -> dict:
     """Квитанция сохраняет факт записи; большие параметры остаются в БД и UI."""
     result = {
@@ -229,6 +244,28 @@ def compact_action(action: dict) -> dict:
     if action.get("status") == "pending" and "confirmation" not in result:
         result["confirmation"] = "Параметры и решение доступны участнику в карточке действия."
     return result
+
+
+IDENTITY_FIELDS = frozenset(
+    {
+        "topic_token",
+        "page_token",
+        "source_id",
+        "source_handle",
+        "fragment_handle",
+        "message_reference_handle",
+        "path",
+        "ref",
+        "commit_sha",
+        "blob_sha",
+        "text_hash",
+        "content_hash",
+        "source_hash",
+        "url",
+        "requested_url",
+        "public_topic",
+    }
+)
 
 
 def compact_fields(value):
@@ -247,8 +284,10 @@ def compact_fields(value):
                 "checklist",
             }:
                 omitted.append(key)
-            elif key in {"id", "status", "participant_decision", "confirmation"} or key.endswith(
-                ("_id", "_ids", "_url")
+            elif (
+                key in IDENTITY_FIELDS
+                or key in {"id", "status", "participant_decision", "confirmation"}
+                or key.endswith(("_id", "_ids", "_url"))
             ):
                 result[key] = deepcopy(item)
             else:
@@ -562,6 +601,8 @@ class AgentContextBudget:
                 if is_chat_message(value):
                     return
                 for key, item in list(value.items()):
+                    if key in IDENTITY_FIELDS:
+                        continue
                     if key in {
                         "question",
                         "current_participant",

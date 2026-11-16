@@ -667,6 +667,25 @@ export interface KnowledgeSource {
 export interface KnowledgeAnswer {
     answer: string;
     sources: KnowledgeSource[];
+    external_sources?: ExternalSourceReference[];
+    assertion_references?: AssertionReference[];
+}
+
+export interface ExternalSourceReference {
+    source_id: string; kind: "git_file" | "git_change" | "web_page"; project_id: number;
+    title: string; url: string | null; excerpt?: string | null; content_hash?: string | null;
+    state: "current" | "stale" | "unavailable";
+    fetched_at?: string | null; coverage: string; is_primary: boolean;
+    connection_id?: number | null; repository_id?: number | null; ref?: string | null;
+    commit_sha?: string | null; path?: string | null; blob_sha?: string | null;
+    line_start?: number | null; line_end?: number | null;
+    task_id?: number | null; change_id?: number | null;
+}
+
+export interface AssertionReference {
+    project_id: number; claim_id: string; revision: number; text: string | null;
+    state: "current" | "conflicting" | "stale" | "unavailable";
+    kind: string; verification: string; source_ids: string[]; is_primary: boolean;
 }
 
 export interface KnowledgeStatus {
@@ -706,6 +725,7 @@ export interface AgentConversationPage {
 }
 
 export interface AgentToolRun {
+    effect?: "write" | "external_release";
     id: string;
     tool_name: string;
     title: string;
@@ -735,6 +755,8 @@ export interface ChatMessageReference {
 }
 
 export interface AgentMessage {
+    external_sources?: ExternalSourceReference[];
+    assertion_references?: AssertionReference[];
     actions?: AgentToolRun[];
     files?: AgentFile[];
     id: number;
@@ -1189,6 +1211,7 @@ export type TaskTransferTarget =
     | { personal: true };
 
 export interface TaskTransferLosses {
+    git_links: number;
     wbs_placements: number;
     dependencies: number;
     document_links: number;
