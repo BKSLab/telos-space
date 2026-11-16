@@ -582,9 +582,30 @@ select:-webkit-autofill {
     border-radius: 2px;
     background-image: var(--brand-spectrum);
   }
+
+  .brand-accent-text {
+    color: var(--color-accent);
+  }
+
+  @supports (background-clip: text) {
+    .brand-accent-text {
+      background-image: var(--brand-spectrum);
+      background-clip: text;
+      color: transparent;
+    }
+  }
 }
 
 @media (forced-colors: active) {
+  .brand-accent-text {
+    background-image: none;
+    color: LinkText;
+  }
+
+  .brand-accent-icon {
+    stroke: LinkText;
+  }
+
   .app-shell,
   .app-sidebar,
   .mobile-header,

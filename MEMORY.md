@@ -256,8 +256,8 @@ Vision — 300 с / 3 попытки, embeddings — 120 с; prompt_cache_key у
 
 ## Прод и восстановление
 
-Последний выкат frontend — 16.11.2026: **`011cc80`**, отдельные строки срока
-и исполнителя, акцентные контуры Lucide и красная просрочка.
+Последний выкат frontend — 16.11.2026: **`9d79fad`**, отдельные строки срока
+и исполнителя, фирменный градиент даты/контуров Lucide и красная просрочка.
 Backend остался из **`7ef3c56`** (TELOS-8 вместе с опубликованной TELOS-22).
 Реализация TELOS-8 — `72f8044`.
 Alembic head **`f23d8b410ce2`** поверх `f12c7a309bd1`; данные сохранены.
@@ -265,7 +265,7 @@ Alembic head **`f23d8b410ce2`** поверх `f12c7a309bd1`; данные сох
 Клон — `/projects/telos-space`, адрес — `http://91.218.114.82:8081`.
 Compose `telos-space`; обязательны `docker-compose.yml` и `docker-compose.prod.yml`.
 Шесть сервисов работают: backend, frontend, nginx, db, redis, qdrant; отдельный MCP не запущен.
-Backend — образ `8c4e54798052`, frontend — `af6ab1cc519e`.
+Backend — образ `8c4e54798052`, frontend — `28f9b9291303`.
 Пересобран и заменён только frontend; nginx проверен и перезагружен.
 Остальные десять контейнеров сохранили ID, образ, время старта и restart count.
 Env и SHA-256 всех 24 оригиналов uploads совпали до/после обновления.
@@ -286,9 +286,9 @@ PostgreSQL/Redis/Qdrant не публикуют порты. Env/CORS/AI-наст
 base и существующие данные не пересоздаются. Прежние образы сохранены
 под тегами `rollback-20261116T144149Z` до завершения приёмки.
 Материалы текущего обновления frontend —
-`/root/backups/telos-space/20261116T154523Z-date-layout`: статика прежней версии,
+`/root/backups/telos-space/20261116T155353Z-date-gradient`: статика прежней версии,
 манифесты сохранности и логи сборки/проверок. Прежний frontend сохранён как
-`telos-space-frontend:rollback-date-layout-20261116T154523Z`.
+`telos-space-frontend:rollback-date-gradient-20261116T155353Z`.
 
 ## Последние проверки
 

@@ -1,5 +1,6 @@
 import { AlertTriangle, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { BrandIcon } from "@/components/ui/BrandIcon";
 import { daysUntil, dueTone, formatDayMonth, formatFullDate } from "@/lib/dates";
 
 interface DueDateProps {
@@ -34,10 +35,12 @@ export function DueDate({ value, isDone = false, className }: DueDateProps) {
         >
             {isOverdue ? (
                 <AlertTriangle size={12} className="shrink-0" aria-hidden="true" />
-            ) : (
+            ) : isDone ? (
                 <CalendarDays size={12} className="shrink-0" aria-hidden="true" />
+            ) : (
+                <BrandIcon icon={CalendarDays} />
             )}
-            <span className="font-mono">{formatDayMonth(value)}</span>
+            <span className={cn("font-mono", !isDone && !isOverdue && "brand-accent-text")}>{formatDayMonth(value)}</span>
             {suffix && <span className="sr-only">{suffix}</span>}
         </span>
     );
