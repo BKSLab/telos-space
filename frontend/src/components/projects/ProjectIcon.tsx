@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { apiUrl, endpoints } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { findProjectIcon, projectEmoji } from "@/lib/projectIcons";
-import { StatusDot } from "@/components/ui/Badge";
+import "./ProjectIdentity.css";
 
 export interface ProjectIconSource {
     id: number;
@@ -18,13 +18,11 @@ interface ProjectIconProps {
     /** `color` — линия иконки цветом проекта; `current` — цветом текста (тёмный фон сайдбара). */
     tone?: "color" | "current";
     className?: string;
-    /** Классы цветной точки, если у проекта нет ни картинки, ни иконки. */
-    dotClassName?: string;
 }
 
 /**
  * Единое изображение проекта: своя картинка → иконка из набора → эмодзи →
- * цветная точка. Картинка отдаётся трекером после проверки доступа; если она
+ * знак «Пик и цель». Картинка отдаётся трекером после проверки доступа; если она
  * не загрузилась, показывается следующий вариант.
  */
 export function ProjectIcon({
@@ -32,12 +30,17 @@ export function ProjectIcon({
     size = 16,
     tone = "color",
     className,
-    dotClassName,
 }: ProjectIconProps) {
     const version = project.icon_image_version ?? null;
-    const [brokenVersion, setBrokenVersion] = useState<string | null>(null);
+    const imageIdentity = version ? `${project.id}:${version}` : null;
+    const [brokenImage, setBrokenImage] = useState<string | null>(null);
+    // В обзорной шапке слот адаптируется через CSS; остальные размеры сохраняются.
+    const dimensions = {
+        width: `var(--project-icon-size, ${size}px)`,
+        height: `var(--project-icon-size, ${size}px)`,
+    };
 
-    if (version && brokenVersion !== version) {
+    if (version && brokenImage !== imageIdentity) {
         return (
             <img
                 src={apiUrl(endpoints.projectIconImage(project.id, version))}
@@ -47,9 +50,9 @@ export function ProjectIcon({
                 height={size}
                 loading="lazy"
                 decoding="async"
-                onError={() => setBrokenVersion(version)}
+                onError={() => setBrokenImage(imageIdentity)}
                 className={cn("shrink-0 rounded-[4px] object-cover", className)}
-                style={{ width: size, height: size }}
+                style={dimensions}
                 data-testid="project-icon-image"
             />
         );
@@ -64,7 +67,7 @@ export function ProjectIcon({
                 strokeWidth={2}
                 aria-hidden="true"
                 className={cn("shrink-0", className)}
-                style={tone === "color" ? { color: project.color } : undefined}
+                style={{ ...dimensions, ...(tone === "color" ? { color: project.color } : {}) }}
                 data-testid="project-icon-lucide"
                 data-icon={option.name}
             />
@@ -76,8 +79,8 @@ export function ProjectIcon({
         return (
             <span
                 aria-hidden="true"
-                className={cn("shrink-0 leading-none", className)}
-                style={{ fontSize: Math.round(size * 0.95) }}
+                className={cn("inline-flex shrink-0 items-center justify-center leading-none", className)}
+                style={{ ...dimensions, fontSize: `calc(var(--project-icon-size, ${size}px) * var(--project-icon-emoji-scale, 0.95))` }}
                 data-testid="project-icon-emoji"
             >
                 {emoji}
@@ -85,7 +88,9 @@ export function ProjectIcon({
         );
     }
 
-    return <span aria-hidden="true" className={cn("inline-flex shrink-0 items-center justify-center", className)} style={{ width: size, height: size }}>
-        <StatusDot color={project.color} className={cn(size >= 24 && "size-2.5", dotClassName)} />
+    return <span aria-hidden="true" className={cn("project-default-icon shrink-0", className)}
+        style={{ ...dimensions, "--project-icon-color": project.color } as CSSProperties}
+        data-testid="project-icon-default" data-icon="peak-goal">
+        <span className="project-default-icon-peak" />
     </span>;
 }

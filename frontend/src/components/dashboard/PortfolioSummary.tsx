@@ -16,7 +16,7 @@ import { useUiStore } from "@/stores/ui";
 
 function DashboardSkeleton() {
     return <div role="status" aria-label="Загрузка сводки" className="flex flex-col gap-4">
-        <MetricGrid>{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-36" />)}</MetricGrid>
+        <MetricGrid>{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-28" />)}</MetricGrid>
         <div className="grid gap-4 lg:grid-cols-2"><Skeleton className="h-72" /><Skeleton className="h-72" /></div>
         <Skeleton className="h-44" />
     </div>;
@@ -40,18 +40,16 @@ export function PortfolioSummary() {
                 <MetricGrid>
                     <MetricCard label="Проекты в работе" value={data.totals.active_projects} hint={`Всего доступно: ${data.totals.total_projects}`} icon={<FolderKanban size={17} />} />
                     <MetricCard label="Задачи в работе" value={data.totals.in_progress_tasks} hint={`Во всех проектах: ${data.totals.total_tasks}`} icon={<ListTodo size={17} />} />
-                    <MetricCard label="Выполнено" value={data.totals.total_tasks ? `${Math.round(data.totals.completion_rate * 100)}%` : "—"} hint={`${data.totals.done_tasks} задач завершено`} icon={<CheckCircle2 size={17} />} tone="success" />
-                    <MetricCard label="Просрочено" value={data.totals.overdue_tasks} hint={data.totals.overdue_tasks > 0 ? "Проверьте сроки открытых задач" : "Открытых задач с просрочкой нет"} icon={<AlertTriangle size={17} />} tone={data.totals.overdue_tasks > 0 ? "danger" : "default"} />
+                    <MetricCard label="Выполнено" value={data.totals.done_tasks} hint={`Из ${data.totals.total_tasks} задач`} icon={<CheckCircle2 size={17} />} tone="success" />
+                    <MetricCard label="Просрочено" value={data.totals.overdue_tasks} hint={data.totals.overdue_tasks > 0 ? "Открытых задач" : "Сроки под контролем"} icon={<AlertTriangle size={17} />} tone={data.totals.overdue_tasks > 0 ? "danger" : "default"} />
                 </MetricGrid>
                 <p className="text-[12px] text-muted">Показатели по всем доступным проектам. Разовые задачи показаны отдельно.</p>
             </section>
 
             <div className="grid items-start gap-4 lg:grid-cols-2">
-                <OverviewPanel title="Фактический прогресс" description="Текущее состояние задач всех доступных проектов">
+                <OverviewPanel title="Фактический прогресс" description="Доля завершённых задач портфеля">
                     <TaskCompletion total={data.totals.total_tasks} done={data.totals.done_tasks} inProgress={data.totals.in_progress_tasks} />
-                    <p className="border-t border-line-subtle pt-3 text-[12px] leading-relaxed text-muted">
-                        {data.totals.total_tasks > 0 ? "Прогресс — доля завершённых задач. Просроченные входят в число открытых." : "Добавьте задачи в проект, чтобы увидеть прогресс работ."}
-                    </p>
+                    {data.totals.total_tasks === 0 && <p className="text-[12px] text-muted">Добавьте задачи в проект, чтобы увидеть прогресс работ.</p>}
                 </OverviewPanel>
 
                 <PortfolioAttention projects={data.projects} tasks={data.attention_tasks} overdue={data.totals.overdue_tasks} onOpenTask={setSelectedTaskId} />

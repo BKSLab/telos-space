@@ -27,16 +27,14 @@ for (const width of [1440, 1024, 768, 390, 320]) {
         await expect(page.getByRole("heading", { name: "Портфель", exact: true })).toBeVisible();
         const catalog = page.getByRole("region", { name: "Каталог проектов" });
         const image = catalog.locator('[data-testid="project-icon-image"]:visible');
-        await expect(image).toHaveCSS("width", "36px");
+        await expect(image).toHaveCSS("width", "48px");
         await expect(image).toHaveJSProperty("naturalWidth", 64);
-        if (width >= 768) {
-            const table = catalog.getByRole("table", { name: "Проекты портфеля" });
-            await expect(table).toBeVisible();
-            expect(await table.locator("th, td").evaluateAll(cells => cells.every(cell => cell.scrollWidth <= cell.clientWidth + 1))).toBe(true);
-        } else {
-            await expect(catalog.getByRole("table")).toBeHidden();
-            await expect(catalog.getByText("Цель Проверить новое рабочее пространство", { exact: true })).toBeVisible();
-        }
+        const projects = catalog.getByRole("list", { name: "Проекты портфеля" });
+        await expect(projects.getByRole("listitem")).toHaveCount(3);
+        await expect(catalog.getByRole("table")).toHaveCount(0);
+        await expect(catalog.getByText("Цель Проверить новое рабочее пространство", { exact: true })).toBeVisible();
+        expect(await projects.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(width >= 768 ? 2 : 1);
+        expect(await projects.getByRole("listitem").evaluateAll(cards => cards.every(card => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: info.outputPath(`projects-${width}.png`) });
 
@@ -73,7 +71,7 @@ test("сворачивание списка и выбор вкладки сох�
     await projects.getByRole("button", { name: "Развернуть список проектов" }).click();
     await projects.getByRole("link", { name: state.projects[0].name, exact: true }).click();
     await expect(projects.getByRole("link", { name: state.projects[0].name, exact: true })).toHaveAttribute("aria-current", "page");
-    await expect(page.locator(".project-header").getByTestId("project-icon-image")).toHaveCSS("width", "32px");
+    await expect(page.locator(".project-header").getByTestId("project-icon-image")).toHaveCSS("width", "72px");
     await page.getByRole("button", { name: "Свернуть панель", exact: true }).click();
     await projects.getByRole("button", { name: "Свернуть список проектов" }).click();
     await page.getByRole("button", { name: "Развернуть панель", exact: true }).click();
@@ -108,5 +106,27 @@ test("мобильный список проектов сворачиваетс�
     await projects.getByRole("link", { name: state.projects[0].name, exact: true }).click();
     await expect(menu).toBeHidden();
     await expect(page.getByRole("heading", { name: state.projects[0].name, exact: true })).toBeVisible();
+    await expect(page.locator(".project-header").getByTestId("project-icon-image")).toHaveCSS("width", "48px");
     expect(state.errors).toEqual([]);
 });
+
+for (const width of [390, 320]) {
+    test(`длинное название карточки доступно без горизонтальной прокрутки на ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        const state = await installPortfolioApi(page);
+        const name = "ДлинноеНазваниеПроектаБезПробелов".repeat(5);
+        state.projects[0].name = name;
+        await page.goto("/?view=projects");
+        const catalog = page.getByRole("region", { name: "Каталог проектов" });
+        const link = catalog.getByRole("link", { name, exact: true });
+        await expect(link).toBeVisible();
+        await expect(link.getByRole("heading", { name, exact: true })).toHaveAttribute("title", name);
+        await expect(link.locator("a, button")).toHaveCount(0);
+        expect(await link.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await link.focus();
+        await page.keyboard.press("Enter");
+        await expect(page).toHaveURL(/\/projects\/DEMO$/);
+        expect(state.errors).toEqual([]);
+    });
+}

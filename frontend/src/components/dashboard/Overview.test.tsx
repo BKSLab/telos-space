@@ -71,6 +71,7 @@ function seedProject(queryClient: QueryClient) {
     queryClient.setQueryData(queryKeys.projectMembers(7), []);
     queryClient.setQueryData(queryKeys.projectRiskSummary(7, `today=${formatDateOnly(new Date())}`), riskSummary);
     queryClient.setQueryData(queryKeys.dashboardAnalytics(7), historicalReport);
+    queryClient.setQueryData(queryKeys.milestones(7), []);
 }
 
 afterEach(() => {
@@ -93,7 +94,8 @@ describe("обзоры", () => {
         renderPage(<PortfolioSummary />, queryClient);
 
         const metrics = within(screen.getByRole("region", { name: "Показатели портфеля" }));
-        expect(metrics.getByText("25%")).toBeTruthy();
+        expect(metrics.getByText("3", { exact: true })).toBeTruthy();
+        expect(metrics.queryByText("25%")).toBeNull();
         expect(metrics.queryByText("900")).toBeNull();
         expect(screen.getByText(/Показатели по всем доступным проектам/)).toBeTruthy();
         expect(screen.getByRole("img", { name: "Выполнено 3 из 12 задач: 25%" })).toBeTruthy();
@@ -103,7 +105,8 @@ describe("обзоры", () => {
         expect(useUiStore.getState().selectedTaskId).toBe(51);
 
         act(() => queryClient.setQueryData(queryKeys.dashboard, { ...dashboard, totals: { ...dashboard.totals, done_tasks: 6, completion_rate: 0.5 } }));
-        await waitFor(() => expect(metrics.getByText("50%")).toBeTruthy());
+        await waitFor(() => expect(metrics.getByText("6", { exact: true })).toBeTruthy());
+        expect(screen.getByRole("img", { name: "Выполнено 6 из 12 задач: 50%" })).toBeTruthy();
         expect(screen.getByText("Сохранённая оценка Ариса")).toBeTruthy();
     });
 

@@ -66,11 +66,11 @@ export function ProjectSummaryPanel({ projectId = null, dataUpdatedAt = null, bl
     const freshness = reportFreshness(report?.created_at, dataUpdatedAt);
 
     return <section aria-label="Вывод Ариса" className="ai-surface flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-card)] border border-ai-border shadow-card">
-        <header className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5">
-            <span className="ai-mark flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-ai-blue"><Sparkles size={18} aria-hidden="true" /></span>
+        <header className="flex flex-wrap items-center gap-2.5 px-4 py-3 sm:px-5">
+            <span className="flex size-6 shrink-0 items-center justify-center text-ai-blue"><Sparkles size={20} aria-hidden="true" /></span>
             <div className="min-w-0 flex-1">
                 <h2 className="text-[16px] font-semibold tracking-[-0.02em] text-primary">Вывод Ариса</h2>
-                <p className="mt-0.5 text-[12px] leading-relaxed text-muted">{projectId ? "Оценка проекта на момент разбора" : "Оценка активных проектов и разовых задач"}</p>
+                <p className="mt-0.5 text-[12px] leading-snug text-muted">{projectId ? "Оценка проекта на момент разбора" : "Оценка активных проектов и разовых задач"}</p>
             </div>
             <Button variant="ai" size="lg" onClick={() => generate.mutate()} disabled={generate.isPending || Boolean(blockedReason)} title={blockedReason}
                 icon={generate.isPending ? <RefreshCw size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}>
@@ -88,17 +88,27 @@ export function ProjectSummaryPanel({ projectId = null, dataUpdatedAt = null, bl
         </div>}
 
         {reportQuery.isPending ? <div role="status" aria-label="Загрузка разбора" className="flex flex-col gap-3 border-t border-line-subtle p-5"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-4 w-1/2" /></div> : report ? <>
-            <div className="flex flex-col gap-3 border-t border-line-subtle px-4 py-4 sm:px-5">
+            <div className="flex flex-col gap-2.5 border-t border-line-subtle px-4 py-3 sm:px-5">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px]">
                     {HealthIcon && <span className={cn("inline-flex items-center gap-1.5 rounded-[var(--radius-control)] border px-2 py-1 font-medium", HEALTH_STYLES[report.health])}><HealthIcon size={14} aria-hidden="true" />Оценка разбора: {ANALYTICS_HEALTH_LABELS[report.health]}</span>}
                     <time dateTime={report.created_at} title={formatDateTime(report.created_at)} className="inline-flex items-center gap-1.5 text-muted"><History size={13} aria-hidden="true" />{formatFullDate(report.created_at)}</time>
                 </div>
                 {freshness === "stale" && <p className="text-[12px] leading-relaxed text-warning">Данные менялись после разбора. Обновите его, чтобы получить новую оценку.</p>}
-                <p className="brand-summary-title max-w-4xl text-[18px] leading-snug font-semibold tracking-[-0.02em] text-primary">{report.headline}</p>
-                <p className="line-clamp-3 max-w-4xl text-[14px] leading-relaxed text-secondary">{report.health_note}</p>
+                <div className={cn("grid min-w-0 gap-3", projectId && report.recommendations.length > 0 && "lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]")}>
+                    <div className="min-w-0">
+                        <p className="brand-summary-title break-words text-[16px] leading-snug font-semibold tracking-[-0.02em] text-primary">{report.headline}</p>
+                        <p className="mt-1.5 line-clamp-2 text-[14px] leading-relaxed text-secondary">{report.health_note}</p>
+                    </div>
+                    {Boolean(projectId) && report.recommendations.length > 0 && <div className="min-w-0 border-t border-line-subtle pt-3 lg:border-t-0 lg:border-l lg:pl-4 lg:pt-0">
+                        <h3 className="mb-2 text-[12px] font-medium text-muted">Рекомендации из разбора</h3>
+                        <ul className="flex flex-col gap-2 text-[14px] text-secondary">{report.recommendations.slice(0, 2).map((item, index) => <li key={`${item.title}-${index}`} className="flex min-w-0 items-start gap-2">
+                            <Lightbulb size={14} className="mt-0.5 shrink-0 text-ai-blue" aria-hidden="true" /><span className="break-words">{item.title}</span>
+                        </li>)}</ul>
+                    </div>}
+                </div>
             </div>
             <details key={report.id} className="group border-t border-line-subtle">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-[14px] font-medium text-accent hover:bg-hover sm:px-5 [&::-webkit-details-marker]:hidden">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-[14px] font-medium text-accent hover:bg-hover sm:px-5 [&::-webkit-details-marker]:hidden">
                     <span>Полный разбор · {formatFullDate(report.created_at)}</span><ChevronDown size={17} className="shrink-0 group-open:rotate-180" aria-hidden="true" />
                 </summary>
                 <PulseDetail report={report} onOpenTask={onOpenTask} />

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowUpRight, CalendarClock, CheckCircle2, ChevronDown, ListTodo, Plus } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import type { ProjectStats, Task } from "@/lib/types";
+import type { ProjectMilestone, ProjectStats, Task } from "@/lib/types";
 import { formatDayMonth } from "@/lib/dates";
 import { projectTaskFocus } from "@/lib/dashboard";
 import { latestUpdate } from "@/lib/overview";
@@ -20,8 +20,9 @@ import { OverviewTaskRow } from "@/components/dashboard/TaskRow";
 import { ProjectSummaryPanel } from "@/components/overview/ProjectSummaryPanel";
 import { StageBreakdown } from "@/components/overview/OverviewBreakdown";
 import { ProjectPeopleSummary } from "@/components/projects/ProjectPeopleSummary";
+import { ProjectSchedulePanel } from "@/components/overview/ProjectSchedulePanel";
 
-const DEADLINES_PREVIEW = 5;
+const DEADLINES_PREVIEW = 3;
 
 function Description({ markdown }: { markdown: string }) {
     const html = useRenderedMarkdown(markdown);
@@ -34,6 +35,7 @@ export function ProjectOverviewPage() {
     const setSelectedTaskId = useUiStore(state => state.setSelectedTaskId);
     const statsQuery = useQuery({ queryKey: queryKeys.projectStats(project.id), queryFn: () => api.get<ProjectStats>(endpoints.projectStats(project.id)) });
     const tasksQuery = useQuery({ queryKey: queryKeys.tasks(project.id), queryFn: () => api.get<Task[]>(endpoints.projectTasks(project.id)) });
+    const milestonesQuery = useQuery({ queryKey: queryKeys.milestones(project.id), queryFn: () => api.get<ProjectMilestone[]>(endpoints.projectMilestones(project.id)) });
     const stats = statsQuery.data;
     const stageNames = new Map((stats?.stage_breakdown ?? []).map(item => [item.stage_id, item.stage_name]));
     const focus = projectTaskFocus(tasksQuery.data ?? [], stats?.stage_breakdown ?? []);
@@ -42,39 +44,44 @@ export function ProjectOverviewPage() {
     const riskSummary = risks.data;
 
     return <div className="scrollbar-thin h-full overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-none flex-col gap-6 px-5 py-5 sm:px-6">
+        <div className="mx-auto flex w-full max-w-none flex-col gap-4 px-3 py-4 sm:gap-5 sm:px-6">
             <header className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h1 className="text-[24px] font-semibold tracking-[-0.03em] text-primary">Обзор проекта</h1>
-                    <p className="mt-1 text-[14px] text-muted">Текущее состояние работ и следующие шаги</p>
+                    <h2 className="text-[16px] font-semibold tracking-[-0.02em] text-primary">Обзор проекта</h2>
                 </div>
                 <LinkButton to={taskList} size="lg" icon={<ArrowUpRight size={16} aria-hidden="true" />}>Открыть задачи</LinkButton>
             </header>
 
             {statsQuery.error && <ErrorMessage title="Показатели недоступны" message={(statsQuery.error as Error).message}
                 action={<Button size="sm" onClick={() => void statsQuery.refetch()}>Повторить загрузку</Button>} />}
-            {statsQuery.isPending && <div role="status" aria-label="Загрузка показателей проекта"><MetricGrid>{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-36" />)}</MetricGrid></div>}
+            {statsQuery.isPending && <div role="status" aria-label="Загрузка показателей проекта"><MetricGrid>{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-28" />)}</MetricGrid></div>}
             {stats && <>
                 <section aria-label="Показатели проекта">
                     <MetricGrid>
                         <MetricCard label="Всего задач" value={stats.total_tasks} hint={`${stats.in_progress_tasks} в работе`} icon={<ListTodo size={17} />} />
-                        <MetricCard label="Выполнено" value={stats.total_tasks ? `${Math.round(stats.completion_rate * 100)}%` : "—"} hint={`${stats.done_tasks} задач завершено`} icon={<CheckCircle2 size={17} />} tone="success" />
-                        <MetricCard label="Просрочено" value={stats.overdue_tasks} hint={stats.overdue_tasks ? "Пересмотрите сроки открытых задач" : "Открытых задач с просрочкой нет"} icon={<AlertTriangle size={17} />} tone={stats.overdue_tasks ? "danger" : "default"} />
+                        <MetricCard label="Выполнено" value={stats.done_tasks} hint={`Из ${stats.total_tasks} задач`} icon={<CheckCircle2 size={17} />} tone="success" />
+                        <MetricCard label="Просрочено" value={stats.overdue_tasks} hint={stats.overdue_tasks ? "Открытых задач" : "Сроки под контролем"} icon={<AlertTriangle size={17} />} tone={stats.overdue_tasks ? "danger" : "default"} />
                         <MetricCard label="Срок на неделе" value={stats.due_soon_tasks} hint="Сегодня и ближайшие 7 дней" icon={<CalendarClock size={17} />} tone={stats.due_soon_tasks ? "warning" : "default"} />
                     </MetricGrid>
                 </section>
                 {stats.total_tasks === 0 && <EmptyState title="В проекте пока нет задач" description="Добавьте первые задачи, чтобы видеть прогресс и планировать сроки."
                     icon={<ListTodo size={24} />} action={<LinkButton to={taskList} variant="primary" size="lg" icon={<Plus size={16} aria-hidden="true" />}>Перейти к задачам</LinkButton>} />}
-                <div className="grid items-start gap-4 lg:grid-cols-2">
-                    <OverviewPanel title="Фактический прогресс" description="Доля завершённых задач проекта">
-                        <TaskCompletion total={stats.total_tasks} done={stats.done_tasks} inProgress={stats.in_progress_tasks} color={project.color} />
-                        <p className="border-t border-line-subtle pt-3 text-[12px] leading-relaxed text-muted">Просрочка учитывается отдельно: у каждой задачи сохраняется её текущая стадия.</p>
-                    </OverviewPanel>
-                    <OverviewPanel title="По стадиям" description="Распределение всех задач по текущему состоянию">
-                        {stats.stage_breakdown.length > 0 ? <StageBreakdown stages={stats.stage_breakdown} /> : <p className="py-5 text-[14px] text-muted">Стадии пока не настроены. Откройте доску проекта, чтобы организовать работу.</p>}
-                    </OverviewPanel>
-                </div>
             </>}
+            <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+                    {stats ? <OverviewPanel title="Фактический прогресс" description="Доля завершённых задач проекта">
+                        <div className="grid items-center gap-5 sm:grid-cols-2">
+                            <TaskCompletion total={stats.total_tasks} done={stats.done_tasks} inProgress={stats.in_progress_tasks} color={project.color} />
+                            <div className="min-w-0 border-t border-line-subtle pt-3 sm:border-t-0 sm:border-l sm:pl-4 sm:pt-0">
+                                <h3 className="mb-3 text-[12px] font-medium text-muted">По стадиям</h3>
+                                {stats.stage_breakdown.length > 0 ? <StageBreakdown stages={stats.stage_breakdown} /> : <p className="text-[14px] text-muted">Стадии пока не настроены.</p>}
+                            </div>
+                        </div>
+                    </OverviewPanel> : <OverviewPanel title="Фактический прогресс">
+                        {statsQuery.isPending ? <Skeleton className="h-30" /> : <p className="text-[14px] text-muted">Прогресс появится после загрузки показателей.</p>}
+                    </OverviewPanel>}
+                    <ProjectSchedulePanel project={project} nextTaskDue={stats?.next_due_date ?? null} milestones={milestonesQuery.data}
+                        isPending={milestonesQuery.isPending} error={milestonesQuery.error} onRetry={() => void milestonesQuery.refetch()} />
+            </div>
 
             <div className="grid items-start gap-4 lg:grid-cols-2">
                 <OverviewPanel title="Требует внимания" description="Сроки открытых задач: просроченные идут первыми"
@@ -108,7 +115,7 @@ export function ProjectOverviewPage() {
             </div>
 
             <ProjectSummaryPanel projectId={project.id} onOpenTask={setSelectedTaskId}
-                dataUpdatedAt={latestUpdate([...(tasksQuery.data ?? []), project, ...(riskSummary?.latest_update ? [{ updated_at: riskSummary.latest_update }] : [])])} />
+                dataUpdatedAt={latestUpdate([...(tasksQuery.data ?? []), ...(milestonesQuery.data ?? []), project, ...(riskSummary?.latest_update ? [{ updated_at: riskSummary.latest_update }] : [])])} />
 
             <OverviewPanel title="Риски проекта" description="Текущие данные реестра рисков"
                 action={<Link to={`/projects/${project.key}/risks`} className="inline-flex items-center gap-1 text-[14px] text-accent hover:text-accent-hover">Открыть реестр<ArrowUpRight size={15} aria-hidden="true" /></Link>}>

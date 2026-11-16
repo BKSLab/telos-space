@@ -50,9 +50,12 @@ afterEach(() => {
 describe("портфель", () => {
     it("показывает все статусы и фактический прогресс, а сводку открывает отдельной вкладкой", async () => {
         setup();
-        const catalog = within(screen.getByRole("table", { name: "Проекты портфеля" }));
-        expect(catalog.getAllByRole("row")).toHaveLength(4);
+        const catalog = within(screen.getByRole("list", { name: "Проекты портфеля" }));
+        expect(catalog.getAllByRole("listitem")).toHaveLength(3);
+        expect(catalog.getAllByRole("link")).toHaveLength(3);
         expect(catalog.getByRole("progressbar", { name: "Прогресс проекта Запуск продукта" }).getAttribute("aria-valuenow")).toBe("25");
+        expect(catalog.getByRole("link", { name: "Подготовка" }).textContent).toContain("0 из 0 задач");
+        expect(catalog.getByRole("progressbar", { name: "Прогресс проекта Подготовка" }).getAttribute("aria-valuenow")).toBe("0");
         expect(catalog.getByText("В архиве")).toBeTruthy();
         expect(catalog.getByText("Планирование")).toBeTruthy();
         expect(screen.queryByRole("region", { name: "Показатели портфеля" })).toBeNull();
@@ -66,14 +69,51 @@ describe("портфель", () => {
     it("совмещает поиск по ключу со статусом и сбрасывает фильтры из пустого результата", async () => {
         setup();
         await userEvent.type(screen.getByRole("searchbox", { name: "Поиск проектов" }), "  demo ");
-        const table = () => within(screen.getByRole("table", { name: "Проекты портфеля" }));
-        expect(table().getAllByRole("row")).toHaveLength(2);
-        expect(table().getByRole("link", { name: /Запуск продукта/ }).getAttribute("href")).toBe("/projects/DEMO");
+        const catalog = () => within(screen.getByRole("list", { name: "Проекты портфеля" }));
+        expect(catalog().getAllByRole("listitem")).toHaveLength(1);
+        expect(catalog().getByRole("link", { name: "Запуск продукта" }).getAttribute("href")).toBe("/projects/DEMO");
         await userEvent.selectOptions(screen.getByRole("combobox", { name: "Статус проекта" }), "ARCHIVED");
         expect(screen.getByText("Проекты не найдены")).toBeTruthy();
         await userEvent.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
-        expect(table().getAllByRole("row")).toHaveLength(4);
+        expect(catalog().getAllByRole("listitem")).toHaveLength(3);
         expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("");
+    });
+
+    it("сохраняет фильтры при переключении представления и возврате назад", async () => {
+        setup(<><HistoryControls /><PortfolioPage /></>, "/?view=projects&q=demo&status=ACTIVE");
+        const navigation = within(screen.getByRole("navigation", { name: "Представления портфеля" }));
+        await userEvent.click(navigation.getByRole("link", { name: "Сводка" }));
+        expect(screen.getByTestId("location").textContent).toBe("/?view=summary&q=demo&status=ACTIVE");
+        await userEvent.click(screen.getByRole("button", { name: "Назад" }));
+        expect(screen.getByTestId("location").textContent).toBe("/?view=projects&q=demo&status=ACTIVE");
+        expect((screen.getByRole("searchbox", { name: "Поиск проектов" }) as HTMLInputElement).value).toBe("demo");
+        expect((screen.getByRole("combobox", { name: "Статус проекта" }) as HTMLSelectElement).value).toBe("ACTIVE");
+        expect(within(screen.getByRole("list", { name: "Проекты портфеля" })).getAllByRole("listitem")).toHaveLength(1);
+    });
+
+    it("сохраняет полное имя длинного проекта и единственную ссылку без вложенных действий", async () => {
+        const name = "ДлинноеНазваниеПроектаБезПробелов".repeat(5);
+        setup(undefined, undefined, { ...dashboard, projects: [{ ...card, name, description_md: "**Описание** [проекта](https://example.com)" }] });
+        const catalog = within(screen.getByRole("list", { name: "Проекты портфеля" }));
+        const link = catalog.getByRole("link", { name });
+        expect(catalog.getByRole("heading", { name }).title).toBe(name);
+        expect(await catalog.findByText("Описание проекта")).toBeTruthy();
+        expect(link.getAttribute("href")).toBe("/projects/DEMO");
+        expect(catalog.getAllByRole("link")).toHaveLength(1);
+        expect(within(link).queryByRole("button")).toBeNull();
+    });
+
+    it("показывает фактические сигналы рисков и не добавляет их без данных", () => {
+        const risks = {
+            total_risks: 3, active_risks: 1, open_risks: 1, mitigating_risks: 0, occurred_risks: 2, closed_risks: 0,
+            high_risks: 1, medium_risks: 2, low_risks: 0, risks_without_owner: 0, risks_without_mitigation: 0,
+            risks_due_for_review: 0, risks_review_overdue: 0, risks_linked_to_tasks: 0, ai_suggested_risks: 0,
+            latest_update: null, matrix: [], signals: [],
+        };
+        setup(undefined, undefined, { ...dashboard, projects: [{ ...card, risks }, { ...card, id: 2, key: "PLAN", name: "Без оценки рисков" }] });
+        const catalog = within(screen.getByRole("list", { name: "Проекты портфеля" }));
+        expect(within(catalog.getByRole("link", { name: card.name })).getByText("Риски: 3 · высоких: 1 · реализовалось: 2")).toBeTruthy();
+        expect(within(catalog.getByRole("link", { name: "Без оценки рисков" })).queryByText(/Риски:/)).toBeNull();
     });
 
     it("восстанавливает вкладку при возвращении и учитывает явную ссылку", async () => {
@@ -111,7 +151,7 @@ describe("портфель", () => {
         setup(undefined, undefined, null);
         expect(await screen.findByText("Сводка недоступна")).toBeTruthy();
         await userEvent.click(screen.getByRole("button", { name: "Повторить загрузку" }));
-        expect(await screen.findByRole("table", { name: "Проекты портфеля" })).toBeTruthy();
+        expect(await screen.findByRole("list", { name: "Проекты портфеля" })).toBeTruthy();
         expect(get).toHaveBeenCalledTimes(2);
     });
 });

@@ -1,16 +1,18 @@
-import { useEffect, useRef } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { NavLink, Outlet, useLocation, useMatch } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Settings } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import type { ProjectStats } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { useProjectFromRoute } from "@/lib/useProject";
+import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 import { ProjectIcon } from "@/components/projects/ProjectIcon";
 import { ProjectStatusBadge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/Progress";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 import { ChatUnreadBadge } from "@/components/chat/ChatUnreadBadge";
+import "./ProjectIdentity.css";
 
 const TABS = [
     { path: "", label: "Обзор", end: true },
@@ -24,6 +26,18 @@ const TABS = [
     { path: "docs", label: "Документы", end: false },
 ];
 
+function ProjectDescriptionPreview({ markdown }: { markdown: string }) {
+    const html = useRenderedMarkdown(markdown);
+    const description = useMemo(() => {
+        const document = new DOMParser().parseFromString(html, "text/html");
+        document.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, br, pre").forEach(element => element.append(" "));
+        return (document.body.textContent ?? "").replace(/\s+/g, " ").trim();
+    }, [html]);
+    if (!description) return null;
+    const excerpt = description.length > 240 ? `${description.slice(0, 237).trimEnd()}…` : description;
+    return <p className="project-overview-description text-[14px] leading-relaxed text-secondary" title={description}>{excerpt}</p>;
+}
+
 /**
  * Рабочее пространство проекта: шапка с показателями и вкладки разделов
  * (раздел 5 дизайн-гайда). Содержимое вкладки рендерится через Outlet.
@@ -31,6 +45,7 @@ const TABS = [
 export function ProjectLayout() {
     const { project, projectKey, isPending, error, isMissing } = useProjectFromRoute();
     const location = useLocation();
+    const isOverview = useMatch("/projects/:projectKey") !== null;
     const tabs = useRef<HTMLElement>(null);
     useEffect(() => {
         const navigation = tabs.current;
@@ -84,25 +99,32 @@ export function ProjectLayout() {
     }
 
     const percent = Math.round((statsQuery.data?.completion_rate ?? 0) * 100);
+    const description = project.description_sections?.goal?.trim() || project.description_md || "";
 
     return (
         <div className="flex h-full min-w-0 flex-col">
-            <header className="project-header material-metal shrink-0 border-b border-line bg-surface px-3 pt-2 sm:px-5 sm:pt-4">
+            <header className={cn("project-header material-metal shrink-0 border-b border-line bg-surface px-3 pt-2 sm:px-5 sm:pt-4", isOverview && "project-overview-header")}
+                style={{ "--project-color": project.color } as CSSProperties}>
                 <div className="flex w-full min-w-0 flex-col gap-3">
-                    <div className="project-header-details flex items-start justify-between gap-2 sm:flex-wrap sm:gap-3">
-                        <div className="flex min-w-0 flex-1 items-start gap-2.5">
-                            <ProjectIcon project={project} size={32} />
-                            <div className="flex min-w-0 flex-col gap-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <h1 title={project.name} className="max-w-full truncate text-[18px] font-semibold tracking-[-0.025em] text-primary sm:text-[24px]">
+                    <div className="project-header-details flex items-start justify-between gap-2 sm:flex-wrap sm:gap-3"
+                        role={isOverview ? "group" : undefined} aria-label={isOverview ? "Сведения о проекте" : undefined} tabIndex={isOverview ? 0 : undefined}>
+                        <div className={cn("flex min-w-0 flex-1 items-start gap-2.5", isOverview && "project-overview-identity")}>
+                            {isOverview ? <div className="project-overview-logo"><ProjectIcon project={project} size={72} /></div>
+                                : <ProjectIcon project={project} size={32} />}
+                            <div className={cn("flex min-w-0 flex-1 flex-col gap-1", isOverview && "gap-2")}>
+                                <div className={cn("flex flex-wrap items-center gap-2", isOverview && "flex-col items-start")}>
+                                    <h1 title={project.name} className={cn("max-w-full font-semibold tracking-[-0.025em] text-primary", isOverview ? "project-overview-name" : "truncate text-[18px] sm:text-[24px]")}>
                                         {project.name}
                                     </h1>
-                                    <span className="font-mono text-[12px] text-muted">
-                                        {project.key}
-                                    </span>
-                                    <ProjectStatusBadge status={project.status} />
+                                    <div className={cn("flex flex-wrap items-center gap-2", !isOverview && "contents")}>
+                                        <span className="font-mono text-[12px] text-muted">
+                                            {project.key}
+                                        </span>
+                                        <ProjectStatusBadge status={project.status} className={isOverview ? "text-[12px]" : undefined} />
+                                    </div>
                                 </div>
-                                {statsQuery.data && (
+                                {isOverview && description && <ProjectDescriptionPreview key={`${project.id}:${description}`} markdown={description} />}
+                                {!isOverview && statsQuery.data && (
                                     <p className="text-[12px] text-muted sm:text-[13px]">
                                         {statsQuery.data.total_tasks} задач ·{" "}
                                         {statsQuery.data.in_progress_tasks} в работе ·{" "}
@@ -118,7 +140,7 @@ export function ProjectLayout() {
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <div className="hidden w-44 items-center gap-2 sm:flex">
+                            {!isOverview && <div className="hidden w-44 items-center gap-2 sm:flex">
                                 <ProgressBar
                                     value={statsQuery.data?.completion_rate ?? 0}
                                     color={project.color}
@@ -127,7 +149,7 @@ export function ProjectLayout() {
                                 <span className="shrink-0 font-mono text-[12px] text-secondary">
                                     {percent}%
                                 </span>
-                            </div>
+                            </div>}
                             <NavLink aria-label="Настройки проекта" title="Настройки проекта" to={`/projects/${project.key}/settings`} className={({ isActive }) => cn("touch-target flex size-8 shrink-0 items-center justify-center rounded-md text-secondary hover:bg-hover", isActive && "bg-accent-soft text-accent")}>
                                 <Settings size={17} aria-hidden="true" />
                             </NavLink>

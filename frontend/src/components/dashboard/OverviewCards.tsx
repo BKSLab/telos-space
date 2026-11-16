@@ -11,7 +11,7 @@ export function OverviewSection({ title, description, action, children, classNam
     children: ReactNode;
     className?: string;
 }) {
-    return <section className={cn("flex min-w-0 flex-col gap-3", className)}>
+    return <section aria-label={title} className={cn("flex min-w-0 flex-col gap-3", className)}>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="min-w-0">
                 <h2 className="text-[16px] font-semibold tracking-[-0.02em] text-primary">{title}</h2>
@@ -38,7 +38,7 @@ export function OverviewPanel({ title, description, action, children, className 
 }
 
 export function MetricGrid({ children }: { children: ReactNode }) {
-    return <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{children}</div>;
+    return <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{children}</div>;
 }
 
 export function MetricCard({ label, value, hint, icon, tone = "default" }: {
@@ -49,13 +49,13 @@ export function MetricCard({ label, value, hint, icon, tone = "default" }: {
     tone?: "default" | "success" | "danger" | "warning";
 }) {
     const tones = { default: "text-primary", success: "text-success", danger: "text-danger", warning: "text-warning" };
-    return <Card className="flex min-w-0 flex-col gap-3 p-4 sm:p-5">
+    return <Card className="flex min-w-0 flex-col gap-2.5 p-3.5 sm:p-4">
         <div className="flex items-start justify-between gap-2 text-[14px] leading-snug text-secondary">
             <span>{label}</span>
             <span aria-hidden="true" className={cn("mt-0.5 shrink-0", tone === "default" ? "text-muted" : tones[tone])}>{icon}</span>
         </div>
         <div className={cn("text-[32px] leading-none font-semibold tracking-[-0.04em] tabular-nums", tones[tone])}>{value}</div>
-        <p className="text-[12px] leading-relaxed text-muted">{hint}</p>
+        <p className="text-[12px] leading-snug text-muted">{hint}</p>
     </Card>;
 }
 
@@ -71,8 +71,8 @@ export function TaskCompletion({ total, done, inProgress, color = "var(--color-s
     const percent = total > 0 ? Math.round(completed / total * 100) : 0;
     const circumference = 2 * Math.PI * 58;
 
-    return <div className="flex flex-wrap items-center gap-x-6 gap-y-4 py-1">
-        <div role="img" aria-label={total > 0 ? `Выполнено ${completed} из ${total} задач: ${percent}%` : "Задач пока нет"} className="relative size-40 shrink-0">
+    return <div className="flex flex-wrap items-center gap-x-4 gap-y-3 py-1">
+        <div role="img" aria-label={total > 0 ? `Выполнено ${completed} из ${total} задач: ${percent}%` : "Задач пока нет"} className="relative size-30 shrink-0">
             <svg viewBox="0 0 144 144" className="size-full -rotate-90" aria-hidden="true">
                 <circle cx="72" cy="72" r="58" fill="none" stroke="var(--color-border-strong)" strokeWidth="12" />
                 {completed > 0 && <circle cx="72" cy="72" r="58" fill="none" stroke={color} strokeWidth="12"
@@ -83,16 +83,16 @@ export function TaskCompletion({ total, done, inProgress, color = "var(--color-s
                 <span className="text-[12px] text-muted">выполнено</span>
             </div>
         </div>
-        <dl className="flex min-w-36 flex-1 flex-col gap-4">
+        <dl className="flex min-w-28 flex-1 flex-col gap-3">
             <div className="flex items-center justify-between gap-4">
                 <dt className="flex items-center gap-2 text-[14px] text-secondary"><CheckCircle2 size={16} className="text-success" aria-hidden="true" />Завершено</dt>
-                <dd className="text-[20px] font-semibold text-primary tabular-nums">{completed}</dd>
+                <dd className="text-[18px] font-semibold text-primary tabular-nums">{completed}</dd>
             </div>
             <div className="flex items-center justify-between gap-4">
                 <dt className="flex items-center gap-2 text-[14px] text-secondary"><Circle size={16} className="text-muted" aria-hidden="true" />Открыто</dt>
-                <dd className="text-[20px] font-semibold text-primary tabular-nums">{remaining}</dd>
+                <dd className="text-[18px] font-semibold text-primary tabular-nums">{remaining}</dd>
             </div>
-            <div className="border-t border-line-subtle pt-3 text-[12px] text-muted">
+            <div className="border-t border-line-subtle pt-2 text-[12px] text-muted">
                 Из открытых <span className="font-semibold text-secondary tabular-nums">{inProgress}</span> в работе
             </div>
         </dl>
