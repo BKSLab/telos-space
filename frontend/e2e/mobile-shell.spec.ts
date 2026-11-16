@@ -34,7 +34,7 @@ test("списки задач читаются без боковой прокр�
     state.tasks[0].due_date = "2026-11-20";
     await installMockApi(page, state);
     await page.route("https://fonts.gstatic.com/**", route => route.abort());
-    for (const path of ["/my-tasks", "/projects/DEMO/tasks"]) {
+    for (const path of ["/my-tasks", "/projects/DEMO/tasks?view=list"]) {
         await page.goto(path);
         const title = page.getByRole("button", { name: state.tasks[0].title, exact: true });
         await expect(title).toBeVisible();
@@ -106,9 +106,9 @@ test("выбор иконки остаётся в видимой области 
     await page.route("https://fonts.gstatic.com/**", route => route.abort());
     await page.setViewportSize({ width: 320, height: 570 });
     await page.goto("/projects/new");
-    const trigger = page.getByRole("button", { name: "Иконка проекта", exact: true });
+    const trigger = page.getByRole("button", { name: "Оформление проекта", exact: true });
     await trigger.tap();
-    const picker = page.getByRole("dialog", { name: "Иконка проекта", exact: true });
+    const picker = page.getByRole("dialog", { name: "Оформление проекта", exact: true });
     await expect(picker).toBeVisible();
     const bounds = (await picker.boundingBox())!;
     expect(bounds.x).toBeGreaterThanOrEqual(0);
@@ -116,10 +116,12 @@ test("выбор иконки остаётся в видимой области 
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(320);
     expect(bounds.y + bounds.height).toBeLessThanOrEqual(570);
     expect(await picker.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-    const icon = picker.getByRole("group", { name: "Иконки набора" }).getByRole("button").first();
-    expect((await icon.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const icon = picker.getByRole("region", { name: "Иконки набора" }).getByRole("button").first();
+    await expect.poll(async () => (await icon.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({ path: info.outputPath("icon-picker-mobile.png") });
     await icon.tap();
+    await expect(picker).toBeVisible();
+    await picker.getByRole("button", { name: "Применить", exact: true }).tap();
     await expect(picker).not.toBeVisible();
     await expect(trigger).toBeFocused();
     expect(state.errors).toEqual([]);
