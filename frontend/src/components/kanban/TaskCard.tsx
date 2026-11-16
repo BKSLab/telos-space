@@ -5,6 +5,7 @@ import type { ProjectStage, Task } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { PriorityBadge } from "@/components/ui/Badge";
 import { DueDate } from "@/components/ui/DueDate";
+import { BrandIcon } from "@/components/ui/BrandIcon";
 import { SearchHighlight } from "@/components/ui/SearchHighlight";
 
 /** Убирает разметку Markdown: в карточке показываем текст, а не сырой синтаксис. */
@@ -132,7 +133,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                                 className="ml-auto inline-flex shrink-0 items-center gap-1 text-[11px] text-muted"
                                 title={`Комментариев: ${task.comments_count}`}
                             >
-                                <MessageSquare size={11} className="shrink-0 text-accent" aria-hidden="true" />
+                                <BrandIcon icon={MessageSquare} size={11} />
                                 {task.comments_count}
                             </span>
                         )}

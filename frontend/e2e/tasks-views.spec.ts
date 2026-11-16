@@ -53,8 +53,17 @@ for (const width of [1440, 390, 320]) {
         }, token);
         const accent = await themeColor("--color-accent");
         await expect(date).toHaveCSS("color", accent);
-        await expect(date.locator("svg")).toHaveCSS("stroke", accent);
-        await expect(comments.locator("svg")).toHaveCSS("stroke", accent);
+        await expect(date.locator(".font-mono")).toHaveCSS("background-image", /linear-gradient/);
+        for (const svg of [date.locator("svg"), comments.locator("svg")]) {
+            const gradient = svg.locator("linearGradient");
+            await expect(gradient).toHaveCount(1);
+            expect(await svg.getAttribute("stroke")).toBe(`url(#${await gradient.getAttribute("id")})`);
+            for (const [index, token] of ["--brand-cyan", "--brand-blue", "--brand-violet"].entries()) {
+                await expect(gradient.locator("stop").nth(index)).toHaveCSS("stop-color", await themeColor(token));
+            }
+        }
+        const gradientIds = await page.locator(".brand-accent-icon linearGradient").evaluateAll(elements => elements.map(element => element.id));
+        expect(new Set(gradientIds).size).toBe(gradientIds.length);
         await expect(comments.locator("svg")).toHaveCSS("fill", "none");
         const overdue = page.getByRole("heading", { name: "Просроченная задача", exact: true }).locator("..").locator('[title^="Срок:"]');
         await expect(overdue).toHaveCSS("color", await themeColor("--color-danger"));
@@ -66,6 +75,10 @@ for (const width of [1440, 390, 320]) {
         await expect(executorOnly.getByText(executorName, { exact: true })).toBeVisible();
         await expect(executorOnly.locator('[title^="Срок:"], [title^="Комментариев:"]')).toHaveCount(0);
         await page.screenshot({ path: info.outputPath(`task-card-footer-${width}.png`) });
+        await page.emulateMedia({ forcedColors: "active" });
+        await expect(date.locator(".font-mono")).toHaveCSS("background-image", "none");
+        await expect(date.locator(".font-mono")).not.toHaveCSS("color", "rgba(0, 0, 0, 0)");
+        await expect(date.locator("svg")).not.toHaveCSS("stroke", /url\(/);
         expect(state.errors).toEqual([]);
         expect(state.writes).toEqual([]);
     });
