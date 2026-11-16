@@ -2,12 +2,6 @@ import { AlertTriangle, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { daysUntil, dueTone, formatDayMonth, formatFullDate } from "@/lib/dates";
 
-const TONE_CLASSES = {
-    muted: "text-muted",
-    warning: "text-warning",
-    danger: "text-danger",
-} as const;
-
 interface DueDateProps {
     value: string | null;
     isDone?: boolean;
@@ -34,13 +28,14 @@ export function DueDate({ value, isDone = false, className }: DueDateProps) {
 
     return (
         <span
-            className={cn("inline-flex items-center gap-1 text-[11px]", TONE_CLASSES[tone], className)}
+            className={cn("inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px]",
+                isDone ? "text-muted" : isOverdue ? "text-danger" : "text-accent", className)}
             title={`Срок: ${formatFullDate(value)}${isOverdue ? " (просрочен)" : ""}`}
         >
             {isOverdue ? (
-                <AlertTriangle size={12} aria-hidden="true" />
+                <AlertTriangle size={12} className="shrink-0" aria-hidden="true" />
             ) : (
-                <CalendarDays size={12} aria-hidden="true" />
+                <CalendarDays size={12} className="shrink-0" aria-hidden="true" />
             )}
             <span className="font-mono">{formatDayMonth(value)}</span>
             {suffix && <span className="sr-only">{suffix}</span>}
