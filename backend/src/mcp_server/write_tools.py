@@ -159,6 +159,9 @@ async def create_task(
         "telos_set_checklist, наблюдатели — telos_set_watchers. Передавайте expected_revision "
         "из telos_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется "
         "прежнее поведение без защиты от затирания чужой правки."
+        " Изменение/снятие назначенных дат требует date_change_reason из поручения "
+        "пользователя; если причины нет, уточни её, не придумывай. Первое назначение "
+        "каждой отсутствующей даты причины не требует."
     ),
     scope=SCOPE_TASKS_WRITE,
 )
@@ -186,6 +189,10 @@ async def update_task(
     due_date: Annotated[
         str | None,
         Field(description="Срок в формате ГГГГ-ММ-ДД; пустая строка снимает срок."),
+    ] = None,
+    date_change_reason: Annotated[
+        str | None,
+        Field(max_length=2000, description="Причина изменения/снятия назначенной даты со слов пользователя."),
     ] = None,
     actor: Actor = None,
     expected_revision: Annotated[
@@ -216,6 +223,8 @@ async def update_task(
         if not payload:
             raise ToolError("Не передано ни одного поля для изменения.")
         updated_fields = sorted(payload)
+        if date_change_reason is not None:
+            payload["date_change_reason"] = date_change_reason
         if expected_revision is not None:
             payload["expected_revision"] = expected_revision
 
@@ -330,6 +339,9 @@ async def transfer_task(
         "Изменяет start_date и/или due_date задачи через доменный сервис и историю. "
         "Пустая строка снимает дату. expected_revision из telos_get_task защищает "
         "от изменения поверх устаревшей версии; без него действует прежнее поведение."
+        " Для изменения/снятия назначенной даты передай date_change_reason из поручения "
+        "пользователя; если причины нет, уточни её, не придумывай. Первое назначение "
+        "каждой отсутствующей даты причины не требует."
     ),
     scope=SCOPE_TASKS_WRITE,
 )
@@ -343,6 +355,10 @@ async def set_task_dates(
     due_date: Annotated[
         str | None,
         Field(description="Завершение ГГГГ-ММ-ДД; пустая строка снимает срок."),
+    ] = None,
+    date_change_reason: Annotated[
+        str | None,
+        Field(max_length=2000, description="Общая причина изменения/снятия назначенных дат со слов пользователя."),
     ] = None,
     actor: Actor = None,
     expected_revision: Annotated[
@@ -361,6 +377,8 @@ async def set_task_dates(
         if not payload:
             raise ToolError("Не передано ни одной даты для изменения.")
         updated_fields = sorted(payload)
+        if date_change_reason is not None:
+            payload["date_change_reason"] = date_change_reason
         if expected_revision is not None:
             payload["expected_revision"] = expected_revision
         try:

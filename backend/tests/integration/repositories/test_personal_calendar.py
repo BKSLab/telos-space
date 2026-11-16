@@ -41,7 +41,7 @@ async def test_personal_calendar_scope_portfolio_and_revocable_feed(
     db_session, project, stage, user
 ):
     db_session.add(ProjectMember(project_id=project.id, user_id=user.id, role="OWNER"))
-    mine = Task(number=1, title="Мой срок", status="IN_PROGRESS", start_date=TODAY, due_date=TODAY)
+    mine = Task(number=1, title="Мой срок", status="IN_PROGRESS", start_date=TODAY, due_date=TODAY, revision=4)
     other_role = Task(number=2, title="Поручено другому", status="NEW", due_date=TODAY)
     undated = Task(number=3, title="Без дат", status="NEW")
     project_task = Task(
@@ -62,6 +62,7 @@ async def test_personal_calendar_scope_portfolio_and_revocable_feed(
     service = calendar(db_session)
     result = await service.get_my_range(user_id=user.id, **PERIOD)
     assert {task.title for task in result.tasks} == {"Мой срок", "Проектная"}
+    assert next(task for task in result.tasks if task.id == mine.id).revision == 4
     assert result.summary.unscheduled == 1
     assert (
         await service.get_my_unscheduled(user_id=user.id, today=TODAY, cursor=None, limit=10)

@@ -6,7 +6,7 @@ const stage = (id: number, order: number): CalendarStage => ({ id, name: `Ста
 const task = (id: number, stageId: number, start: string | null, done = false): CalendarTask => ({
     id, key: `T-${id}`, title: `Задача ${id}`, start_date: start, due_date: start, baseline_start_date: null, baseline_due_date: null,
     drift_days: null, wbs_node_id: null, stage_id: stageId, priority: "MEDIUM", assignee: null, is_done: done, is_overdue: false, is_due_soon: false,
-    risk_level: null, risk_reasons: [], updated_at: "2026-09-01T00:00:00Z",
+    risk_level: null, risk_reasons: [], updated_at: "2026-09-01T00:00:00Z", revision: 1,
 });
 
 describe("buildTimelineStageRows", () => {

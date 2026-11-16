@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import { queryKeys } from "@/lib/api";
 import * as clipboard from "@/lib/clipboard";
-import type { Task, TaskUpdate, UserSummary } from "@/lib/types";
+import type { Task, TaskActivity, TaskUpdate, UserSummary } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
 import { TaskDialog } from "./TaskDialog";
 
@@ -27,7 +27,7 @@ const task: Task = {
 };
 const clients: QueryClient[] = [];
 
-function setup(initial = task) {
+function setup(initial = task, activity: TaskActivity[] = []) {
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
     const state = { task: { ...initial }, calls: [] as { method: string; path: string; body?: TaskUpdate }[] };
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -56,7 +56,8 @@ function setup(initial = task) {
         ]);
         if (path === "/api/v1/projects/1/risks") return json({ total: 0, items: [] });
         if (path === "/api/v1/documents") return json({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
-        if (["/api/v1/tasks/5/comments", "/api/v1/tasks/5/activity"].includes(path)) return json([]);
+        if (path === "/api/v1/tasks/5/activity") return json(activity);
+        if (path === "/api/v1/tasks/5/comments") return json([]);
         throw new Error(`Unexpected request: ${method} ${path}`);
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
@@ -67,7 +68,7 @@ function setup(initial = task) {
     const updateCache = async (changes: Partial<Task>) => {
         state.task = { ...state.task, ...changes };
         await act(async () => { client.setQueryData(queryKeys.task(5), state.task); });
-        await waitFor(() => expect(screen.getByRole("heading", { name: state.task.title })).toBeTruthy());
+        await waitFor(() => expect(screen.getByRole("heading", { name: state.task.title, hidden: true })).toBeTruthy());
     };
     return { state, client, patches, updateCache, user: userEvent.setup() };
 }
@@ -153,29 +154,59 @@ it("переименование сохраняет исходную верси�
 it.each([
     { label: "Начало", field: "start_date", original: "2026-11-07", remote: "2026-11-09", draft: "2026-11-10" },
     { label: "Завершение", field: "due_date", original: "2026-11-20", remote: "2026-11-22", draft: "2026-11-25" },
-] as const)("$label: фиксирует версию при фокусе, сохраняет выбранную дату при 409 и перечитывает после открытия карточки", async ({ label, field, original, remote, draft }) => {
+] as const)("$label: сохраняет дату и причину с версией открытия диалога, удерживает черновик при 409", async ({ label, field, original, remote, draft }) => {
     const { state, patches, updateCache, user } = setup();
     await screen.findByRole("heading", { name: task.title });
-    const input = screen.getByLabelText(label, { exact: true }) as HTMLInputElement;
-    fireEvent.focus(input);
+    await user.click(screen.getByRole("button", { name: "Изменить сроки" }));
+    const datesDialog = await screen.findByRole("dialog", { name: "Изменить сроки" });
+    const input = within(datesDialog).getByLabelText(label, { exact: true }) as HTMLInputElement;
     await updateCache({ revision: 3, [field]: remote });
     expect(input.value).toBe(original);
     fireEvent.change(input, { target: { value: draft } });
+    expect(patches()).toHaveLength(0);
+    fireEvent.change(within(datesDialog).getByRole("textbox", { name: /Причина изменения/ }), { target: { value: "Причина переноса" } });
+    await user.click(within(datesDialog).getByRole("button", { name: "Сохранить сроки" }));
     await screen.findByText(/Задача уже изменена/);
-    expect(patches()[0].body).toEqual({ [field]: draft, expected_revision: 1 });
+    expect(patches()[0].body).toEqual({ start_date: task.start_date, due_date: task.due_date, [field]: draft, date_change_reason: "Причина переноса", expected_revision: 1 });
     expect(input.value).toBe(draft);
     expect(state.task[field]).toBe(remote);
-    await user.click(screen.getByRole("button", { name: "Закрыть задачу" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await act(async () => { useUiStore.getState().setSelectedTaskId(5); });
-    const dialog = await screen.findByRole("dialog", { name: "Задача DEMO-5" });
-    const reopened = within(dialog).getByLabelText(label, { exact: true }) as HTMLInputElement;
+    expect((within(datesDialog).getByRole("textbox", { name: /Причина изменения/ }) as HTMLTextAreaElement).value).toBe("Причина переноса");
+    await user.click(within(datesDialog).getByRole("button", { name: "Отмена" }));
+    await user.click(screen.getByRole("button", { name: "Изменить сроки" }));
+    const reopenedDialog = await screen.findByRole("dialog", { name: "Изменить сроки" });
+    const reopened = within(reopenedDialog).getByLabelText(label, { exact: true }) as HTMLInputElement;
     expect(reopened.value).toBe(remote);
-    fireEvent.focus(reopened);
     fireEvent.change(reopened, { target: { value: draft } });
+    fireEvent.change(within(reopenedDialog).getByRole("textbox", { name: /Причина изменения/ }), { target: { value: "Причина переноса" } });
+    await user.click(within(reopenedDialog).getByRole("button", { name: "Сохранить сроки" }));
     await waitFor(() => expect(state.task[field]).toBe(draft));
-    expect(patches()[1].body).toEqual({ [field]: draft, expected_revision: 3 });
+    expect(patches()[1].body).toEqual({ start_date: task.start_date, due_date: task.due_date, [field]: draft, date_change_reason: "Причина переноса", expected_revision: 3 });
 }, 15_000);
+
+it("назначает отсутствующие даты без причины и сохраняет их только по кнопке", async () => {
+    const { user, patches } = setup({ ...task, start_date: null, due_date: null });
+    await user.click(await screen.findByRole("button", { name: "Изменить сроки" }));
+    const dialog = await screen.findByRole("dialog", { name: "Изменить сроки" });
+    fireEvent.change(within(dialog).getByLabelText("Начало"), { target: { value: "2026-11-19" } });
+    fireEvent.change(within(dialog).getByLabelText("Завершение"), { target: { value: "2026-11-21" } });
+    expect(within(dialog).queryByRole("textbox", { name: /Причина/ })).toBeNull();
+    expect(patches()).toHaveLength(0);
+    await user.click(within(dialog).getByRole("button", { name: "Сохранить сроки" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Изменить сроки" })).toBeNull());
+    expect(patches().map(call => call.body)).toEqual([{ start_date: "2026-11-19", due_date: "2026-11-21", expected_revision: 1 }]);
+});
+
+it("показывает причину переноса вместе с датами, автором и временем в истории", async () => {
+    const { user } = setup(task, [{ id: 1, task_id: 5, event_type: "DATES_CHANGED", from_value: "начало: 2026-11-07; завершение: 2026-11-20",
+        to_value: "начало: 2026-11-10; завершение: 2026-11-25", reason: "Ждём согласование\nот заказчика", actor_user_id: 1, actor_name: "Владелец Иван", via_api_key_label: null, created_at: stamp }]);
+    await user.click(await screen.findByRole("tab", { name: "История" }));
+    expect(screen.getByText("Сроки изменены")).toBeTruthy();
+    expect(screen.getByText("Причина: Ждём согласование от заказчика")).toBeTruthy();
+    expect(screen.getByText("начало: 2026-11-07; завершение: 2026-11-20")).toBeTruthy();
+    expect(screen.getByText("начало: 2026-11-10; завершение: 2026-11-25")).toBeTruthy();
+    expect(within(screen.getByRole("tabpanel", { name: "История" })).getAllByText("Владелец Иван").length).toBeGreaterThan(0);
+    expect(document.querySelector(`time[datetime="${stamp}"]`)).toBeTruthy();
+});
 
 it("непосредственный выбор приоритета использует актуальную версию и не закрывает открытый черновик описания", async () => {
     const { patches, updateCache, user } = setup();

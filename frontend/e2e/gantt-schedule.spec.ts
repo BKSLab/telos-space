@@ -119,7 +119,7 @@ test.describe("шкала проекта: график", () => {
         expect(state.errors).toEqual([]);
     });
 
-    test("перенос с конфликтом у последователей: «Сдвинуть и N следующих?» — Да / Только эту", async ({ page }) => {
+    test("перенос с конфликтом: одно окно дат и причины для каскада или одной задачи", async ({ page }) => {
         const state = mockScheduleState();
         // DEMO-2 → DEMO-5: DEMO-5 начинается до срока DEMO-2 + 2 дня.
         state.schedule.dependencies = [
@@ -132,23 +132,31 @@ test.describe("шкала проекта: график", () => {
         const endHandle = page.getByRole("button", { name: /Изменить завершение DEMO-2/ });
         await endHandle.focus();
         await endHandle.press("ArrowRight");
-        await endHandle.press("ArrowRight");
-        const dialog = page.getByRole("dialog", { name: /Сдвинуть и 1 следующую\?/ });
+        const dialog = page.getByRole("dialog", { name: "Изменить сроки", exact: true });
         await expect(dialog).toBeVisible();
         await expect(dialog.getByText("DEMO-5")).toBeVisible();
+        await expect(dialog.getByRole("button", { name: "Сохранить и сдвинуть" })).toBeDisabled();
+        expect(state.writes.some(write => write.path.endsWith("/scenarios/apply") || write.method === "PATCH")).toBe(false);
         await shot(page, "shift-successors-1440-light");
 
-        await dialog.getByRole("button", { name: "Да, сдвинуть" }).click();
+        await dialog.getByRole("textbox", { name: /Причина изменения/ }).fill("  Задержка поставки  ");
+        await dialog.getByRole("button", { name: "Сохранить и сдвинуть" }).click();
         await expect(page.getByText("Перенесено задач: 2.")).toBeVisible();
         const apply = state.writes.find((write) => write.path === "/projects/1/calendar/scenarios/apply");
         expect((apply?.body as { changes: { task_id: number }[] }).changes.map((change) => change.task_id)).toEqual([101, 104]);
+        expect(apply?.body).toMatchObject({ date_change_reason: "Задержка поставки" });
+        expect((apply?.body as { changes: { expected_updated_at: string }[] }).changes.every(change => change.expected_updated_at === stamp)).toBe(true);
         expect(state.writes.some((write) => write.method === "PATCH" && write.path === "/tasks/101")).toBe(false);
 
         // «Только эту» — обычное сохранение одной задачи, без сценария.
         await endHandle.focus();
         await endHandle.press("ArrowRight");
-        await page.getByRole("dialog", { name: /Сдвинуть и 1 следующую\?/ }).getByRole("button", { name: "Только эту" }).click();
+        await expect(dialog).toBeVisible();
+        await dialog.getByRole("checkbox", { name: "Сдвинуть зависимые задачи (1)" }).uncheck();
+        await dialog.getByRole("textbox", { name: /Причина изменения/ }).fill("Изменена одна задача");
+        await dialog.getByRole("button", { name: "Сохранить сроки" }).click();
         await expect.poll(() => state.writes.some((write) => write.method === "PATCH" && write.path === "/tasks/101")).toBe(true);
+        expect(state.writes.find(write => write.method === "PATCH" && write.path === "/tasks/101")?.body).toMatchObject({ date_change_reason: "Изменена одна задача" });
         expect(state.writes.filter((write) => write.path === "/projects/1/calendar/scenarios/apply")).toHaveLength(1);
         expect(state.errors).toEqual([]);
     });

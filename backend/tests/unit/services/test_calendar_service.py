@@ -26,6 +26,7 @@ def make_task(*, task_id: int = 1, due_date: date | None = TODAY) -> SimpleNames
     """Создаёт полную задачу-дублёр календаря."""
     return SimpleNamespace(
         id=task_id,
+        revision=4,
         project_id=1,
         stage_id=10,
         wbs_node_id=20,
@@ -120,6 +121,7 @@ async def test_get_range_builds_compact_calendar_with_client_today() -> None:
 
     assert result.range.today == TODAY
     assert result.tasks[0].key == "TEST-1"
+    assert result.tasks[0].revision == 4
     assert result.tasks[0].is_due_soon is True
     assert result.summary.unscheduled == 2
     assert result.wbs_nodes[0].title == "Backend"
@@ -225,6 +227,17 @@ async def test_get_range_explains_dates_milestones_and_dependencies() -> None:
     assert result.recent_changes[0].task_key == "TEST-1"
     assert result.recent_changes[0].from_date == date(2026, 8, 28)
     assert result.recent_changes[0].to_date == date(2026, 8, 30)
+    activity.get_recent_due_date_changes.return_value.append(SimpleNamespace(
+        id=8, task_id=overdue.id,
+        from_value="начало: 2026-08-20; завершение: 2026-08-30",
+        to_value="начало: —; завершение: 2026-09-03",
+        created_at=datetime.now(UTC),
+    ))
+    result = await service.get_range(
+        project_id=1, date_from=TODAY - timedelta(days=7), date_to=TODAY, today=TODAY,
+    )
+    assert result.recent_changes[1].from_date == date(2026, 8, 30)
+    assert result.recent_changes[1].to_date == date(2026, 9, 3)
 
     service, projects, tasks, _, _, _ = build_service()
     projects.get_by_id.return_value.due_date = date(2026, 9, 30)
@@ -340,4 +353,5 @@ async def test_calendar_reads_report_failures_and_paginate_by_cursor() -> None:
 
     assert [item.id for item in result.items] == [1, 2]
     assert all(item.due_date is None for item in result.items)
+    assert all(item.revision == 4 for item in result.items)
     assert result.next_cursor == 2

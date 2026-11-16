@@ -31,10 +31,13 @@ for (const viewport of [{ width: 320, height: 740 }, { width: 390, height: 844 }
             await expect(scroller).toBeVisible();
             expect((await scroller.boundingBox())?.height ?? 0).toBeGreaterThan(40);
             await page.getByRole("button", { name: "Изменить даты DEMO-1", exact: true }).click();
-            const dates = page.getByRole("dialog", { name: "Срок DEMO-1", exact: true });
+            const dates = page.getByRole("dialog", { name: "Изменить сроки", exact: true });
             await dates.getByLabel("Завершение", { exact: true }).fill(iso(9));
-            await dates.getByRole("button", { name: "Сохранить", exact: true }).click();
-            await expect.poll(() => state.writes.find((write) => write.method === "PATCH" && write.path === "/tasks/100")?.body).toMatchObject({ due_date: iso(9) });
+            const saveDates = dates.getByRole("button", { name: "Сохранить сроки", exact: true });
+            await expect(saveDates).toBeDisabled();
+            await dates.getByRole("textbox", { name: /Причина изменения/ }).fill("Согласовали новый срок");
+            await saveDates.click();
+            await expect.poll(() => state.writes.find((write) => write.method === "PATCH" && write.path === "/tasks/100")?.body).toMatchObject({ due_date: iso(9), date_change_reason: "Согласовали новый срок" });
             await expect(dates).not.toBeVisible();
 
             await page.getByRole("button", { name: "Инструменты календаря", exact: true }).click();
@@ -114,10 +117,13 @@ test.describe("мобильные инструменты Ганта", () => {
         await expect(panel).toContainText("Изменения ещё не сохранены");
         await panel.getByRole("button", { name: "Свернуть панель", exact: true }).click();
         await page.getByRole("button", { name: "Изменить даты DEMO-1", exact: true }).click();
-        const dates = page.getByRole("dialog", { name: "Срок DEMO-1", exact: true });
+        const dates = page.getByRole("dialog", { name: "Изменить сроки", exact: true });
         await dates.getByLabel("Завершение", { exact: true }).fill(iso(6));
-        await dates.getByRole("button", { name: "Сохранить", exact: true }).click();
+        await expect(dates.getByRole("textbox", { name: /Причина/ })).toHaveCount(0);
+        await dates.getByRole("button", { name: "Сохранить сроки", exact: true }).click();
         await expect(panel).toBeVisible();
+        await expect(panel.getByRole("button", { name: "Apply", exact: true })).toBeDisabled();
+        await panel.getByRole("textbox", { name: /Причина изменения/ }).fill("Сдвиг всего сценария");
         await expect(panel.getByRole("button", { name: "Apply", exact: true })).toBeEnabled();
         expect(state.writes.some((write) => write.path.endsWith("/calendar/scenarios/preview"))).toBe(true);
         expect(state.writes.some((write) => write.method === "PATCH")).toBe(false);

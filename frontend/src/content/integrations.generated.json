@@ -79,7 +79,7 @@
       "write": true
     },
     {
-      "description": "Применяет конкретные даты и expected_updated_at из preview после решения участника.",
+      "description": "Применяет конкретные даты и expected_updated_at из preview после решения участника. Изменение/снятие назначенных дат требует общую date_change_reason пользователя; если её нет, уточни, не придумывай.",
       "group": "tasks",
       "id": "mcp-action-581439353cf3a15c",
       "inputSchema": {
@@ -145,6 +145,20 @@
             "minItems": 1,
             "title": "Changes",
             "type": "array"
+          },
+          "date_change_reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Общая причина изменения назначенных дат. Бери из поручения пользователя; если её нет, уточни причину перед применением, не придумывай.",
+            "title": "Date Change Reason"
           }
         },
         "required": [
@@ -5863,7 +5877,7 @@
       "write": true
     },
     {
-      "description": "Название, описание, приоритет, роли, участники и сроки; отсутствующие поля сохраняются, null очищает допустимое поле.",
+      "description": "Название, описание, приоритет, роли, участники и сроки; отсутствующие поля сохраняются, null очищает допустимое поле. Изменение/снятие назначенной даты требует changes.date_change_reason из поручения; если причины нет, уточни её, не придумывай. Первое назначение отсутствующей даты причины не требует.",
       "group": "aris",
       "id": "mcp-action-06ccc8db03922062",
       "inputSchema": {
@@ -5959,6 +5973,23 @@
                   2
                 ],
                 "title": "Checklist Revision"
+              },
+              "date_change_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Причина изменения или снятия уже назначенной даты; первое назначение каждой отсутствующей даты и повтор тех же значений причины не требуют.",
+                "examples": [
+                  "Согласование с заказчиком перенесено на следующую неделю."
+                ],
+                "title": "Date Change Reason"
               },
               "description_md": {
                 "anyOf": [
@@ -39908,7 +39939,7 @@
       "write": true
     },
     {
-      "description": "Изменяет start_date и/или due_date задачи через доменный сервис и историю. Пустая строка снимает дату. expected_revision из telos_get_task защищает от изменения поверх устаревшей версии; без него действует прежнее поведение. Требует право tasks:write.",
+      "description": "Изменяет start_date и/или due_date задачи через доменный сервис и историю. Пустая строка снимает дату. expected_revision из telos_get_task защищает от изменения поверх устаревшей версии; без него действует прежнее поведение. Для изменения/снятия назначенной даты передай date_change_reason из поручения пользователя; если причины нет, уточни её, не придумывай. Первое назначение каждой отсутствующей даты причины не требует. Требует право tasks:write.",
       "group": "calendar",
       "id": "mcp-15ed6a93725c9515",
       "inputSchema": {
@@ -39925,6 +39956,20 @@
             "default": null,
             "description": "Логин текущего пользователя; действие всегда выполняется с его правами.",
             "title": "Actor"
+          },
+          "date_change_reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Общая причина изменения/снятия назначенных дат со слов пользователя.",
+            "title": "Date Change Reason"
           },
           "due_date": {
             "anyOf": [
@@ -40906,7 +40951,7 @@
       "write": true
     },
     {
-      "description": "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, приоритет, исполнитель, сроки. Стадия — telos_move_task, чек-лист — telos_set_checklist, наблюдатели — telos_set_watchers. Передавайте expected_revision из telos_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется прежнее поведение без защиты от затирания чужой правки. Требует право tasks:write.",
+      "description": "Изменяет переданные поля задачи и не трогает остальные: заголовок, описание, приоритет, исполнитель, сроки. Стадия — telos_move_task, чек-лист — telos_set_checklist, наблюдатели — telos_set_watchers. Передавайте expected_revision из telos_get_task: устаревшая версия отклоняется без записи. Без версии сохраняется прежнее поведение без защиты от затирания чужой правки. Изменение/снятие назначенных дат требует date_change_reason из поручения пользователя; если причины нет, уточни её, не придумывай. Первое назначение каждой отсутствующей даты причины не требует. Требует право tasks:write.",
       "group": "aris",
       "id": "mcp-06ccc8db03922062",
       "inputSchema": {
@@ -40936,6 +40981,20 @@
             "default": null,
             "description": "Точный логин исполнителя из команды проекта; пустая строка снимает исполнителя.",
             "title": "Assignee"
+          },
+          "date_change_reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Причина изменения/снятия назначенной даты со слов пользователя.",
+            "title": "Date Change Reason"
           },
           "description": {
             "anyOf": [
@@ -41114,6 +41173,21 @@
           ],
           "title": "Id",
           "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Причина изменения дат; null при первом назначении или в прежних событиях.",
+          "examples": [
+            "Перенос поставки оборудования."
+          ],
+          "title": "Reason"
         },
         "task_id": {
           "description": "Идентификатор задачи.",
@@ -46743,6 +46817,16 @@
           "description": "Процент выполнения: 100 у выполненной задачи, иначе доля отмеченных пунктов чек-листа; null — чек-листа нет, прогресс неизвестен.",
           "title": "Progress"
         },
+        "revision": {
+          "default": 1,
+          "description": "Текущая версия задачи для expected_revision при изменении её дат.",
+          "examples": [
+            3
+          ],
+          "minimum": 1.0,
+          "title": "Revision",
+          "type": "integer"
+        },
         "risk_level": {
           "anyOf": [
             {
@@ -50474,6 +50558,16 @@
           "description": "Процент выполнения: 100 у выполненной задачи, иначе доля отмеченных пунктов чек-листа; null — чек-листа нет, прогресс неизвестен.",
           "title": "Progress"
         },
+        "revision": {
+          "default": 1,
+          "description": "Текущая версия задачи для expected_revision при изменении её дат.",
+          "examples": [
+            3
+          ],
+          "minimum": 1.0,
+          "title": "Revision",
+          "type": "integer"
+        },
         "risk_level": {
           "anyOf": [
             {
@@ -53727,6 +53821,22 @@
           "minItems": 1,
           "title": "Changes",
           "type": "array"
+        },
+        "date_change_reason": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Общая причина изменения или снятия назначенных дат всех задач сценария.",
+          "examples": [
+            "Перенос поставки оборудования и зависимых задач."
+          ],
+          "title": "Date Change Reason"
         }
       },
       "required": [
@@ -54240,6 +54350,7 @@
         "STAGE_CHANGED",
         "DUE_DATE_CHANGED",
         "START_DATE_CHANGED",
+        "DATES_CHANGED",
         "BASELINE_CHANGED",
         "DESCRIPTION_CHANGED",
         "PRIORITY_CHANGED",
@@ -56380,6 +56491,22 @@
             2
           ],
           "title": "Checklist Revision"
+        },
+        "date_change_reason": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Причина изменения или снятия уже назначенной даты; первое назначение каждой отсутствующей даты и повтор тех же значений причины не требуют.",
+          "examples": [
+            "Согласование с заказчиком перенесено на следующую неделю."
+          ],
+          "title": "Date Change Reason"
         },
         "description_md": {
           "anyOf": [

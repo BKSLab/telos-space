@@ -403,6 +403,7 @@ def _to_calendar_task(
     if due_date is None:
         return schema(
             id=task.id,
+            revision=task.revision,
             key=build_task_key(project_key=project_key, number=task.number),
             title=task.title,
             start_date=task.start_date,
@@ -425,6 +426,7 @@ def _to_calendar_task(
         )
     return schema(
         id=task.id,
+        revision=task.revision,
         key=build_task_key(project_key=project_key, number=task.number),
         title=task.title,
         start_date=task.start_date,
@@ -508,11 +510,11 @@ def _task_risk(
 
 
 def _parse_activity_date(value: str | None) -> date | None:
-    """Безопасно разбирает date-only значение существующей истории."""
+    """Читает дедлайн из прежнего события или снимка обеих дат."""
     if value is None:
         return None
     try:
-        return date.fromisoformat(value)
+        return date.fromisoformat(value.rsplit("; завершение: ", 1)[-1])
     except ValueError:
         return None
 

@@ -115,6 +115,16 @@ class TaskNumberAllocationError(TasksServiceError):
         return "Не удалось выделить номер задачи. Повторите попытку."
 
 
+class TaskDateChangeReasonError(TasksServiceError):
+    """Изменение назначенных дат не сопровождается допустимой причиной."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    detail = "Для изменения или снятия назначенной даты укажите причину (до 2000 символов)."
+
+    def __init__(self) -> None:
+        super().__init__(error_details=self.detail)
+
+
 class TaskDateRangeError(TasksServiceError):
     """Начало задачи находится после её дедлайна."""
 

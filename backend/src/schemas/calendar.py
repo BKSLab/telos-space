@@ -56,6 +56,12 @@ class CalendarTaskSchema(BaseModel):
     """Компактная задача временного представления."""
 
     id: int
+    revision: int = Field(
+        default=1,
+        ge=1,
+        description="Текущая версия задачи для expected_revision при изменении её дат.",
+        examples=[3],
+    )
     key: str
     title: str
     start_date: date | None

@@ -169,7 +169,7 @@ PROJECT_ACTIONS = (
     ProjectAction(
         "telos_update_task",
         "Изменить задачу",
-        "Название, описание, приоритет, роли, участники и сроки; отсутствующие поля сохраняются, null очищает допустимое поле.",
+        "Название, описание, приоритет, роли, участники и сроки; отсутствующие поля сохраняются, null очищает допустимое поле. Изменение/снятие назначенной даты требует changes.date_change_reason из поручения; если причины нет, уточни её, не придумывай. Первое назначение отсутствующей даты причины не требует.",
         p.TaskUpdateInput,
         tasks.update_task,
     ),
@@ -494,7 +494,7 @@ PROJECT_ACTIONS = (
     ProjectAction(
         "telos_apply_schedule_change",
         "Применить перенос сроков",
-        "Применяет конкретные даты и expected_updated_at из preview после решения участника.",
+        "Применяет конкретные даты и expected_updated_at из preview после решения участника. Изменение/снятие назначенных дат требует общую date_change_reason пользователя; если её нет, уточни, не придумывай.",
         p.ScenarioApplyInput,
         structure.apply_schedule,
         requires_confirmation=True,

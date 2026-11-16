@@ -245,6 +245,8 @@ class TasksRepository:
         project_id: int,
         stage_id: int | None = None,
         task_ids: set[int] | None = None,
+        *,
+        for_update: bool = False,
     ) -> list[Task]:
         """Возвращает задачи проекта с опциональными фильтрами.
 
@@ -252,6 +254,7 @@ class TasksRepository:
             project_id: Идентификатор проекта.
             stage_id: Опциональный идентификатор стадии.
             task_ids: Опциональный набор идентификаторов задач.
+            for_update: Заблокировать актуальные строки до конца транзакции.
 
         Returns:
             Задачи проекта в сохранённом порядке.
@@ -269,6 +272,14 @@ class TasksRepository:
                 if not task_ids:
                     return []
                 stmt = stmt.where(Task.id.in_(task_ids))
+            if for_update:
+                # Единый порядок блокировок исключает дедлок двух календарных сценариев.
+                stmt = (
+                    stmt.order_by(None)
+                    .order_by(Task.id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
             result: Result = await self.db_session.execute(stmt)
             return list(result.scalars().all())
         except (SQLAlchemyError, Exception) as error:

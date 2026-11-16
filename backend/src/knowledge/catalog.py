@@ -188,8 +188,8 @@ POLICIES = (
         "task",
         SourceType.ACTIVITY,
         "История задачи",
-        "id task_id event_type from_value to_value actor_user_id actor_name via_api_key_label created_at",
-        "event_type from_value to_value",
+        "id task_id event_type from_value to_value reason actor_user_id actor_name via_api_key_label created_at",
+        "event_type from_value to_value reason",
         "event_type",
     ),
     policy(
@@ -356,6 +356,7 @@ FIELD_LABELS = {
     "event_type": "Изменение",
     "from_value": "Было",
     "to_value": "Стало",
+    "reason": "Причина изменения дат",
     "previous_due_date": "Прежний срок",
     "new_due_date": "Новый срок",
     "changed_by_name": "Автор изменения",

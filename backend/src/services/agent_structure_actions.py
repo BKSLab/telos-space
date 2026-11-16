@@ -177,6 +177,10 @@ async def apply_schedule(
     db: AgentProjectToolScope, ctx: AgentToolContext, args: inputs.ScenarioApplyInput
 ) -> dict:
     """Атомарно применяет подтверждённые даты и версии задач из preview."""
-    return (await db.scenarios.apply(ctx.project_id, args.model_dump()["changes"])).model_dump(
-        mode="json"
-    )
+    return (
+        await db.scenarios.apply(
+            ctx.project_id,
+            args.model_dump()["changes"],
+            date_change_reason=args.date_change_reason,
+        )
+    ).model_dump(mode="json")

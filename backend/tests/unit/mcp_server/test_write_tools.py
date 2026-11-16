@@ -205,9 +205,13 @@ async def test_update_task_touches_only_given_fields_and_clears_by_empty_value(w
     # Пустая строка снимает срок, а не считается неверной датой.
     services = write_tools()
 
-    await wt.update_task(FakeContext(), task_key=TASK_KEY, due_date="")
+    await wt.update_task(
+        FakeContext(), task_key=TASK_KEY, due_date="", date_change_reason="Дедлайн отменён"
+    )
 
-    assert services.tasks.update_task.await_args.kwargs["data"] == {"due_date": None}
+    assert services.tasks.update_task.await_args.kwargs["data"] == {
+        "due_date": None, "date_change_reason": "Дедлайн отменён"
+    }
 
 
 async def test_move_task_resolves_stage_by_name(write_tools) -> None:
@@ -286,11 +290,15 @@ async def test_set_task_dates_and_milestones_use_domain_services(write_tools) ->
         task_key=TASK_KEY,
         start_date="2026-09-01",
         due_date="2026-10-01",
+        date_change_reason="Изменение поставки",
     )
 
     assert services.tasks.update_task.await_args.kwargs == {
         "task_id": TASK_ID,
-        "data": {"start_date": date(2026, 9, 1), "due_date": date(2026, 10, 1)},
+        "data": {
+            "start_date": date(2026, 9, 1), "due_date": date(2026, 10, 1),
+            "date_change_reason": "Изменение поставки",
+        },
         "updated_by_user_id": 1,
     }
     assert result["updated_fields"] == ["due_date", "start_date"]

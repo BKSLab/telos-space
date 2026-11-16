@@ -66,10 +66,24 @@ async def test_get_recent_due_date_changes_filters_event_type_on_real_postgres(
         from_value="2026-09-02",
         to_value="2026-09-08",
     )
+    combined_change = await repository.save(
+        task_id=task.id,
+        event_type=TaskActivityEventType.DATES_CHANGED,
+        from_value="начало: 2026-09-01; завершение: 2026-09-08",
+        to_value="начало: 2026-09-02; завершение: 2026-09-09",
+        reason="Поставка задержалась",
+    )
+    await repository.save(
+        task_id=task.id,
+        event_type=TaskActivityEventType.DATES_CHANGED,
+        from_value="начало: 2026-09-02; завершение: 2026-09-09",
+        to_value="начало: 2026-09-03; завершение: 2026-09-09",
+        reason="Старт позже",
+    )
 
     result = await repository.get_recent_due_date_changes(
         project_id=stage.project_id,
         limit=10,
     )
 
-    assert [item.id for item in result] == [due_change.id]
+    assert [item.id for item in result] == [combined_change.id, due_change.id]

@@ -406,11 +406,15 @@ async def test_update_task_records_history_and_reindexes_only_semantic_fields() 
         tasks_repository,
         activity_repository=activity_repository,
         knowledge_events=knowledge_events,
-    ).update_task(task_id=10, data={"start_date": date(2026, 9, 2)})
+    ).update_task(
+        task_id=10,
+        data={"start_date": date(2026, 9, 2), "date_change_reason": "Зависимость перенесена"},
+    )
     event = activity_repository.save.await_args.kwargs
-    assert event["event_type"] == TaskActivityEventType.START_DATE_CHANGED
-    assert event["from_value"] == "2026-09-01"
-    assert event["to_value"] == "2026-09-02"
+    assert event["event_type"] == TaskActivityEventType.DATES_CHANGED
+    assert event["from_value"] == "начало: 2026-09-01; завершение: 2026-09-08"
+    assert event["to_value"] == "начало: 2026-09-02; завершение: 2026-09-08"
+    assert event["reason"] == "Зависимость перенесена"
     knowledge_events.upsert.assert_not_awaited()
 
     tasks_repository = AsyncMock(spec=TasksRepository)

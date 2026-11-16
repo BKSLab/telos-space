@@ -98,6 +98,7 @@ async def test_preview_is_read_only_and_apply_commits_cascade_atomically(
             }
             for change in preview.changes
         ],
+        date_change_reason="Перенос поставки",
     )
 
     assert applied.applied_count == 2
@@ -105,9 +106,9 @@ async def test_preview_is_read_only_and_apply_commits_cascade_atomically(
     assert (await tasks.get_by_id(successor.id)).start_date == date(2026, 9, 11)
     activity = await TaskActivityRepository(db_session).get_for_task(successor.id)
     assert {item.event_type for item in activity} == {
-        TaskActivityEventType.START_DATE_CHANGED,
-        TaskActivityEventType.DUE_DATE_CHANGED,
+        TaskActivityEventType.DATES_CHANGED,
     }
+    assert len(activity) == 1 and activity[0].reason == "Перенос поставки"
 
 
 @pytest.mark.asyncio
@@ -138,6 +139,7 @@ async def test_stale_scenario_rejects_whole_batch_before_first_update(
     )
     await db_session.commit()
 
+    predecessor_id, successor_id = predecessor.id, successor.id
     with pytest.raises(CalendarScenarioVersionConflictError):
         await service.apply(
             stage.project_id,
@@ -152,8 +154,8 @@ async def test_stale_scenario_rejects_whole_batch_before_first_update(
             ],
         )
 
-    assert (await tasks.get_by_id(predecessor.id)).due_date == date(2026, 9, 5)
-    persisted_successor = await tasks.get_by_id(successor.id)
+    assert (await tasks.get_by_id(predecessor_id)).due_date == date(2026, 9, 5)
+    persisted_successor = await tasks.get_by_id(successor_id)
     assert persisted_successor.start_date == date(2026, 9, 6)
     assert persisted_successor.title == "Изменено параллельно"
-    assert await TaskActivityRepository(db_session).get_for_task(predecessor.id) == []
+    assert await TaskActivityRepository(db_session).get_for_task(predecessor_id) == []

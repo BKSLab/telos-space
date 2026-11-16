@@ -113,11 +113,18 @@ async def test_apply_records_all_dates_and_commits_once() -> None:
                 "expected_updated_at": NOW,
             },
         ],
+        date_change_reason="  Изменилось согласование  ",
     )
 
     assert result.applied_count == 2
     assert tasks.update.await_count == 2
-    assert activity.save.await_count == 3
+    assert activity.save.await_count == 2
+    assert {call.kwargs["reason"] for call in activity.save.await_args_list} == {
+        "Изменилось согласование"
+    }
+    assert {call.kwargs["event_type"].value for call in activity.save.await_args_list} == {
+        "DATES_CHANGED"
+    }
     uow.commit.assert_awaited_once()
 
 

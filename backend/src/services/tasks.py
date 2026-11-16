@@ -22,6 +22,7 @@ from src.exceptions.task_reports import TaskReportsRepositoryError
 from src.exceptions.tasks import (
     TaskChecklistConflictError,
     TaskChecklistValidationError,
+    TaskDateChangeReasonError,
     TaskDateRangeError,
     TaskManagerRequiredError,
     TaskNotFoundError,
@@ -70,6 +71,7 @@ from src.schemas.tasks import (
 from src.schemas.users import UserSummarySchema
 from src.services.auth import to_user_summary
 from src.services.knowledge_events import KnowledgeEvents
+from src.services.task_dates import task_dates_value, validate_date_change_reason
 from src.storage.task_attachments import TaskAttachmentStorage
 from src.utils.checklists import checklist_text
 from src.utils.task_filters import TaskFilters, task_matches
@@ -365,6 +367,7 @@ class TasksService:
         try:
             payload = dict(data)
             expected_task_revision = payload.pop("expected_revision", None)
+            date_change_reason = payload.pop("date_change_reason", None)
             if expected_task_revision is not None and (
                 type(expected_task_revision) is not int or expected_task_revision < 1
             ):
@@ -394,6 +397,13 @@ class TasksService:
             self._validate_schedule(
                 start_date=payload.get("start_date", task.start_date),
                 due_date=payload.get("due_date", task.due_date),
+            )
+            date_change_reason = validate_date_change_reason(
+                previous_start=task.start_date,
+                previous_due=task.due_date,
+                next_start=payload.get("start_date", task.start_date),
+                next_due=payload.get("due_date", task.due_date),
+                reason=date_change_reason,
             )
             assignments: list[dict] | None = None
             if participant_patch:
@@ -443,7 +453,9 @@ class TasksService:
                         executor = selected_members.get(executor_id)
                         payload["assignee"] = _member_display_name(executor) if executor else None
 
-            await self._record_field_changes(task=task, data=payload)
+            await self._record_field_changes(
+                task=task, data=payload, date_change_reason=date_change_reason
+            )
             updated = (
                 await self.tasks_repository.update(task=task, data=payload)
                 if payload or assignments is not None
@@ -466,6 +478,10 @@ class TasksService:
             logger.error("❌ Ошибка обновления задачи id=%s.", task_id, exc_info=True)
             await self.unit_of_work.rollback()
             raise TasksServiceError(str(error)) from error
+
+        except TaskDateChangeReasonError:
+            await self.unit_of_work.rollback()
+            raise
 
     async def move_task(
         self,
@@ -1018,7 +1034,9 @@ class TasksService:
             context[comment.task_id] = (count + 1, comment.body_md)
         return context
 
-    async def _record_field_changes(self, task: Task, data: dict) -> None:
+    async def _record_field_changes(
+        self, task: Task, data: dict, *, date_change_reason: str | None = None
+    ) -> None:
         """Фиксирует изменения значимых полей задачи в истории."""
         if "checklist" in data and data["checklist"] != task.checklist:
             await self.activity_repository.save(
@@ -1027,19 +1045,15 @@ class TasksService:
                 from_value=(checklist_text(task.checklist).splitlines() or [None])[0],
                 to_value=(checklist_text(data["checklist"]).splitlines() or [None])[0],
             )
-        if "due_date" in data and data["due_date"] != task.due_date:
+        next_start = data.get("start_date", task.start_date)
+        next_due = data.get("due_date", task.due_date)
+        if (next_start, next_due) != (task.start_date, task.due_date):
             await self.activity_repository.save(
                 task_id=task.id,
-                event_type=TaskActivityEventType.DUE_DATE_CHANGED,
-                from_value=str(task.due_date) if task.due_date else None,
-                to_value=str(data["due_date"]) if data["due_date"] else None,
-            )
-        if "start_date" in data and data["start_date"] != task.start_date:
-            await self.activity_repository.save(
-                task_id=task.id,
-                event_type=TaskActivityEventType.START_DATE_CHANGED,
-                from_value=str(task.start_date) if task.start_date else None,
-                to_value=str(data["start_date"]) if data["start_date"] else None,
+                event_type=TaskActivityEventType.DATES_CHANGED,
+                from_value=task_dates_value(task.start_date, task.due_date),
+                to_value=task_dates_value(next_start, next_due),
+                reason=date_change_reason,
             )
         if "description_md" in data and data["description_md"] != task.description_md:
             await self.activity_repository.save(

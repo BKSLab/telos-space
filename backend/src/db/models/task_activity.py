@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -19,6 +19,7 @@ class TaskActivityEventType(str, enum.Enum):
     STAGE_CHANGED = "STAGE_CHANGED"
     DUE_DATE_CHANGED = "DUE_DATE_CHANGED"
     START_DATE_CHANGED = "START_DATE_CHANGED"
+    DATES_CHANGED = "DATES_CHANGED"
     BASELINE_CHANGED = "BASELINE_CHANGED"
     DESCRIPTION_CHANGED = "DESCRIPTION_CHANGED"
     PRIORITY_CHANGED = "PRIORITY_CHANGED"
@@ -63,6 +64,12 @@ class TaskActivity(Base):
         nullable=True,
         doc="Новое значение.",
         comment="Текстовое представление нового значения.",
+    )
+    reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        doc="Причина изменения плановых дат.",
+        comment="Общая причина изменения или снятия назначенных дат задачи.",
     )
     actor_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
