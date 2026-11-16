@@ -138,6 +138,7 @@ async def ask_aris(
             api_key_id=principal_key_id(principal),
             request_id=request_id,
             timeout_seconds=wait_seconds,
+            principal=principal,
         )
     except (AgentConversationsServiceError, AuthServiceError) as error:
         raise ToolError(error.detail) from error
@@ -167,12 +168,14 @@ async def get_aris_result(
     except ValueError as error:
         raise ToolError("request_id должен быть UUID из ответа telos_ask_aris.") from error
     async with tool_context(context) as tools:
-        try:
-            result = await tools.services.requests.get_external_result(
-                user_id=tools.principal.user_id,
-                api_key_id=principal_key_id(tools.principal),
-                request_id=parsed,
-            )
-        except (AgentConversationsServiceError, AuthServiceError) as error:
-            raise ToolError(error.detail) from error
+        requests, principal = tools.services.requests, tools.principal
+    try:
+        result = await requests.get_external_result(
+            user_id=principal.user_id,
+            api_key_id=principal_key_id(principal),
+            request_id=parsed,
+            principal=principal,
+        )
+    except (AgentConversationsServiceError, AuthServiceError) as error:
+        raise ToolError(error.detail) from error
     return result.model_dump(mode="json")

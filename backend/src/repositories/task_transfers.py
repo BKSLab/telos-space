@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.board_stickers import BoardStickerTaskLink
 from src.db.models.document_links import DocumentLink
+from src.db.models.git_sources import GitTaskChangeLink
 from src.db.models.project_risks import ProjectRisk
 from src.db.models.task_dependencies import TaskDependency
 from src.db.models.tasks import Task
@@ -27,11 +28,12 @@ class TaskProjectLinks:
     risks: int = 0
     board_stickers: int = 0
     wbs_placements: int = 0
+    git_links: int = 0
 
     @property
     def total(self) -> int:
         """Всего связей, которые снимет перенос."""
-        return self.dependencies + self.document_links + self.risks + self.board_stickers + self.wbs_placements
+        return self.dependencies + self.document_links + self.risks + self.board_stickers + self.wbs_placements + self.git_links
 
 
 class TaskTransfersRepository:
@@ -88,9 +90,12 @@ class TaskTransfersRepository:
                     Task.canvas_x.is_not(None), Task.canvas_y.is_not(None)),
             ).scalar_subquery()
         )
+        git_links = select(func.count()).select_from(GitTaskChangeLink).where(
+            GitTaskChangeLink.task_id == task_id
+        ).scalar_subquery()
         try:
             result: Result = await self.db_session.execute(
-                select(dependencies, links, risks, stickers, placements)
+                select(dependencies, links, risks, stickers, placements, git_links)
             )
             row = result.one()
             return TaskProjectLinks(
@@ -99,6 +104,7 @@ class TaskTransfersRepository:
                 risks=int(row[2]),
                 board_stickers=int(row[3]),
                 wbs_placements=int(row[4]),
+                git_links=int(row[5]),
             )
         except (SQLAlchemyError, Exception) as error:
             await self.db_session.rollback()
@@ -131,6 +137,14 @@ class TaskTransfersRepository:
         await self._write(
             delete(DocumentLink).where(DocumentLink.task_id == task_id),
             operation="удаления связей с документами",
+            task_id=task_id,
+        )
+
+    async def delete_git_links(self, task_id: int) -> None:
+        """Снимает Git-привязки прежнего проекта; сами изменения и история остаются."""
+        await self._write(
+            delete(GitTaskChangeLink).where(GitTaskChangeLink.task_id == task_id),
+            operation="удаления Git-привязок прежнего проекта",
             task_id=task_id,
         )
 

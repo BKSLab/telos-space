@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GripVertical, Plus, Trash2 } from "lucide-react";
@@ -6,6 +6,7 @@ import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
 import type { Project, ProjectStage } from "@/lib/types";
 import { PROJECT_COLORS } from "@/lib/types";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
+import { useCurrentUser } from "@/lib/useAuth";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Card, Section } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
@@ -16,10 +17,13 @@ import { useToast } from "@/lib/toast";
 import { ProjectForm } from "@/components/projects/ProjectForm";
 import { ProjectPeopleSummary } from "@/components/projects/ProjectPeopleSummary";
 import { ProjectDeadlineHistory } from "@/components/projects/ProjectDeadlineHistory";
+import { ProjectContextHistory } from "@/components/projects/ProjectContextHistory";
+import { ProjectGitSources } from "@/components/projects/ProjectGitSources";
 import { ProjectTeamPage } from "@/routes/ProjectTeamPage";
 import {
     isProjectFormValid,
     requiresDeadlineComment,
+    rebaseProjectFormValues,
     toProjectFormValues,
     toProjectUpdatePayload,
     type ProjectFormValues,
@@ -27,15 +31,28 @@ import {
 
 export function ProjectSettingsPage() {
     const project = useProjectOutlet();
+    return <ProjectSettingsEditor key={project.id} project={project} />;
+}
+
+function ProjectSettingsEditor({ project }: { project: Project }) {
+    const currentUser = useCurrentUser();
+    const canEditProject = currentUser.data != null && project.owner_id != null && currentUser.data.id === project.owner_id;
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const toast = useToast();
     const [values, setValues] = useState<ProjectFormValues>(() => toProjectFormValues(project));
     const [formProject, setFormProject] = useState(project);
+    const [conflictingProject, setConflictingProject] = useState<Project | null>(null);
     const [newStageName, setNewStageName] = useState("");
     const [isDeleteOpen, setDeleteOpen] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState("");
     const commentRequired = requiresDeadlineComment(formProject, values);
+    const active = useRef(true);
+
+    useEffect(() => {
+        active.current = true;
+        return () => { active.current = false; };
+    }, []);
 
     const stagesQuery = useQuery({
         queryKey: queryKeys.stages(project.id),
@@ -46,26 +63,30 @@ export function ProjectSettingsPage() {
         queryClient.invalidateQueries({ queryKey: queryKeys.projects });
         queryClient.invalidateQueries({ queryKey: ["projects", project.id] });
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectContextHistory(project.id) });
     };
 
     const saveMutation = useMutation({
         mutationFn: () =>
             api.patch<Project>(endpoints.project(project.id), toProjectUpdatePayload(values, formProject)),
         onSuccess: (saved) => {
+            invalidateProject();
+            if (!active.current) return;
             setValues(toProjectFormValues(saved));
             setFormProject(saved);
-            invalidateProject();
+            setConflictingProject(null);
             toast.success("Настройки проекта сохранены");
         },
         onError: async (error) => {
             if (error instanceof ApiError && error.status === 409) {
-                setValues((current) => ({ ...current, due_date_comment: "" }));
-                try {
-                    setFormProject(await api.get<Project>(endpoints.project(project.id)));
-                } catch {
-                    toast.error("Не удалось загрузить актуальный срок. Обновите страницу перед повторным сохранением.");
-                }
                 invalidateProject();
+                if (!active.current) return;
+                try {
+                    const latest = await api.get<Project>(endpoints.project(project.id));
+                    if (active.current) setConflictingProject(latest);
+                } catch {
+                    if (active.current) toast.error("Не удалось загрузить актуальные данные. Обновите страницу перед повторным сохранением.");
+                }
             }
         },
     });
@@ -121,12 +142,34 @@ export function ProjectSettingsPage() {
                         {saveMutation.error && (
                             <ErrorMessage message={(saveMutation.error as Error).message} />
                         )}
-                        <ProjectForm project={project} onProjectChange={saved => { queryClient.setQueryData(queryKeys.project(project.id), saved); void queryClient.invalidateQueries({ queryKey: queryKeys.projects }); void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }); }} values={values} onChange={setValues} lockKey requireDeadlineComment={commentRequired} disabled={saveMutation.isPending} />
+                        {!canEditProject && <p className="text-[13px] text-muted">Паспорт и настройки редактирует владелец проекта.</p>}
+                        {conflictingProject && <div className="flex flex-col gap-3 rounded-[var(--radius-control)] border border-line bg-surface-2 p-3 text-[13px]">
+                            <p className="text-primary">Проект изменился во время редактирования. Ваш черновик сохранён. Сравните его с актуальным паспортом.</p>
+                            <details>
+                                <summary className="cursor-pointer text-accent">Актуальный паспорт</summary>
+                                <div className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-secondary">{conflictingProject.description_md || "Паспорт пока не заполнен."}</div>
+                            </details>
+                            <div className="flex flex-wrap gap-2">
+                                <Button size="sm" onClick={() => {
+                                    setValues(toProjectFormValues(conflictingProject));
+                                    setFormProject(conflictingProject);
+                                    setConflictingProject(null);
+                                    saveMutation.reset();
+                                }}>Принять актуальную версию</Button>
+                                <Button size="sm" onClick={() => {
+                                    setValues(rebaseProjectFormValues(values, formProject, conflictingProject));
+                                    setFormProject(conflictingProject);
+                                    setConflictingProject(null);
+                                    saveMutation.reset();
+                                }}>Продолжить с моими правками</Button>
+                            </div>
+                        </div>}
+                        <ProjectForm project={project} onProjectChange={saved => { queryClient.setQueryData(queryKeys.project(project.id), saved); void queryClient.invalidateQueries({ queryKey: queryKeys.projects }); void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }); }} values={values} onChange={setValues} lockKey requireDeadlineComment={commentRequired} disabled={!canEditProject || saveMutation.isPending} />
                         {commentRequired && <p className="text-[12px] text-muted">Предыдущий срок: {formProject.due_date ?? "без даты"}.</p>}
                         <div className="flex justify-end pt-1">
                             <Button
                                 variant="primary"
-                                disabled={!isProjectFormValid(values) || (commentRequired && !values.due_date_comment.trim()) || saveMutation.isPending}
+                                disabled={!canEditProject || !isProjectFormValid(values) || (commentRequired && !values.due_date_comment.trim()) || saveMutation.isPending || conflictingProject !== null || Object.keys(toProjectUpdatePayload(values, formProject)).length === 0}
                                 onClick={() => saveMutation.mutate()}
                             >
                                 Сохранить
@@ -136,6 +179,8 @@ export function ProjectSettingsPage() {
                 </Section>
 
                 <ProjectDeadlineHistory projectId={project.id} />
+                <ProjectContextHistory projectId={project.id} />
+                <ProjectGitSources key={project.id} projectId={project.id} canEdit={canEditProject} />
                 <ProjectTeamPage embedded />
 
                 <Section title="Стадии канбана">

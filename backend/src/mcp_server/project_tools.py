@@ -19,9 +19,24 @@ from src.exceptions.base import ApplicationError
 from src.mcp_server.context import bearer_secret_of, resolve_project, tool_context
 from src.mcp_server.links import build_links, put_url
 from src.mcp_server.registry import telos_tool
+from src.schemas.agent_context import (
+    ContextInput,
+    ContextPageInput,
+    GitReadInput,
+    GitSearchInput,
+    TaskGitLinksInput,
+    WebSaveInput,
+    WebTopicInput,
+)
+from src.schemas.context_selection import (
+    ContextSelectionInput,
+    KnowledgeClaimReadInput,
+    KnowledgeMapReadInput,
+)
 from src.schemas.project_stages import StageCreateSchema
 from src.schemas.projects import ProjectCreateSchema, ProjectDescriptionSchema, ProjectStatus
-from src.utils.api_scopes import SCOPE_PROJECTS_READ, SCOPE_PROJECTS_WRITE
+from src.schemas.web_research import WebReadSchema, WebSearchSchema, WebUrlApprovalSchema
+from src.utils.api_scopes import SCOPE_KNOWLEDGE_READ, SCOPE_PROJECTS_READ, SCOPE_PROJECTS_WRITE
 
 ACTION_CLOSED_FOR_KEYS = (
     "Это действие недоступно по сервисному API-ключу: его выполняют люди из интерфейса."
@@ -49,35 +64,59 @@ async def create_project(
     key: Annotated[str, ProjectCreateSchema.model_fields["key"]],
     name: Annotated[str, ProjectCreateSchema.model_fields["name"]],
     request_id: Annotated[
-        UUID, Field(description="Стабильный UUID создания; повторяйте его и исходные аргументы при сетевом сбое.")
+        UUID,
+        Field(
+            description="Стабильный UUID создания; повторяйте его и исходные аргументы при сетевом сбое."
+        ),
     ],
     description_sections: Annotated[
         ProjectDescriptionSchema | None,
-        Field(description="Блоки problem, goal, expected_result, additional. Имеют приоритет перед description_md."),
+        Field(
+            description="Единые поля паспорта: problem, goal, expected_result, additional, audience, capabilities, boundaries, constraints, glossary, decisions, open_questions. Имеют приоритет перед description_md."
+        ),
     ] = None,
-    description_md: Annotated[str | None, ProjectCreateSchema.model_fields["description_md"]] = None,
+    description_md: Annotated[
+        str | None, ProjectCreateSchema.model_fields["description_md"]
+    ] = None,
     member_usernames: Annotated[
         list[str] | None,
-        Field(max_length=100, description="Точные логины участников; владелец включается автоматически."),
+        Field(
+            max_length=100,
+            description="Точные логины участников; владелец включается автоматически.",
+        ),
     ] = None,
-    stages: Annotated[list[StageCreateSchema] | None, ProjectCreateSchema.model_fields["stages"]] = None,
-    status: Annotated[ProjectStatus, ProjectCreateSchema.model_fields["status"]] = ProjectStatus.PLANNING,
+    stages: Annotated[
+        list[StageCreateSchema] | None, ProjectCreateSchema.model_fields["stages"]
+    ] = None,
+    status: Annotated[
+        ProjectStatus, ProjectCreateSchema.model_fields["status"]
+    ] = ProjectStatus.PLANNING,
     color: Annotated[str, ProjectCreateSchema.model_fields["color"]] = "#58a6ff",
     icon: Annotated[str | None, ProjectCreateSchema.model_fields["icon"]] = None,
     start_date: Annotated[date | None, ProjectCreateSchema.model_fields["start_date"]] = None,
     due_date: Annotated[date | None, ProjectCreateSchema.model_fields["due_date"]] = None,
     actor: Annotated[
-        str | None, Field(description="Только логин владельца ключа; владелец проекта определяется сервером.")
+        str | None,
+        Field(description="Только логин владельца ключа; владелец проекта определяется сервером."),
     ] = None,
 ) -> dict:
     """Применяет общий с REST сценарий создания и возвращает durable-результат."""
     try:
-        data = ProjectCreateSchema.model_validate({
-            "key": key, "name": name,
-            "description_sections": description_sections, "description_md": description_md,
-            "member_usernames": member_usernames or [], "stages": stages, "status": status,
-            "color": color, "icon": icon, "start_date": start_date, "due_date": due_date,
-        })
+        data = ProjectCreateSchema.model_validate(
+            {
+                "key": key,
+                "name": name,
+                "description_sections": description_sections,
+                "description_md": description_md,
+                "member_usernames": member_usernames or [],
+                "stages": stages,
+                "status": status,
+                "color": color,
+                "icon": icon,
+                "start_date": start_date,
+                "due_date": due_date,
+            }
+        )
     except ValidationError as error:
         raise ToolError(describe_validation_error(error, ProjectCreateSchema)) from error
     async with tool_context(context, require_write=True) as tools:
@@ -86,8 +125,10 @@ async def create_project(
         links = build_links(tools.settings.app.app_public_url)
     try:
         result = await creation.create(
-            actor_user_id=user_id, bearer_secret=bearer_secret_of(context),
-            data=data, request_id=request_id,
+            actor_user_id=user_id,
+            bearer_secret=bearer_secret_of(context),
+            data=data,
+            request_id=request_id,
         )
     except ApplicationError as error:
         raise ToolError(error.detail) from error
@@ -99,6 +140,9 @@ async def create_project(
 
 def action_allowed(principal, name: str) -> bool:
     """Открыто ли действие каталога предъявленным учётным данным."""
+    definition = next((item for item in PROJECT_ACTIONS if item.name == name), None)
+    if definition and not all(principal.allows(scope) for scope in definition.required_scopes):
+        return False
     if principal.api_key is None:
         return True
     return any(principal.allows(scope) for scope in action_scope_options(name))
@@ -139,12 +183,16 @@ async def get_latest_project_summary(
         project_id = await resolve_project(tools, project_key)
         actions = tools.services.actions
         actor = AgentToolContext(
-            project_id=project_id, user_id=tools.principal.user_id, can_write=False,
+            project_id=project_id,
+            user_id=tools.principal.user_id,
+            can_write=False,
             principal=tools.principal,
         )
     try:
         return await actions.execute(
-            context=actor, name="telos_get_latest_project_summary", arguments={},
+            context=actor,
+            name="telos_get_latest_project_summary",
+            arguments={},
         )
     except AgentToolsServiceError as error:
         raise ToolError(error.detail) from error
@@ -232,6 +280,13 @@ async def execute_project_tool(
             can_write=tools.principal.can_write,
             request_id=request_id,
             principal=tools.principal,
+            origin_read_scopes=frozenset({SCOPE_PROJECTS_READ})
+            | definition.required_scopes
+            | frozenset(
+                sorted(
+                    scope for scope in action_scope_options(name) if tools.principal.allows(scope)
+                )[:1]
+            ),
         )
         actions = tools.services.actions
     try:
@@ -257,13 +312,15 @@ async def execute_project_tool(
                 return response
             decision = "approve" if answer.action == "accept" and answer.data.approve else "reject"
             # Повторно проверяем токен после ожидания, включая отзыв и срок действия.
-            async with tool_context(context, require_write=True) as current:
+            async with tool_context(context, require_write=definition.mutating) as current:
                 await resolve_project(current, project_key)
                 if current.principal.user_id != actor.user_id:
                     raise ToolError("Пользователь вызова изменился.")
                 if not action_allowed(current.principal, name):
                     raise ToolError(ACTION_CLOSED_FOR_KEYS)
-                actor = replace(actor, principal=current.principal, can_write=current.principal.can_write)
+                actor = replace(
+                    actor, principal=current.principal, can_write=current.principal.can_write
+                )
             decided = await actions.decide(
                 context=actor, action_id=UUID(action["id"]), decision=decision
             )
@@ -271,3 +328,202 @@ async def execute_project_tool(
         return response
     except AgentToolsServiceError as error:
         raise ToolError(error.detail) from error
+
+
+async def _context_action(context, project_key, name, arguments, request_id=None):
+    """Единый action pipeline сохраняет ACL, pending и квитанции MCP-вызова."""
+    return await execute_project_tool(
+        context,
+        project_key,
+        name,
+        arguments.model_dump(mode="json", exclude_unset=True),
+        request_id=request_id,
+    )
+
+
+@telos_tool(
+    name="telos_select_context",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Подобрать контекст",
+    description="Краткий паспорт, релевантные источники и существенные пробелы конкретного вопроса.",
+    strict_arguments=True,
+)
+async def select_context(
+    context: Context, project_key: str, arguments: ContextSelectionInput
+) -> dict:
+    """Паспорт, релевантные источники, противоречия и адресное дочитывание."""
+    # В MCP нет сырого человеческого текста для проверки provided; не выдаём
+    # model-authored quote за подтверждённое текущим запросом человека.
+    return await _context_action(context, project_key, "telos_select_context", arguments)
+
+
+@telos_tool(
+    name="telos_get_knowledge_map",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Карта знаний",
+    description="Текущие утверждения проекта с provenance, gaps и пагинацией.",
+    strict_arguments=True,
+)
+async def get_knowledge_map(
+    context: Context, project_key: str, arguments: KnowledgeMapReadInput
+) -> dict:
+    """Ограниченная текущая карта с provenance, gaps и курсором."""
+    return await _context_action(context, project_key, "telos_get_knowledge_map", arguments)
+
+
+@telos_tool(
+    name="telos_get_knowledge_claim",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Утверждение карты",
+    description="Утверждение и evidence точных исходных версий.",
+    strict_arguments=True,
+)
+async def get_knowledge_claim(
+    context: Context, project_key: str, arguments: KnowledgeClaimReadInput
+) -> dict:
+    """Утверждение и evidence точных исходных версий."""
+    return await _context_action(context, project_key, "telos_get_knowledge_claim", arguments)
+
+
+@telos_tool(
+    name="telos_list_git_connections",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Репозитории проекта",
+    description="Доступные подключения, ref, observed/indexed SHA и полнота.",
+    strict_arguments=True,
+)
+async def list_git_connections(
+    context: Context, project_key: str, arguments: ContextPageInput
+) -> dict:
+    """Только доступные подключения, ref, observed/indexed SHA и полнота."""
+    return await _context_action(context, project_key, "telos_list_git_connections", arguments)
+
+
+@telos_tool(
+    name="telos_search_git_sources",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Поиск по коду",
+    description="Кандидаты по точным repository/SHA/path без смешивания репозиториев.",
+    strict_arguments=True,
+)
+async def search_git_sources(context: Context, project_key: str, arguments: GitSearchInput) -> dict:
+    """Кандидаты по repository/SHA/path без объединения похожих файлов."""
+    return await _context_action(context, project_key, "telos_search_git_sources", arguments)
+
+
+@telos_tool(
+    name="telos_read_git_file",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Файл Git",
+    description="Страница файла точного репозитория и SHA, next_offset продолжает чтение.",
+    strict_arguments=True,
+)
+async def read_git_file(context: Context, project_key: str, arguments: GitReadInput) -> dict:
+    """Страница файла точного репозитория и SHA с продолжением."""
+    return await _context_action(context, project_key, "telos_read_git_file", arguments)
+
+
+@telos_tool(
+    name="telos_get_git_map",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Карта кода",
+    description="Компоненты/импорты/символы и отдельный manifest каждого репозитория.",
+    strict_arguments=True,
+)
+async def get_git_map(context: Context, project_key: str) -> dict:
+    """Компоненты/импорты/символы и отдельный manifest каждого репозитория."""
+    return await _context_action(context, project_key, "telos_get_git_map", ContextInput())
+
+
+@telos_tool(
+    name="telos_list_task_git_links",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Изменения задачи",
+    description="Отдельные PR/commits задачи и проверенные exactSHA CI/deploy/environment.",
+    strict_arguments=True,
+)
+async def list_task_git_links(
+    context: Context, project_key: str, arguments: TaskGitLinksInput
+) -> dict:
+    """Отдельные PR/commits и проверенные exactSHA CI/deploy/env."""
+    return await _context_action(context, project_key, "telos_list_task_git_links", arguments)
+
+
+@telos_tool(
+    name="telos_request_web_search",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Разрешить публичную тему",
+    description="Отдельное человеческое согласие на точную публичную тему поиска.",
+    strict_arguments=True,
+)
+async def request_web_search(
+    context: Context, project_key: str, arguments: WebTopicInput, request_id: UUID
+) -> dict:
+    """Сохраняет точную тему и отдельно запрашивает человека через elicitation."""
+    return await _context_action(
+        context, project_key, "telos_request_web_search", arguments, request_id
+    )
+
+
+@telos_tool(
+    name="telos_request_web_page",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Разрешить публичный URL",
+    description="Отдельное человеческое согласие на точный публичный URL; без сети до решения.",
+    strict_arguments=True,
+)
+async def request_web_page(
+    context: Context, project_key: str, arguments: WebUrlApprovalSchema, request_id: UUID
+) -> dict:
+    """Согласие на точный URL; до решения человека сеть не вызывается."""
+    return await _context_action(
+        context, project_key, "telos_request_web_page", arguments, request_id
+    )
+
+
+@telos_tool(
+    name="telos_search_web",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Публичный поиск",
+    description="Поиск только неизменённой подписанной публичной темы.",
+    strict_arguments=True,
+)
+async def search_web(context: Context, project_key: str, arguments: WebSearchSchema) -> dict:
+    """Поиск только неизменённого подписанного публичного topic_token."""
+    return await _context_action(context, project_key, "telos_search_web", arguments)
+
+
+@telos_tool(
+    name="telos_read_web_page",
+    scope=SCOPE_KNOWLEDGE_READ,
+    title="Публичная страница",
+    description="Чтение page_token с полнотой, временем и hash исходной страницы.",
+    strict_arguments=True,
+)
+async def read_web_page(context: Context, project_key: str, arguments: WebReadSchema) -> dict:
+    """Текст разрешённой страницы с полнотой, датой чтения и hash."""
+    return await _context_action(context, project_key, "telos_read_web_page", arguments)
+
+
+@telos_tool(
+    name="telos_save_web_research",
+    scope=SCOPE_PROJECTS_WRITE,
+    write=True,
+    title="Сохранить исследование",
+    description="Явное сохранение прочитанной страницы с hash-CAS и квитанцией повторов.",
+    strict_arguments=True,
+)
+async def save_web_research(
+    context: Context,
+    project_key: str,
+    arguments: WebSaveInput,
+    request_id: UUID,
+    actor: Annotated[
+        str | None,
+        Field(description="Только текущий владелец credentials; автор определяется сервером."),
+    ] = None,
+) -> dict:
+    """Явное сохранение проверенной страницы с квитанцией повторов."""
+    return await _context_action(
+        context, project_key, "telos_save_web_research", arguments, request_id
+    )

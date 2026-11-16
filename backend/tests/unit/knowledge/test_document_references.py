@@ -6,6 +6,7 @@ from copy import deepcopy
 import pytest
 
 from src.agent.tools import AgentToolRequest
+from src.exceptions.ai import AgentAnswerError
 from src.knowledge.catalog import build_catalog
 from src.knowledge.context import document_fragment, source_brief, source_view
 from src.services.project_agent import ProjectAgentService, _SourceRegistry
@@ -124,13 +125,6 @@ async def test_answer_selects_verified_primary_among_sources_and_rechecks_curren
             )
 
         clients.llm_client.get_structured_response.side_effect = respond
-        result = await service.ask(project_id=1, question="Какие условия приёмки?", history=[])
-        documents = [item for item in result.sources if item.entity_type == "document"]
-        if deleted:
-            assert documents == [] and not any(item.is_primary for item in result.sources)
-        else:
-            assert len(result.sources) == 2 and len(documents) == 1
-            assert documents[0].is_primary and documents[0].title == "Текущий заголовок"
-            assert documents[0].reference.quote == text[text.index("Искомое условие"):]
-            assert documents[0].reference.content_hash == document_text_hash(text)
-            assert documents[0].reference.content_hash != document_text_hash("Новый текст")
+        # Старая цитата не становится current evidence после подмены текста/удаления.
+        with pytest.raises(AgentAnswerError, match="Источники изменились"):
+            await service.ask(project_id=1, question="Какие условия приёмки?", history=[])

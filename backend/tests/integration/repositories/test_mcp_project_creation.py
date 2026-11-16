@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -89,7 +90,17 @@ async def project_creation_env(postgres_container, tmp_path):
                                  prefix=raw[:8], scope=scope))
             legacy[scope] = raw
         await session.commit()
-    state = {RUNTIME_STATE_KEY: SimpleNamespace(vision=DisabledVisionCapability()), SETTINGS_STATE_KEY: settings, SESSION_FACTORY_STATE_KEY: factory}
+    # Keep composition complete while rejecting any unexpected external provider call.
+    state = {
+        RUNTIME_STATE_KEY: SimpleNamespace(
+            vision=DisabledVisionCapability(),
+            embedding_client=Mock(spec=[]),
+            qdrant_client=Mock(spec=[]),
+            web_context=Mock(spec=[]),
+            web_grants=Mock(spec=[]),
+        ),
+        SETTINGS_STATE_KEY: settings, SESSION_FACTORY_STATE_KEY: factory,
+    }
     try:
         yield SimpleNamespace(engine=engine, factory=factory, settings=settings, keys=keys, legacy=legacy, state=state)
     finally:
@@ -392,7 +403,11 @@ async def test_real_mcp_minimal_full_passport_read_rest_unicode_and_create_task(
                 result = await rest.get(f"/api/v1/projects/{await project_id(env, 'FULL')}")
                 assert result.status_code == 200
                 saved = result.json()
-                assert saved["description_sections"] == {**sections, "additional": long_text.strip()}
+                assert saved["description_sections"] == {
+                    **sections, "additional": long_text.strip(),
+                    "audience": "", "capabilities": "", "boundaries": "", "constraints": "",
+                    "glossary": "", "decisions": "", "open_questions": "",
+                }
                 assert saved["description_md"] == expected and saved["icon"] == "lucide:rocket"
             async with env.factory() as session:
                 pid = await project_id(env, "FULL")
@@ -406,6 +421,7 @@ async def test_real_mcp_minimal_full_passport_read_rest_unicode_and_create_task(
 TCP_SERVER = '''
 import os
 from types import SimpleNamespace
+from unittest.mock import Mock
 import uvicorn
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from src.clients.vision import DisabledVisionCapability
@@ -420,7 +436,11 @@ settings.knowledge.knowledge_enabled = True
 engine = create_async_engine(os.environ["PROJECT_CREATION_TEST_DB"])
 factory = async_sessionmaker(engine, expire_on_commit=False)
 app = build_mcp_app(settings=settings)
-state = {RUNTIME_STATE_KEY: SimpleNamespace(vision=DisabledVisionCapability()), SESSION_FACTORY_STATE_KEY: factory, SETTINGS_STATE_KEY: settings}
+state = {RUNTIME_STATE_KEY: SimpleNamespace(
+    vision=DisabledVisionCapability(),
+    embedding_client=Mock(spec=[]), qdrant_client=Mock(spec=[]),
+    web_context=Mock(spec=[]), web_grants=Mock(spec=[]),
+), SESSION_FACTORY_STATE_KEY: factory, SETTINGS_STATE_KEY: settings}
 dropped = False
 async def with_resources(scope, receive, send):
     global dropped

@@ -109,7 +109,9 @@ async def test_tools_are_generated_from_the_registry_without_hand_written_copies
 
     assert result.output.answer == "Готово."
     expected = {
-        tool.name: tool for tool in executor.tools.values() if ArisMode.WIDGET_PROJECT in tool.modes
+        tool.name: tool
+        for tool in executor.tools.values()
+        if ArisMode.WIDGET_PROJECT in tool.modes and not tool.required_scopes
     }
     assert {item.name for item in offered} == set(expected)
     for item in offered:
@@ -186,7 +188,10 @@ async def test_write_tools_are_not_offered_without_write_right_or_key_scope():
         visible = set(offered) & mutating
         if expect is None:
             assert visible == {
-                name for name in mutating if ArisMode.WIDGET_PROJECT in executor.tools[name].modes
+                name
+                for name in mutating
+                if ArisMode.WIDGET_PROJECT in executor.tools[name].modes
+                and not executor.tools[name].required_scopes
             }
         else:
             assert visible == expect
@@ -1189,7 +1194,8 @@ async def test_gateway_sends_and_measures_only_visible_schemas_before_and_after_
         sum(item["function"]["name"] != "telos_submit_answer" for item in payload["tools"])
         for payload in seen
     ]
-    assert wire_counts == [1, 11, 11]
+    assert wire_counts == [1, 12, 12]
+    assert "telos_prepare_task" in {item["function"]["name"] for item in seen[1]["tools"]}
     assert [item["tools_offered"] for item in result.model_requests] == wire_counts
     assert all(payload["reasoning"] == extra_body["reasoning"] for payload in seen)
     assert all(payload["temperature"] == 0.3 for payload in seen)

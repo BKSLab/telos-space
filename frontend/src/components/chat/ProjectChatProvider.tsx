@@ -82,6 +82,10 @@ export function ProjectChatProvider({ projectId, projectKey, children, chatVisib
             const message = event.data.message;
             if (message) {
                 client.setQueriesData<ChatHistory>({ queryKey: chatKeys.messages(projectId, userId) }, (old) => applyChatMessage(old, { ...message, eventSeq: event.seq }));
+                if (message.agent?.requires_context_validation && message.agent.status === "completed") {
+                    // Broadcast has no reader identity. Hydrate only through the viewer's guarded GET.
+                    void client.invalidateQueries({ queryKey: chatKeys.messages(projectId, userId) });
+                }
                 if (event.type === "message.updated" || event.type === "message.deleted") {
                     let referencesChanged = false;
                     client.setQueriesData<ChatHistory>({ queryKey: chatKeys.messages(projectId, userId) }, old => {

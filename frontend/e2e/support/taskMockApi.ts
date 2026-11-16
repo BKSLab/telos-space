@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import type { MyTask, Task, TaskComment, TaskTransferLosses, TaskStatus } from "../../src/lib/types";
 import { installMockApi as installBaseApi, mockState as baseState, stamp } from "./mockApi";
 
-const zeroLosses: TaskTransferLosses = { dependencies: 0, document_links: 0, risks: 0, board_stickers: 0, wbs_placements: 0 };
+const zeroLosses: TaskTransferLosses = { dependencies: 0, document_links: 0, risks: 0, board_stickers: 0, wbs_placements: 0, git_links: 0 };
 interface TaskAttentionItem {
     task_id: number; revision: number; deadline_revision: number; overdue: boolean;
     is_new: boolean; is_overdue: boolean; is_updated: boolean;

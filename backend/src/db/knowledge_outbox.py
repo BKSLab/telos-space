@@ -4,7 +4,7 @@
 Одна транзакция создаёт не более одного задания на каждый затронутый проект.
 """
 
-from sqlalchemy import event, text
+from sqlalchemy import event, inspect, text
 
 OUTBOX_FUNCTION = """
 CREATE OR REPLACE FUNCTION knowledge_project_changed() RETURNS trigger AS $$
@@ -69,7 +69,35 @@ def outbox_statements(rules=None) -> list[str]:
 
 def install_outbox(connection, rules=None):
     """Устанавливает единую функцию и триггеры выбранной версии реестра."""
-    for statement in outbox_statements(rules):
+    if rules is None:
+        from src.knowledge.catalog import POLICIES
+
+        rules = [
+            (rule.table, rule.scope, rule.fields) for rule in POLICIES if rule.invalidates_index
+        ]
+    inspector = inspect(connection)
+    tables = set(inspector.get_table_names())
+    required = {"self": {"id"}, "project": {"project_id"}, "task": {"task_id"}, "user": {"id"}}
+    physical_rules = []
+    for table, scope, declared_fields in rules:
+        if table not in tables:
+            continue
+        columns = {item["name"] for item in inspector.get_columns(table)}
+        if not required.get(scope, set()).issubset(columns):
+            continue
+        if scope == "document" and not columns.intersection({"project_id", "owner_task_id"}):
+            continue
+        if scope in {"task", "document"} and "tasks" not in tables:
+            continue
+        if scope == "user" and "project_members" not in tables:
+            continue
+        fields = tuple(name for name in declared_fields if name in columns)
+        if not set(fields).difference({"created_at", "updated_at"}):
+            continue
+        # Старые миграции передают и явные правила из текущего каталога.
+        # Валидный frozen-набор сохраняется; отсутствующее не попадает в DDL.
+        physical_rules.append((table, scope, fields))
+    for statement in outbox_statements(physical_rules):
         connection.execute(text(statement))
 
 

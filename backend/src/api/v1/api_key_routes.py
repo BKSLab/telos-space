@@ -35,11 +35,20 @@ _P = "/api/v1"
 
 #: (HTTP-метод, шаблон маршрута) → требуемое право.
 API_KEY_ROUTE_SCOPES: Final[dict[tuple[str, str], str]] = {
+    ("GET", f"{_P}/projects/{{project_id}}/knowledge/map"): SCOPE_KNOWLEDGE_READ,
+    ("GET", f"{_P}/projects/{{project_id}}/knowledge/map/status"): SCOPE_KNOWLEDGE_READ,
+    ("GET", f"{_P}/projects/{{project_id}}/knowledge/map/claims/{{claim_id}}"): SCOPE_KNOWLEDGE_READ,
+    ("POST", f"{_P}/projects/{{project_id}}/knowledge/map/refresh"): SCOPE_PROJECTS_WRITE,
+    ("GET", f"{_P}/projects/{{project_id}}/web-research/status"): SCOPE_KNOWLEDGE_READ,
+    ("POST", f"{_P}/projects/{{project_id}}/web-research/search"): SCOPE_KNOWLEDGE_READ,
+    ("POST", f"{_P}/projects/{{project_id}}/web-research/read"): SCOPE_KNOWLEDGE_READ,
+    ("POST", f"{_P}/projects/{{project_id}}/web-research/documents"): SCOPE_PROJECTS_WRITE,
     # ── Проекты: карточка, стадии, команда, вехи, календарь, риски ──────────
     ("GET", f"{_P}/projects"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/stats"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/deadline-history"): SCOPE_PROJECTS_READ,
+    ("GET", f"{_P}/projects/{{project_id}}/context-history"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/stages"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/members"): SCOPE_PROJECTS_READ,
     ("GET", f"{_P}/projects/{{project_id}}/milestones"): SCOPE_PROJECTS_READ,
@@ -161,6 +170,41 @@ for base in (f"{_P}/boards", f"{_P}/projects/{{project_id}}/boards"):
 _PROMOTION = ("POST", f"{_P}/boards/{{board_id}}/create-project")
 API_KEY_ROUTE_SCOPES[_PROMOTION] = SCOPE_BOARDS_WRITE
 API_KEY_EXTRA_SCOPES: Final = {_PROMOTION: (SCOPE_PROJECTS_WRITE,)}
+for method, suffix, scope in (
+    *(("GET", suffix, SCOPE_KNOWLEDGE_READ) for suffix in (
+        "/connections", "/connections/{connection_id}",
+        "/connections/{connection_id}/tree", "/connections/{connection_id}/file",
+        "/connections/{connection_id}/compare", "/search", "/map",
+    )),
+    *((method, suffix, SCOPE_PROJECTS_WRITE) for method, suffix in (
+        ("POST", "/connections"), ("PATCH", "/connections/{connection_id}"),
+        ("DELETE", "/connections/{connection_id}"),
+        ("POST", "/connections/{connection_id}/sync"),
+    )),
+    ("GET", "/tasks/{task_id}/links", SCOPE_TASKS_READ),
+    ("GET", "/tasks/{task_id}/candidates", SCOPE_TASKS_READ),
+    ("POST", "/tasks/{task_id}/links", SCOPE_TASKS_WRITE),
+    ("DELETE", "/tasks/{task_id}/links/{link_id}", SCOPE_TASKS_WRITE),
+    ("POST", "/tasks/{task_id}/links/{link_id}/refresh", SCOPE_TASKS_WRITE),
+):
+    pair = (method, f"{_P}/projects/{{project_id}}/git{suffix}")
+    API_KEY_ROUTE_SCOPES[pair] = scope
+    API_KEY_EXTRA_SCOPES[pair] = tuple(
+        additional for additional in (SCOPE_PROJECTS_READ, SCOPE_KNOWLEDGE_READ)
+        if additional != scope
+    )
+
+for method, suffix, additional in (
+    ("GET", "/knowledge/map", (SCOPE_PROJECTS_READ,)),
+    ("GET", "/knowledge/map/status", (SCOPE_PROJECTS_READ,)),
+    ("GET", "/knowledge/map/claims/{claim_id}", (SCOPE_PROJECTS_READ,)),
+    ("POST", "/knowledge/map/refresh", (SCOPE_PROJECTS_READ, SCOPE_KNOWLEDGE_READ)),
+    ("GET", "/web-research/status", (SCOPE_PROJECTS_READ,)),
+    ("POST", "/web-research/search", (SCOPE_PROJECTS_READ,)),
+    ("POST", "/web-research/read", (SCOPE_PROJECTS_READ,)),
+    ("POST", "/web-research/documents", (SCOPE_PROJECTS_READ, SCOPE_KNOWLEDGE_READ)),
+):
+    API_KEY_EXTRA_SCOPES[(method, f"{_P}/projects/{{project_id}}{suffix}")] = additional
 
 
 def required_scope(method: str, route_path: str) -> str | None:

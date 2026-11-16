@@ -63,9 +63,12 @@ def make_project(project_id: int = 7, key: str = "PROJ") -> SimpleNamespace:
     now = datetime.now(UTC)
     return SimpleNamespace(
         id=project_id,
+        owner_id=OWNER_ID,
         key=key,
         name="Тестовый проект",
         description_md=None,
+        description_sections=None,
+        context_revision=0,
         status="ACTIVE",
         color="#58a6ff",
         icon=None,
@@ -89,6 +92,14 @@ def build_service(
     members = members_repository or AsyncMock(spec=ProjectMembersRepository)
     if members_repository is None:
         members.get_project_ids_for_user.return_value = {7}
+    users_repository = AsyncMock(spec=UsersRepository)
+    users_repository.get_by_id.return_value = SimpleNamespace(
+        id=OWNER_ID,
+        username="owner",
+        last_name="Тестов",
+        first_name="Иван",
+        middle_name=None,
+    )
     return ProjectsService(
         projects_repository=projects_repository or AsyncMock(spec=ProjectsRepository),
         members_repository=members,
@@ -97,7 +108,7 @@ def build_service(
         unit_of_work=unit_of_work or AsyncMock(spec=UnitOfWork),
         knowledge_events=knowledge_events or AsyncMock(spec=KnowledgeEvents),
         attachment_storage=AsyncMock(spec=TaskAttachmentStorage),
-        users_repository=AsyncMock(spec=UsersRepository),
+        users_repository=users_repository,
         deadline_changes_repository=AsyncMock(spec=ProjectDeadlineChangesRepository),
     )
 

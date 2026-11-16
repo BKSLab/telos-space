@@ -70,7 +70,7 @@ def personal_service(*, project_id=None):
     )
     db = SimpleNamespace(
         access=SimpleNamespace(ensure_task_access=AsyncMock()),
-        tasks=SimpleNamespace(get_task=AsyncMock(side_effect=[initial, current])),
+        tasks=SimpleNamespace(get_task=AsyncMock(return_value=current)),
     )
 
     async def read(context, arguments):
@@ -124,20 +124,9 @@ async def test_project_direct_read_without_model_sources_returns_one_current_pri
         return final("Проверена задача.")
 
     service.agent_model = FunctionModel(respond)
-    answer = await service.ask(project_id=project.id, question="Что с PROJ-12?", history=[])
-
+    with pytest.raises(AgentAnswerError, match="Источники изменились"):
+        await service.ask(project_id=project.id, question="Что с PROJ-12?", history=[])
     assert step == 3 and handler.await_count == 1
-    assert len(answer.sources) == 1
-    source = answer.sources[0]
-    assert (source.source_id, source.entity_id, source.task_id, source.is_primary) == (
-        "task:7",
-        7,
-        7,
-        True,
-    )
-    assert "Текущий заголовок" in source.title
-    assert source.card.key == "PROJ-12" and source.card.priority == "LOW"
-    assert source.card.summary == "Актуальное описание"
     assert db.sources.get_project_rows.await_count >= 2
     clients.embedding_client.get_embedding.assert_not_awaited()
     clients.llm_client.get_structured_response.assert_not_awaited()
@@ -223,7 +212,7 @@ async def test_personal_direct_read_returns_fresh_task_after_acl_with_fallback_o
         source.excerpt == current.description_md and source.card.summary == current.description_md
     )
     assert source.card.priority == "LOW" and source.card.assignee == current.assignee
-    assert db.access.ensure_task_access.await_count == db.tasks.get_task.await_count == 2
+    assert db.access.ensure_task_access.await_count == db.tasks.get_task.await_count == 3
     source_db.sources.get_project_rows.assert_not_awaited()
     clients.embedding_client.get_embedding.assert_not_awaited()
     clients.qdrant_client.search.assert_not_awaited()
@@ -233,7 +222,7 @@ async def test_personal_direct_read_returns_fresh_task_after_acl_with_fallback_o
 async def test_personal_list_or_multiple_direct_reads_do_not_select_an_arbitrary_task(kind):
     service, clients, source_db, db, initial, _ = personal_service()
     second = initial.model_copy(update={"id": 8, "key": "PERSONAL-13", "title": "Другая задача"})
-    db.tasks.get_task.side_effect = [initial, second]
+    db.tasks.get_task.side_effect = lambda task_id: initial if task_id == initial.id else second
     listed = AsyncMock(
         return_value={"items": [{"source_id": "task:7", "task": initial.model_dump(mode="json")}]}
     )
@@ -258,7 +247,7 @@ async def test_personal_list_or_multiple_direct_reads_do_not_select_an_arbitrary
     answer = await ask_personal(service)
 
     assert answer.sources == []
-    assert db.access.ensure_task_access.await_count == (0 if kind == "list" else 2)
+    assert db.access.ensure_task_access.await_count == (1 if kind == "list" else 4)
     source_db.sources.get_project_rows.assert_not_awaited()
 
 
@@ -291,7 +280,7 @@ async def test_forged_source_ids_and_primary_reference_never_become_task_cards(p
 
     assert answer.sources == []
     if personal:
-        assert db.access.ensure_task_access.await_count == db.tasks.get_task.await_count == 1
+        assert db.access.ensure_task_access.await_count == db.tasks.get_task.await_count == 2
 
 
 @pytest.mark.parametrize("change", ["delete", "move"])
@@ -318,9 +307,8 @@ async def test_project_task_removed_from_current_scope_is_not_returned_from_cach
         )
 
     clients.llm_client.get_structured_response.side_effect = respond
-    answer = await service.ask(project_id=1, question="Покажи задачу", history=[])
-
-    assert answer.sources == []
+    with pytest.raises(AgentAnswerError, match="Источники изменились"):
+        await service.ask(project_id=1, question="Покажи задачу", history=[])
     assert db.sources.get_project_rows.await_count >= 2
 
 

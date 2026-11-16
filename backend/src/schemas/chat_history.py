@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from src.schemas.chat_files import ChatFileSchema
 from src.schemas.chat_references import ChatMessageReferenceSchema
@@ -198,6 +198,7 @@ class ChatHistoryFiltersSchema(BaseModel):
 
 
 class ChatHistoryPageSchema(BaseModel):
+    _source_guards: tuple = PrivateAttr(default=())
     """Страница подходящих сообщений в хронологическом порядке."""
 
     items: list[ChatHistoryMessageSchema] = Field(

@@ -18,7 +18,6 @@ from src.dependencies.auth import PrincipalDep, require_write_scope
 from src.dependencies.chat import (
     ChatPrincipalDep,
     require_chat_access,
-    require_chat_write_scope,
 )
 from src.dependencies.services import (
     AgentActionsServiceDep,
@@ -50,7 +49,6 @@ chat_router = APIRouter(
 
 @router.post(
     "/{conversation_id}/actions/{action_id}/decision",
-    dependencies=[Depends(require_write_scope)],
     response_model=AgentToolRunSchema,
     summary="Решение по действию Ариса в виджете",
     description="Выполняет либо отклоняет действие, которое Арис предложил в личном диалоге. Параметры нельзя подменить при подтверждении; после решения Арис продолжает ответ (статус реплики снова queued).",
@@ -87,7 +85,12 @@ async def decide_agent_action(
     try:
         result = await service.decide(
             # Проект действия берётся из самого действия, а не из маршрута.
-            context=AgentToolContext(project_id=None, user_id=principal.user_id, can_write=True),
+            context=AgentToolContext(
+                project_id=None,
+                user_id=principal.user_id,
+                can_write=principal.can_write,
+                principal=principal,
+            ),
             conversation_id=conversation_id,
             action_id=action_id,
             decision=data.decision,
@@ -417,7 +420,6 @@ async def retry_agent_message(
 
 @chat_router.post(
     "/actions/{action_id}/decision",
-    dependencies=[Depends(require_chat_write_scope)],
     response_model=AgentToolRunSchema,
     summary="Решение по действию Ариса в чате проекта",
     description="Подтверждает или отклоняет действие, которое Арис предложил в общем чате. Решить может автор просьбы или участник с правами на само действие; действие выполняется от имени решающего с его правами, параметры неизменны. Карточка обновится у всей команды событием message.updated.",
@@ -456,7 +458,10 @@ async def decide_project_chat_aris_action(
     try:
         result = await service.decide_in_chat(
             context=AgentToolContext(
-                project_id=project_id, user_id=principal.user_id, can_write=True
+                project_id=project_id,
+                user_id=principal.user_id,
+                can_write=principal.can_write,
+                principal=principal,
             ),
             action_id=action_id,
             decision=data.decision,

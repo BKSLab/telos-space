@@ -16,15 +16,18 @@ from src.agent.action_catalog import PERSONAL_ACTIONS, PROJECT_ACTIONS
 from src.agent.aris import ArisMode
 from src.agent.tools import AgentToolContext
 from src.core.settings import get_settings
-from src.db.models import ChatAgentTurn, ChatEvent, ChatMessage, ProjectMember
+from src.db.models import AgentToolRun, ChatAgentTurn, ChatEvent, ChatMessage, ProjectMember
+from src.dependencies.agent_context import build_context_evidence_service
 from src.dependencies.scopes import build_agent_project_tool_scope, build_aris_chat_scope
 from src.exceptions.agent_tools import AgentToolAccessError, AgentToolConflictError
 from src.exceptions.ai import AiProviderError
+from src.knowledge.catalog import build_catalog
 from src.repositories.chat_messages import ChatMessagesRepository
 from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeSourceSchema
 from src.schemas.project_chats import ChatMessageCreate
 from src.services.agent_actions import AgentActionsService
 from src.services.aris_chat import ArisChatConfig, ArisChatService
+from src.services.context_evidence import HIDDEN_CONTEXT_ANSWER, ContextEvidence
 from src.services.project_agent import ProjectAgentService
 
 
@@ -55,6 +58,20 @@ async def events(env, message_id):
     async with env.factory() as db:
         rows = (await db.execute(select(ChatEvent).order_by(ChatEvent.seq))).scalars()
         return [row.event_type for row in rows if row.payload.get("message_id") == message_id]
+
+
+async def guarded_proposal(env, text, *, user_id):
+    """Положительный mock-ответ несёт настоящие версии PG-источников preview."""
+    verifier = build_context_evidence_service(session_factory=env.factory, settings=get_settings())
+    env.service.presenter.evidence = verifier
+    async with verifier.scope() as db:
+        catalog = build_catalog(1, await db.sources.get_project_rows(1))
+    ledger = ContextEvidence()
+    for source in catalog.sources.values():
+        ledger.internal(1, source)
+    answer = KnowledgeAnswerSchema(answer=text, sources=[])
+    answer._context_evidence = ledger, verifier.session_principal(user_id)
+    return answer
 
 
 async def test_only_addressed_message_queues_aris_and_placeholder_is_visible_to_all(aris):
@@ -161,8 +178,9 @@ async def test_history_refreshes_terminal_reply_committed_after_reading_placehol
     if outcome == "failed":
         assert reply.content.startswith("Не получилось ответить") and reply.agent.sources == []
     elif outcome == "card_only":
-        assert reply.content == ""
-        assert [source.source_id for source in reply.agent.sources] == ["project:1"]
+        # Legacy mock-card содержит identity, но не source version proof.
+        assert reply.content == HIDDEN_CONTEXT_ANSWER and reply.agent.sources == []
+        assert reply.agent.requires_context_validation is False
     else:
         assert reply.content == "В проекте две задачи." and reply.agent.sources == []
 
@@ -275,7 +293,7 @@ async def test_proposed_action_is_decided_by_requester_or_member_with_rights(ari
             name="telos_delete_task",
             arguments={"task_id": task["id"], "expected_updated_at": task["updated_at"]},
         )
-        return KnowledgeAnswerSchema(answer="Подтвердите удаление в карточке.", sources=[])
+        return await guarded_proposal(env, "Подтвердите удаление в карточке.", user_id=2)
 
     env.agent.ask.side_effect = propose
     await env.service.send(1, 2, message("Арис, удали задачу про окно заказа"))
@@ -303,7 +321,9 @@ async def test_proposed_action_is_decided_by_requester_or_member_with_rights(ari
     with pytest.raises(AgentToolConflictError):
         await decide(2, "reject")
     refreshed = (await env.service.history(1, 2)).messages[-1]
-    assert refreshed.agent.actions[0].status == "completed"
+    assert not refreshed.agent.actions and refreshed.content == HIDDEN_CONTEXT_ANSWER
+    async with env.factory() as db:
+        assert (await db.get(AgentToolRun, action.id)).status == "completed"
     assert (await events(env, refreshed.id))[-1] == "message.updated"
 
 
@@ -315,7 +335,7 @@ async def test_owner_only_action_needs_owner_rights_and_requester_can_reject(ari
         await env.actions.execute(
             context=kwargs["execution"], name="telos_remove_member", arguments={"user_id": 2}
         )
-        return KnowledgeAnswerSchema(answer="Жду решения.", sources=[])
+        return await guarded_proposal(env, "Жду решения.", user_id=1)
 
     env.agent.ask.side_effect = propose
     await env.service.send(1, 1, message("Арис, убери второго участника"))

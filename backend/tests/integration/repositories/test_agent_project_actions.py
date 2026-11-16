@@ -431,15 +431,16 @@ async def test_document_actions_keep_owner_scopes_and_recheck_completed_receipts
 
 
 async def test_personal_document_actions_keep_personal_and_shared_project_contexts_separate(actions_env):
-    import json
     from unittest.mock import AsyncMock
+
+    from pydantic_ai.messages import ModelResponse, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
 
     from src.agent.action_catalog import PERSONAL_ACTIONS
     from src.agent.aris import ArisMode
-    from src.agent.tools import AgentToolRequest
     from src.dependencies.services import build_project_tool_executor
     from src.services.project_query import ProjectQueryService
-    from tests.unit.knowledge.agent_models import LegacyOutput
+    from tests.unit.knowledge.agent_models import final, tool_results
     from tests.unit.knowledge.test_project_agent import build_service
 
     env = actions_env
@@ -461,17 +462,28 @@ async def test_personal_document_actions_keep_personal_and_shared_project_contex
     service, _, clients, source_db = build_service()
     service.tools = build_project_tool_executor(AsyncMock(spec=ProjectQueryService), env.actions)
 
-    async def respond(*, content, **_kwargs):
-        payload = json.loads(content)
-        if not payload.get("read_results"):
-            return LegacyOutput(tool_calls=[AgentToolRequest(name="telos_get_document", arguments={"document_ref": private_ref})])
-        page = payload["read_results"][0]["result"]
-        return LegacyOutput(answer="Личные условия проверены.", source_ids=[page["source_handle"]], primary_reference=page["fragment_handle"])
+    model_calls = []
 
-    clients.llm_client.get_structured_response.side_effect = respond
+    async def respond(messages, info):
+        offered = {tool.name for tool in info.function_tools}
+        model_calls.append(offered)
+        if "telos_get_document" not in offered:
+            return ModelResponse(parts=[ToolCallPart("telos_load_capability", {"id": "documents"})])
+        reads = tool_results(messages)
+        if not reads:
+            return ModelResponse(parts=[ToolCallPart("telos_get_document", {"document_ref": private_ref})])
+        assert reads[0]["request"] == {
+            "name": "telos_get_document", "arguments": {"document_ref": private_ref}
+        }
+        page = reads[0]["result"]
+        return final("Личные условия проверены.", [page["source_handle"]], page["fragment_handle"])
+
+    service.agent_model = FunctionModel(respond)
     answer = await service.ask_personal(question="Что сказано в личном документе?", history=[], memory="", actor={"user_id": 1}, execution=replace(personal, can_write=False))
+    assert answer.answer == "Личные условия проверены." and len(model_calls) == 3
     assert len(answer.sources) == 1 and answer.sources[0].document_ref == private_ref
     assert answer.sources[0].is_primary and answer.sources[0].reference.quote == "Приватные условия"
+    clients.llm_client.get_structured_response.assert_not_awaited()
     source_db.sources.get_project_rows.assert_not_awaited()
     clients.embedding_client.get_embedding.assert_not_awaited()
     clients.qdrant_client.search.assert_not_awaited()

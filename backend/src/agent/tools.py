@@ -46,6 +46,11 @@ class AgentToolContext:
     allowed_tools: frozenset[str] | None = None
     principal: "Principal | None" = None
     timezone: str = "UTC"
+    approval_id: UUID | None = None
+    """Только _apply_decision задаёт ID сохранённого человеческого согласия."""
+    request_text: str | None = None
+    origin_read_scopes: frozenset[str] = frozenset()
+    """Только транспорт/серверная policy задаёт фактически разрешивший read путь."""
 
     def allows(self, name: str) -> bool:
         """Открыт ли изменяющий инструмент правами ключа этого вопроса."""
@@ -78,6 +83,7 @@ class AgentTool:
     mutating: bool = False
     requires_confirmation: bool = False
     modes: frozenset[ArisMode] = ALL_MODES
+    required_scopes: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         require_canonical_tool_name(self.name)
@@ -128,6 +134,15 @@ class AgentToolExecutor:
         tool = self.tools.get(request.name)
         if tool is None or context.mode not in tool.modes:
             return self._refuse(context, request, "Инструмент недоступен в этом запросе.")
+        if tool.required_scopes and (
+            context.principal is None
+            or not all(context.principal.allows(scope) for scope in tool.required_scopes)
+        ):
+            return self._refuse(
+                context,
+                request,
+                "Не хватает прав knowledge:read и projects:read для чтения контекста.",
+            )
         if tool.mutating and not context.can_write:
             return self._refuse(context, request, "Текущий запрос не разрешает изменения проекта.")
         if tool.mutating and not context.allows(tool.name):

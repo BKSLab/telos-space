@@ -30,6 +30,7 @@ from src.exceptions.project_chats import ChatConflictError, ChatNotFoundError, C
 from src.schemas.chat_references import ChatMessageReferenceSchema
 from src.services.agent_chat_files import ChatFileContext
 from src.services.auth import ApiKeyGrant, Principal
+from src.services.context_evidence import HIDDEN_CONTEXT_ANSWER
 from src.utils.document_refs import encode_document_ref
 from tests.integration.test_agent_chat_files import reader
 
@@ -889,8 +890,10 @@ async def test_card_only_and_entity_only_messages_preserve_bounded_followup_iden
     for data, card_id in ((private, private["completed"]), (shared, shared["answers"][-1])):
         initial = await history.initial_context(context=data["context"])
         card_only = next(message for message in initial["messages"] if message["id"] == card_id)
-        assert card_only["content"] == "" and len(card_only["entity_references"]) == 20
-        hints = card_only["entity_references"]
+        assert card_only["content"] == HIDDEN_CONTEXT_ANSWER and not card_only["entity_references"]
+        # Pure bounding of metadata is distinct from proof of current source ACL.
+        hints = [hint.model_dump() for hint in history._entity_hints(sources)]
+        assert len(hints) == 20
         assert hints[0]["entity_type"] == "task" and hints[0]["entity_id"] == task_id
         assert hints[0]["source_id"] == f"task:{task_id}" and hints[0]["key"] == task_key
         assert hints[1]["task_id"] == task_id
@@ -906,10 +909,10 @@ async def test_card_only_and_entity_only_messages_preserve_bounded_followup_iden
             for hint in hints
         )
         detail = await history.get_message(context=data["context"], message_id=card_id)
-        assert detail["message"]["entity_references"] == hints
+        assert detail["message"]["entity_references"] == []
         page = await history.list_messages(context=data["context"])
         listed = next(message for message in page.items if message.id == card_id)
-        assert [hint.model_dump() for hint in listed.entity_references] == hints
+        assert not listed.entity_references
         serialized = json.dumps(initial, ensure_ascii=False)
         assert all(
             marker not in serialized

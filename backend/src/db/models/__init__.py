@@ -3,6 +3,7 @@ from src.db.document_catalog_ddl import register_document_catalog_ddl
 from src.db.file_processing_ddl import register_file_processing_ddl
 from src.db.knowledge_outbox import register_outbox_ddl
 from src.db.task_attention_ddl import register_attention_ddl
+from src.knowledge.project_events import register_project_knowledge_ddl
 
 from .agent_conversations import AgentConversation
 from .agent_files import AgentFile
@@ -33,6 +34,16 @@ from .documents import Document
 from .file_comment_submissions import FileCommentSubmission
 from .file_processing_jobs import FileProcessingJob
 from .file_search_chunks import FileSearchChunk
+from .git_sources import (
+    GitChange,
+    GitConnection,
+    GitDelivery,
+    GitFile,
+    GitFragment,
+    GitSnapshot,
+    GitSyncJob,
+    GitTaskChangeLink,
+)
 from .knowledge_attachment_texts import KnowledgeAttachmentText
 from .knowledge_index_jobs import (
     KnowledgeEntityType,
@@ -45,11 +56,20 @@ from .knowledge_source_summaries import KnowledgeSourceSummary
 from .project_chats import ProjectChat
 from .project_deadline_changes import ProjectDeadlineChange
 from .project_files import ProjectFile
+from .project_knowledge import (
+    ProjectKnowledgeClaim,
+    ProjectKnowledgeClaimRevision,
+    ProjectKnowledgeEvidence,
+    ProjectKnowledgeManifest,
+    ProjectKnowledgeSource,
+    ProjectKnowledgeSourceVersion,
+    ProjectKnowledgeState,
+)
 from .project_members import ProjectMember, ProjectRole
 from .project_milestones import ProjectMilestone, ProjectMilestoneStatus
 from .project_risks import ProjectRisk
 from .project_stages import ProjectStage
-from .projects import Project, ProjectStatus
+from .projects import Project, ProjectContextHistory, ProjectStatus
 from .task_activity import TaskActivity, TaskActivityEventType
 from .task_attachments import TaskAttachment
 from .task_comment_attachments import TaskCommentAttachment
@@ -86,6 +106,21 @@ __all__ = [
     "Base",
     "FileCommentSubmission",
     "FileProcessingJob",
+    "GitChange",
+    "GitConnection",
+    "GitDelivery",
+    "GitFile",
+    "GitFragment",
+    "GitSnapshot",
+    "GitSyncJob",
+    "GitTaskChangeLink",
+    "ProjectKnowledgeClaim",
+    "ProjectKnowledgeClaimRevision",
+    "ProjectKnowledgeEvidence",
+    "ProjectKnowledgeManifest",
+    "ProjectKnowledgeSource",
+    "ProjectKnowledgeSourceVersion",
+    "ProjectKnowledgeState",
     "FileSearchChunk",
     "ChatAttachment",
     "ChatEvent",
@@ -106,6 +141,7 @@ __all__ = [
     "KnowledgeIndexOperation",
     "KnowledgeIndexStatus",
     "Project",
+    "ProjectContextHistory",
     "ProjectDeadlineChange",
     "ProjectMember",
     "ProjectMilestone",
@@ -141,3 +177,4 @@ register_chat_ddl(Base.metadata)
 register_attention_ddl(Base.metadata)
 register_file_processing_ddl(Base.metadata)
 register_document_catalog_ddl(Base.metadata)
+register_project_knowledge_ddl(Base.metadata)

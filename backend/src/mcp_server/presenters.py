@@ -49,12 +49,12 @@ def project_summary(project: ProjectSummaryDto) -> dict:
     }
 
 
-def project_detail(
-    overview: ProjectOverviewDto, *, full_text: bool = False
-) -> dict:
+def project_detail(overview: ProjectOverviewDto, *, full_text: bool = False) -> dict:
     """Возвращает карточку проекта с превью или полным описанием."""
     result = {
         **project_summary(overview.summary),
+        "context_revision": overview.context_revision,
+        "context": overview.context,
         "description": overview.description if full_text else shorten(overview.description),
         "total_tasks": overview.total_tasks,
         "stages": [
@@ -91,9 +91,7 @@ def task_summary(task: TaskSummaryDto) -> dict:
     }
 
 
-def task_detail(
-    details: TaskDetailsDto, *, full_text: bool = False
-) -> dict:
+def task_detail(details: TaskDetailsDto, *, full_text: bool = False) -> dict:
     """Возвращает карточку задачи с превью или полным описанием."""
     result = {
         **task_summary(details.summary),
@@ -113,9 +111,7 @@ def task_detail(
     return result
 
 
-def comment_item(
-    comment: CommentDto, *, full_text: bool = False
-) -> dict:
+def comment_item(comment: CommentDto, *, full_text: bool = False) -> dict:
     """Возвращает комментарий с превью или полным текстом."""
     result = {
         "task_key": comment.task_key,
@@ -131,7 +127,8 @@ def comment_item(
                 "tool": "telos_get_comment",
                 "arguments": {"task_key": comment.task_key, "comment_id": comment.comment_id},
             }
-            if comment.comment_id is not None else None
+            if comment.comment_id is not None
+            else None
         ),
     )
     return result

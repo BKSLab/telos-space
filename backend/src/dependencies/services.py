@@ -23,6 +23,11 @@ from src.agent.worker import AgentWorker
 from src.clients.agent_model import build_agent_model
 from src.core.settings import Settings
 from src.db.session import async_session_factory
+from src.dependencies.agent_context import (
+    AgentContextToolsDep,
+    build_agent_context_tools,
+    build_context_evidence_service,
+)
 from src.dependencies.chat_files import build_agent_chat_files_service
 from src.dependencies.chat_history import build_agent_chat_history_service
 from src.dependencies.clients import (
@@ -641,25 +646,40 @@ def build_knowledge_tool_executor(query: ProjectQueryService) -> AgentToolExecut
     )
 
 
-def get_agent_chat_files_service(settings: SettingsDep, vision: VisionCapabilityDep) -> AgentChatFilesService:
+def get_agent_chat_files_service(
+    settings: SettingsDep, vision: VisionCapabilityDep
+) -> AgentChatFilesService:
     """Собирает подготовку и чтение файлов с отдельными короткими областями БД."""
-    return build_agent_chat_files_service(session_factory=async_session_factory, settings=settings, vision=vision)
+    return build_agent_chat_files_service(
+        session_factory=async_session_factory, settings=settings, vision=vision
+    )
 
 
 AgentChatFilesServiceDep = Annotated[AgentChatFilesService, Depends(get_agent_chat_files_service)]
 
 
-def get_agent_chat_history_service(chat_files: AgentChatFilesServiceDep) -> AgentChatHistoryService:
+def get_agent_chat_history_service(
+    chat_files: AgentChatFilesServiceDep, context_tools: AgentContextToolsDep
+) -> AgentChatHistoryService:
     """Внедряет scoped history reader с общей авторизацией файлов и переписки."""
-    return build_agent_chat_history_service(session_factory=async_session_factory, chat_files=chat_files)
+    return build_agent_chat_history_service(
+        session_factory=async_session_factory,
+        chat_files=chat_files,
+        evidence=context_tools.evidence,
+    )
 
 
-AgentChatHistoryServiceDep = Annotated[AgentChatHistoryService, Depends(get_agent_chat_history_service)]
+AgentChatHistoryServiceDep = Annotated[
+    AgentChatHistoryService, Depends(get_agent_chat_history_service)
+]
 
 
 def get_agent_actions_service(
-    scope: AgentProjectToolScopeDep, settings: SettingsDep, chat_files: AgentChatFilesServiceDep,
+    scope: AgentProjectToolScopeDep,
+    settings: SettingsDep,
+    chat_files: AgentChatFilesServiceDep,
     chat_history: AgentChatHistoryServiceDep,
+    context_tools: AgentContextToolsDep,
 ) -> AgentActionsService:
     """Собирает общий сценарий проектных инструментов для чата и MCP."""
     return AgentActionsService(
@@ -667,6 +687,7 @@ def get_agent_actions_service(
         actions=ARIS_ACTIONS,
         chat_files=chat_files,
         chat_history=chat_history,
+        context_tools=context_tools,
         confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
     )
 
@@ -707,6 +728,7 @@ def build_project_tool_executor(
             definition.mutating,
             definition.requires_confirmation,
             definition.modes,
+            definition.required_scopes,
         )
         for definition in actions.actions.values()
     )
@@ -755,6 +777,16 @@ def build_project_tool_executor(
                 for item in executor.describe()
                 if item["name"] in wanted
                 and (not item["mutating"] or (context.can_write and context.allows(item["name"])))
+                and (
+                    not executor.tools[item["name"]].required_scopes
+                    or (
+                        context.principal is not None
+                        and all(
+                            context.principal.allows(scope)
+                            for scope in executor.tools[item["name"]].required_scopes
+                        )
+                    )
+                )
                 # Схема проектного действия нужна и для telos_run_project_action вне проекта.
                 and (
                     context.mode in executor.tools[item["name"]].modes
@@ -797,6 +829,7 @@ def get_project_agent_service(
     settings: SettingsDep,
     tools: AgentToolExecutorDep,
     chat_history: AgentChatHistoryServiceDep,
+    context_tools: AgentContextToolsDep,
 ) -> ProjectAgentService:
     """Создаёт Арис.
 
@@ -812,6 +845,7 @@ def get_project_agent_service(
         tools=tools,
         agent_model=build_agent_model(settings.llm, llm_client.http_client),
         chat_history=chat_history,
+        context_tools=context_tools,
     )
 
 
@@ -875,8 +909,15 @@ def build_agent_worker(
     *, session_factory: SessionFactory, settings: Settings, runtime: KnowledgeRuntime
 ) -> AgentWorker:
     """Собирает фоновое исполнение с теми же сервисами и клиентами, что HTTP."""
-    chat_files = build_agent_chat_files_service(session_factory=session_factory, settings=settings, vision=runtime.vision)
-    chat_history = build_agent_chat_history_service(session_factory=session_factory, chat_files=chat_files)
+    chat_files = build_agent_chat_files_service(
+        session_factory=session_factory, settings=settings, vision=runtime.vision
+    )
+    context_tools = build_agent_context_tools(
+        session_factory=session_factory, settings=settings, runtime=runtime
+    )
+    chat_history = build_agent_chat_history_service(
+        session_factory=session_factory, chat_files=chat_files, evidence=context_tools.evidence
+    )
     tools = build_project_tool_executor(
         ProjectQueryService(
             scope=build_project_knowledge_query_scope(session_factory=session_factory)
@@ -886,6 +927,7 @@ def build_agent_worker(
                 session_factory=session_factory, settings=settings
             ),
             actions=ARIS_ACTIONS,
+            context_tools=context_tools,
             chat_files=chat_files,
             chat_history=chat_history,
             confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
@@ -900,6 +942,7 @@ def build_agent_worker(
         tools=tools,
         agent_model=build_agent_model(settings.llm, runtime.http_client),
         chat_history=chat_history,
+        context_tools=context_tools,
     )
     service = AgentConversationsService(
         scope=build_agent_conversation_scope(session_factory=session_factory),
@@ -1289,7 +1332,13 @@ CalendarFeedServiceDep = Annotated[CalendarFeedService, Depends(get_calendar_fee
 def get_agent_requests_service(
     scope: AgentConversationScopeDep, settings: SettingsDep
 ) -> AgentRequestsService:
-    return AgentRequestsService(scope=scope, links=RequestLinks(settings.app.app_public_url))
+    return AgentRequestsService(
+        scope=scope,
+        links=RequestLinks(settings.app.app_public_url),
+        evidence=build_context_evidence_service(
+            session_factory=async_session_factory, settings=settings
+        ),
+    )
 
 
 AgentRequestsServiceDep = Annotated[AgentRequestsService, Depends(get_agent_requests_service)]

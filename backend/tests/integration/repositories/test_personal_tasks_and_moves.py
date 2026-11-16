@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 from sqlalchemy import select
 
+from src.db.models.git_sources import GitChange, GitConnection, GitTaskChangeLink
 from src.db.models.task_attachments import TaskAttachment
 from src.db.models.task_comments import TaskComment
 from src.db.models.task_participants import TaskParticipant, TaskParticipantRole
@@ -211,6 +212,14 @@ async def test_move_clears_wbs_and_preserves_files_comments_report(db_session, p
     await ProjectMembersRepository(db_session).save(data={"project_id": project.id, "user_id": user.id, "role": "OWNER"})
     node = await WbsNodesRepository(db_session).save(data={"project_id": project.id, "title": "Раздел", "position": 1000})
     task = await service.create_task(project_id=project.id, data={"title": "Задача с итогом", "wbs_node_id": node.id}, created_by_user_id=user.id)
+    related_task = await service.create_task(project_id=project.id, data={"title": "Другая задача того же PR"}, created_by_user_id=user.id)
+    connection = GitConnection(project_id=project.id, repository_id=101, owner="example", repo="repo", name="Repo", ref="main", include_paths=[""], scope_hash="0" * 64, is_private=False)
+    db_session.add(connection)
+    await db_session.flush()
+    change = GitChange(connection_id=connection.id, kind="pull_request", provider_id="17", title="PR для двух задач", head_sha="a" * 40, status="open")
+    db_session.add(change)
+    await db_session.flush()
+    db_session.add_all([GitTaskChangeLink(task_id=item.id, change_id=change.id, created_by_user_id=user.id) for item in (task, related_task)])
     storage = TaskAttachmentStorage(tmp_path)
     key = await storage.save(task.id, ".txt", b"saved attachment")
     db_session.add_all([
@@ -222,6 +231,7 @@ async def test_move_clears_wbs_and_preserves_files_comments_report(db_session, p
     target = TaskTransferTargetSchema(personal=True)
     preview = await moves.preview(task_id=task.id, target=target, user_id=user.id)
     assert preview.losses.wbs_placements == 1
+    assert preview.losses.git_links == 1
     moved = await moves.move(task_id=task.id, target=target, user_id=user.id)
     assert moved.task.id == task.id and moved.task.kind is TaskKind.PERSONAL
     row = await TasksRepository(db_session).get_by_id(task.id)
@@ -231,6 +241,9 @@ async def test_move_clears_wbs_and_preserves_files_comments_report(db_session, p
     assert len(await TaskCommentsRepository(db_session).get_for_task(task.id)) == 1
     attachment = (await db_session.execute(select(TaskAttachment).where(TaskAttachment.task_id == task.id))).scalar_one()
     assert attachment.storage_key == key and storage.resolve(key).read_bytes() == b"saved attachment"
+    assert (await db_session.execute(select(GitTaskChangeLink).where(GitTaskChangeLink.task_id == task.id))).scalars().all() == []
+    assert (await db_session.execute(select(GitTaskChangeLink).where(GitTaskChangeLink.task_id == related_task.id))).scalar_one().change_id == change.id
+    assert (await db_session.execute(select(GitChange).where(GitChange.id == change.id))).scalar_one().title == "PR для двух задач"
     returned = await moves.move(task_id=task.id, target=TaskTransferTargetSchema(project_id=project.id), user_id=user.id)
     assert returned.task.project_id == project.id and returned.task.status is None
     assert returned.task.wbs_node_id is None

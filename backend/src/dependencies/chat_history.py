@@ -12,6 +12,7 @@ from src.services.agent_chat_history import (
     ChatHistoryScope,
     ChatHistoryScopeFactory,
 )
+from src.services.context_evidence import ContextEvidenceService
 
 
 def build_agent_chat_history_scope(
@@ -28,9 +29,14 @@ def build_agent_chat_history_scope(
 
 
 def build_agent_chat_history_service(
-    *, session_factory: async_sessionmaker[AsyncSession], chat_files: AgentChatFilesService
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_files: AgentChatFilesService,
+    evidence: ContextEvidenceService | None = None,
 ) -> AgentChatHistoryService:
     """Права исходят из того же chat_files, который обслуживает текущий runtime."""
     return AgentChatHistoryService(
-        files=chat_files, scope=build_agent_chat_history_scope(session_factory=session_factory)
+        files=chat_files,
+        scope=build_agent_chat_history_scope(session_factory=session_factory),
+        evidence=evidence,
     )

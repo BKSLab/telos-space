@@ -36,6 +36,7 @@ class SourceType(StrEnum):
     ACTIVITY = "activity"
     DEADLINE_CHANGE = "deadline_change"
     ANALYTICS_REPORT = "analytics_report"
+    GIT_FILE = "git_file"
 
 
 @dataclass(frozen=True)
@@ -96,7 +97,7 @@ POLICIES = (
         "self",
         SourceType.PROJECT,
         "Проект",
-        "id owner_id key name description_md status start_date due_date description_sections due_date_has_been_set created_at updated_at",
+        "id owner_id key name description_md status start_date due_date description_sections context_revision due_date_has_been_set created_at updated_at",
         "description_md",
         "name",
     ),
@@ -211,13 +212,21 @@ POLICIES = (
         "created_at",
     ),
     # Связи входят в граф обоих концов; голые идентификаторы не образуют embeddings.
-    policy("document_links", "task", None, "Документ задачи", "id document_id project_file_id task_id"),
     policy(
-        "task_comment_attachments", "task", None, "Вложение комментария",
+        "document_links", "task", None, "Документ задачи", "id document_id project_file_id task_id"
+    ),
+    policy(
+        "task_comment_attachments",
+        "task",
+        None,
+        "Вложение комментария",
         "comment_id attachment_id task_id",
     ),
     policy(
-        "task_comment_documents", "task", None, "Документ комментария",
+        "task_comment_documents",
+        "task",
+        None,
+        "Документ комментария",
         "id comment_id task_id document_id project_file_id document_link_id",
     ),
     policy("project_sticker_task_links", "task", None, "Стикер задачи", "sticker_id task_id"),
@@ -264,6 +273,22 @@ POLICIES = (
 POLICY_BY_TABLE = {item.table: item for item in POLICIES}
 POLICY_BY_TYPE = {item.kind: item for item in POLICIES if item.kind}
 EXCLUDED_TABLES = {
+    "git_connections": "Credential binding и private repo: только GitSourceService с текущим Contents proof, не generic SQL reader.",
+    "git_snapshots": "Git версии и coverage выдаются через proof-gated GitSourceService.",
+    "git_files": "GitFile authoritative cache доступен только после live remote proof; raw POLICIES обошла бы upstream revoke.",
+    "git_fragments": "Производный FTS GitSourceService; тот же доказательный reader проверяет текущую привязку и доступ.",
+    "git_sync_jobs": "Checkpoint/очередь Git, не первичный источник карты.",
+    "git_deliveries": "Квитанции webhook, не источник знаний и не рекурсивный outbox.",
+    "git_changes": "PR/commit metadata требуют текущего Git proof и repository binding.",
+    "git_task_change_links": "N:N связи с Git проходят общий GitSourceService и текущие права.",
+    "project_knowledge_states": "Производная карта: поколения/состояния не становятся источником и не ставят сами себя в очередь.",
+    "project_knowledge_sources": "Поколения существующих источников; содержание читается через общий каталог.",
+    "project_knowledge_source_versions": "Metadata точных версий; выдача только через ProjectKnowledgeService с текущими generation/ACL.",
+    "project_knowledge_manifests": "Квитанции входных наборов карты, не первичные факты.",
+    "project_knowledge_claims": "Производные утверждения читаются с проверкой evidence, без рекурсивной индексации.",
+    "project_knowledge_claim_revisions": "История производных утверждений; прежний текст не выдаётся после инвалидации источника.",
+    "project_knowledge_evidence": "Проверяемые ссылки/фрагменты версий карты, не новый первичный корпус.",
+    "project_context_history": "Неизменяемые исторические snapshots; актуальные знания читают единственный текущий паспорт проекта, история выдаётся отдельно по тем же правам.",
     "chat_file_texts": "Тексты приватных и командных файлов доступны только в точном контексте переписки, без проектного Qdrant.",
     "document_submissions": "Квитанции повторов; документы индексируются по исходной сущности.",
     "document_index_states": "Производное состояние обработки документов, не самостоятельные знания.",
@@ -414,7 +439,7 @@ class ProjectSource:
             self.properties.get("owner_task_id")
             if self.kind is SourceType.DOCUMENT
             else self.properties.get("task_id")
-            if self.kind in {SourceType.COMMENT, SourceType.ATTACHMENT, SourceType.ACTIVITY}
+            if self.kind in {SourceType.COMMENT, SourceType.ATTACHMENT, SourceType.ACTIVITY, SourceType.TASK_REPORT}
             else None
         )
         return {
@@ -534,7 +559,9 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             }
             title = str(row.get(rule.title_field) or rule.label).strip()
             if rule.kind in {SourceType.ATTACHMENT, SourceType.PROJECT_FILE}:
-                title = str(row.get("display_title") or row.get(rule.title_field) or rule.label).strip()
+                title = str(
+                    row.get("display_title") or row.get(rule.title_field) or rule.label
+                ).strip()
             if rule.title_field in rule.semantic:
                 # Стикер/комментарий уже входит в текст целиком; коротко только название.
                 title = title[:200]
@@ -589,7 +616,9 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
                 if extracted.get("text"):
                     document_text = extracted["text"]
                     document_rendition = "extracted_text"
-                    document_text_start = len("\n\n".join(text_parts)) + 2 + len("## Содержимое файла\n")
+                    document_text_start = (
+                        len("\n\n".join(text_parts)) + 2 + len("## Содержимое файла\n")
+                    )
                     text_parts.append(f"## Содержимое файла\n{extracted['text']}")
                 else:
                     properties["extraction"].setdefault("status", "pending")
@@ -606,7 +635,13 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             if rule.kind is SourceType.WBS_NODE and row.get("parent_id"):
                 parent = f"wbs_node:{row['parent_id']}"
             source = ProjectSource(
-                project_id, rule.kind, row["id"], title, "\n\n".join(text_parts), properties, parent,
+                project_id,
+                rule.kind,
+                row["id"],
+                title,
+                "\n\n".join(text_parts),
+                properties,
+                parent,
                 document_text=document_text,
                 document_rendition=document_rendition,
                 document_text_start=document_text_start,
@@ -630,7 +665,8 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
                 catalog.link(f"risk:{row['id']}", f"member:{member['id']}", "owned_by", "owns_risk")
     for row in rows.get("document_links", []):
         document_source_id = (
-            f"document:{row['document_id']}" if row.get("document_id")
+            f"document:{row['document_id']}"
+            if row.get("document_id")
             else f"project_file:{row.get('project_file_id')}"
         )
         catalog.link(
@@ -682,7 +718,11 @@ def build_catalog(project_id: int, rows: dict[str, list[dict]]) -> ProjectCatalo
             "attached_to_comment",
         )
     for row in rows.get("task_comment_documents", []):
-        target = f"document:{row['document_id']}" if row.get("document_id") else f"project_file:{row.get('project_file_id')}"
+        target = (
+            f"document:{row['document_id']}"
+            if row.get("document_id")
+            else f"project_file:{row.get('project_file_id')}"
+        )
         catalog.link(
             f"comment:{row['comment_id']}", target, "attached_document", "attached_to_comment"
         )

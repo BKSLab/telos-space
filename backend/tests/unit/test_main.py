@@ -108,6 +108,7 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(main_module, "build_knowledge_runtime", build_runtime)
     monkeypatch.setattr(main_module, "build_knowledge_worker", build_worker)
     agent_started = asyncio.Event()
+    git_started = asyncio.Event()
     files_started = asyncio.Event()
     chat_files_started = asyncio.Event()
     chat_files_stopped = asyncio.Event()
@@ -134,7 +135,9 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             files_started.set()
             await stop_event.wait()
 
-    monkeypatch.setattr(main_module, "build_file_processing_worker", lambda **kwargs: FakeFileWorker())
+    monkeypatch.setattr(
+        main_module, "build_file_processing_worker", lambda **kwargs: FakeFileWorker()
+    )
 
     class FakeAgentWorker:
         async def run(self, stop_event):
@@ -142,6 +145,13 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             await stop_event.wait()
 
     monkeypatch.setattr(main_module, "build_agent_worker", lambda **kwargs: FakeAgentWorker())
+
+    class FakeGitWorker:
+        async def run(self, stop_event):
+            git_started.set()
+            await stop_event.wait()
+
+    monkeypatch.setattr(main_module, "build_git_source_service", lambda **kwargs: FakeGitWorker())
     monkeypatch.setattr(main_module, "close_knowledge_runtime", close_runtime)
     monkeypatch.setattr(main_module, "engine", SimpleNamespace(dispose=dispose_engine))
     monkeypatch.setattr(main_module, "settings", settings)
@@ -169,6 +179,7 @@ def composition(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 
     return SimpleNamespace(
         agent_worker_started=agent_started,
+        git_worker_started=git_started,
         file_worker_started=files_started,
         chat_file_worker_started=chat_files_started,
         chat_file_worker_stopped=chat_files_stopped,
@@ -303,25 +314,27 @@ async def test_lifespan_cancels_a_stuck_worker_and_still_frees_resources(
     composition.dispose_engine.assert_awaited_once_with()
 
 
-async def test_lifespan_does_not_start_the_worker_when_knowledge_is_disabled(
+async def test_lifespan_updates_map_without_semantic_index_when_knowledge_is_disabled(
     composition: SimpleNamespace,
 ) -> None:
-    """С выключенной базой знаний индексатор не собирается и не запускается."""
+    """Карта работает без семантического индекса, Qdrant backfill не вызывается."""
     composition.settings.knowledge.knowledge_enabled = False
 
     async with main_module.lifespan(FastAPI()):
         await asyncio.wait_for(composition.agent_worker_started.wait(), timeout=1)
+        await asyncio.wait_for(composition.git_worker_started.wait(), timeout=1)
         await asyncio.wait_for(composition.file_worker_started.wait(), timeout=1)
         await asyncio.wait_for(composition.chat_file_worker_started.wait(), timeout=1)
 
-    assert composition.worker_started.is_set() is False
-    assert composition.worker_built.runtime is None
+    assert composition.worker_started.is_set() is True
+    assert composition.worker_built.runtime is composition.runtime
     composition.runtime.qdrant_client.backfill_payload_indexes.assert_not_awaited()
     composition.dispose_engine.assert_awaited_once_with()
 
 
 async def test_file_processing_starts_before_qdrant_backfill(composition):
     """Даже ожидающий Qdrant не задерживает независимую обработку файлов."""
+
     async def backfill():
         await asyncio.wait_for(composition.file_worker_started.wait(), timeout=1)
         await asyncio.wait_for(composition.chat_file_worker_started.wait(), timeout=1)

@@ -17,6 +17,7 @@ import { TaskCompletion } from "@/components/dashboard/OverviewCards";
 import { ProjectSummaryPanel } from "@/components/overview/ProjectSummaryPanel";
 
 vi.mock("@/lib/useProjectOutlet", () => ({ useProjectOutlet: () => project }));
+vi.mock("@/components/projects/ProjectKnowledgePanel", () => ({ ProjectKnowledgePanel: () => null }));
 
 const project: Project = {
     id: 7, key: "DEMO", name: "Тестовый проект", status: "ACTIVE", color: "#58a6ff", icon: null,

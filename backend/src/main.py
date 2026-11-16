@@ -32,6 +32,7 @@ from src.api.v1.endpoints.calendar_workload import router as calendar_workload_r
 from src.api.v1.endpoints.dashboard import router as dashboard_router
 from src.api.v1.endpoints.document_catalog import router as document_catalog_router
 from src.api.v1.endpoints.free_boards import router as free_boards_router
+from src.api.v1.endpoints.git_sources import router as git_sources_router
 from src.api.v1.endpoints.knowledge import router as knowledge_router
 from src.api.v1.endpoints.milestones import router as milestones_router
 from src.api.v1.endpoints.my_calendar import router as my_calendar_router
@@ -40,6 +41,7 @@ from src.api.v1.endpoints.project_chat_ws import router as project_chat_ws_route
 from src.api.v1.endpoints.project_chats import download_router as chat_download_router
 from src.api.v1.endpoints.project_chats import router as project_chats_router
 from src.api.v1.endpoints.project_icons import router as project_icons_router
+from src.api.v1.endpoints.project_knowledge import router as project_knowledge_router
 from src.api.v1.endpoints.project_members import router as project_members_router
 from src.api.v1.endpoints.project_risks import router as project_risks_router
 from src.api.v1.endpoints.project_stages import router as project_stages_router
@@ -58,6 +60,7 @@ from src.api.v1.endpoints.task_transfers import router as task_transfers_router
 from src.api.v1.endpoints.tasks import router as tasks_router
 from src.api.v1.endpoints.users import router as users_router
 from src.api.v1.endpoints.wbs_nodes import router as wbs_nodes_router
+from src.api.v1.endpoints.web_research import router as web_research_router
 from src.core.app_state import (
     RUNTIME_STATE_KEY,
     SESSION_FACTORY_STATE_KEY,
@@ -68,6 +71,7 @@ from src.core.settings import get_settings
 from src.db.session import async_session_factory, engine
 from src.dependencies.chat_files import build_agent_chat_files_service
 from src.dependencies.file_processing import build_file_processing_worker
+from src.dependencies.git_sources import build_git_source_service
 from src.dependencies.scopes import build_api_key_usage_recorder
 from src.dependencies.services import build_agent_worker
 from src.dependencies.task_attention import build_task_attention_runtime
@@ -151,16 +155,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[dict[str, object]]:
                 "⚠️ Qdrant недоступен при старте; backfill payload-индексов отложен.",
                 exc_info=True,
             )
-        worker = build_knowledge_worker(
-            session_factory=async_session_factory,
-            settings=settings,
-            runtime=runtime,
-        )
-        worker_task = asyncio.create_task(
-            worker.run(worker_stop),
-            name="project-knowledge-indexer",
-        )
-        logger.info("✅ Фоновый индексатор базы знаний запущен.")
+    worker = build_knowledge_worker(
+        session_factory=async_session_factory,
+        settings=settings,
+        runtime=runtime,
+    )
+    worker_task = asyncio.create_task(
+        worker.run(worker_stop),
+        name="project-knowledge-indexer",
+    )
+    logger.info("✅ Фоновое обновление знаний запущено.")
+    git_worker = build_git_source_service(session_factory=async_session_factory, settings=settings)
+    git_worker_task = asyncio.create_task(git_worker.run(worker_stop), name="project-git-synchronizer")
     agent_worker = build_agent_worker(
         session_factory=async_session_factory, settings=settings, runtime=runtime
     )
@@ -188,6 +194,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[dict[str, object]]:
         await attention_runtime.close()
         await chat_runtime.close()
         worker_stop.set()
+        git_worker_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await git_worker_task
         chat_file_task.cancel()
         with suppress(asyncio.CancelledError):
             await chat_file_task
@@ -257,6 +266,7 @@ async def validation_exception_handler(
 for api_router in (
     project_boards_router,
     free_boards_router,
+    git_sources_router,
     board_shapes_router,
     board_editor_router,
     task_reports_router,
@@ -296,6 +306,8 @@ for api_router in (
     task_dependencies_router,
     task_activity_router,
     knowledge_router,
+    project_knowledge_router,
+    web_research_router,
     agent_conversations_router,
     agent_file_content_router,
     project_chats_router,

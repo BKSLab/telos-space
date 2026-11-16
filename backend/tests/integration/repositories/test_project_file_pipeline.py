@@ -27,6 +27,7 @@ from src.repositories.knowledge_sources import KnowledgeSourcesRepository
 from src.repositories.project_files import ProjectFilesRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.services.knowledge_index import KnowledgeIndexService
+from src.services.project_knowledge_updates import ProjectKnowledgeUpdatesService
 from src.services.source_summaries import SourceSummariesService
 from src.storage.task_attachments import TaskAttachmentStorage
 
@@ -59,7 +60,13 @@ def build_pipeline(db_session, storage):
     async def scope():
         yield service
 
-    worker = KnowledgeWorker(config=None, queue=None, index_service=scope, runtime=None)
+    worker = KnowledgeWorker(
+        config=None,
+        queue=None,
+        index_service=scope,
+        runtime=None,
+        map_updates=AsyncMock(spec=ProjectKnowledgeUpdatesService),
+    )
     return worker, service, sources, qdrant, embeddings
 
 

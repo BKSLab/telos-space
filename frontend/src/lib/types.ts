@@ -76,6 +76,38 @@ export interface ProjectDescription {
     goal: string;
     expected_result: string;
     additional: string;
+    audience?: string;
+    capabilities?: string;
+    boundaries?: string;
+    constraints?: string;
+    glossary?: string;
+    decisions?: string;
+    open_questions?: string;
+}
+
+export interface ProjectContextSummary {
+    revision: number;
+    fields: Record<string, string>;
+    unknown_fields: string[];
+    truncated_fields: string[];
+}
+
+export interface ProjectContextRevision {
+    revision: number;
+    changed_by_user_id: number | null;
+    changed_by_name: string | null;
+    created_at: string;
+    is_initial: boolean;
+    changed_fields: string[];
+}
+
+export interface ProjectContextHistoryPage {
+    items: ProjectContextRevision[];
+    total: number;
+    offset: number;
+    limit: number;
+    has_more: boolean;
+    next_offset: number | null;
 }
 
 export interface ProjectDeadlineChange {
@@ -92,6 +124,8 @@ export interface Project {
     id: number;
     owner_id?: number | null;
     description_sections?: ProjectDescription | null;
+    context_revision?: number;
+    context?: ProjectContextSummary;
     due_date_has_been_set?: boolean;
     key: string;
     name: string;
@@ -124,10 +158,12 @@ export interface ProjectCreate {
     member_usernames?: string[];
 }
 
-export type ProjectUpdate = Partial<ProjectCreate> & {
+export type ProjectUpdate = Omit<Partial<ProjectCreate>, "description_sections"> & {
+    description_sections?: Partial<ProjectDescription> | null;
     order_index?: number;
     due_date_comment?: string;
     expected_due_date?: string | null;
+    expected_context_revision?: number;
 };
 
 export interface StageBreakdown {
@@ -635,6 +671,25 @@ export interface KnowledgeSource {
 export interface KnowledgeAnswer {
     answer: string;
     sources: KnowledgeSource[];
+    external_sources?: ExternalSourceReference[];
+    assertion_references?: AssertionReference[];
+}
+
+export interface ExternalSourceReference {
+    source_id: string; kind: "git_file" | "git_change" | "web_page"; project_id: number;
+    title: string; url: string | null; excerpt?: string | null; content_hash?: string | null;
+    state: "current" | "stale" | "unavailable";
+    fetched_at?: string | null; coverage: string; is_primary: boolean;
+    connection_id?: number | null; repository_id?: number | null; ref?: string | null;
+    commit_sha?: string | null; path?: string | null; blob_sha?: string | null;
+    line_start?: number | null; line_end?: number | null;
+    task_id?: number | null; change_id?: number | null;
+}
+
+export interface AssertionReference {
+    project_id: number; claim_id: string; revision: number; text: string | null;
+    state: "current" | "conflicting" | "stale" | "unavailable";
+    kind: string; verification: string; source_ids: string[]; is_primary: boolean;
 }
 
 export interface KnowledgeStatus {
@@ -674,6 +729,7 @@ export interface AgentConversationPage {
 }
 
 export interface AgentToolRun {
+    effect?: "write" | "external_release";
     id: string;
     tool_name: string;
     title: string;
@@ -703,6 +759,8 @@ export interface ChatMessageReference {
 }
 
 export interface AgentMessage {
+    external_sources?: ExternalSourceReference[];
+    assertion_references?: AssertionReference[];
     actions?: AgentToolRun[];
     files?: AgentFile[];
     id: number;
@@ -1157,6 +1215,7 @@ export type TaskTransferTarget =
     | { personal: true };
 
 export interface TaskTransferLosses {
+    git_links: number;
     wbs_placements: number;
     dependencies: number;
     document_links: number;

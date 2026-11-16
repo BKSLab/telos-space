@@ -74,12 +74,39 @@ export function ProjectForm({ values, onChange, lockKey = false, requireDeadline
                 <Field key={field} label={label} hint={hint}>
                     {(id) => (
                         <Textarea id={id} rows={2} value={values.description_sections[field]}
+                            placeholder="Пока не определено"
                             onChange={(event) => update({ description_sections: {
                                 ...values.description_sections, [field]: event.target.value,
                             } })} />
                     )}
                 </Field>
             ))}
+
+            <details className="rounded-[var(--radius-control)] border border-line-subtle px-3 py-2.5">
+                <summary className="cursor-pointer text-[14px] font-medium text-secondary">Контекст проекта</summary>
+                <p className="mt-2 text-[12px] text-muted">Заполните известное. Остальные сведения можно уточнить позже; ссылки на материалы укажите в нужном разделе.</p>
+                <div className="mt-4 flex min-w-0 flex-col gap-4">
+                    {([
+                        ["audience", "Пользователи и участники", "Для кого проект и кто использует его результат? Состав команды указан отдельно."],
+                        ["capabilities", "Текущие возможности", "Что уже работает? Укажите подтверждающие материалы, если они есть."],
+                        ["boundaries", "Границы проекта", "Что входит в проект и что остаётся за его пределами?"],
+                        ["constraints", "Ограничения", "Какие условия и ограничения нужно учитывать?"],
+                        ["glossary", "Термины", "Названия, сокращения и их значение для команды."],
+                        ["decisions", "Принятые решения", "Что уже согласовано и где зафиксировано?"],
+                        ["open_questions", "Открытые вопросы", "Что предстоит выяснить или согласовать?"],
+                    ] as const).map(([field, label, hint]) => (
+                        <Field key={field} label={label} hint={hint}>
+                            {(id) => (
+                                <Textarea id={id} rows={2} value={values.description_sections[field] ?? ""}
+                                    placeholder="Пока не определено"
+                                    onChange={(event) => update({ description_sections: {
+                                        ...values.description_sections, [field]: event.target.value,
+                                    } })} />
+                            )}
+                        </Field>
+                    ))}
+                </div>
+            </details>
 
             <div className="grid gap-4 sm:grid-cols-3">
                 <Field label="Статус">

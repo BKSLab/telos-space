@@ -20,7 +20,7 @@ from src.api.v1.responses import (
     SERVER_ERROR_RESPONSE,
     VALIDATION_RESPONSE,
 )
-from src.dependencies.auth import PrincipalDep
+from src.dependencies.context_auth import ContextPrincipalDep
 from src.dependencies.services import AgentRequestsServiceDep
 from src.dependencies.settings import SettingsDep
 from src.exceptions.agent_conversations import AgentConversationsServiceError
@@ -52,7 +52,7 @@ ERRORS = {
 )
 async def create_aris_request(
     data: AgentAskSchema,
-    principal: PrincipalDep,
+    principal: ContextPrincipalDep,
     service: AgentRequestsServiceDep,
     settings: SettingsDep,
 ) -> AgentRequestResultSchema:
@@ -81,6 +81,7 @@ async def create_aris_request(
             api_key_id=principal_key_id(principal),
             request_id=request_id,
             timeout_seconds=settings.agent.agent_ask_wait_seconds,
+            principal=principal,
         )
         logger.info("✅ POST /aris/requests: request_id=%s, status=%s.", request_id, result.status)
         return result
@@ -104,7 +105,7 @@ async def create_aris_request(
 )
 async def get_aris_request(
     request_id: RequestIdPath,
-    principal: PrincipalDep,
+    principal: ContextPrincipalDep,
     service: AgentRequestsServiceDep,
 ) -> AgentRequestResultSchema:
     """Отдаёт результат вопроса тому, кто его задал.
@@ -119,7 +120,10 @@ async def get_aris_request(
     try:
         principal.require(SCOPE_AGENT_ASK)
         return await service.get_external_result(
-            user_id=principal.user_id, api_key_id=principal_key_id(principal), request_id=request_id
+            user_id=principal.user_id,
+            api_key_id=principal_key_id(principal),
+            request_id=request_id,
+            principal=principal,
         )
     except (AgentConversationsServiceError, AuthServiceError) as error:
         logger.info("ℹ️ GET /aris/requests/%s: %s.", request_id, error.detail)

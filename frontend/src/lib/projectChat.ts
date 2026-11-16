@@ -1,5 +1,5 @@
 /** Общий контракт HTTP/WS. Серверный seq задаёт порядок внутри проекта. */
-import type { AgentToolRun, ChatMessageReference, KnowledgeSource } from "@/lib/types";
+import type { AgentToolRun, AssertionReference, ChatMessageReference, ExternalSourceReference, KnowledgeSource } from "@/lib/types";
 import { ARIS_NAME } from "@/lib/aris";
 
 export type ChatEntityType = "TASK" | "DOCUMENT" | "RISK" | "MILESTONE" | "WBS_NODE";
@@ -19,6 +19,9 @@ export type ChatAuthorType = "USER" | "AGENT";
 export interface ChatReply { id: number; seq: number; author_type?: ChatAuthorType; author: ChatUser | null; content: string; deleted: boolean }
 /** Состояние ответа Ариса: queued/processing — «Арис думает», completed — ответ, failed — ошибка (текст уже в content). */
 export interface ChatAgentState {
+    requires_context_validation?: boolean;
+    external_sources?: ExternalSourceReference[];
+    assertion_references?: AssertionReference[];
     name: string;
     status: "queued" | "processing" | "completed" | "failed";
     error: string | null;

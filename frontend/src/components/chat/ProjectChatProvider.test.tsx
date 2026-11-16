@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, queryKeys } from "@/lib/api";
@@ -28,10 +29,10 @@ function Notices() {
     return <ul aria-label="События переноса">{chat.taskMoves.map((notice) => <li key={notice.seq}>{notice.text}<button onClick={() => chat.dismissTaskMove(notice.seq)}>Скрыть {notice.seq}</button></li>)}</ul>;
 }
 
-function setup() {
+function setup(extra?: ReactNode) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     for (const [projectId, userId] of [[1, 1], [2, 1], [2, 2]]) client.setQueryData<ProjectChat>(chatKeys.info(projectId, userId), { id: projectId, project_id: projectId, event_cursor: 0, last_read_seq: 0, unread_count: 0, members });
-    const node = (projectId = 1) => <QueryClientProvider client={client}><MemoryRouter><ProjectChatProvider projectId={projectId} projectKey={`DEMO${projectId}`}><Notices /></ProjectChatProvider></MemoryRouter></QueryClientProvider>;
+    const node = (projectId = 1) => <QueryClientProvider client={client}><MemoryRouter><ProjectChatProvider projectId={projectId} projectKey={`DEMO${projectId}`}><Notices />{extra}</ProjectChatProvider></MemoryRouter></QueryClientProvider>;
     const view = render(node());
     return { client, switchProject: (projectId: number) => view.rerender(node(projectId)) };
 }
@@ -45,6 +46,30 @@ afterEach(() => {
     vi.restoreAllMocks();
     connections.length = 0;
     auth.id = 1;
+});
+
+function GuardedHistoryReader() {
+    const query = useQuery({ queryKey: chatKeys.messages(1, 1), queryFn: () => api.get<ChatHistory>("/api/v1/projects/1/chat/messages") });
+    return <p>{query.data?.messages[0]?.content}</p>;
+}
+
+it("гидратирует защищённый broadcast через GET читателя и не повторяет проверку после deny", async () => {
+    let body = "Первый проверенный ответ";
+    let reads = 0;
+    vi.spyOn(api, "get").mockImplementation(async path => {
+        if (path.includes("/messages")) { reads++; return { messages: [message({ content: body })], initialized: true, event_cursor: 1, has_more: false }; }
+        return { id: 1, project_id: 1, event_cursor: 0, last_read_seq: 0, unread_count: 0, members };
+    });
+    const { client } = setup(<GuardedHistoryReader />);
+    await screen.findByText("Первый проверенный ответ");
+    body = "Источники ответа недоступны читателю";
+    const agent = { name: "Арис", status: "completed" as const, error: null, requester: members[0], request_message_id: 6, sources: [], actions: [], requires_context_validation: true };
+    act(() => connections.at(-1)!.onEvent({ type: "message.updated", project_id: 1, seq: 2, data: { message: message({ author_type: "AGENT", content: "Проверяю доступ к источникам…", agent }) } }, false));
+    await screen.findByText(body);
+    expect(reads).toBe(2);
+    act(() => connections.at(-1)!.onEvent({ type: "message.updated", project_id: 1, seq: 3, data: { message: message({ author_type: "AGENT", content: body, agent: { ...agent, requires_context_validation: false } }) } }, false));
+    expect(reads).toBe(2);
+    client.clear();
 });
 
 describe("события переноса в общем чате", () => {

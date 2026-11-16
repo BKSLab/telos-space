@@ -45,6 +45,7 @@ from src.services.access import AccessService
 from src.services.agent_actions import AgentActionsService
 from src.services.agent_chat_files import AgentChatFilesService
 from src.services.agent_chat_history import AgentChatHistoryService
+from src.services.agent_context_tools import AgentContextToolsService
 from src.services.agent_requests import AgentRequestsService, RequestLinks
 from src.services.auth import AuthService
 from src.services.calendar import CalendarService
@@ -319,6 +320,7 @@ def build_tool_services(
     settings: Settings,
     chat_files: AgentChatFilesService | None = None,
     chat_history: AgentChatHistoryService | None = None,
+    context_tools: AgentContextToolsService | None = None,
 ) -> ToolServices:
     """Собирает полный набор сервисов одного вызова инструмента.
 
@@ -349,7 +351,11 @@ def build_tool_services(
         attachments=build_attachments_service(session, settings),
         dependencies=build_dependencies_service(session),
         moves=build_moves_service(session, settings),
-        requests=AgentRequestsService(scope=build_agent_conversation_scope(session_factory=session_factory), links=RequestLinks(settings.app.app_public_url)),
+        requests=AgentRequestsService(
+            scope=build_agent_conversation_scope(session_factory=session_factory),
+            links=RequestLinks(settings.app.app_public_url),
+            evidence=context_tools.evidence if context_tools is not None else None,
+        ),
         project_creation=ProjectCreationService(
             scope=build_agent_project_tool_scope(
                 session_factory=session_factory, settings=settings
@@ -362,6 +368,7 @@ def build_tool_services(
             actions=PROJECT_ACTIONS + PERSONAL_ACTIONS,
             chat_files=chat_files,
             chat_history=chat_history,
+            context_tools=context_tools,
             confirm_ttl=timedelta(hours=settings.agent.agent_action_confirm_ttl_hours),
         ),
     )

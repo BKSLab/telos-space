@@ -94,6 +94,7 @@ export const endpoints = {
     projects: () => `${V1}/projects`,
     projectDefaults: () => `${V1}/projects/defaults`,
     projectDeadlineHistory: (projectId: number) => `${V1}/projects/${projectId}/deadline-history`,
+    projectContextHistory: (projectId: number, offset = 0) => `${V1}/projects/${projectId}/context-history?limit=20&offset=${offset}`,
     project: (projectId: number) => `${V1}/projects/${projectId}`,
     projectStats: (projectId: number) => `${V1}/projects/${projectId}/stats`,
     projectRisks: (projectId: number) => `${V1}/projects/${projectId}/risks`,
@@ -223,6 +224,9 @@ export const queryKeys = {
     projectStats: (projectId: number) => ["projects", projectId, "stats"] as const,
     projectDefaults: ["project-defaults"] as const,
     projectDeadlineHistory: (projectId: number) => ["projects", projectId, "deadline-history"] as const,
+    projectContextHistory: (projectId: number, offset?: number) => offset === undefined
+        ? ["projects", projectId, "context-history"] as const
+        : ["projects", projectId, "context-history", offset] as const,
     projectRisks: (projectId: number) => ["projects", projectId, "risks"] as const,
     projectRiskList: (projectId: number, query: string) => ["projects", projectId, "risks", "list", query] as const,
     projectRisk: (projectId: number, riskId: number) => ["projects", projectId, "risks", "detail", riskId] as const,

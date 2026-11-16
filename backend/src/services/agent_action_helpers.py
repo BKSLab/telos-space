@@ -12,6 +12,28 @@ from src.schemas.tasks import TaskSchema
 from src.services.agent_tool_scope import AgentProjectToolScope
 
 
+def task_model_payload(task, *, project_bound: bool) -> dict:
+    """Детали других источников читаются отдельно с их собственными identity/proofs."""
+    data = task.model_dump(mode="json", exclude={"report", "last_comment", "comments_count"})
+    reads = {"report": {"loaded": False}, "comments": {"loaded": False}}
+    if task.project_id is not None:
+        for key, name in (("report", "telos_get_task_report"), ("comments", "telos_list_comments")):
+            arguments = {"task_id": task.id}
+            reads[key]["read"] = (
+                {"tool": name, "arguments": arguments}
+                if project_bound
+                else {
+                    "tool": "telos_run_project_action",
+                    "arguments": {
+                        "project_key": task.key.rpartition("-")[0],
+                        "name": name,
+                        "arguments": arguments,
+                    },
+                }
+            )
+    return {"task": data, "source_reads": reads, "source_id": f"task:{task.id}"}
+
+
 def page(items: Sequence[BaseModel], args: PageInput) -> dict[str, Any]:
     """Ограничивает публичные результаты списка с курсором продолжения."""
     end = args.offset + args.limit

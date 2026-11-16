@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi.routing import APIRoute, APIWebSocketRoute
 
 from src.api.v1.api_key_routes import API_KEY_ROUTE_SCOPES, extra_scopes, required_scope
+from src.utils.action_effects import EXTERNAL_RELEASE_ACTIONS
 from src.utils.api_scopes import API_SCOPES
 
 TARGET = Path(__file__).resolve().parents[2] / "frontend/src/content/integrations.generated.json"
@@ -26,6 +27,12 @@ SUBSCRIPTIONS = {("GET", "/api/v1/ics/{token}.ics")}
 # Эти сценарии проверяют READ/WRITE в короткой сервисной auth/access области.
 DETACHED_WRITE_ROUTES = {
     ("POST", "/api/v1/tasks/{task_id}/comments/with-files"),
+}
+SERVICE_SESSION_ROUTES = {
+    ("PUT", "/api/v1/projects/{project_id}/git/connections/{connection_id}/credential"),
+}
+SIGNED_ROUTES = {
+    ("POST", "/api/v1/projects/{project_id}/git/connections/{connection_id}/events"),
 }
 
 
@@ -85,10 +92,11 @@ def _http_entries(app, schema: dict) -> list[dict]:
             pair = (method, path)
             route = routes[pair]
             names = dependency_names(route)
-            session = "require_session" in names
+            session = bool(names & {"require_session", "require_context_session"}) or pair in SERVICE_SESSION_ROUTES
             document_route = "get_document_catalog_principal" in names
             write = bool(names & {"require_write_scope", "require_chat_write_scope"}) or pair in DETACHED_WRITE_ROUTES or document_route and method != "GET"
             scope = required_scope(method, path)
+            write = write or bool(scope and scope.endswith((":write", ":delete")))
             scopes = list(dict.fromkeys([scope, *extra_scopes(method, path)])) if scope else None
             scope_rule = None
             if document_route:
@@ -116,13 +124,15 @@ def _http_entries(app, schema: dict) -> list[dict]:
                     if pair in PUBLIC
                     else "subscription"
                     if pair in SUBSCRIPTIONS
+                    else "signature"
+                    if pair in SIGNED_ROUTES
                     else "session"
                     if session
                     else "authenticated",
                     "scopes": scopes,
                     **({"scopeRule": scope_rule} if scope_rule else {}),
                     "tokens": []
-                    if session or pair in PUBLIC or pair in SUBSCRIPTIONS
+                    if session or pair in PUBLIC or pair in SUBSCRIPTIONS or pair in SIGNED_ROUTES
                     else ["WRITE"]
                     if write
                     else ["READ", "WRITE"],
@@ -181,9 +191,11 @@ async def build_catalog(app) -> dict:
     from src.mcp_server.server import mcp_server
 
     schema = app.openapi()
+    actions_by_name = {action.name: action for action in PROJECT_ACTIONS}
     tools = []
     for tool in sorted(await mcp_server.list_tools(), key=lambda item: item.name):
         spec = TOOL_REGISTRY[tool.name]
+        action = actions_by_name.get(tool.name)
         raw = tool.model_dump(mode="json", by_alias=True, exclude_none=True)
         tools.append(
             {
@@ -193,7 +205,9 @@ async def build_catalog(app) -> dict:
                 "group": _group(tool.name),
                 "summary": spec.title,
                 "description": tool.description or spec.description,
-                "scopes": [spec.scope],
+                "scopes": list(dict.fromkeys([
+                    spec.scope, *sorted(action.required_scopes if action else ()),
+                ])),
                 "tokens": ["WRITE"] if spec.write else ["READ", "WRITE"],
                 "write": spec.write,
                 "inputSchema": raw["inputSchema"],
@@ -204,7 +218,7 @@ async def build_catalog(app) -> dict:
     for action in sorted(PROJECT_ACTIONS, key=lambda item: item.name):
         scope = ACTION_SCOPES.get(action.name)
         scope_rule = None
-        scopes = list(dict.fromkeys(["projects:read", scope])) if scope else None
+        scopes = list(dict.fromkeys(["projects:read", scope, *sorted(action.required_scopes)])) if scope else None
         if action.name in DOCUMENT_ACTION_SCOPES:
             scopes = sorted({"projects:read", *DOCUMENT_ACTION_SCOPES[action.name]})
             scope_rule = "Право документа выбирается по его владельцу: projects:* либо tasks:*. Связь требует projects:write и tasks:write. projects:read открывает внешний каталог действий проекта; точные права повторно проверяет общий сервис."
@@ -221,7 +235,7 @@ async def build_catalog(app) -> dict:
                 "description": action.description,
                 "scopes": scopes,
                 **({"scopeRule": scope_rule} if scope_rule else {}),
-                "tokens": ["WRITE"] if action.mutating else ["READ", "WRITE"],
+                "tokens": ["WRITE"] if action.mutating and action.name not in EXTERNAL_RELEASE_ACTIONS else ["READ", "WRITE"],
                 "write": action.mutating,
                 "requiresConfirmation": action.requires_confirmation,
                 "ownerOnly": action.owner_only,

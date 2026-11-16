@@ -53,6 +53,17 @@ function setup(message: Message) {
 }
 afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.restoreAllMocks(); useUiStore.getState().setSelectedTaskId(null); });
 
+it("READ инициатор видит точную публичную тему и может разрешить внешнее исследование", async () => {
+    const row = answer();
+    row.agent!.requester = { id: 1, username: "reader", display_name: "Читатель" };
+    row.agent!.actions = [{ id: "web-consent", tool_name: "telos_request_web_search", effect: "external_release", title: "Публичный поиск", arguments: { public_topic: "Python official documentation", topic_token: "server-token-hidden" }, status: "pending", result: {}, created_at: "2026-11-16T12:00:00Z" }];
+    setup(row);
+    expect((screen.getByRole("button", { name: "Разрешить" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("Точная публичная тема")).toBeTruthy();
+    expect(screen.getByText("Python official documentation")).toBeTruthy();
+    expect(screen.queryByText("server-token-hidden")).toBeNull();
+});
+
 it("завершение реального server payload показывает карточку задачи и текущий контекст без открытия модалки", async () => {
     const pending = answer({ content: "", agent: { ...answer().agent!, status: "processing", sources: [] } });
     const { update, fetch } = setup(pending);

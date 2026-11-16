@@ -16,6 +16,6 @@ describe("перенос проектных и разовых задач", () =>
         expect(transferDeniedHint("PERSONAL", true, true)).toBeUndefined();
     });
     it("включает размещение ИСР в последствия переноса", () => {
-        expect(transferLossesText({ dependencies: 2, document_links: 1, risks: 5, board_stickers: 0, wbs_placements: 1 })).toBe("2 зависимости, 1 связь с документом, 5 рисков, 1 размещение в ИСР");
+        expect(transferLossesText({ dependencies: 2, document_links: 1, risks: 5, board_stickers: 0, wbs_placements: 1, git_links: 2 })).toBe("2 зависимости, 1 связь с документом, 5 рисков, 1 размещение в ИСР, 2 Git-привязки");
     });
 });

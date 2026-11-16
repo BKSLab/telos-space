@@ -268,13 +268,24 @@ class DocumentCatalogService:
         return "\n\n".join(parts)
 
     async def create(
-        self, *, user_id: int, data: DocumentCreateRequestSchema, principal: Principal | None = None
+        self,
+        *,
+        user_id: int,
+        data: DocumentCreateRequestSchema,
+        principal: Principal | None = None,
+        request_binding: dict[str, str] | None = None,
     ) -> DocumentCatalogItemSchema:
         """Атомарно создаёт один Markdown и квитанцию безопасного повтора."""
         self._write_token(principal)
         self._validate_text(data.title, data.content_md, data.caption)
-        arguments_hash = self._arguments_hash(
-            {"operation": "text", **data.model_dump(mode="json", exclude={"request_id"})}
+        arguments_hash = (
+            self._prepared_creation_hash(
+                data.project_id, data.owner_task_id, data.title, request_binding
+            )
+            if request_binding is not None
+            else self._arguments_hash(
+                {"operation": "text", **data.model_dump(mode="json", exclude={"request_id"})}
+            )
         )
         try:
             async with self.scope() as db:
@@ -322,6 +333,60 @@ class DocumentCatalogService:
                 result = await self._item_in_scope(db, row, user_id, principal)
                 await self._commit(db)
                 return result
+        except DATA_ERRORS as error:
+            raise DocumentCatalogServiceError(str(error)) from error
+
+    @classmethod
+    def _prepared_creation_hash(cls, project_id, owner_task_id, title, binding):
+        """Server-only стабильная identity подготовленного документа, не время сетевого повтора."""
+        return cls._arguments_hash(
+            {
+                "operation": "prepared_text",
+                "project_id": project_id,
+                "owner_task_id": owner_task_id,
+                "title": title,
+                "binding": binding,
+            }
+        )
+
+    async def replay_creation(
+        self,
+        *,
+        user_id: int,
+        request_id: UUID,
+        project_id: int | None,
+        title: str,
+        request_binding: dict[str, str],
+        principal: Principal,
+        owner_task_id: int | None = None,
+    ) -> DocumentCatalogItemSchema | None:
+        """Возвращает завершённый prepared request до повторной сети с текущими правами."""
+        self._write_token(principal)
+        arguments_hash = self._prepared_creation_hash(
+            project_id, owner_task_id, title, request_binding
+        )
+        try:
+            async with self.scope() as db:
+                await self._owner(
+                    db,
+                    project_id=project_id,
+                    owner_task_id=owner_task_id,
+                    user_id=user_id,
+                    principal=principal,
+                )
+                await db.catalog.lock_request(user_id=user_id, request_id=request_id)
+                previous = await db.catalog.get_submission(user_id=user_id, request_id=request_id)
+                if previous is None:
+                    return None
+                await self._owner(
+                    db,
+                    project_id=project_id,
+                    owner_task_id=owner_task_id,
+                    user_id=user_id,
+                    principal=principal,
+                    lock=True,
+                )
+                return await self._replay(db, previous, arguments_hash, user_id, principal)
         except DATA_ERRORS as error:
             raise DocumentCatalogServiceError(str(error)) from error
 

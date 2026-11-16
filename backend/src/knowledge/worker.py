@@ -23,9 +23,11 @@ from src.db.models.knowledge_index_jobs import (
     KnowledgeIndexJob,
 )
 from src.exceptions.clients import VectorStoreClientError
+from src.knowledge.project_map import MAP_JOB_ENTITY_ID
 from src.knowledge.runtime import KnowledgeRuntime
 from src.services.knowledge_index import KnowledgeIndexService
 from src.services.knowledge_queue import JobOutcome, KnowledgeQueueService
+from src.services.project_knowledge_updates import ProjectKnowledgeUpdatesService
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ class WorkerConfig:
     batch_size: int
     max_attempts: int
     retention: timedelta
+    semantic_enabled: bool = True
     cleanup_interval_seconds: float = RETENTION_CLEANUP_INTERVAL_SECONDS
 
     @classmethod
@@ -59,6 +62,7 @@ class WorkerConfig:
             batch_size=knowledge.knowledge_embedding_batch_size,
             max_attempts=knowledge.knowledge_index_max_attempts,
             retention=timedelta(days=knowledge.knowledge_job_retention_days),
+            semantic_enabled=knowledge.knowledge_enabled,
         )
 
 
@@ -81,11 +85,13 @@ class KnowledgeWorker:
         queue: KnowledgeQueueService,
         index_service: IndexServiceFactory,
         runtime: KnowledgeRuntime,
+        map_updates: ProjectKnowledgeUpdatesService,
     ) -> None:
         self.config = config
         self.queue = queue
         self.index_service = index_service
         self.runtime = runtime
+        self.map_updates = map_updates
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """Обрабатывает очередь до остановки приложения.
@@ -100,6 +106,7 @@ class KnowledgeWorker:
 
         while not stop_event.is_set():
             try:
+                await self.map_updates.enqueue_missing_projects()
                 await self._backfill_payload_indexes_if_pending()
                 processed = await self._process_next()
                 if loop.time() >= next_cleanup_at:
@@ -118,7 +125,7 @@ class KnowledgeWorker:
 
     async def _backfill_payload_indexes_if_pending(self) -> None:
         """Повторяет отложенный startup-backfill до первого успешного обращения."""
-        if not self.runtime.payload_indexes_backfill_pending:
+        if not self.config.semantic_enabled or not self.runtime.payload_indexes_backfill_pending:
             return
         try:
             await self.runtime.qdrant_client.backfill_payload_indexes()
@@ -136,7 +143,18 @@ class KnowledgeWorker:
         jobs = await self.queue.claim_next_batch(limit=self.config.batch_size)
         if not jobs:
             return False
-        result = await self._prepare_and_execute_job(jobs[0])
+        try:
+            # Generation-gated map stage не зависит от доступности LLM/Qdrant.
+            await self.map_updates.process_project(jobs[0].project_id)
+            semantic_jobs = [job for job in jobs if job.entity_id != MAP_JOB_ENTITY_ID]
+            if self.config.semantic_enabled and semantic_jobs:
+                result = await self._prepare_and_execute_job(semantic_jobs[0])
+            else:
+                result = JobExecutionResult(job=jobs[0])
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            result = JobExecutionResult(job=jobs[0], error=error)
         await self._persist_results(
             [
                 JobExecutionResult(job=job, chunks_count=result.chunks_count, error=result.error)

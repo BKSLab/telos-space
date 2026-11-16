@@ -19,6 +19,7 @@ from src.exceptions.agent_conversations import (
     AgentConversationsServiceError,
     AgentMessageConflictError,
 )
+from src.exceptions.agent_tools import AgentToolAccessError
 from src.exceptions.project_chats import ChatNotFoundError
 from src.schemas.agent_conversations import (
     AgentConversationListSchema,
@@ -36,7 +37,8 @@ from src.services.project_chats import ProjectChatService
 
 
 async def test_action_decision_uses_server_actor_and_does_not_accept_changed_arguments(
-    api_client, current_principal,
+    api_client,
+    current_principal,
 ):
     actions = AsyncMock(spec=AgentActionsService)
     action_id = uuid4()
@@ -72,10 +74,17 @@ async def test_action_decision_uses_server_actor_and_does_not_accept_changed_arg
     assert call["context"].project_id == 1 and call["context"].user_id == 1
     assert call["decision"] == "reject" and call["action_id"] == action_id
     chat.authenticate.return_value = replace(current_principal, scope=ApiTokenScope.READ)
-    assert (await api_client.post(chat_path, json={"decision": "approve"})).status_code == 403
+    actions.decide_in_chat.side_effect = AgentToolAccessError(
+        "Обычная запись недоступна READ credentials."
+    )
+    assert (
+        await api_client.post(chat_path, json={"decision": "approve"})
+    ).status_code == AgentToolAccessError.status_code
+    readonly = actions.decide_in_chat.await_args.kwargs["context"]
+    assert readonly.can_write is False and readonly.principal.scope is ApiTokenScope.READ
     chat.authenticate.side_effect = ChatNotFoundError("Нет доступа к чату проекта.")
     assert (await api_client.post(chat_path, json={"decision": "approve"})).status_code == 404
-    assert actions.decide_in_chat.await_count == 1
+    assert actions.decide_in_chat.await_count == 2
 
 
 async def test_file_upload_uses_multipart_and_server_owned_conversation(api_client):

@@ -10,6 +10,7 @@ import { actionSources } from "@/lib/agentCards";
 import { invalidateAfterArisAction } from "@/lib/useArisConversations";
 import { AgentActionCard } from "@/components/projects/AgentActionCard";
 import { AgentEntityCard } from "@/components/agent/AgentEntityCard";
+import { AgentContextReferences } from "@/components/agent/AgentContextReferences";
 import { ChatMessageReferences } from "./ChatMessageReferences";
 
 /** Ответ Ариса — Markdown; HTML очищается DOMPurify внутри общего рендерера. */
@@ -37,7 +38,7 @@ function decisionError(error: unknown): string {
     if (error instanceof ApiError) {
         if (error.status === 409) return "Не получилось: данные изменились после предложения или решение уже принято. Отклоните карточку и попросите Ариса заново.";
         if (error.status === 404) return "Это действие вам недоступно: нужны права на само изменение.";
-        if (error.status === 403) return "У вас доступ только на чтение — решать по действиям Ариса нельзя.";
+        if (error.status === 403) return "Это действие вам недоступно. Проверьте права и автора запроса.";
     }
     return (error as Error)?.message ?? "Не удалось сохранить решение.";
 }
@@ -75,17 +76,18 @@ export function ArisChatReply({ message }: { message: ChatMessage }) {
             ? <div className="flex items-start gap-2 text-[13px] text-danger"><CircleAlert size={14} className="mt-0.5 shrink-0" aria-hidden="true" /><div><p className="whitespace-pre-wrap">{message.content || "Не получилось ответить. Спросите ещё раз."}</p><p className="mt-1 text-[11px] text-muted">Чтобы спросить снова, начните новое сообщение с «Арис».</p></div></div>
             : message.content ? <ArisMarkdown content={message.content} /> : null}
         <ChatMessageReferences references={agent?.message_references} />
+        <AgentContextReferences projectId={projectId} external={agent?.external_sources} assertions={agent?.assertion_references} />
         {sources.length > 0 && <div className="grid gap-3 sm:grid-cols-2">{sources.map((source) => <AgentEntityCard key={source.source_id} source={source} project={project} />)}</div>}
         {actions.map((action) => <AgentActionCard key={action.id} action={action} project={project} sources={agent?.sources ?? []}
             pending={decide.isPending && decide.variables?.actionId === action.id}
             onDecision={(decision) => decide.mutate({ actionId: action.id, decision })}
             rules={{
                 enabled: answered,
-                canApprove: canWrite,
-                canReject: canWrite || mine,
+                canApprove: action.effect === "external_release" ? mine : canWrite,
+                canReject: action.effect === "external_release" ? mine : canWrite || mine,
                 disabledHint: "Решить можно, когда Арис допишет ответ",
-                approveHint: "Выполнится от вашего имени и с вашими правами — изменение сразу увидит вся команда. Отменить можно только вручную",
-                note: mine && !canWrite
+                approveHint: action.effect === "external_release" ? "Разрешить отправку показанной публичной темы или адреса" : "Выполнится от вашего имени и с вашими правами — изменение сразу увидит вся команда. Отменить можно только вручную",
+                note: action.effect === "external_release" ? (mine ? "Разрешение относится только к показанной публичной теме или адресу. Проверьте, что в них нет внутренних сведений." : "Разрешить внешнее исследование может только автор запроса.") : mine && !canWrite
                     ? "Подтвердить может участник с правом на изменения в проекте. Вы можете только отклонить."
                     : mine || !requester
                         ? "Арис предлагает изменение. Оно выполнится только после подтверждения; отменить потом можно только вручную."

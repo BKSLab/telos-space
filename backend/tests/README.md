@@ -83,3 +83,58 @@ def test_service_never_reads_global_settings() -> None:
 не даёт сокращать набор за счёт настоящих проверок. Перед
 `tests/integration` нужен доступный Docker: локальный `skip`
 testcontainers успешной проверкой не считается.
+
+## Исходные сценарии контекста Ариса
+
+`fixtures/aris_context_contract.json` содержит только синтетические материалы:
+паспорта и задачи, тексты/версии источников, владельцев и ACL, привязки repo,
+полные SHA, CI/deploy со средой и события между чтением и публикацией. Запросы
+ссылаются на явный набор материалов; `expected` и `forbidden` задают проверяемые
+факты, неизвестное, источники, текущий manifest и запрещённые выводы.
+
+Из `backend`:
+
+```powershell
+.\venv\Scripts\python.exe -m pytest -q tests/unit/knowledge/test_context_acceptance.py
+```
+
+Эти тесты проверяют **согласованность исходных сценариев** и отвергают мутации
+evidence, версии, ACL, repo/SHA, среды и причинности событий. Они не вызывают
+сервисы продукта, PostgreSQL, Git/web или модель и не измеряют качество ответа,
+скорость либо стоимость. События `index_attempt` и `deliver_event` остаются входами
+будущих проверок; валидатор не выполняет индексацию или доставку.
+
+Запуск этих fixture-тестов оставляет продуктовые сценарии **not_run**:
+пустой/заполненный паспорт при нуле задач;
+противоречивые, старые, удалённые и отозванные источники; изоляция
+shared/private-project/global/draft; 0/1/3 repo и одинаковые path/symbol;
+одна задача с PR в двух repo; CI и deploy на разных SHA/средах;
+race, checkpoint/crash/restart, дубли/перестановка событий, force-push и rollback.
+Сценарии создания/закрытия задач, веб-исследования и полного пользовательского
+цикла также не исполнены этим набором. Требования приёмки и целевые бюджеты —
+в [едином контракте](../../docs/knowledge.md#бюджеты-и-приёмка-этапов).
+
+Для настоящих retrieval predictions переиспользуется
+`evals/knowledge_retrieval/runner.py` (Recall@k/MRR с утверждёнными source IDs);
+для разрешённого живого замера — `scripts/aris_benchmark.py` и учёт HTTP-попыток
+`scripts/aris_usage.py`. Эта fixture не является retrieval ground truth.
+Отсутствующий usage/тариф не означает нулевую стоимость; лимит timeout не заменяет
+измеренный baseline. Нового runner и заранее заполненных результатов здесь нет.
+
+Реализацию проверяют отдельные продуктовые наборы, например:
+
+```powershell
+.\venv\Scripts\python.exe -m pytest -q tests/unit/knowledge/test_context_runtime.py tests/unit/services/test_context_evidence.py tests/unit/services/test_context_selection.py tests/unit/services/test_git_source_service.py tests/unit/services/test_web_research.py
+.\venv\Scripts\python.exe -m pytest -q tests/api/endpoints/test_project_knowledge_api.py tests/api/endpoints/test_git_sources_api.py tests/api/endpoints/test_web_research_api.py
+.\venv\Scripts\python.exe -m pytest -q tests/integration/repositories/test_project_knowledge.py tests/integration/repositories/test_git_sources.py tests/integration/repositories/test_context_actions.py tests/integration/repositories/test_web_research_persistence.py tests/integration/test_context_delivery.py
+```
+
+Последняя команда использует настоящий PostgreSQL в Docker, в том числе для
+гонок, атомарности и повторов. Git/web HTTP и модель в этих тестах контролируемые;
+они не подтверждают живые внешние credentials или качество настоящей модели.
+Миграции проверяются в `test_project_context_migration.py`,
+`test_project_knowledge_migration.py` и `test_git_sources_migration.py`.
+Для живой оценки фиксируют текущую модель и исходный материал, фактические
+HTTP attempts/usage/cost и проверяемые исходы: изменения БД, прочитанную версию
+отчёта, отсутствие выдуманных назначений/сроков. Наличие ответа само по себе
+не считается успехом; `incomplete`, `failed` и недоступный провайдер сохраняются.

@@ -3,10 +3,13 @@
 # ruff: noqa: F811 -- pytest внедряет импортированные фикстуры по имени параметра.
 
 from dataclasses import replace
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
+from src.core.settings import get_settings
+from src.dependencies.agent_context import build_context_evidence_service
 from src.exceptions.agent_conversations import AgentConversationNotFoundError
 from src.exceptions.agent_files import (
     AgentFileConflictError,
@@ -18,9 +21,11 @@ from src.exceptions.agent_tools import (
     AgentToolConflictError,
     AgentToolOperationError,
 )
+from src.knowledge.catalog import build_catalog
 from src.schemas.agent_conversations import AgentMessageCreateSchema
 from src.schemas.knowledge import KnowledgeAnswerSchema
 from src.services.agent_files import AgentFilesService
+from src.services.context_evidence import ContextEvidence
 from tests.integration.repositories.test_agent_conversations_repository import (
     agent_env as agent_env,
 )
@@ -28,6 +33,23 @@ from tests.integration.repositories.test_agent_conversations_repository import r
 from tests.integration.repositories.test_agent_project_actions import actions_env as actions_env
 from tests.integration.repositories.test_agent_project_actions import invoke, result, task
 from tests.integration.test_agent_chat_files import reader
+
+
+async def guarded_action_answer(env, text):
+    """Controlled responder сохраняет реальные текущие passport/task versions."""
+    verifier = build_context_evidence_service(session_factory=env.factory, settings=get_settings())
+    async with verifier.scope() as db:
+        catalog = build_catalog(1, await db.sources.get_project_rows(1))
+    ledger = ContextEvidence()
+    for source in catalog.sources.values():
+        if source.kind in {"project", "task"}:
+            ledger.internal(1, source)
+    principal = verifier.session_principal(1)
+    await verifier.validate(ledger.saved, principal=principal)
+    answer = KnowledgeAnswerSchema(answer=text, sources=[])
+    answer._context_evidence = ledger, principal
+    env.responder.context_tools = SimpleNamespace(evidence=verifier, git=verifier.git)
+    return answer
 
 
 async def test_file_is_private_until_sent_then_attaches_original_bytes_once(actions_env):
@@ -69,7 +91,9 @@ async def test_file_is_private_until_sent_then_attaches_original_bytes_once(acti
         )
         with pytest.raises(AgentToolAccessError):
             await invoke(
-                env, "telos_attach_uploaded_file", call,
+                env,
+                "telos_attach_uploaded_file",
+                call,
                 context=replace(context, user_id=2),
             )
         copies.append(first)
@@ -122,9 +146,9 @@ async def test_confirmed_action_resumes_chat_and_old_worker_cannot_write(actions
                     "expected_updated_at": original["updated_at"],
                 },
             )
-            return KnowledgeAnswerSchema(answer="Подтвердите удаление в карточке.", sources=[])
+            return await guarded_action_answer(env, "Подтвердите удаление в карточке.")
         assert kwargs["action_history"][0]["status"] == "completed"
-        return KnowledgeAnswerSchema(answer="Задача удалена.", sources=[])
+        return await guarded_action_answer(env, "Задача удалена.")
 
     env.responder.ask.side_effect = respond
     await send(env, conversation.id, "Удали задачу")
@@ -177,7 +201,7 @@ async def test_new_question_rejects_pending_action_and_changed_arguments_cannot_
             name="telos_delete_task",
             arguments={"task_id": original["id"], "expected_updated_at": original["updated_at"]},
         )
-        return KnowledgeAnswerSchema(answer="Ожидаю решения.", sources=[])
+        return await guarded_action_answer(env, "Ожидаю решения.")
 
     env.responder.ask.side_effect = respond
     await send(env, conversation.id, "Удали задачу")

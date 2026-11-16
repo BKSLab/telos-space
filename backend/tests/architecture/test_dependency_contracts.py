@@ -27,6 +27,7 @@ SETTINGS_ALLOWLIST = {
     # момент сборки приложения, а не при обработке запроса.
     SRC / "dependencies" / "auth.py",
     SRC / "dependencies" / "document_catalog.py",
+    SRC / "dependencies" / "context_auth.py",
     SRC / "core" / "config_logger.py",
     SRC / "db" / "alembic" / "env.py",
     SRC / "utils" / "tokens.py",

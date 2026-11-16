@@ -19,6 +19,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/States";
 import { AgentActionCard } from "@/components/projects/AgentActionCard";
 import { AgentEntityCard } from "@/components/agent/AgentEntityCard";
+import { AgentContextReferences } from "@/components/agent/AgentContextReferences";
 import { ArisAvatar } from "@/components/brand/ArisAvatar";
 import { ArisMarkdown, ArisThinking } from "@/components/chat/ArisChatReply";
 import { newUuid } from "@/lib/uuid";
@@ -249,6 +250,7 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
                                 onDecision={(decision) => chat.decide.mutate({ id: conversationId!, actionId: action.id, decision })}
                                 rules={{ enabled: message.id === lastMessage?.id && !busy && !sending, approveHint: "Выполнить от вашего имени. Отменить можно только вручную" }}
                             />)}
+                            {message.role === "assistant" && [...new Set([...(message.external_sources ?? []).map(source => source.project_id), ...(message.assertion_references ?? []).map(claim => claim.project_id)])].map(projectId => <AgentContextReferences key={projectId} projectId={projectId} external={message.external_sources} assertions={message.assertion_references} />)}
                             {message.sources?.length > 0 && <div className="mt-2 grid gap-2">
                                 {message.sources.filter((source) => !actions.some((action) => actionSources(action).some((item) => item.source_id === source.source_id)))
                                     .map((source) => <AgentEntityCard key={source.source_id} source={source} project={project} />)}

@@ -30,6 +30,7 @@ from src.exceptions.agent_tools import (
 )
 from src.exceptions.base import RepositoryError, ServiceError
 from src.exceptions.board_stickers import BoardStickerNotFoundError
+from src.exceptions.context_selection import ContextSelectionChangedError
 from src.schemas.agent_tools import (
     AgentPendingActionSchema,
     AgentPendingProjectSchema,
@@ -38,8 +39,10 @@ from src.schemas.agent_tools import (
 from src.services.agent_action_helpers import checked_task
 from src.services.agent_chat_files import AgentChatFilesService
 from src.services.agent_chat_history import AgentChatHistoryService
+from src.services.agent_context_tools import AgentContextToolsService
 from src.services.agent_tool_scope import AgentProjectToolScope, AgentProjectToolScopeFactory
 from src.services.auth import Principal
+from src.services.context_results import ContextReadResult
 from src.services.tasks import user_display_name
 from src.utils.document_refs import decode_document_ref
 from src.utils.request_actor import (
@@ -66,10 +69,12 @@ class AgentActionsService:
         confirm_ttl: timedelta = DEFAULT_CONFIRM_TTL,
         chat_files: AgentChatFilesService | None = None,
         chat_history: AgentChatHistoryService | None = None,
+        context_tools: AgentContextToolsService | None = None,
     ) -> None:
         self.scope = scope
         self.chat_files = chat_files
         self.chat_history = chat_history
+        self.context_tools = context_tools
         self.confirm_ttl = confirm_ttl
         self.actions = {action.name: action for action in actions}
         if len(self.actions) != len(actions):
@@ -123,12 +128,53 @@ class AgentActionsService:
             # Сервис заново проверяет активный ход, пользователя и точный чат.
             # Внешний UnitOfWork не занимает соединение во время ожидания подготовки.
             return await definition.chat_file_handler(self.chat_files, context, parameters)
+        if (
+            definition.context_handler is not None
+            and not definition.mutating
+            and not definition.external_effect
+        ):
+            # Общие context-сервисы открывают собственные короткие области.
+            # Никакой DB checkout не удерживается во время Git/Web/embeddings.
+            async with self._scope() as db:
+                actor = await self._authorize(db, context, definition)
+            return await self._invoke_context(definition, actor, parameters)
+        if definition.name == "telos_save_web_research":
+            return await self._save_web_research(context, definition, parameters, payload)
         async with self._scope() as db:
             actor = await self._authorize(db, context, definition)
-            if not definition.mutating:
-                return await self._invoke(definition, db, actor, parameters)
+            if not definition.mutating and not definition.external_effect:
+                watch = (
+                    self.context_tools is not None
+                    and actor.mode == ArisMode.WIDGET_PERSONAL
+                    and definition.needs_project
+                    and actor.project_id is not None
+                )
+                before = (
+                    await self.context_tools.evidence.capture_project(
+                        project_id=actor.project_id, principal=actor.principal
+                    )
+                    if watch
+                    else None
+                )
+                value = await self._invoke(definition, db, actor, parameters)
+                if watch:
+                    after = await self.context_tools.evidence.capture_project(
+                        project_id=actor.project_id, principal=actor.principal
+                    )
+                    if before != after:
+                        raise ContextSelectionChangedError()
+                    return ContextReadResult(
+                        value,
+                        project_id=actor.project_id,
+                        project_reads=(after,),
+                        restricted=False,
+                        origin_read_scopes=actor.origin_read_scopes,
+                    )
+                return value
             await self._require_execution(db, actor)
-            request_id = await self._request_id(db, actor, name, payload)
+            request_id = await self._request_id(
+                db, actor, name, payload, external_effect=definition.external_effect
+            )
             await db.runs.lock_request(actor.project_id, actor.user_id, request_id)
             previous = await db.runs.get_request(actor.project_id, actor.user_id, request_id)
             if previous is not None:
@@ -175,6 +221,8 @@ class AgentActionsService:
 
     async def _invoke(self, definition, db, actor, parameters):
         """Рабочая очередь подписывает эффект проверенным инициатором операции."""
+        if definition.context_handler is not None:
+            return await self._invoke_context(definition, actor, parameters)
         if definition.name == "telos_attach_uploaded_file":
             if self.chat_files is None or db.bind_chat_files is None:
                 raise AgentToolAccessError("Чтение оригинала файла переписки не подключено.")
@@ -195,6 +243,81 @@ class AgentActionsService:
             return await definition.handler(db, actor, parameters)
         finally:
             reset_request_actor(token)
+
+    async def _invoke_context(self, definition, actor, parameters):
+        if self.context_tools is None:
+            raise AgentToolAccessError("Чтение контекста не подключено.")
+        return await definition.context_handler(self.context_tools, actor, parameters)
+
+    async def _save_web_research(self, context, definition, parameters, payload):
+        """Сеть до транзакции; документ и action receipt фиксируются вместе."""
+        if self.context_tools is None:
+            raise AgentToolAccessError("Внешнее исследование не подключено.")
+        async with self._scope() as db:
+            actor = await self._authorize(db, context, definition)
+            await self._require_execution(db, actor)
+            request_id = await self._request_id(db, actor, definition.name, payload)
+            previous = await db.runs.get_request(actor.project_id, actor.user_id, request_id)
+            if previous is not None:
+                return await self._web_replay(db, actor, definition, parameters, payload, previous)
+        plan = await self.context_tools.web.prepare_save(
+            project_id=actor.project_id,
+            principal=actor.principal,
+            **parameters.model_dump(),
+        )
+        async with self._scope() as db:
+            actor = await self._authorize(db, context, definition)
+            await self._require_execution(db, actor)
+            await db.runs.lock_request(actor.project_id, actor.user_id, request_id)
+            previous = await db.runs.get_request(actor.project_id, actor.user_id, request_id)
+            if previous is not None:
+                return await self._web_replay(db, actor, definition, parameters, payload, previous)
+            if db.document_catalog is None:
+                raise AgentToolAccessError("Каталог документов не подключён.")
+            document = await self.context_tools.web.persist_prepared(
+                project_id=actor.project_id,
+                principal=actor.principal,
+                plan=plan,
+                request_id=request_id,
+                documents=db.document_catalog,
+            )
+            row = await db.runs.save(
+                dict(
+                    id=uuid4(),
+                    project_id=actor.project_id,
+                    user_id=actor.user_id,
+                    message_id=actor.message_id,
+                    chat_turn_id=actor.chat_turn_id,
+                    request_id=request_id,
+                    tool_name=definition.name,
+                    title=definition.title,
+                    arguments=payload,
+                    status="completed",
+                    result={"document": document.model_dump(mode="json")},
+                )
+            )
+            await db.unit_of_work.commit()
+            return self._result(row)
+
+    async def _web_replay(self, db, actor, definition, parameters, payload, previous):
+        if previous.tool_name != definition.name or previous.arguments != payload:
+            raise AgentToolRequestConflictError(
+                "Ключ вызова уже использован с другими аргументами."
+            )
+        if previous.status != "completed":
+            raise AgentToolConflictError("Сохранение исследования ещё не завершено.")
+        await self.context_tools.web.validate_page_grants(
+            project_id=actor.project_id,
+            principal=actor.principal,
+            page_tokens=[parameters.page_token],
+        )
+        ref = previous.result.get("document", {}).get("ref")
+        if not ref or db.document_catalog is None:
+            raise AgentToolConflictError("Сохранённый документ недоступен.")
+        await db.document_catalog.get(
+            user_id=actor.user_id, principal=actor.principal, document_ref=ref
+        )
+        return self._result(previous)
 
     async def decide(
         self,
@@ -342,6 +465,11 @@ class AgentActionsService:
         отвечает 409, а не прежним результатом.
         """
         definition = self._definition(row.tool_name)
+        if definition.external_effect:
+            if row.user_id != context.user_id:
+                raise AgentToolAccessError("Внешнюю передачу разрешает только её инициатор.")
+        elif not context.can_write:
+            raise AgentToolAccessError("Транспорт не разрешает решение по записи.")
         actor = await self._authorize(db, context, definition) if authorize else context
         if row.status in {"completed", "rejected"}:
             if repeat_is_error:
@@ -382,7 +510,12 @@ class AgentActionsService:
                 raise AgentToolConflictError(
                     "Объект изменился после предложения. Отклоните действие и запросите актуальное."
                 )
-            result = await self._invoke(definition, db, actor, parameters)
+            result = await self._invoke(
+                definition,
+                db,
+                replace(actor, approval_id=row.id) if definition.external_effect else actor,
+                parameters,
+            )
             state = "completed"
         else:
             result = {"message": "Участник отклонил действие. Изменения не применены."}
@@ -397,7 +530,7 @@ class AgentActionsService:
 
     @staticmethod
     def _check_decision(context: AgentToolContext, decision: str) -> None:
-        if not context.can_write or decision not in {"approve", "reject"}:
+        if context.user_id is None or decision not in {"approve", "reject"}:
             raise AgentToolAccessError("Транспорт не разрешает решение по действию.")
 
     @staticmethod
@@ -507,14 +640,19 @@ class AgentActionsService:
 
     @staticmethod
     async def _request_id(
-        db: AgentProjectToolScope, context: AgentToolContext, name: str, payload: dict
+        db: AgentProjectToolScope,
+        context: AgentToolContext,
+        name: str,
+        payload: dict,
+        *,
+        external_effect: bool = False,
     ) -> UUID:
         """Использует квитанцию операции внутри заблокированного ответа.
 
         Идентичность действия задают ответ, инструмент и проверенные аргументы.
         Сохранённый UUID остаётся ключом повторов после перезапуска runtime.
         """
-        if not context.can_write:
+        if not context.can_write and not external_effect:
             raise AgentToolAccessError("Этому вызову не разрешено изменять проект.")
         if context.message_id is not None:
             receipts = await db.runs.get_for_messages([context.message_id])
@@ -574,7 +712,13 @@ class AgentActionsService:
                     raise AgentToolAccessError("Действие доступно только владельцу проекта.")
                 if definition.mutating and not grant.can_write:
                     raise AgentToolAccessError("Проект доступен только для чтения.")
-        return await AgentActionsService._active_user(db, context)
+        context = await AgentActionsService._active_user(db, context)
+        if definition.required_scopes and (
+            context.principal is None
+            or not all(context.principal.allows(scope) for scope in definition.required_scopes)
+        ):
+            raise AgentToolAccessError("Текущие права не разрешают чтение контекста.")
+        return context
 
     @staticmethod
     async def _require_document_receipt(db, context, definition, parameters, receipt):

@@ -64,6 +64,7 @@ class TaskTransferLossesSchema(BaseModel):
     risks: int = Field(0, ge=0, description="Рисков проекта, привязанных к задаче.")
     wbs_placements: int = Field(0, ge=0, description="Размещений задачи в ИСР или на холсте.")
     board_stickers: int = Field(0, ge=0, description="Стикеров доски проекта с задачей.")
+    git_links: int = Field(0, ge=0, description="Git-привязок прежнего проекта.")
 
 
 class TaskTransferPreviewSchema(BaseModel):

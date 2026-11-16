@@ -19,6 +19,7 @@ import { useProjectConversations } from "@/lib/useProjectConversations";
 import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 import { ArisThinking } from "@/components/chat/ArisChatReply";
 import { AgentEntityCard } from "@/components/agent/AgentEntityCard";
+import { AgentContextReferences } from "@/components/agent/AgentContextReferences";
 import { AgentFileList } from "@/components/files/AgentFileList";
 import { actionSources } from "@/lib/agentCards";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -364,6 +365,7 @@ export function ProjectConversationWorkspace({ project }: { project: Project }) 
                                                 pending={chat.decide.isPending}
                                                 onDecision={(decision) => chat.decide.mutate({ id: conversationId!, actionId: action.id, decision })}
                                             />)}
+                                            <AgentContextReferences projectId={project.id} external={message.external_sources} assertions={message.assertion_references} />
                                             {message.sources?.length > 0 && <div className="mt-3 grid gap-2">
                                                 {message.sources.filter((source) => !(message.actions ?? []).some((action) => actionSources(action).some((item) => item.source_id === source.source_id)))
                                                     .map((source) => <AgentEntityCard key={source.source_id} source={source} project={project} />)}

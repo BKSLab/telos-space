@@ -15,7 +15,9 @@ from src.services.project_agent import ProjectAgentService
 
 
 @pytest.mark.asyncio
-async def test_ask_returns_grounded_answer_and_sources(api_client: AsyncClient) -> None:
+async def test_ask_returns_grounded_answer_and_sources(
+    api_client: AsyncClient, current_principal
+) -> None:
     service = AsyncMock(spec=ProjectAgentService)
     service.ask.return_value = KnowledgeAnswerSchema(
         answer="Задача находится **в работе**.",
@@ -39,10 +41,17 @@ async def test_ask_returns_grounded_answer_and_sources(api_client: AsyncClient) 
     assert response.status_code == 200
     assert response.json()["sources"][0]["task_id"] == 7
     service.ask.assert_awaited_once()
+    execution = service.ask.await_args.kwargs["execution"]
+    assert (
+        execution.principal is current_principal and execution.user_id == current_principal.user_id
+    )
+    assert execution.origin_read_scopes == frozenset({"knowledge:read"})
 
 
 @pytest.mark.asyncio
-async def test_knowledge_endpoints_validate_input_and_hide_internals(api_client: AsyncClient) -> None:
+async def test_knowledge_endpoints_validate_input_and_hide_internals(
+    api_client: AsyncClient,
+) -> None:
     """Пустой вопрос отклоняется, сбой провайдера — 503, статус не раскрывает имя коллекции."""
 
     service = AsyncMock(spec=ProjectAgentService)
@@ -73,7 +82,9 @@ async def test_knowledge_endpoints_validate_input_and_hide_internals(api_client:
 
     service.get_status.side_effect = AiProviderError("private provider details")
     response = await api_client.get("/api/v1/projects/1/knowledge/status")
-    assert response.status_code == 503 and "private provider details" not in response.json()["detail"]
+    assert (
+        response.status_code == 503 and "private provider details" not in response.json()["detail"]
+    )
 
     service = AsyncMock(spec=ProjectAgentService)
     service.get_status.return_value = KnowledgeStatusSchema(

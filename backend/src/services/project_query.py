@@ -26,6 +26,7 @@ from src.knowledge.documents import build_wbs_paths
 from src.schemas.knowledge import KnowledgeReadRequest
 from src.services.db_scope import ProjectQueryScope, ProjectQueryScopeFactory
 from src.utils.checklists import checklist_context
+from src.utils.project_context import compact_project_context
 from src.utils.task_filters import TaskFilters, task_matches
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,17 @@ class ProjectOverviewDto:
     description: str | None
     total_tasks: int
     stages: list[ProjectStageDto]
+    context_revision: int = 0
+    description_sections: dict[str, str] | None = None
+
+    @property
+    def context(self) -> dict:
+        """Вычисляет ограниченное текущее представление того же паспорта."""
+        return compact_project_context(
+            sections=self.description_sections,
+            description_md=self.description,
+            revision=self.context_revision,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,6 +342,8 @@ class ProjectQueryService:
             summary=_project_summary(project),
             description=project.description_md,
             total_tasks=len(tasks),
+            context_revision=getattr(project, "context_revision", 0) or 0,
+            description_sections=getattr(project, "description_sections", None),
             stages=[
                 ProjectStageDto(
                     name=stage.name,
@@ -509,7 +523,9 @@ class ProjectQueryService:
         except RepositoryError as error:
             logger.error(
                 "❌ Не удалось получить комментарий id=%s задачи id=%s.",
-                comment_id, task_id, exc_info=True,
+                comment_id,
+                task_id,
+                exc_info=True,
             )
             raise ProjectsServiceError(str(error)) from error
 

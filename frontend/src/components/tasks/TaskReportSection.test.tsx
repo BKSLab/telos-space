@@ -6,7 +6,7 @@ import { TaskReportSection } from "./TaskReportSection";
 import { api } from "@/lib/api";
 import type { TaskComment } from "@/lib/types";
 vi.mock("@/lib/api", () => ({ api: { get: vi.fn(), post: vi.fn() } }));
-const report = { task_id: 5, revision: 1, body_md: "Первый результат", author_name: "Кирилл", created_at: null, source_comment_id: null, source_comment_original_id: null, source_author_name: null };
+const report = { id: 12, task_id: 5, revision: 1, body_md: "Первый результат", author_name: "Кирилл", created_at: null, source_comment_id: null, source_comment_original_id: null, source_author_name: null };
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 function mount(selectedComment: TaskComment | null = null, canEdit = true, initial = report) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });

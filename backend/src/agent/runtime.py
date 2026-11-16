@@ -215,6 +215,7 @@ class ArisDeps:
     budget: AgentContextBudget
     tool_rounds: int
     on_result: ResultHook | None = None
+    before_write: Callable[[], Awaitable[None]] | None = None
     write_gate: WriteGate | None = None
     calls: list[dict[str, Any]] = field(default_factory=list)
     progress: ProgressReporter | None = None
@@ -227,6 +228,7 @@ class ArisDeps:
     _domain_steps: set[int] = field(default_factory=set)
     _context_groups: set[str] = field(default_factory=set)
     _context_load_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _web_calls: int = 0
 
     @property
     def tool_step_limit(self) -> int:
@@ -238,6 +240,11 @@ class ArisDeps:
         """Можно ли вызывать инструмент в этом вопросе: режим, запись, права ключа."""
         tool = self.executor.tools.get(name)
         if tool is None or self.execution.mode not in tool.modes:
+            return False
+        if tool.required_scopes and (
+            self.execution.principal is None
+            or not all(self.execution.principal.allows(scope) for scope in tool.required_scopes)
+        ):
             return False
         if tool.mutating:
             return (
@@ -701,6 +708,17 @@ async def invoke(
                 return {"error": reason}
             raise ModelRetry(reason) from error
         execution = deps.execution
+        called_name = (
+            str(arguments.get("name") or "") if tool.name == PROJECT_ACTION_TOOL else tool.name
+        )
+        if called_name in {"telos_search_web", "telos_read_web_page"}:
+            if deps._web_calls >= 4:
+                record["refused"] = "web_limit"
+                return {
+                    "error": "Достигнут предел четырёх поисковых/читающих Web вызовов на вопрос.",
+                    "reason": "web_budget",
+                }
+            deps._web_calls += 1
         if (
             deps.write_gate is None
             and deps.write_gate_factory is not None
@@ -735,6 +753,12 @@ async def invoke(
                 return {"error": WRITE_NOT_REQUESTED}
             # Проектное действие по ключу: обёртка откажет в записи сама.
             execution = dataclass_replace(execution, can_write=False)
+        if (
+            deps.before_write is not None
+            and execution.can_write
+            and deps.may_write(tool, arguments)
+        ):
+            await deps.before_write()
         result = await deps.executor.execute(
             execution, AgentToolRequest(name=tool.name, arguments=arguments)
         )
@@ -766,6 +790,12 @@ def _fit_result(result: dict[str, Any], max_tokens: int) -> dict[str, Any]:
         if AgentContextBudget._shrink_text(value):
             continue
         break
+    if estimate_tokens(encode(value)) > max_tokens:
+        return {
+            "error": "Результат не помещается в бюджет без изменения identity. Выберите меньшую страницу или один источник.",
+            "omitted": True,
+            "reason": "context_budget",
+        }
     return value
 
 

@@ -45,6 +45,11 @@ COMPOSITION_MODULES = {
     SRC / "dependencies" / "agent_file_content.py",
     SRC / "dependencies" / "chat_files.py",
     SRC / "dependencies" / "chat_history.py",
+    SRC / "dependencies" / "project_knowledge.py",
+    SRC / "dependencies" / "git_sources.py",
+    SRC / "dependencies" / "web_research.py",
+    SRC / "dependencies" / "context_auth.py",
+    SRC / "dependencies" / "agent_context.py",
     SRC / "mcp_server" / "services.py",
     SRC / "mcp_server" / "app.py",
     SRC / "knowledge" / "composition.py",
@@ -242,7 +247,7 @@ def test_worker_receives_its_dependencies_through_the_constructor() -> None:
 
     parameters = set(inspect.signature(KnowledgeWorker.__init__).parameters) - {"self"}
 
-    assert parameters == {"config", "queue", "index_service", "runtime"}
+    assert parameters == {"config", "queue", "index_service", "runtime", "map_updates"}
 
 
 def test_mcp_tool_context_does_not_expose_a_session() -> None:

@@ -205,6 +205,10 @@ class KnowledgeSourcesRepository:
                     Document.search_vector.op("@@")(terms),
                 )
             )
+        if not branches:
+            # Git text закрыт generic reader: его кандидаты и текст выдаёт
+            # GitSourceService после текущего upstream Contents proof.
+            return []
         matched = union_all(*branches).subquery("matched_knowledge_sources")
         rank = func.max(matched.c.rank)
         try:

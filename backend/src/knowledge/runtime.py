@@ -16,7 +16,10 @@ from src.clients.llm import LlmClient
 from src.clients.model_options import agent_request_fields
 from src.clients.qdrant import ProjectQdrantClient
 from src.clients.vision import DisabledVisionCapability, VisionCapability, VisionClient
+from src.clients.web_context import SystemWebDnsResolver, WebContextClient
 from src.core.settings import Settings
+from src.schemas.web_context import WebContextConfig
+from src.utils.web_grants import WebGrantSigner
 
 
 @dataclass(slots=True)
@@ -38,6 +41,8 @@ class KnowledgeRuntime:
     llm_client: LlmClient
     qdrant_client: ProjectQdrantClient
     vision: VisionCapability
+    web_context: WebContextClient
+    web_grants: WebGrantSigner
     payload_indexes_backfill_pending: bool = False
 
 
@@ -123,6 +128,22 @@ def build_knowledge_runtime(
             vector_dim=settings.embedding.embedding_dim,
         ),
         vision=build_vision_capability(settings=settings, http_client=http_client),
+        web_context=WebContextClient(
+            config=WebContextConfig(search_api_key=settings.web_research.brave_search_api_key),
+            search_transport=httpx.AsyncHTTPTransport(
+                verify=True, trust_env=False, retries=0,
+                limits=httpx.Limits(max_connections=8, max_keepalive_connections=0),
+            ),
+            read_transport=httpx.AsyncHTTPTransport(
+                verify=True, trust_env=False, http1=True, http2=False, retries=0,
+                limits=httpx.Limits(max_connections=8, max_keepalive_connections=0),
+            ),
+            resolver=SystemWebDnsResolver(),
+        ),
+        web_grants=WebGrantSigner(
+            secret=settings.auth.jwt_secret.get_secret_value(),
+            ttl_seconds=settings.web_research.web_research_grant_ttl_seconds,
+        ),
     )
 
 
@@ -163,4 +184,6 @@ async def close_knowledge_runtime(runtime: KnowledgeRuntime) -> None:
         runtime: Контейнер, созданный этим же lifespan.
     """
     await runtime.qdrant_client.close()
+    await runtime.web_context.search_transport.aclose()
+    await runtime.web_context.read_transport.aclose()
     await runtime.http_client.aclose()

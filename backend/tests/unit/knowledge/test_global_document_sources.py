@@ -247,6 +247,7 @@ async def test_global_wrapper_lists_reads_and_returns_verified_project_document_
 ):
     env = global_document
     ref = env.document(kind, task_owned=task_owned)
+    env.state.row["title"] = "Текущий заголовок"
     principal = env.key({"projects:read", "tasks:read"})
     step, source_handle, fragment_handle = 0, None, None
 
@@ -270,7 +271,6 @@ async def test_global_wrapper_lists_reads_and_returns_verified_project_document_
             )
         assert result["text"] == env.text and result["source_handle"] == source_handle
         fragment_handle = result["fragment_handle"]
-        env.state.row["title"] = "Текущий заголовок"
         env.project.key = "RENAMED"
         return final(
             "Условия проверены.", source_ids=[source_handle], primary_reference=fragment_handle
@@ -474,8 +474,8 @@ async def test_final_document_quote_rechecks_its_actual_range_and_current_rendit
     else:
         with pytest.raises(AgentAnswerError, match="Документ изменился"):
             await env.ask(FunctionModel(respond), principal=principal)
-    assert env.rows.text.await_args.kwargs["offset"] == offset
-    assert env.rows.text.await_args.kwargs["max_chars"] == 800
+    assert any(call.kwargs["offset"] == offset and call.kwargs["max_chars"] == 800
+               for call in env.rows.text.await_args_list)
 
 
 async def test_old_first_fragment_cannot_hide_behind_a_later_read_of_new_version(global_document):

@@ -184,6 +184,22 @@ class KnowledgeSettings(SettingsBase):
     knowledge_summary_chunk_chars: int = Field(default=16000, ge=2000, le=32000)
 
 
+class WebResearchSettings(SettingsBase):
+    """Публичное чтение не требует ключа, поиск использует только ключ Brave."""
+
+    web_research_enabled: bool = True
+    brave_search_api_key: SecretStr = SecretStr("")
+    web_research_grant_ttl_seconds: int = Field(default=900, ge=60, le=900)
+
+
+class GitSettings(SettingsBase):
+    """Серверные Git credentials отделены от сессионных секретов."""
+
+    git_credentials_key: SecretStr = SecretStr("")
+    git_poll_interval_seconds: float = Field(default=60.0, ge=10.0)
+    git_sync_batch_files: int = Field(default=20, ge=1, le=100)
+
+
 class DBSettings(SettingsBase):
     """Настройки подключения к PostgreSQL.
 
@@ -300,6 +316,8 @@ class Settings(BaseSettings):
     llm: LlmSettings = Field(default_factory=LlmSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     knowledge: KnowledgeSettings = Field(default_factory=KnowledgeSettings)
+    web_research: WebResearchSettings = Field(default_factory=WebResearchSettings)
+    git: GitSettings = Field(default_factory=GitSettings)
     file_processing: FileProcessingSettings = Field(default_factory=FileProcessingSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
     chat: ChatSettings = Field(default_factory=ChatSettings)

@@ -82,17 +82,28 @@ async def tool_context(
     authorization = _authorization_header(context)
     runtime, settings, session_factory = _app_resources(context)
     async with session_factory() as session:
+        from src.dependencies.agent_context import build_agent_context_tools
         from src.dependencies.chat_files import build_agent_chat_files_service
         from src.dependencies.chat_history import build_agent_chat_history_service
 
-        chat_files = build_agent_chat_files_service(session_factory=session_factory, settings=settings, vision=runtime.vision)
+        chat_files = build_agent_chat_files_service(
+            session_factory=session_factory, settings=settings, vision=runtime.vision
+        )
+        context_tools = build_agent_context_tools(
+            session_factory=session_factory, settings=settings, runtime=runtime
+        )
 
         services = build_tool_services(
             session=session,
             session_factory=session_factory,
             settings=settings,
             chat_files=chat_files,
-            chat_history=build_agent_chat_history_service(session_factory=session_factory, chat_files=chat_files),
+            chat_history=build_agent_chat_history_service(
+                session_factory=session_factory,
+                chat_files=chat_files,
+                evidence=context_tools.evidence,
+            ),
+            context_tools=context_tools,
         )
         try:
             principal = await services.auth.resolve_principal(
@@ -120,11 +131,15 @@ async def tool_context(
             raise ToolError(READ_ONLY_TOKEN)
         actor_token = set_request_actor(principal.request_actor())
         try:
-            yield ToolContext(principal=principal, services=services, runtime=runtime,
-                              settings=settings, writes=writes)
+            yield ToolContext(
+                principal=principal,
+                services=services,
+                runtime=runtime,
+                settings=settings,
+                writes=writes,
+            )
         finally:
             reset_request_actor(actor_token)
-
 
 
 async def resolve_project(tools: ToolContext, project_key: str) -> int:

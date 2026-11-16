@@ -120,9 +120,11 @@ class ProjectChatService:
                 rows = rows[:limit]
                 if after is None:
                     rows.reverse()
-            return ChatMessagePage(
+            result = ChatMessagePage(
                 messages=await self.presenter.messages(db, rows), has_more=more, event_cursor=cursor
             )
+        result.messages = await self.presenter.reveal(result.messages, reader_id=user_id)
+        return result
 
     async def lookup_entities(self, project_id: int, user_id: int, query: str = ""):
         """Ищет объекты текущего проекта для # picker."""

@@ -1,0 +1,2132 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "as_of": "2026-11-16T09:00:00Z",
+  "actors": [
+    "u1",
+    "u2"
+  ],
+  "projects": {
+    "p0": {
+      "member_ids": [
+        "u1"
+      ],
+      "repository_ids": [],
+      "task_refs": [],
+      "passport_ref": "project:p0"
+    },
+    "p1": {
+      "member_ids": [
+        "u1"
+      ],
+      "repository_ids": [
+        "r1"
+      ],
+      "task_refs": [],
+      "passport_ref": "project:p1"
+    },
+    "p2": {
+      "member_ids": [
+        "u2"
+      ],
+      "repository_ids": [],
+      "task_refs": [],
+      "passport_ref": null
+    },
+    "p3": {
+      "member_ids": [
+        "u1"
+      ],
+      "repository_ids": [
+        "r31",
+        "r32",
+        "r33"
+      ],
+      "task_refs": [
+        "task:t1"
+      ],
+      "passport_ref": null
+    }
+  },
+  "repositories": {
+    "r1": {
+      "project_id": "p1",
+      "ref": "refs/heads/main",
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "generation": 1,
+      "role": "application",
+      "commits": {
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": [],
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "cccccccccccccccccccccccccccccccccccccccc": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "dddddddddddddddddddddddddddddddddddddddd": []
+      }
+    },
+    "r31": {
+      "project_id": "p3",
+      "ref": "refs/heads/main",
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "generation": 1,
+      "role": "api",
+      "commits": {
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": []
+      }
+    },
+    "r32": {
+      "project_id": "p3",
+      "ref": "refs/heads/main",
+      "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "generation": 1,
+      "role": "web",
+      "commits": {
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": []
+      }
+    },
+    "r33": {
+      "project_id": "p3",
+      "ref": "refs/heads/release",
+      "head_sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "generation": 1,
+      "role": "worker",
+      "commits": {
+        "cccccccccccccccccccccccccccccccccccccccc": []
+      }
+    }
+  },
+  "sources": {
+    "project:p0": {
+      "subject": "project:p0",
+      "kind": "passport",
+      "project_id": "p0",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Паспорт ещё не заполнен; задач нет.",
+          "facts": {
+            "goal": null,
+            "expected_result": null,
+            "success_criteria": [],
+            "task_count": 0
+          }
+        }
+      ]
+    },
+    "project:p1": {
+      "subject": "project:p1",
+      "kind": "passport",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Цель: сохранить историю решений команды. Результат: проверяемая карта знаний. Критерий: источник каждого утверждения.",
+          "facts": {
+            "goal": "Сохранить историю решений команды",
+            "expected_result": "Проверяемая карта знаний",
+            "success_criteria": [
+              "У каждого утверждения указан источник"
+            ],
+            "task_count": 0
+          }
+        }
+      ]
+    },
+    "document:release": {
+      "subject": "project:p1",
+      "kind": "document",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 2,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Релиз назначен на 10 ноября 2026.",
+          "facts": {
+            "release_date": "2026-11-10"
+          }
+        },
+        {
+          "revision": 2,
+          "text": "Принято перенести релиз на 30 ноября 2026.",
+          "facts": {
+            "release_date": "2026-11-30"
+          }
+        }
+      ]
+    },
+    "document:conflict-a": {
+      "subject": "project:p1",
+      "kind": "document",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Текущее решение группы A: релиз 20 ноября 2026.",
+          "facts": {
+            "release_date": "2026-11-20"
+          }
+        }
+      ]
+    },
+    "document:conflict-b": {
+      "subject": "project:p1",
+      "kind": "document",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Текущее решение группы B: релиз 30 ноября 2026.",
+          "facts": {
+            "release_date": "2026-11-30"
+          }
+        }
+      ]
+    },
+    "document:deleted": {
+      "subject": "project:p1",
+      "kind": "document",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": true,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Ранее обсуждался Redis; источник удалён.",
+          "facts": {
+            "storage": "Redis"
+          }
+        }
+      ]
+    },
+    "message:shared": {
+      "subject": "project:p1",
+      "kind": "chat_message",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": "shared-p1",
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Общее решение: проверять происхождение фактов.",
+          "facts": {
+            "decision": "Проверять происхождение фактов"
+          }
+        }
+      ]
+    },
+    "message:private-a": {
+      "subject": "project:p1",
+      "kind": "chat_message",
+      "project_id": "p1",
+      "visibility": "private",
+      "owner_id": "u1",
+      "conversation_id": "private-a",
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Личное предложение владельца диалога A.",
+          "facts": {
+            "private_note": "Обсудить личное предложение"
+          }
+        }
+      ]
+    },
+    "message:private-b": {
+      "subject": "project:p1",
+      "kind": "chat_message",
+      "project_id": "p1",
+      "visibility": "private",
+      "owner_id": "u1",
+      "conversation_id": "private-b",
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Приватный текст диалога B.",
+          "facts": {
+            "other_thread_note": "Текст другого личного диалога"
+          }
+        }
+      ]
+    },
+    "message:draft": {
+      "subject": "project:p1",
+      "kind": "chat_file",
+      "project_id": "p1",
+      "visibility": "draft",
+      "owner_id": "u1",
+      "conversation_id": "shared-p1",
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Готовый текст файла до Send.",
+          "facts": {
+            "draft_note": "Ещё не отправлено"
+          }
+        }
+      ]
+    },
+    "document:personal": {
+      "subject": "personal:u1",
+      "kind": "document",
+      "project_id": null,
+      "visibility": "private",
+      "owner_id": "u1",
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Личная заметка u1.",
+          "facts": {
+            "personal_note": "Собственная заметка"
+          }
+        }
+      ]
+    },
+    "document:other-project": {
+      "subject": "project:p2",
+      "kind": "document",
+      "project_id": "p2",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Материал проекта p2, где u1 не состоит.",
+          "facts": {
+            "other_project_note": "Закрытый план p2"
+          }
+        }
+      ]
+    },
+    "document:other-personal": {
+      "subject": "personal:u2",
+      "kind": "document",
+      "project_id": null,
+      "visibility": "private",
+      "owner_id": "u2",
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1",
+          "u2"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Личная заметка u2; ошибочный ACL не меняет владельца.",
+          "facts": {
+            "personal_note": "Чужая заметка"
+          }
+        }
+      ]
+    },
+    "code:r1": {
+      "subject": "code:r1:src/service.py:build_context",
+      "kind": "code",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "def build_context(): return read_current_passport()",
+          "facts": {
+            "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "path": "src/service.py",
+            "symbol": "build_context",
+            "body": "return read_current_passport()"
+          }
+        },
+        {
+          "revision": 2,
+          "text": "def build_context(): return read_current_map()",
+          "facts": {
+            "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "path": "src/service.py",
+            "symbol": "build_context",
+            "body": "return read_current_map()"
+          }
+        },
+        {
+          "revision": 3,
+          "text": "def build_context(): return read_verified_sources()",
+          "facts": {
+            "commit_sha": "dddddddddddddddddddddddddddddddddddddddd",
+            "path": "src/service.py",
+            "symbol": "build_context",
+            "body": "return read_verified_sources()"
+          }
+        }
+      ],
+      "repository_id": "r1"
+    },
+    "code:r31": {
+      "subject": "code:r31:src/service.py:build_context",
+      "kind": "code",
+      "project_id": "p3",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "def build_context(): return api_context()",
+          "facts": {
+            "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "path": "src/service.py",
+            "symbol": "build_context",
+            "body": "return api_context()"
+          }
+        }
+      ],
+      "repository_id": "r31"
+    },
+    "code:r32": {
+      "subject": "code:r32:src/service.py:build_context",
+      "kind": "code",
+      "project_id": "p3",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "def build_context(): return web_context()",
+          "facts": {
+            "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "path": "src/service.py",
+            "symbol": "build_context",
+            "body": "return web_context()"
+          }
+        }
+      ],
+      "repository_id": "r32"
+    },
+    "code:r33": {
+      "subject": "code:r33:src/service.py:build_context",
+      "kind": "code",
+      "project_id": "p3",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "def build_context(): return worker_context()",
+          "facts": {
+            "commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
+            "path": "src/service.py",
+            "symbol": "build_context",
+            "body": "return worker_context()"
+          }
+        }
+      ],
+      "repository_id": "r33"
+    },
+    "task:t1": {
+      "subject": "task:t1",
+      "kind": "task",
+      "project_id": "p3",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Одна задача меняет API и UI; нужны оба PR.",
+          "facts": {
+            "status": "in_progress",
+            "pull_request_refs": [
+              "pr:r31:7",
+              "pr:r32:7"
+            ]
+          }
+        }
+      ]
+    },
+    "pr:r31:7": {
+      "subject": "pr:r31:7",
+      "kind": "pull_request",
+      "project_id": "p3",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "PR API #7 merged; относится к task:t1.",
+          "facts": {
+            "task_ref": "task:t1",
+            "state": "merged",
+            "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ],
+      "repository_id": "r31"
+    },
+    "pr:r32:7": {
+      "subject": "pr:r32:7",
+      "kind": "pull_request",
+      "project_id": "p3",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "PR UI #7 open; относится к task:t1.",
+          "facts": {
+            "task_ref": "task:t1",
+            "state": "open",
+            "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        }
+      ],
+      "repository_id": "r32"
+    },
+    "ci:r1:green": {
+      "subject": "ci:r1:green",
+      "kind": "ci",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "CI успешно завершён только для commit C.",
+          "facts": {
+            "commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
+            "status": "success"
+          }
+        }
+      ],
+      "repository_id": "r1"
+    },
+    "ci:r1:red": {
+      "subject": "ci:r1:red",
+      "kind": "ci",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Последняя проверка commit A завершилась ошибкой.",
+          "facts": {
+            "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "status": "failed"
+          }
+        }
+      ],
+      "repository_id": "r1"
+    },
+    "deploy:r1:staging": {
+      "subject": "deploy:r1:staging",
+      "kind": "deployment",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "В staging развёрнут commit B.",
+          "facts": {
+            "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "environment": "staging",
+            "status": "deployed"
+          }
+        }
+      ],
+      "repository_id": "r1"
+    },
+    "deploy:r1:production": {
+      "subject": "deploy:r1:production",
+      "kind": "deployment",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "В production развёрнут commit A.",
+          "facts": {
+            "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "environment": "production",
+            "status": "deployed"
+          }
+        },
+        {
+          "revision": 2,
+          "text": "Production обновлён до commit B.",
+          "facts": {
+            "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "environment": "production",
+            "status": "deployed"
+          }
+        },
+        {
+          "revision": 3,
+          "text": "Production явно откачен с B на A.",
+          "facts": {
+            "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "environment": "production",
+            "status": "deployed"
+          }
+        }
+      ],
+      "repository_id": "r1"
+    },
+    "document:race": {
+      "subject": "project:p1",
+      "kind": "document",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Первоначальное решение до параллельной правки.",
+          "facts": {
+            "decision": "Старое решение"
+          }
+        },
+        {
+          "revision": 2,
+          "text": "Решение изменено, пока worker обрабатывал rev1.",
+          "facts": {
+            "decision": "Новое решение"
+          }
+        }
+      ]
+    },
+    "document:restart": {
+      "subject": "project:p1",
+      "kind": "document",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Полный текст уже сохранён до сбоя worker.",
+          "facts": {
+            "decision": "Сохранить исходный текст"
+          }
+        }
+      ]
+    },
+    "document:transaction": {
+      "subject": "project:p1",
+      "kind": "document",
+      "project_id": "p1",
+      "visibility": "project",
+      "owner_id": null,
+      "conversation_id": null,
+      "acl": {
+        "revision": 1,
+        "readers": [
+          "u1"
+        ]
+      },
+      "current_revision": 1,
+      "deleted": false,
+      "versions": [
+        {
+          "revision": 1,
+          "text": "Последняя зафиксированная версия.",
+          "facts": {
+            "decision": "Принятое решение"
+          }
+        },
+        {
+          "revision": 2,
+          "text": "Эта правка и её outbox должны откатиться.",
+          "facts": {
+            "decision": "Незафиксированное решение"
+          }
+        }
+      ]
+    }
+  },
+  "jobs": {
+    "job-race": {
+      "source_ref": "document:race",
+      "revision": 1
+    },
+    "job-restart": {
+      "source_ref": "document:restart",
+      "revision": 1
+    },
+    "job-transaction": {
+      "source_ref": "document:transaction",
+      "revision": 1
+    }
+  },
+  "cases": [
+    {
+      "id": "passport-empty",
+      "requires": [
+        "project_passport"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p0",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p0",
+        "question": "Что за проект и что считать успехом?"
+      },
+      "materials": [
+        "project:p0"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "project:p0",
+            "revision": 1,
+            "field": "task_count",
+            "value": 0
+          }
+        ],
+        "unknown": [
+          {
+            "subject": "project:p0",
+            "field": "goal",
+            "reason": "missing"
+          },
+          {
+            "subject": "project:p0",
+            "field": "expected_result",
+            "reason": "missing"
+          },
+          {
+            "subject": "project:p0",
+            "field": "success_criteria",
+            "reason": "missing"
+          }
+        ],
+        "repository_heads": [],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "ask_missing_goal_and_result",
+          "project_exists_with_zero_tasks"
+        ]
+      },
+      "forbidden": {
+        "sources": [],
+        "claims": [
+          {
+            "subject": "project:p0",
+            "field": "goal",
+            "value": "Разработать приложение"
+          }
+        ],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "passport-filled-zero-tasks",
+      "requires": [
+        "project_passport"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "Какой результат нужен, если задач пока нет?"
+      },
+      "materials": [
+        "project:p1"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "project:p1",
+            "revision": 1,
+            "field": "goal",
+            "value": "Сохранить историю решений команды"
+          },
+          {
+            "source_ref": "project:p1",
+            "revision": 1,
+            "field": "expected_result",
+            "value": "Проверяемая карта знаний"
+          },
+          {
+            "source_ref": "project:p1",
+            "revision": 1,
+            "field": "success_criteria",
+            "value": [
+              "У каждого утверждения указан источник"
+            ]
+          },
+          {
+            "source_ref": "project:p1",
+            "revision": 1,
+            "field": "task_count",
+            "value": 0
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "do_not_equate_zero_tasks_with_completion"
+        ]
+      },
+      "forbidden": {
+        "sources": [],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "sources-conflicting",
+      "requires": [
+        "evidence_map"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "На какую дату согласован релиз?"
+      },
+      "materials": [
+        "document:conflict-a",
+        "document:conflict-b"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [],
+        "unknown": [
+          {
+            "subject": "project:p1",
+            "field": "release_date",
+            "reason": "conflicting"
+          }
+        ],
+        "repository_heads": [],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "report_unresolved_conflict"
+        ]
+      },
+      "forbidden": {
+        "sources": [],
+        "claims": [
+          {
+            "subject": "project:p1",
+            "field": "release_date",
+            "value": "2026-11-20"
+          },
+          {
+            "subject": "project:p1",
+            "field": "release_date",
+            "value": "2026-11-30"
+          }
+        ],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "sources-old-deleted-revoked",
+      "requires": [
+        "source_access_recheck"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "Какой срок релиза и какое хранилище приняты?"
+      },
+      "materials": [
+        "document:release",
+        "document:deleted"
+      ],
+      "events": [
+        {
+          "phase": "before_publish",
+          "kind": "revoke_access",
+          "source_ref": "document:release",
+          "actor_id": "u1",
+          "acl_revision": 2
+        }
+      ],
+      "expected": {
+        "facts": [],
+        "unknown": [
+          {
+            "subject": "project:p1",
+            "field": "release_date",
+            "reason": "inaccessible"
+          },
+          {
+            "subject": "project:p1",
+            "field": "storage",
+            "reason": "inaccessible"
+          }
+        ],
+        "repository_heads": [],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "suppress_answer_after_revocation"
+        ]
+      },
+      "forbidden": {
+        "sources": [
+          {
+            "source_ref": "document:release",
+            "revision": 1,
+            "reason": "not_current_revision"
+          },
+          {
+            "source_ref": "document:release",
+            "revision": 2,
+            "reason": "acl"
+          },
+          {
+            "source_ref": "document:deleted",
+            "revision": 1,
+            "reason": "deleted"
+          }
+        ],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "shared-isolation",
+      "requires": [
+        "context_isolation"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "Какие решения доступны общему чату?"
+      },
+      "materials": [
+        "message:shared",
+        "message:private-a",
+        "message:private-b",
+        "message:draft",
+        "document:personal",
+        "document:other-project"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "message:shared",
+            "revision": 1,
+            "field": "decision",
+            "value": "Проверять происхождение фактов"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": []
+      },
+      "forbidden": {
+        "sources": [
+          {
+            "source_ref": "message:private-a",
+            "revision": 1,
+            "reason": "private_conversation"
+          },
+          {
+            "source_ref": "message:private-b",
+            "revision": 1,
+            "reason": "private_conversation"
+          },
+          {
+            "source_ref": "message:draft",
+            "revision": 1,
+            "reason": "draft"
+          },
+          {
+            "source_ref": "document:personal",
+            "revision": 1,
+            "reason": "scope"
+          },
+          {
+            "source_ref": "document:other-project",
+            "revision": 1,
+            "reason": "scope"
+          }
+        ],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "private-project-exact-dialog",
+      "requires": [
+        "context_isolation"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "private_project",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "private-a",
+        "question": "Учти мои заметки в этом личном диалоге."
+      },
+      "materials": [
+        "message:shared",
+        "message:private-a",
+        "message:private-b",
+        "message:draft",
+        "document:other-project"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "message:shared",
+            "revision": 1,
+            "field": "decision",
+            "value": "Проверять происхождение фактов"
+          },
+          {
+            "source_ref": "message:private-a",
+            "revision": 1,
+            "field": "private_note",
+            "value": "Обсудить личное предложение"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": []
+      },
+      "forbidden": {
+        "sources": [
+          {
+            "source_ref": "message:private-b",
+            "revision": 1,
+            "reason": "private_conversation"
+          },
+          {
+            "source_ref": "message:draft",
+            "revision": 1,
+            "reason": "draft"
+          },
+          {
+            "source_ref": "document:other-project",
+            "revision": 1,
+            "reason": "scope"
+          }
+        ],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "global-explicit-project-and-owner",
+      "requires": [
+        "context_isolation"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "global",
+        "project_id": null,
+        "selected_project_ids": [
+          "p1"
+        ],
+        "conversation_id": "global-u1",
+        "question": "Сопоставь мою заметку с доступным проектом p1."
+      },
+      "materials": [
+        "document:personal",
+        "message:shared",
+        "message:private-a",
+        "document:other-project",
+        "document:other-personal",
+        "message:draft"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "document:personal",
+            "revision": 1,
+            "field": "personal_note",
+            "value": "Собственная заметка"
+          },
+          {
+            "source_ref": "message:shared",
+            "revision": 1,
+            "field": "decision",
+            "value": "Проверять происхождение фактов"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": []
+      },
+      "forbidden": {
+        "sources": [
+          {
+            "source_ref": "message:private-a",
+            "revision": 1,
+            "reason": "private_conversation"
+          },
+          {
+            "source_ref": "document:other-project",
+            "revision": 1,
+            "reason": "scope"
+          },
+          {
+            "source_ref": "document:other-personal",
+            "revision": 1,
+            "reason": "owner"
+          },
+          {
+            "source_ref": "message:draft",
+            "revision": 1,
+            "reason": "draft"
+          }
+        ],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "single-repository",
+      "requires": [
+        "repository_context"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "Где реализована сборка контекста?"
+      },
+      "materials": [
+        "code:r1"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "code:r1",
+            "revision": 1,
+            "field": "commit_sha",
+            "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "source_ref": "code:r1",
+            "revision": 1,
+            "field": "path",
+            "value": "src/service.py"
+          },
+          {
+            "source_ref": "code:r1",
+            "revision": 1,
+            "field": "symbol",
+            "value": "build_context"
+          },
+          {
+            "source_ref": "code:r1",
+            "revision": 1,
+            "field": "body",
+            "value": "return read_current_passport()"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [
+          {
+            "repository_id": "r1",
+            "ref": "refs/heads/main",
+            "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "generation": 1
+          }
+        ],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": []
+      },
+      "forbidden": {
+        "sources": [],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "three-repos-same-path-symbol",
+      "requires": [
+        "repository_context",
+        "code_identity"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p3",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p3",
+        "question": "Чем отличается build_context в API, UI и worker?"
+      },
+      "materials": [
+        "code:r31",
+        "code:r32",
+        "code:r33"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "code:r31",
+            "revision": 1,
+            "field": "commit_sha",
+            "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "source_ref": "code:r31",
+            "revision": 1,
+            "field": "path",
+            "value": "src/service.py"
+          },
+          {
+            "source_ref": "code:r31",
+            "revision": 1,
+            "field": "symbol",
+            "value": "build_context"
+          },
+          {
+            "source_ref": "code:r31",
+            "revision": 1,
+            "field": "body",
+            "value": "return api_context()"
+          },
+          {
+            "source_ref": "code:r32",
+            "revision": 1,
+            "field": "commit_sha",
+            "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "source_ref": "code:r32",
+            "revision": 1,
+            "field": "path",
+            "value": "src/service.py"
+          },
+          {
+            "source_ref": "code:r32",
+            "revision": 1,
+            "field": "symbol",
+            "value": "build_context"
+          },
+          {
+            "source_ref": "code:r32",
+            "revision": 1,
+            "field": "body",
+            "value": "return web_context()"
+          },
+          {
+            "source_ref": "code:r33",
+            "revision": 1,
+            "field": "commit_sha",
+            "value": "cccccccccccccccccccccccccccccccccccccccc"
+          },
+          {
+            "source_ref": "code:r33",
+            "revision": 1,
+            "field": "path",
+            "value": "src/service.py"
+          },
+          {
+            "source_ref": "code:r33",
+            "revision": 1,
+            "field": "symbol",
+            "value": "build_context"
+          },
+          {
+            "source_ref": "code:r33",
+            "revision": 1,
+            "field": "body",
+            "value": "return worker_context()"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [
+          {
+            "repository_id": "r31",
+            "ref": "refs/heads/main",
+            "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "generation": 1
+          },
+          {
+            "repository_id": "r32",
+            "ref": "refs/heads/main",
+            "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "generation": 1
+          },
+          {
+            "repository_id": "r33",
+            "ref": "refs/heads/release",
+            "commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
+            "generation": 1
+          }
+        ],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "cite_repository_commit_path_symbol_for_each_part"
+        ]
+      },
+      "forbidden": {
+        "sources": [],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "task-two-pull-requests",
+      "requires": [
+        "artifact_graph"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p3",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p3",
+        "question": "Можно ли считать задачу завершённой после merge API?"
+      },
+      "materials": [
+        "task:t1",
+        "pr:r31:7",
+        "pr:r32:7"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "task:t1",
+            "revision": 1,
+            "field": "status",
+            "value": "in_progress"
+          },
+          {
+            "source_ref": "task:t1",
+            "revision": 1,
+            "field": "pull_request_refs",
+            "value": [
+              "pr:r31:7",
+              "pr:r32:7"
+            ]
+          },
+          {
+            "source_ref": "pr:r31:7",
+            "revision": 1,
+            "field": "state",
+            "value": "merged"
+          },
+          {
+            "source_ref": "pr:r32:7",
+            "revision": 1,
+            "field": "state",
+            "value": "open"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "keep_both_repository_links",
+          "do_not_complete_task_from_one_merge"
+        ]
+      },
+      "forbidden": {
+        "sources": [],
+        "claims": [
+          {
+            "subject": "task:t1",
+            "field": "status",
+            "value": "completed"
+          }
+        ],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "ci-deploy-sha-environment",
+      "requires": [
+        "artifact_graph"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "Что проверено, что в staging и что сейчас в production?"
+      },
+      "materials": [
+        "ci:r1:green",
+        "ci:r1:red",
+        "deploy:r1:staging",
+        "deploy:r1:production"
+      ],
+      "events": [],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "ci:r1:green",
+            "revision": 1,
+            "field": "commit_sha",
+            "value": "cccccccccccccccccccccccccccccccccccccccc"
+          },
+          {
+            "source_ref": "ci:r1:green",
+            "revision": 1,
+            "field": "status",
+            "value": "success"
+          },
+          {
+            "source_ref": "ci:r1:red",
+            "revision": 1,
+            "field": "commit_sha",
+            "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "source_ref": "ci:r1:red",
+            "revision": 1,
+            "field": "status",
+            "value": "failed"
+          },
+          {
+            "source_ref": "deploy:r1:staging",
+            "revision": 1,
+            "field": "commit_sha",
+            "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "source_ref": "deploy:r1:staging",
+            "revision": 1,
+            "field": "environment",
+            "value": "staging"
+          },
+          {
+            "source_ref": "deploy:r1:staging",
+            "revision": 1,
+            "field": "status",
+            "value": "deployed"
+          },
+          {
+            "source_ref": "deploy:r1:production",
+            "revision": 1,
+            "field": "commit_sha",
+            "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "source_ref": "deploy:r1:production",
+            "revision": 1,
+            "field": "environment",
+            "value": "production"
+          },
+          {
+            "source_ref": "deploy:r1:production",
+            "revision": 1,
+            "field": "status",
+            "value": "deployed"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [],
+        "manifest": [],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "distinguish_ci_commit_and_each_deployment_environment"
+        ]
+      },
+      "forbidden": {
+        "sources": [],
+        "claims": [
+          {
+            "subject": "deploy:r1:production",
+            "field": "commit_sha",
+            "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "subject": "deploy:r1:production",
+            "field": "commit_sha",
+            "value": "cccccccccccccccccccccccccccccccccccccccc"
+          }
+        ],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "late-old-index-write",
+      "requires": [
+        "versioned_index"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "Какое решение действует после параллельной правки?"
+      },
+      "materials": [
+        "document:race"
+      ],
+      "events": [
+        {
+          "phase": "before_publish",
+          "kind": "set_revision",
+          "source_ref": "document:race",
+          "revision": 2
+        },
+        {
+          "phase": "before_publish",
+          "kind": "index_attempt",
+          "job_id": "job-race",
+          "source_ref": "document:race",
+          "revision": 1
+        }
+      ],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "document:race",
+            "revision": 2,
+            "field": "decision",
+            "value": "Новое решение"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [],
+        "manifest": [
+          {
+            "source_ref": "document:race",
+            "revision": 2
+          }
+        ],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "reject_late_old_write"
+        ]
+      },
+      "forbidden": {
+        "sources": [
+          {
+            "source_ref": "document:race",
+            "revision": 1,
+            "reason": "not_current_revision"
+          }
+        ],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "crash-checkpoint-restart",
+      "requires": [
+        "durable_index_jobs"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "Продолжи индексирование после перезапуска worker."
+      },
+      "materials": [
+        "document:restart"
+      ],
+      "events": [
+        {
+          "phase": "before_publish",
+          "kind": "checkpoint",
+          "job_id": "job-restart",
+          "source_ref": "document:restart",
+          "revision": 1,
+          "stage": "extracted",
+          "worker_id": "worker-a"
+        },
+        {
+          "phase": "before_publish",
+          "kind": "crash",
+          "job_id": "job-restart",
+          "worker_id": "worker-a"
+        },
+        {
+          "phase": "before_publish",
+          "kind": "restart",
+          "job_id": "job-restart",
+          "worker_id": "worker-b"
+        },
+        {
+          "phase": "before_publish",
+          "kind": "index_attempt",
+          "job_id": "job-restart",
+          "source_ref": "document:restart",
+          "revision": 1
+        }
+      ],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "document:restart",
+            "revision": 1,
+            "field": "decision",
+            "value": "Сохранить исходный текст"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [],
+        "manifest": [
+          {
+            "source_ref": "document:restart",
+            "revision": 1
+          }
+        ],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "reuse_extracted_text",
+          "one_publication_for_same_job"
+        ]
+      },
+      "forbidden": {
+        "sources": [],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "reorder-duplicate-force-push",
+      "requires": [
+        "git_event_reconciliation"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "Какой код соответствует текущему main после force-push?"
+      },
+      "materials": [
+        "code:r1"
+      ],
+      "events": [
+        {
+          "phase": "before_publish",
+          "kind": "ref_update",
+          "repository_id": "r1",
+          "previous_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "generation": 2,
+          "force": false
+        },
+        {
+          "phase": "before_publish",
+          "kind": "set_revision",
+          "source_ref": "code:r1",
+          "revision": 2
+        },
+        {
+          "phase": "before_publish",
+          "kind": "ref_update",
+          "repository_id": "r1",
+          "previous_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "commit_sha": "dddddddddddddddddddddddddddddddddddddddd",
+          "generation": 3,
+          "force": true
+        },
+        {
+          "phase": "before_publish",
+          "kind": "set_revision",
+          "source_ref": "code:r1",
+          "revision": 3
+        },
+        {
+          "phase": "before_publish",
+          "kind": "deliver_event",
+          "event_id": "push-3",
+          "repository_id": "r1",
+          "generation": 3,
+          "commit_sha": "dddddddddddddddddddddddddddddddddddddddd"
+        },
+        {
+          "phase": "before_publish",
+          "kind": "deliver_event",
+          "event_id": "push-2",
+          "repository_id": "r1",
+          "generation": 2,
+          "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "phase": "before_publish",
+          "kind": "deliver_event",
+          "event_id": "push-3",
+          "repository_id": "r1",
+          "generation": 3,
+          "commit_sha": "dddddddddddddddddddddddddddddddddddddddd"
+        }
+      ],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "code:r1",
+            "revision": 3,
+            "field": "commit_sha",
+            "value": "dddddddddddddddddddddddddddddddddddddddd"
+          },
+          {
+            "source_ref": "code:r1",
+            "revision": 3,
+            "field": "path",
+            "value": "src/service.py"
+          },
+          {
+            "source_ref": "code:r1",
+            "revision": 3,
+            "field": "symbol",
+            "value": "build_context"
+          },
+          {
+            "source_ref": "code:r1",
+            "revision": 3,
+            "field": "body",
+            "value": "return read_verified_sources()"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [
+          {
+            "repository_id": "r1",
+            "ref": "refs/heads/main",
+            "commit_sha": "dddddddddddddddddddddddddddddddddddddddd",
+            "generation": 3
+          }
+        ],
+        "manifest": [
+          {
+            "source_ref": "code:r1",
+            "revision": 3
+          }
+        ],
+        "absent_outbox_transactions": [],
+        "behavior": [
+          "use_ref_generation_instead_of_delivery_time"
+        ]
+      },
+      "forbidden": {
+        "sources": [
+          {
+            "source_ref": "code:r1",
+            "revision": 1,
+            "reason": "not_current_revision"
+          },
+          {
+            "source_ref": "code:r1",
+            "revision": 2,
+            "reason": "not_current_revision"
+          }
+        ],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    },
+    {
+      "id": "deploy-and-transaction-rollback",
+      "requires": [
+        "deployment_evidence",
+        "transactional_outbox"
+      ],
+      "request": {
+        "actor_id": "u1",
+        "channel": "shared",
+        "project_id": "p1",
+        "selected_project_ids": [],
+        "conversation_id": "shared-p1",
+        "question": "Что осталось в production и знаниях после откатов?"
+      },
+      "materials": [
+        "deploy:r1:production",
+        "document:transaction"
+      ],
+      "events": [
+        {
+          "phase": "before_publish",
+          "kind": "set_revision",
+          "source_ref": "deploy:r1:production",
+          "revision": 2
+        },
+        {
+          "phase": "before_publish",
+          "kind": "set_revision",
+          "source_ref": "deploy:r1:production",
+          "revision": 3
+        },
+        {
+          "phase": "before_publish",
+          "kind": "transaction_write",
+          "transaction_id": "tx-rollback",
+          "source_ref": "document:transaction",
+          "revision": 2
+        },
+        {
+          "phase": "before_publish",
+          "kind": "transaction_rollback",
+          "transaction_id": "tx-rollback"
+        },
+        {
+          "phase": "before_publish",
+          "kind": "index_failure",
+          "job_id": "job-transaction",
+          "source_ref": "document:transaction",
+          "revision": 1
+        },
+        {
+          "phase": "before_publish",
+          "kind": "index_attempt",
+          "job_id": "job-transaction",
+          "source_ref": "document:transaction",
+          "revision": 1
+        }
+      ],
+      "expected": {
+        "facts": [
+          {
+            "source_ref": "deploy:r1:production",
+            "revision": 3,
+            "field": "commit_sha",
+            "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          {
+            "source_ref": "deploy:r1:production",
+            "revision": 3,
+            "field": "environment",
+            "value": "production"
+          },
+          {
+            "source_ref": "document:transaction",
+            "revision": 1,
+            "field": "decision",
+            "value": "Принятое решение"
+          }
+        ],
+        "unknown": [],
+        "repository_heads": [],
+        "manifest": [
+          {
+            "source_ref": "document:transaction",
+            "revision": 1
+          }
+        ],
+        "absent_outbox_transactions": [
+          "tx-rollback"
+        ],
+        "behavior": [
+          "keep_rollback_history_and_current_environment",
+          "preserve_previous_index_on_failure"
+        ]
+      },
+      "forbidden": {
+        "sources": [
+          {
+            "source_ref": "deploy:r1:production",
+            "revision": 2,
+            "reason": "not_current_revision"
+          },
+          {
+            "source_ref": "document:transaction",
+            "revision": 2,
+            "reason": "not_current_revision"
+          }
+        ],
+        "claims": [],
+        "effects": [
+          "business_write"
+        ]
+      }
+    }
+  ]
+}

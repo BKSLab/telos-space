@@ -25,7 +25,13 @@ from src.db.models import (
     TaskReport,
     WbsNode,
 )
-from src.knowledge.catalog import EXCLUDED_TABLES, POLICIES, SourceType, build_catalog
+from src.knowledge.catalog import (
+    EXCLUDED_TABLES,
+    POLICIES,
+    POLICY_BY_TYPE,
+    SourceType,
+    build_catalog,
+)
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
 
 
@@ -208,7 +214,7 @@ async def test_every_source_and_horizontal_relation_is_searchable(db_session, pr
     assert reason_source.properties["reason"] == "Проверено нефритосогласование"
     assert "нефритосогласование" in reason_source.text
     assert reason_source.parent_source_id == f"task:{task.id}"
-    assert {source.kind for source in catalog.sources.values()} == set(SourceType)
+    assert {source.kind for source in catalog.sources.values()} == set(POLICY_BY_TYPE)
     for query, kind in [
         (project.name, "project"),
         (stage.name, "stage"),
@@ -275,7 +281,10 @@ def test_model_coverage_requires_an_explicit_policy():
     from src.knowledge.catalog import EXCLUDED_FIELDS
 
     assert set(Base.metadata.tables) == {rule.table for rule in POLICIES} | set(EXCLUDED_TABLES)
-    assert {rule.kind for rule in POLICIES if rule.kind} == set(SourceType)
+    assert {rule.kind for rule in POLICIES if rule.kind} == set(POLICY_BY_TYPE)
+    # Git has its own upstream/credential proof; the generic SQL path cannot
+    # expose the cached corpus even when its enum is known to citations.
+    assert set(SourceType) - set(POLICY_BY_TYPE) == {SourceType.GIT_FILE}
     for rule in POLICIES:
         assert set(Base.metadata.tables[rule.table].c.keys()) == set(rule.fields) | set(
             EXCLUDED_FIELDS.get(rule.table, {})

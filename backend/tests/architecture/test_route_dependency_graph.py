@@ -30,6 +30,8 @@ PUBLIC_READ_ROUTES = {
 # Управление токенами закрыто для самих токенов: скомпрометированный токен
 # не должен уметь выпустить себе замену и отозвать чужие.
 SESSION_ONLY_ROUTES = {
+    ("POST", "/api/v1/projects/{project_id}/web-research/topics"),
+    ("POST", "/api/v1/projects/{project_id}/web-research/pages"),
     ("POST", "/api/v1/users/me/tokens"),
     ("DELETE", "/api/v1/users/me/tokens/{token_id}"),
     ("POST", "/api/v1/users/me/api-keys"),
@@ -43,6 +45,8 @@ SESSION_ONLY_ROUTES = {
 
 # POST, которые ничего не меняют: расчёт, предпросмотр и поиск.
 READ_ONLY_POST_ROUTES = {
+    ("POST", "/api/v1/projects/{project_id}/web-research/search"),
+    ("POST", "/api/v1/projects/{project_id}/web-research/read"),
     # Вопрос ставит ответ в очередь. Запись в домен защищена WriteGate и подтверждением.
     ("POST", "/api/v1/aris/requests"),
     ("POST", "/api/v1/projects/{project_id}/chat/entities/resolve"),
@@ -98,8 +102,46 @@ DETACHED_AUTH_ROUTES = DOCUMENT_ROUTES | STREAMING_ROUTES | DETACHED_WRITE_SERVI
     ("POST", "/api/v1/projects/{project_id}/risks/suggestions"),
 }
 
-EXPECTED_NON_GET_TOTAL = 123
-EXPECTED_MUTATION_TOTAL = 102
+# Все context routes используют свежую авторизацию сервиса в короткой DB-области.
+# Webhook аутентифицирует HMAC и repository binding вместо user credentials.
+CONTEXT_READ_SERVICES = {
+    ("POST", "/api/v1/aris/requests"): "get_agent_requests_service",
+    ("GET", "/api/v1/aris/requests/{request_id}"): "get_agent_requests_service",
+    **{("GET", f"/api/v1/projects/{{project_id}}/knowledge/map{suffix}"): "get_project_knowledge_service"
+       for suffix in ("", "/status", "/claims/{claim_id}")},
+    ("GET", "/api/v1/projects/{project_id}/web-research/status"): "get_web_research_service",
+    **{("POST", f"/api/v1/projects/{{project_id}}/web-research/{suffix}"): "get_web_research_service"
+       for suffix in ("topics", "pages", "search", "read")},
+    **{("GET", f"/api/v1/projects/{{project_id}}/git{suffix}"): "get_git_source_service"
+       for suffix in ("/connections", "/connections/{connection_id}", "/connections/{connection_id}/tree",
+                      "/connections/{connection_id}/file", "/connections/{connection_id}/compare",
+                      "/search", "/map", "/tasks/{task_id}/links", "/tasks/{task_id}/candidates")},
+}
+CONTEXT_WRITE_SERVICES = {
+    ("POST", "/api/v1/projects/{project_id}/knowledge/map/refresh"): "get_project_knowledge_service",
+    ("POST", "/api/v1/projects/{project_id}/web-research/documents"): "get_web_research_service",
+    **{(method, f"/api/v1/projects/{{project_id}}/git{suffix}"): "get_git_source_service"
+       for method, suffix in (("POST", "/connections"), ("PATCH", "/connections/{connection_id}"),
+          ("DELETE", "/connections/{connection_id}"), ("PUT", "/connections/{connection_id}/credential"),
+          ("POST", "/connections/{connection_id}/sync"), ("POST", "/connections/{connection_id}/events"),
+          ("POST", "/tasks/{task_id}/links"), ("DELETE", "/tasks/{task_id}/links/{link_id}"),
+          ("POST", "/tasks/{task_id}/links/{link_id}/refresh"))},
+}
+DETACHED_WRITE_SERVICES.update(CONTEXT_WRITE_SERVICES)
+DETACHED_AUTH_ROUTES |= CONTEXT_READ_SERVICES.keys() | CONTEXT_WRITE_SERVICES.keys()
+# Решения могут подтверждать внешний read effect. Запись проверяет actual action
+# service; эти endpoints сохраняют обычную request authentication.
+ACTION_DECISION_SERVICES = {
+    ("POST", path): "get_agent_actions_service" for path in (
+        "/api/v1/aris/conversations/{conversation_id}/actions/{action_id}/decision",
+        "/api/v1/projects/{project_id}/aris/conversations/{conversation_id}/actions/{action_id}/decision",
+        "/api/v1/projects/{project_id}/chat/aris/actions/{action_id}/decision",
+    )
+}
+SERVICE_WRITE_GUARDS = DETACHED_WRITE_SERVICES | ACTION_DECISION_SERVICES
+
+EXPECTED_NON_GET_TOTAL = 138
+EXPECTED_MUTATION_TOTAL = 113
 
 
 def route_dependencies(route: APIRoute) -> set[str]:
@@ -225,7 +267,7 @@ def test_write_scope_is_required_exactly_where_it_should_be() -> None:
     unprotected = [
         f"{method} {path}"
         for method, path, route in mutation_routes()
-        if (method, path) not in DETACHED_WRITE_SERVICES
+        if (method, path) not in SERVICE_WRITE_GUARDS
         and not {"require_write_scope", "require_chat_write_scope"} & route_dependencies(route)
     ]
 
@@ -233,7 +275,7 @@ def test_write_scope_is_required_exactly_where_it_should_be() -> None:
         sorted(unprotected)
     )
     detached = {(method, path): route for method, path, route in api_routes()}
-    for pair, service in DETACHED_WRITE_SERVICES.items():
+    for pair, service in (SERVICE_WRITE_GUARDS | CONTEXT_READ_SERVICES).items():
         assert service in route_dependencies(detached[pair]), f"{pair} должен проверять права через {service}"
     # Расчёт и предпросмотр остаются доступны токену на чтение.
     wrongly_protected = [
@@ -320,7 +362,7 @@ def test_authentication_is_required_everywhere_except_public_routes() -> None:
         if (method, path) not in SESSION_ONLY_ROUTES:
             continue
         deps = route_dependencies(route)
-        assert "require_session" in deps, f"{method} {path} не закрыт guard сессии."
+        assert {"require_session", "require_context_session"} & deps, f"{method} {path} не закрыт guard сессии."
         assert "require_write_scope" not in deps, (
             f"{method} {path} использует scope записи вместо guard сессии."
         )

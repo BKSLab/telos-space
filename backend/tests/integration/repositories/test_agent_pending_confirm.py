@@ -15,7 +15,7 @@ from src.exceptions.agent_tools import (
     AgentToolDecidedError,
     AgentToolExpiredError,
 )
-from src.schemas.knowledge import KnowledgeAnswerSchema
+from tests.integration.repositories.test_agent_action_conversations import guarded_action_answer
 from tests.integration.repositories.test_agent_personal_conversations import (
     agent_env as agent_env,
 )
@@ -33,19 +33,30 @@ async def test_external_pending_cannot_be_approved_through_widget_decision(actio
     original = await task(env)
     action_id = await propose_delete(env, original)
     async with env.factory() as session:
-        conversation = AgentConversation(user_id=1, project_id=None, title="Внешний API", channel="api")
+        conversation = AgentConversation(
+            user_id=1, project_id=None, title="Внешний API", channel="api"
+        )
         session.add(conversation)
         await session.flush()
-        message = AgentMessage(conversation_id=conversation.id, request_id=uuid4(),
-            role="assistant", content="Требуется решение", status="completed")
+        message = AgentMessage(
+            conversation_id=conversation.id,
+            request_id=uuid4(),
+            role="assistant",
+            content="Требуется решение",
+            status="completed",
+        )
         session.add(message)
         await session.flush()
         row = await session.get(AgentToolRun, action_id)
         row.message_id = message.id
         await session.commit()
     with pytest.raises(AgentToolAccessError):
-        await env.actions.decide(context=AgentToolContext(project_id=None, user_id=1, can_write=True),
-            action_id=action_id, decision="approve", conversation_id=conversation.id)
+        await env.actions.decide(
+            context=AgentToolContext(project_id=None, user_id=1, can_write=True),
+            action_id=action_id,
+            decision="approve",
+            conversation_id=conversation.id,
+        )
     assert (await invoke(env, "telos_list_tasks"))["total"] == 1
     decision = await env.actions.decide_pending(user_id=1, action_id=action_id, decision="approve")
     assert decision.status == "completed"
@@ -159,8 +170,8 @@ async def test_link_decision_of_chat_action_finds_conversation_and_resumes_answe
                     "expected_updated_at": original["updated_at"],
                 },
             )
-            return KnowledgeAnswerSchema(answer="Подтвердите удаление по ссылке.", sources=[])
-        return KnowledgeAnswerSchema(answer="Задача удалена.", sources=[])
+            return await guarded_action_answer(env, "Подтвердите удаление по ссылке.")
+        return await guarded_action_answer(env, "Задача удалена.")
 
     env.responder.ask.side_effect = respond
     await send(env, conversation.id, "Удали задачу")
