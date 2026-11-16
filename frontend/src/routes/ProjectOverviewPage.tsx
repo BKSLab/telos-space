@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUpRight, CalendarClock, CheckCircle2, ChevronDown, ListTodo, Plus } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CalendarClock, ChartNoAxesCombined, CheckCircle2, ChevronDown, ListTodo, Plus } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import type { ProjectMilestone, ProjectStats, Task } from "@/lib/types";
 import { formatDayMonth } from "@/lib/dates";
@@ -18,7 +18,6 @@ import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 import { ActionLink, MetricCard, MetricGrid, OverviewPanel, TaskCompletion } from "@/components/dashboard/OverviewCards";
 import { OverviewTaskRow } from "@/components/dashboard/TaskRow";
 import { ProjectSummaryPanel } from "@/components/overview/ProjectSummaryPanel";
-import { StageBreakdown } from "@/components/overview/OverviewBreakdown";
 import { ProjectPeopleSummary } from "@/components/projects/ProjectPeopleSummary";
 import { ProjectSchedulePanel } from "@/components/overview/ProjectSchedulePanel";
 
@@ -43,7 +42,7 @@ export function ProjectOverviewPage() {
     const taskList = `/projects/${project.key}/tasks`;
     const riskSummary = risks.data;
 
-    return <div className="scrollbar-thin h-full overflow-y-auto">
+    return <div className="min-w-0">
         <div className="mx-auto flex w-full max-w-none flex-col gap-4 px-3 py-4 sm:gap-5 sm:px-6">
             <header className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -68,14 +67,8 @@ export function ProjectOverviewPage() {
                     icon={<ListTodo size={24} />} action={<LinkButton to={taskList} variant="primary" size="lg" icon={<Plus size={16} aria-hidden="true" />}>Перейти к задачам</LinkButton>} />}
             </>}
             <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-                    {stats ? <OverviewPanel title="Фактический прогресс" description="Доля завершённых задач проекта">
-                        <div className="grid items-center gap-5 sm:grid-cols-2">
-                            <TaskCompletion total={stats.total_tasks} done={stats.done_tasks} inProgress={stats.in_progress_tasks} color={project.color} />
-                            <div className="min-w-0 border-t border-line-subtle pt-3 sm:border-t-0 sm:border-l sm:pl-4 sm:pt-0">
-                                <h3 className="mb-3 text-[12px] font-medium text-muted">По стадиям</h3>
-                                {stats.stage_breakdown.length > 0 ? <StageBreakdown stages={stats.stage_breakdown} /> : <p className="text-[14px] text-muted">Стадии пока не настроены.</p>}
-                            </div>
-                        </div>
+                    {stats ? <OverviewPanel title="Фактический прогресс" description="Доля завершённых задач и текущие стадии" icon={<ChartNoAxesCombined size={19} aria-hidden="true" />}>
+                        <TaskCompletion total={stats.total_tasks} done={stats.done_tasks} inProgress={stats.in_progress_tasks} color={project.color} stages={stats.stage_breakdown} />
                     </OverviewPanel> : <OverviewPanel title="Фактический прогресс">
                         {statsQuery.isPending ? <Skeleton className="h-30" /> : <p className="text-[14px] text-muted">Прогресс появится после загрузки показателей.</p>}
                     </OverviewPanel>}

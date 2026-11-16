@@ -54,35 +54,31 @@ it("оставляет одну активную вкладку чата и со
     client.clear();
 });
 
-it("показывает крупную identity с читаемым описанием только в обзоре", async () => {
+it("показывает компактную identity проекта без повторных KPI", () => {
     const { client, container } = setup("/projects/demo/");
-    expect(container.querySelector(".project-overview-header")).toBeTruthy();
-    expect(container.querySelector(".project-overview-logo")).toBeTruthy();
+    expect(container.querySelector(".project-header-compact")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Личный проект" })).toBeTruthy();
     expect(screen.getByText("DEMO")).toBeTruthy();
     expect(screen.getByText("В работе")).toBeTruthy();
-    const description = await screen.findByText("Доступный терминал для разработки. Без лишней разметки");
-    expect(description.querySelector("a, code, strong, ul")).toBeNull();
+    expect(screen.getByTestId("project-icon-default").style.width).toBe("var(--project-icon-size, 40px)");
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.getByRole("link", { name: "Настройки проекта" }).getAttribute("href")).toBe("/projects/DEMO/settings");
     client.clear();
 });
 
-it("при переходе с обзора оставляет компактную шапку и доступные с клавиатуры действия", async () => {
+it("сохраняет одну шапку при переходе с обзора и доступные с клавиатуры действия", async () => {
     const user = userEvent.setup();
     const { client, container } = setup("/projects/DEMO");
     const settings = screen.getByRole("link", { name: "Настройки проекта" });
-    await user.tab();
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Сведения о проекте" }));
+    const identity = container.querySelector(".project-header-logo")!.parentElement!.innerHTML;
     await user.tab();
     expect(document.activeElement).toBe(settings);
     await user.keyboard("{Enter}");
     expect(screen.getByText("Параметры проекта")).toBeTruthy();
-    expect(container.querySelector(".project-overview-header")).toBeNull();
-    expect(container.querySelector(".project-overview-logo")).toBeNull();
-    expect(screen.getByTestId("project-icon-default").style.width).toBe("var(--project-icon-size, 32px)");
+    expect(container.querySelector(".project-header-logo")!.parentElement!.innerHTML).toBe(identity);
+    expect(screen.getByTestId("project-icon-default").style.width).toBe("var(--project-icon-size, 40px)");
     expect(screen.queryByText("Доступный терминал для разработки. Без лишней разметки")).toBeNull();
-    expect(screen.getByRole("progressbar")).toBeTruthy();
+    expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.getByRole("navigation", { name: "Разделы проекта" })).toBeTruthy();
     client.clear();
 });

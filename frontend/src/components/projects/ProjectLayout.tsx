@@ -1,15 +1,10 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { NavLink, Outlet, useLocation, useMatch } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { Settings } from "lucide-react";
-import { api, endpoints, queryKeys } from "@/lib/api";
-import type { ProjectStats } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { useProjectFromRoute } from "@/lib/useProject";
-import { useRenderedMarkdown } from "@/lib/useRenderedMarkdown";
 import { ProjectIcon } from "@/components/projects/ProjectIcon";
 import { ProjectStatusBadge } from "@/components/ui/Badge";
-import { ProgressBar } from "@/components/ui/Progress";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
 import { ChatUnreadBadge } from "@/components/chat/ChatUnreadBadge";
 import "./ProjectIdentity.css";
@@ -26,28 +21,18 @@ const TABS = [
     { path: "docs", label: "Документы", end: false },
 ];
 
-function ProjectDescriptionPreview({ markdown }: { markdown: string }) {
-    const html = useRenderedMarkdown(markdown);
-    const description = useMemo(() => {
-        const document = new DOMParser().parseFromString(html, "text/html");
-        document.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, br, pre").forEach(element => element.append(" "));
-        return (document.body.textContent ?? "").replace(/\s+/g, " ").trim();
-    }, [html]);
-    if (!description) return null;
-    const excerpt = description.length > 240 ? `${description.slice(0, 237).trimEnd()}…` : description;
-    return <p className="project-overview-description text-[14px] leading-relaxed text-secondary" title={description}>{excerpt}</p>;
-}
-
 /**
- * Рабочее пространство проекта: шапка с показателями и вкладки разделов
- * (раздел 5 дизайн-гайда). Содержимое вкладки рендерится через Outlet.
+ * Одна компактная шапка для всех разделов. В обзоре она входит в общую
+ * прокрутку; рабочие холсты других вкладок сохраняют свой viewport.
  */
 export function ProjectLayout() {
     const { project, projectKey, isPending, error, isMissing } = useProjectFromRoute();
     const location = useLocation();
     const isOverview = useMatch("/projects/:projectKey") !== null;
     const tabs = useRef<HTMLElement>(null);
+    const workspace = useRef<HTMLDivElement>(null);
     useEffect(() => {
+        if (workspace.current) workspace.current.scrollTop = 0;
         const navigation = tabs.current;
         const active = navigation?.querySelector<HTMLElement>('[aria-current="page"]');
         if (!navigation || !active) return;
@@ -63,12 +48,6 @@ export function ProjectLayout() {
         navigation.querySelectorAll("a").forEach(tab => observer.observe(tab));
         return () => { cancelAnimationFrame(frame); observer.disconnect(); };
     }, [project?.id, location.pathname]);
-
-    const statsQuery = useQuery({
-        queryKey: queryKeys.projectStats(project?.id ?? 0),
-        queryFn: () => api.get<ProjectStats>(endpoints.projectStats(project?.id as number)),
-        enabled: project !== undefined,
-    });
 
     if (isPending) {
         return (
@@ -98,58 +77,30 @@ export function ProjectLayout() {
         );
     }
 
-    const percent = Math.round((statsQuery.data?.completion_rate ?? 0) * 100);
-    const description = project.description_sections?.goal?.trim() || project.description_md || "";
-
     return (
-        <div className="flex h-full min-w-0 flex-col">
-            <header className={cn("project-header material-metal shrink-0 border-b border-line bg-surface px-3 pt-2 sm:px-5 sm:pt-4", isOverview && "project-overview-header")}
+        <div ref={workspace} className={cn("project-workspace h-full min-w-0", isOverview ? "scrollbar-thin overflow-x-hidden overflow-y-auto" : "flex flex-col overflow-hidden")}>
+            <header className="project-header project-header-compact material-metal shrink-0 border-b border-line bg-surface px-3 sm:px-5"
                 style={{ "--project-color": project.color } as CSSProperties}>
-                <div className="flex w-full min-w-0 flex-col gap-3">
-                    <div className="project-header-details flex items-start justify-between gap-2 sm:flex-wrap sm:gap-3"
-                        role={isOverview ? "group" : undefined} aria-label={isOverview ? "Сведения о проекте" : undefined} tabIndex={isOverview ? 0 : undefined}>
-                        <div className={cn("flex min-w-0 flex-1 items-start gap-2.5", isOverview && "project-overview-identity")}>
-                            {isOverview ? <div className="project-overview-logo"><ProjectIcon project={project} size={72} /></div>
-                                : <ProjectIcon project={project} size={32} />}
-                            <div className={cn("flex min-w-0 flex-1 flex-col gap-1", isOverview && "gap-2")}>
-                                <div className={cn("flex flex-wrap items-center gap-2", isOverview && "flex-col items-start")}>
-                                    <h1 title={project.name} className={cn("max-w-full font-semibold tracking-[-0.025em] text-primary", isOverview ? "project-overview-name" : "truncate text-[18px] sm:text-[24px]")}>
+                <div className="flex w-full min-w-0 flex-col">
+                    <div className="project-header-details flex min-w-0 items-center justify-between gap-3 py-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <div className="project-header-logo"><ProjectIcon project={project} size={40} /></div>
+                            <div className="flex min-w-0 flex-1 flex-col gap-1">
+                                <div className="flex min-w-0 flex-col items-start gap-1">
+                                    <h1 title={project.name} className="project-header-name max-w-full font-semibold tracking-[-0.025em] text-primary">
                                         {project.name}
                                     </h1>
-                                    <div className={cn("flex flex-wrap items-center gap-2", !isOverview && "contents")}>
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <span className="font-mono text-[12px] text-muted">
                                             {project.key}
                                         </span>
-                                        <ProjectStatusBadge status={project.status} className={isOverview ? "text-[12px]" : undefined} />
+                                        <ProjectStatusBadge status={project.status} className="text-[12px]" />
                                     </div>
                                 </div>
-                                {isOverview && description && <ProjectDescriptionPreview key={`${project.id}:${description}`} markdown={description} />}
-                                {!isOverview && statsQuery.data && (
-                                    <p className="text-[12px] text-muted sm:text-[13px]">
-                                        {statsQuery.data.total_tasks} задач ·{" "}
-                                        {statsQuery.data.in_progress_tasks} в работе ·{" "}
-                                        {statsQuery.data.done_tasks} готово
-                                        {statsQuery.data.overdue_tasks > 0 && (
-                                            <span className="ml-1 text-danger">
-                                                · {statsQuery.data.overdue_tasks} просрочено
-                                            </span>
-                                        )}
-                                    </p>
-                                )}
                             </div>
                         </div>
 
                         <div className="flex items-center gap-3">
-                            {!isOverview && <div className="hidden w-44 items-center gap-2 sm:flex">
-                                <ProgressBar
-                                    value={statsQuery.data?.completion_rate ?? 0}
-                                    color={project.color}
-                                    label={`Прогресс проекта ${project.name}`}
-                                />
-                                <span className="shrink-0 font-mono text-[12px] text-secondary">
-                                    {percent}%
-                                </span>
-                            </div>}
                             <NavLink aria-label="Настройки проекта" title="Настройки проекта" to={`/projects/${project.key}/settings`} className={({ isActive }) => cn("touch-target flex size-8 shrink-0 items-center justify-center rounded-md text-secondary hover:bg-hover", isActive && "bg-accent-soft text-accent")}>
                                 <Settings size={17} aria-hidden="true" />
                             </NavLink>
@@ -180,7 +131,7 @@ export function ProjectLayout() {
                 </div>
             </header>
 
-            <div className="min-h-0 flex-1">
+            <div className={isOverview ? "min-w-0" : "min-h-0 flex-1"}>
                 <Outlet context={{ project }} />
             </div>
 

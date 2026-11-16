@@ -1,46 +1,36 @@
 import { UserIdentity } from "@/components/users/UserIdentity";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ChevronDown, CircleCheckBig, Flame, History, Info, Lightbulb, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
+import { Activity, ArrowUpRight, Ban, BookOpen, CalendarClock, ChevronDown, CircleCheckBig, Clock3, Flame, Flag, History, Info, Lightbulb, ListTree, RefreshCw, ShieldAlert, Sparkles, Users } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import { cn } from "@/lib/cn";
 import { formatDateTime, formatFullDate } from "@/lib/dates";
 import { reportFreshness } from "@/lib/overview";
-import type { AnalyticsHealth, AnalyticsReport } from "@/lib/types";
-import { ANALYTICS_HEALTH_LABELS } from "@/lib/types";
+import type { AnalyticsHealth, AnalyticsReport, AnalyticsSignals } from "@/lib/types";
+import { ANALYTICS_HEALTH_LABELS, ANALYTICS_HORIZON_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { AiOperationStatus } from "@/components/ui/AiOperationStatus";
 import { FindingCard, ProgressCard, RecommendationCard } from "@/components/dashboard/AnalyticsCards";
-
-const HEALTH_STYLES: Record<AnalyticsHealth, string> = {
-    STABLE: "border-success/30 bg-success/10 text-success",
-    WATCH: "border-accent-border bg-accent-soft text-accent",
-    RISK: "border-warning/30 bg-warning/10 text-warning",
-    CRITICAL: "border-danger/35 bg-danger/12 text-danger",
-};
+import "./ProjectSummaryPanel.css";
 
 const HEALTH_ICONS: Record<AnalyticsHealth, typeof Activity> = {
-    STABLE: CircleCheckBig,
-    WATCH: Activity,
-    RISK: ShieldAlert,
-    CRITICAL: Flame,
+    STABLE: CircleCheckBig, WATCH: Activity, RISK: ShieldAlert, CRITICAL: Flame,
 };
 
-const SIGNAL_ROWS: { key: "high_risks" | "occurred_risks" | "risks_review_overdue" | "risks_without_owner" | "risks_without_mitigation" | "overdue_tasks" | "milestones_at_risk" | "due_soon_tasks" | "blocked_tasks" | "stale_tasks" | "no_due_date_tasks" | "unassigned_tasks" | "unplaced_tasks"; label: string }[] = [
-    { key: "high_risks", label: "высоких рисков" },
-    { key: "occurred_risks", label: "реализовавшихся рисков" },
-    { key: "risks_review_overdue", label: "рисков с просроченным контролем" },
-    { key: "risks_without_owner", label: "рисков без ответственного" },
-    { key: "risks_without_mitigation", label: "рисков без митигации" },
-    { key: "overdue_tasks", label: "просроченных задач" },
-    { key: "milestones_at_risk", label: "вех под угрозой" },
-    { key: "due_soon_tasks", label: "задач со сроком на неделе" },
-    { key: "blocked_tasks", label: "заблокированных задач" },
-    { key: "stale_tasks", label: "задач без движения 2 недели" },
-    { key: "no_due_date_tasks", label: "задач без срока" },
-    { key: "unassigned_tasks", label: "задач без исполнителя" },
-    { key: "unplaced_tasks", label: "задач вне разделов ИСР" },
+const SIGNAL_ROWS: { key: keyof AnalyticsSignals; label: string; icon: typeof Activity; tone: "danger" | "warning" | "neutral" }[] = [
+    { key: "high_risks", label: "высоких рисков", icon: ShieldAlert, tone: "danger" },
+    { key: "occurred_risks", label: "реализовавшихся рисков", icon: Flame, tone: "danger" },
+    { key: "risks_review_overdue", label: "рисков с просроченным контролем", icon: Clock3, tone: "warning" },
+    { key: "risks_without_owner", label: "рисков без ответственного", icon: Users, tone: "warning" },
+    { key: "risks_without_mitigation", label: "рисков без митигации", icon: ShieldAlert, tone: "warning" },
+    { key: "overdue_tasks", label: "просроченных задач", icon: CalendarClock, tone: "danger" },
+    { key: "milestones_at_risk", label: "вех под угрозой", icon: Flag, tone: "warning" },
+    { key: "due_soon_tasks", label: "задач со сроком на неделе", icon: CalendarClock, tone: "neutral" },
+    { key: "blocked_tasks", label: "заблокированных задач", icon: Ban, tone: "danger" },
+    { key: "stale_tasks", label: "задач без движения 2 недели", icon: Clock3, tone: "warning" },
+    { key: "no_due_date_tasks", label: "задач без срока", icon: CalendarClock, tone: "warning" },
+    { key: "unassigned_tasks", label: "задач без исполнителя", icon: Users, tone: "warning" },
+    { key: "unplaced_tasks", label: "задач вне разделов ИСР", icon: ListTree, tone: "neutral" },
 ];
 
 interface ProjectSummaryPanelProps {
@@ -65,12 +55,12 @@ export function ProjectSummaryPanel({ projectId = null, dataUpdatedAt = null, bl
     const HealthIcon = report ? HEALTH_ICONS[report.health] : null;
     const freshness = reportFreshness(report?.created_at, dataUpdatedAt);
 
-    return <section aria-label="Вывод Ариса" className="ai-surface flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-card)] border border-ai-border shadow-card">
-        <header className="flex flex-wrap items-center gap-2.5 px-4 py-3 sm:px-5">
-            <span className="flex size-6 shrink-0 items-center justify-center text-ai-blue"><Sparkles size={20} aria-hidden="true" /></span>
+    return <section aria-label="Вывод Ариса" className="aris-summary-panel" data-freshness={freshness}>
+        <header className="aris-summary-header">
+            <span className="aris-summary-mark"><Sparkles size={21} aria-hidden="true" /></span>
             <div className="min-w-0 flex-1">
-                <h2 className="text-[16px] font-semibold tracking-[-0.02em] text-primary">Вывод Ариса</h2>
-                <p className="mt-0.5 text-[12px] leading-snug text-muted">{projectId ? "Оценка проекта на момент разбора" : "Оценка активных проектов и разовых задач"}</p>
+                <h2>Вывод Ариса</h2>
+                <p>{projectId ? "Оценка проекта на момент разбора" : "Оценка активных проектов и разовых задач"}</p>
             </div>
             <Button variant="ai" size="lg" onClick={() => generate.mutate()} disabled={generate.isPending || Boolean(blockedReason)} title={blockedReason}
                 icon={generate.isPending ? <RefreshCw size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}>
@@ -78,101 +68,137 @@ export function ProjectSummaryPanel({ projectId = null, dataUpdatedAt = null, bl
             </Button>
         </header>
 
-        {blockedReason && <p className="px-4 pb-4 text-[12px] text-muted sm:px-5">{blockedReason}</p>}
-        {reportQuery.error && <div className="px-4 pb-4 sm:px-5"><ErrorMessage title="Разбор недоступен" message={(reportQuery.error as Error).message}
+        {blockedReason && <p className="aris-summary-message text-muted">{blockedReason}</p>}
+        {reportQuery.error && <div className="aris-summary-message"><ErrorMessage title="Разбор недоступен" message={(reportQuery.error as Error).message}
             action={<Button size="sm" onClick={() => void reportQuery.refetch()}>Повторить загрузку</Button>} /></div>}
-        {generate.error && <div className="px-4 pb-4 sm:px-5"><ErrorMessage title="Разбор не сформирован" message={(generate.error as Error).message} /></div>}
-        {generate.isPending && <div className="border-t border-line-subtle px-4 py-3 sm:px-5">
+        {generate.error && <div className="aris-summary-message"><ErrorMessage title="Разбор не сформирован" message={(generate.error as Error).message} /></div>}
+        {generate.isPending && <div className="aris-summary-pending">
             <AiOperationStatus message={projectId ? "Арис готовит разбор проекта…" : "Арис готовит разбор портфеля…"}
                 description={`Сопоставляет задачи, сроки, риски и обсуждения. ${report ? "Ниже сохранён предыдущий разбор." : "Результат появится здесь."}`} />
         </div>}
 
         {reportQuery.isPending ? <div role="status" aria-label="Загрузка разбора" className="flex flex-col gap-3 border-t border-line-subtle p-5"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-4 w-1/2" /></div> : report ? <>
-            <div className="flex flex-col gap-2.5 border-t border-line-subtle px-4 py-3 sm:px-5">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px]">
-                    {HealthIcon && <span className={cn("inline-flex items-center gap-1.5 rounded-[var(--radius-control)] border px-2 py-1 font-medium", HEALTH_STYLES[report.health])}><HealthIcon size={14} aria-hidden="true" />Оценка разбора: {ANALYTICS_HEALTH_LABELS[report.health]}</span>}
-                    <time dateTime={report.created_at} title={formatDateTime(report.created_at)} className="inline-flex items-center gap-1.5 text-muted"><History size={13} aria-hidden="true" />{formatFullDate(report.created_at)}</time>
-                </div>
-                {freshness === "stale" && <p className="text-[12px] leading-relaxed text-warning">Данные менялись после разбора. Обновите его, чтобы получить новую оценку.</p>}
-                <div className={cn("grid min-w-0 gap-3", projectId && report.recommendations.length > 0 && "lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]")}>
-                    <div className="min-w-0">
-                        <p className="brand-summary-title break-words text-[16px] leading-snug font-semibold tracking-[-0.02em] text-primary">{report.headline}</p>
-                        <p className="mt-1.5 line-clamp-2 text-[14px] leading-relaxed text-secondary">{report.health_note}</p>
+            <div className="aris-summary-preview">
+                <div className="aris-summary-assessment">
+                    <div className="aris-summary-statusline">
+                        {HealthIcon && <span className="aris-health" data-health={report.health}><HealthIcon size={14} aria-hidden="true" />Оценка разбора: {ANALYTICS_HEALTH_LABELS[report.health]}</span>}
+                        <time dateTime={report.created_at} title={formatDateTime(report.created_at)}><History size={12} aria-hidden="true" />{formatFullDate(report.created_at)}</time>
                     </div>
-                    {Boolean(projectId) && report.recommendations.length > 0 && <div className="min-w-0 border-t border-line-subtle pt-3 lg:border-t-0 lg:border-l lg:pl-4 lg:pt-0">
-                        <h3 className="mb-2 text-[12px] font-medium text-muted">Рекомендации из разбора</h3>
-                        <ul className="flex flex-col gap-2 text-[14px] text-secondary">{report.recommendations.slice(0, 2).map((item, index) => <li key={`${item.title}-${index}`} className="flex min-w-0 items-start gap-2">
-                            <Lightbulb size={14} className="mt-0.5 shrink-0 text-ai-blue" aria-hidden="true" /><span className="break-words">{item.title}</span>
-                        </li>)}</ul>
-                    </div>}
+                    <p className="aris-summary-headline">{report.headline}</p>
+                    <p className="aris-summary-note">{report.health_note}</p>
                 </div>
+                {report.recommendations.length > 0 && <section className="aris-summary-recommendations" aria-label="Рекомендации из разбора">
+                    <h3><Lightbulb size={14} aria-hidden="true" />Рекомендации из разбора</h3>
+                    <ul>{report.recommendations.slice(0, 2).map((item, index) => <li key={`${item.title}-${index}`}>
+                        <ArrowUpRight size={14} aria-hidden="true" />
+                        <span>{item.title}</span><span className="aris-preview-horizon">{ANALYTICS_HORIZON_LABELS[item.horizon]}</span>
+                    </li>)}</ul>
+                </section>}
             </div>
-            <details key={report.id} className="group border-t border-line-subtle">
-                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-[14px] font-medium text-accent hover:bg-hover sm:px-5 [&::-webkit-details-marker]:hidden">
-                    <span>Полный разбор · {formatFullDate(report.created_at)}</span><ChevronDown size={17} className="shrink-0 group-open:rotate-180" aria-hidden="true" />
-                </summary>
+            {freshness === "stale" && <p className="aris-summary-stale"><History size={13} aria-hidden="true" />Данные менялись после разбора. Обновите его, чтобы получить новую оценку.</p>}
+            <details key={report.id} className="aris-summary-details">
+                <summary><span>Полный разбор · {formatFullDate(report.created_at)}</span><ChevronDown size={17} aria-hidden="true" /></summary>
                 <PulseDetail report={report} onOpenTask={onOpenTask} />
             </details>
-        </> : !reportQuery.error && !generate.isPending && <p className="border-t border-line-subtle px-4 py-4 text-[14px] leading-relaxed text-muted sm:px-5">{projectId ? "Попросите Ариса оценить ход работ, риски и следующие шаги по проекту." : "Попросите Ариса сопоставить активные проекты и разовые задачи и подсказать, с чего начать."}</p>}
+        </> : !reportQuery.error && !generate.isPending && <p className="aris-summary-empty">{projectId ? "Попросите Ариса оценить ход работ, риски и следующие шаги по проекту." : "Попросите Ариса сопоставить активные проекты и разовые задачи и подсказать, с чего начать."}</p>}
+    </section>;
+}
+
+function SavedSignals({ report }: { report: AnalyticsReport }) {
+    const signals = SIGNAL_ROWS.flatMap(row => {
+        const count = report.signals[row.key];
+        return typeof count === "number" && count > 0 ? [{ ...row, count }] : [];
+    });
+    const largest = Math.max(...signals.map(row => row.count), 1);
+    const { total_tasks: total, done_tasks: done } = report.signals;
+    const circumference = 2 * Math.PI * 25;
+    const share = total > 0 ? Math.max(0, Math.min(done / total, 1)) : 0;
+    return <section className="aris-report-snapshot" aria-label="Сохранённые показатели разбора">
+        <div className="aris-snapshot-completion">
+            <svg viewBox="0 0 64 64" role="img" aria-label={total > 0 ? `Сохранённый снимок: завершено ${done} из ${total} задач` : "Сохранённый снимок: задач не было"}>
+                <circle className="aris-snapshot-track" cx="32" cy="32" r="25" />
+                {share > 0 && <circle className="aris-snapshot-value" cx="32" cy="32" r="25" strokeDasharray={`${share * circumference} ${circumference}`} transform="rotate(-90 32 32)" />}
+                <text x="32" y="36" textAnchor="middle">{total > 0 ? done : "—"}</text>
+            </svg>
+            <div><span className="aris-report-eyebrow">Сохранённый снимок</span><p>{total > 0 ? `${done} из ${total} задач завершено` : "На дату разбора задач не было"}</p>
+                <time dateTime={report.created_at}>{formatDateTime(report.created_at)}</time></div>
+        </div>
+        <div className="aris-snapshot-signals">
+            <h3>Сигналы на момент разбора</h3>
+            {signals.length > 0 ? <>
+                <ul>{signals.map(({ key, label, icon: Icon, tone, count }) => <li key={key} data-tone={tone}>
+                    <Icon size={14} aria-hidden="true" /><span>{label}</span><strong>{count}</strong>
+                    <span className="aris-signal-track" aria-hidden="true"><span style={{ "--signal-width": `${count / largest * 100}%` } as CSSProperties} /></span>
+                </li>)}</ul>
+                <p>Сохранённые количества; сигналы могут пересекаться.</p>
+            </> : <p>В сохранённом снимке нет ненулевых сигналов.</p>}
+        </div>
     </section>;
 }
 
 function PulseDetail({ report, onOpenTask }: { report: AnalyticsReport; onOpenTask: (taskId: number) => void }) {
-    const signals = SIGNAL_ROWS.filter(row => (report.signals[row.key] ?? 0) > 0);
-    return <div className="flex min-w-0 flex-col gap-5 px-4 pb-5 sm:px-5">
-        <p className="max-w-4xl text-[14px] leading-relaxed text-secondary">{report.health_note}</p>
-        {signals.length > 0 && <div className="flex flex-col gap-2">
-            <h3 className="text-[12px] font-medium text-muted">Сигналы на момент разбора</h3>
-            <ul className="flex flex-wrap gap-x-5 gap-y-2 text-[12px] text-secondary">{signals.map(row => <li key={row.key}><span className="font-semibold tabular-nums">{report.signals[row.key]}</span> {row.label}</li>)}</ul>
-        </div>}
-        <div className="grid items-start gap-5 lg:grid-cols-3">
-            <PulseColumn title="Риски и препятствия" icon={<Flame size={15} aria-hidden="true" />} count={report.findings.length} empty="Проблем, требующих вмешательства, в разборе не найдено.">
-                {report.findings.map((finding, index) => <FindingCard key={`${finding.title}-${index}`} finding={finding} onOpenTask={onOpenTask} />)}
-            </PulseColumn>
-            <PulseColumn title="Что сделано" icon={<CircleCheckBig size={15} aria-hidden="true" />} count={report.progress.length} empty="Заметных результатов в разборе не отмечено.">
-                {report.progress.map((progress, index) => <ProgressCard key={`${progress.title}-${index}`} progress={progress} onOpenTask={onOpenTask} />)}
-            </PulseColumn>
-            <PulseColumn title="Рекомендации" icon={<Lightbulb size={15} aria-hidden="true" />} count={report.recommendations.length} empty="Дополнительных организационных действий в разборе нет.">
-                {report.recommendations.map((recommendation, index) => <RecommendationCard key={`${recommendation.title}-${index}`} recommendation={recommendation} onOpenTask={onOpenTask} />)}
-            </PulseColumn>
+    const currentProjectKey = report.scope === "PROJECT" ? report.project_key : null;
+    return <div className="aris-report-detail">
+        <SavedSignals report={report} />
+        <div className="aris-report-editorial">
+            <div className="aris-report-observations">
+                <ReportGroup title="Риски и препятствия" icon={<ShieldAlert size={17} aria-hidden="true" />} count={report.findings.length} tone="warning" empty="Проблем, требующих вмешательства, в разборе не найдено.">
+                    {report.findings.map((finding, index) => <FindingCard key={`${finding.title}-${index}`} finding={finding} currentProjectKey={currentProjectKey} onOpenTask={onOpenTask} />)}
+                </ReportGroup>
+                <ReportGroup title="Что сделано" icon={<CircleCheckBig size={17} aria-hidden="true" />} count={report.progress.length} tone="success" empty="Заметных результатов в разборе не отмечено.">
+                    {report.progress.map((progress, index) => <ProgressCard key={`${progress.title}-${index}`} progress={progress} currentProjectKey={currentProjectKey} onOpenTask={onOpenTask} />)}
+                </ReportGroup>
+            </div>
+            <ReportGroup title="Рекомендации" icon={<Lightbulb size={17} aria-hidden="true" />} count={report.recommendations.length} tone="accent" empty="Дополнительных организационных действий в разборе нет.">
+                {report.recommendations.map((recommendation, index) => <RecommendationCard key={`${recommendation.title}-${index}`} recommendation={recommendation} currentProjectKey={currentProjectKey} onOpenTask={onOpenTask} />)}
+            </ReportGroup>
         </div>
         <PulseFooter report={report} />
     </div>;
 }
 
-function PulseColumn({ title, icon, count, empty, children }: { title: string; icon: ReactNode; count: number; empty: string; children: ReactNode }) {
-    return <div className="flex min-w-0 flex-col gap-3">
-        <h3 className="flex items-center gap-2 text-[14px] font-semibold text-secondary">{icon}{title}<span className="ml-auto text-[12px] font-normal text-muted tabular-nums">{count}</span></h3>
-        {count === 0 ? <p className="text-[14px] leading-relaxed text-muted">{empty}</p> : <div className="flex flex-col gap-3">{children}</div>}
-    </div>;
+function ReportGroup({ title, icon, count, tone, empty, children }: { title: string; icon: ReactNode; count: number; tone: string; empty: string; children: ReactNode }) {
+    return <section className="aris-report-group" aria-label={title} data-tone={tone}>
+        <h3>{icon}<span>{title}</span><span className="aris-group-count">{count}</span></h3>
+        {count === 0 ? <p className="aris-report-group-empty">{empty}</p> : <div className="aris-report-items">{children}</div>}
+    </section>;
 }
+
+const CONTEXT_LABELS: Record<string, string> = {
+    tasks: "Задач", comments: "Комментариев", documents: "Документов", document_links: "Связей документов с задачами",
+    stickers: "Стикеров", sticker_links: "Связей стикеров с задачами", wbs_nodes: "Разделов ИСР", milestones: "Вех",
+    activity: "Событий истории", risks: "Рисков", stages: "Стадий", members: "Участников команды", participants: "Ролевых назначений",
+    attachments: "Вложений", dependencies: "Зависимостей задач", checklists: "Чек-листов", checklist_items: "Пунктов чек-листов", outside_tasks: "Разовых задач",
+};
 
 function PulseFooter({ report }: { report: AnalyticsReport }) {
     const { context } = report;
-    const included = [
-        `${context.tasks_included} из ${context.tasks_total} задач`,
-        context.comments_included > 0 && `${context.comments_included} комментариев`,
-        context.milestones_included > 0 && `${context.milestones_included} вех`,
-        context.wbs_nodes_included > 0 && `${context.wbs_nodes_included} разделов ИСР`,
-        context.stickers_included > 0 && `${context.stickers_included} стикеров`,
-        context.documents_included > 0 && `${context.documents_included} документов`,
-        (context.risks_total ?? 0) > 0 && `${context.risks_included ?? 0} из ${context.risks_total} рисков`,
-        context.activity_included > 0 && `${context.activity_included} событий истории`,
-        ...([
-            ["members", "участников команды"], ["participants", "ролевых назначений"], ["attachments", "вложений"],
-            ["dependencies", "зависимостей задач"], ["checklists", "чек-листов"], ["checklist_items", "пунктов чек-листов"], ["outside_tasks", "разовых задач"],
-        ] as const).map(([key, label]) => {
-            const count = context.entity_counts?.[key];
-            return count && count.total > 0 && `${count.included} из ${count.total} ${label}`;
-        }),
-    ].filter(Boolean) as string[];
-
-    return <footer className="flex flex-col gap-2 border-t border-line-subtle pt-4 text-[12px] leading-relaxed text-muted">
-        <p>Сохранённый разбор от {formatFullDate(report.created_at)} · <UserIdentity userId={report.created_by_user_id} name={report.created_by} /></p>
-        <p>В разбор вошли: {included.join(", ")}.</p>
-        {context.truncated && context.omitted.length > 0 && <details>
-            <summary className="inline-flex cursor-pointer items-center gap-1.5 hover:text-secondary"><Info size={13} aria-hidden="true" />Часть данных не вошла в разбор</summary>
-            <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">{context.omitted.map(item => <li key={item}>{item}</li>)}</ul>
-        </details>}
+    const included = new Map<string, [string, string]>([
+        ["tasks", ["Задач", `${context.tasks_included} из ${context.tasks_total}`]],
+        ["projects", ["Проектов", String(context.projects)]],
+    ]);
+    ([
+        ["comments", context.comments_included], ["milestones", context.milestones_included], ["wbs_nodes", context.wbs_nodes_included],
+        ["stickers", context.stickers_included], ["documents", context.documents_included], ["activity", context.activity_included],
+    ] as const).forEach(([key, count]) => { if (count > 0) included.set(key, [CONTEXT_LABELS[key], String(count)]); });
+    if (context.risks_total) included.set("risks", ["Рисков", `${context.risks_included ?? 0} из ${context.risks_total}`]);
+    Object.entries(context.entity_counts ?? {}).forEach(([key, count]) => {
+        if (count.total > 0) included.set(key, [CONTEXT_LABELS[key] ?? key, `${count.included} из ${count.total}`]);
+    });
+    const hasLimitations = context.truncated || context.omitted.length > 0;
+    return <footer className="aris-report-footer">
+        <div className="aris-report-provenance"><span><History size={13} aria-hidden="true" />Сохранённый разбор от <time dateTime={report.created_at}>{formatDateTime(report.created_at)}</time></span>
+            <UserIdentity userId={report.created_by_user_id} name={report.created_by} /></div>
+        <details className="aris-report-context">
+            <summary><BookOpen size={15} aria-hidden="true" /><span>Контекст и источники разбора</span><span className="aris-context-coverage">{context.tasks_included} из {context.tasks_total} задач</span><ChevronDown size={15} aria-hidden="true" /></summary>
+            <div className="aris-context-content">
+                {(report.project_key || report.project_name) && <p>{report.project_key}{report.project_key && report.project_name && " · "}{report.project_name}</p>}
+                <dl className="aris-context-counts">{Array.from(included, ([key, [label, count]]) => <div key={key}><dt>{label}</dt><dd>{count}</dd></div>)}</dl>
+                <dl className="aris-context-technical"><div><dt>Модель разбора</dt><dd>{report.llm_model}</dd></div><div><dt>Время подготовки</dt><dd>{(report.duration_ms / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} с</dd></div></dl>
+                {hasLimitations && <aside className="aris-context-limitations"><h4><Info size={15} aria-hidden="true" />Часть данных не вошла в разбор</h4>
+                    {context.omitted.length > 0 ? <ul>{context.omitted.map(item => <li key={item}>{item}</li>)}</ul> : <p>Объём контекста был ограничен при подготовке разбора.</p>}</aside>}
+            </div>
+        </details>
+        {hasLimitations && <p className="aris-context-limited"><Info size={13} aria-hidden="true" />Разбор учитывает часть данных. Ограничения указаны в контексте.</p>}
     </footer>;
 }

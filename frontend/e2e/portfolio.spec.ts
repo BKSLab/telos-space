@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { Dashboard, DashboardProject } from "../src/lib/types";
+import type { Dashboard, DashboardProject, DashboardTask } from "../src/lib/types";
+import type { RiskSummary } from "../src/lib/risks";
 import { installMockApi, mockState } from "./support/taskMockApi";
 
 async function installPortfolioApi(page: Page) {
@@ -7,11 +8,20 @@ async function installPortfolioApi(page: Page) {
     state.projects[0].icon_image_version = "portfolio-v1";
     state.projects[0].description_md = "## Цель\n\n**Проверить** новое рабочее пространство";
     state.projects[2].status = "ARCHIVED";
+    const risks: RiskSummary = {
+        total_risks: 3, active_risks: 2, open_risks: 1, mitigating_risks: 1, occurred_risks: 1, closed_risks: 0,
+        high_risks: 1, medium_risks: 1, low_risks: 1, risks_without_owner: 0, risks_without_mitigation: 0,
+        risks_due_for_review: 0, risks_review_overdue: 0, risks_linked_to_tasks: 0, ai_suggested_risks: 0,
+        latest_update: null, matrix: [], signals: [{ code: "HIGH_OPEN_RISK", count: 1 }],
+    };
     await installMockApi(page, state);
     await page.route("**/api/v1/projects/1/icon-image*", route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="12" fill="#6c83ff"/><path d="m16 46 16-28 16 28" stroke="#fff" stroke-width="5" fill="none"/></svg>' }));
     await page.route("**/api/v1/dashboard", route => {
-        const projects: DashboardProject[] = state.projects.map(project => ({ ...project, total_tasks: 4, done_tasks: 1, in_progress_tasks: 1, overdue_tasks: project.id === 1 ? 2 : 0, completion_rate: 0.25, next_due_date: "2999-01-01" }));
-        const dashboard: Dashboard = { projects, totals: { total_projects: 3, active_projects: 1, total_tasks: 12, done_tasks: 3, in_progress_tasks: 3, overdue_tasks: 2, completion_rate: 0.25 }, attention_tasks: [], recent_tasks: [] };
+        const projects: DashboardProject[] = state.projects.map(project => ({ ...project, total_tasks: 4, done_tasks: 1, in_progress_tasks: 1, overdue_tasks: project.id === 1 ? 2 : 0, completion_rate: 0.25, next_due_date: "2999-01-01", ...(project.id === 1 ? { risks } : {}) }));
+        const attention: DashboardTask = { id: state.tasks[0].id, key: state.tasks[0].key, title: state.tasks[0].title,
+            project_id: 1, project_key: state.projects[0].key, project_name: state.projects[0].name, project_color: state.projects[0].color,
+            stage_id: 1, stage_name: "В работе", priority: "HIGH", due_date: "2020-01-01", is_overdue: true, updated_at: state.tasks[0].updated_at };
+        const dashboard: Dashboard = { projects, totals: { total_projects: 3, active_projects: 1, total_tasks: 12, done_tasks: 3, in_progress_tasks: 3, overdue_tasks: 2, completion_rate: 0.25 }, attention_tasks: [attention], recent_tasks: [attention] };
         return route.fulfill({ json: dashboard });
     });
     await page.route("https://fonts.gstatic.com/**", route => route.abort());
@@ -36,6 +46,8 @@ for (const width of [1440, 1024, 768, 390, 320]) {
         expect(await projects.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(width >= 768 ? 2 : 1);
         expect(await projects.getByRole("listitem").evaluateAll(cards => cards.every(card => card.scrollWidth <= card.clientWidth + 1))).toBe(true);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath(`catalog-overview-${width}.png`) });
+        await projects.getByRole("listitem").first().scrollIntoViewIfNeeded();
         await page.screenshot({ path: info.outputPath(`projects-${width}.png`) });
 
         await page.getByRole("combobox", { name: "Статус проекта" }).selectOption("ARCHIVED");
@@ -48,8 +60,15 @@ for (const width of [1440, 1024, 768, 390, 320]) {
         const navigation = page.getByRole("navigation", { name: "Представления портфеля" });
         await navigation.getByRole("link", { name: "Сводка", exact: true }).click();
         await expect(page.getByRole("region", { name: "Показатели портфеля" })).toBeVisible();
+        await expect(page.getByRole("img", { name: "Статусы проектов: всего 3", exact: true })).toBeVisible();
+        await expect(page.getByRole("img", { name: "Выполнено 3 из 12 задач: 25%", exact: true })).toBeVisible();
+        await expect(page.getByRole("region", { name: "Ближайшие сроки" })).toBeVisible();
         await expect(catalog).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.getByRole("heading", { name: "Портфель", exact: true }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: info.outputPath(`summary-${width}.png`) });
+        await page.getByRole("region", { name: "Проекты по статусам" }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: info.outputPath(`summary-charts-${width}.png`) });
         await navigation.getByRole("link", { name: "Проекты", exact: true }).click();
         await expect(catalog).toBeVisible();
         expect(state.errors).toEqual([]);
@@ -71,7 +90,7 @@ test("сворачивание списка и выбор вкладки сох�
     await projects.getByRole("button", { name: "Развернуть список проектов" }).click();
     await projects.getByRole("link", { name: state.projects[0].name, exact: true }).click();
     await expect(projects.getByRole("link", { name: state.projects[0].name, exact: true })).toHaveAttribute("aria-current", "page");
-    await expect(page.locator(".project-header").getByTestId("project-icon-image")).toHaveCSS("width", "72px");
+    await expect(page.locator(".project-header").getByTestId("project-icon-image")).toHaveCSS("width", "40px");
     await page.getByRole("button", { name: "Свернуть панель", exact: true }).click();
     await projects.getByRole("button", { name: "Свернуть список проектов" }).click();
     await page.getByRole("button", { name: "Развернуть панель", exact: true }).click();
@@ -106,7 +125,7 @@ test("мобильный список проектов сворачиваетс�
     await projects.getByRole("link", { name: state.projects[0].name, exact: true }).click();
     await expect(menu).toBeHidden();
     await expect(page.getByRole("heading", { name: state.projects[0].name, exact: true })).toBeVisible();
-    await expect(page.locator(".project-header").getByTestId("project-icon-image")).toHaveCSS("width", "48px");
+    await expect(page.locator(".project-header").getByTestId("project-icon-image")).toHaveCSS("width", "36px");
     expect(state.errors).toEqual([]);
 });
 

@@ -116,7 +116,10 @@ describe("обзоры", () => {
         queryClient.setQueryData(queryKeys.tasks(7), [task(11, 1, null, "Уточнить требования"), task(12, 2, "2020-01-01", "Открытая просроченная"), task(13, 3, "2019-01-01", "Завершённая со старым сроком"), task(14, 2, "2999-01-01", "Будущая задача")]);
         renderPage(<ProjectOverviewPage />, queryClient);
         expect(screen.queryByRole("button", { name: /Завершённая со старым сроком/ })).toBeNull();
-        expect(screen.getByRole("progressbar", { name: "Доля задач в стадии «В работе»" }).getAttribute("aria-valuenow")).toBe("50");
+        const distribution = within(screen.getByRole("region", { name: "Фактический прогресс" }));
+        expect(distribution.getByText("Новые")).toBeTruthy();
+        expect(distribution.getByText("В работе")).toBeTruthy();
+        expect(distribution.getByText("Готово")).toBeTruthy();
         expect(screen.getByRole("img", { name: "Выполнено 1 из 4 задач: 25%" })).toBeTruthy();
         expect(screen.getByRole("link", { name: /Размещение в ИСР/ }).getAttribute("href")).toBe("/projects/DEMO/structure");
         await userEvent.click(screen.getByRole("button", { name: /Открытая просроченная/ }));

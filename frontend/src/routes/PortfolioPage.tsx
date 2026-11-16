@@ -31,12 +31,12 @@ export function PortfolioPage() {
     }, [requested, view, storedView, setView, setParams]);
 
     return <Page className="max-w-[1600px]">
-        <header className="flex flex-wrap items-end justify-between gap-3">
-            <div className="flex min-w-0 flex-col gap-1.5">
+        <header className="flex min-w-0 items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <h1 className="text-[24px] font-semibold tracking-[-0.03em] text-primary">Портфель</h1>
-                <p className="text-[14px] text-muted">{view === "projects" ? "Все проекты и их текущее состояние" : "Общая картина и ближайшие действия"}</p>
+                <p className="hidden text-[13px] text-muted sm:block">{view === "projects" ? "Все проекты и их текущее состояние" : "Общая картина и ближайшие действия"}</p>
             </div>
-            <LinkButton to="/projects/new" variant="primary" icon={<Plus size={16} aria-hidden="true" />}>Новый проект</LinkButton>
+            <LinkButton to="/projects/new" variant="primary" size="sm" className="shrink-0" icon={<Plus size={16} aria-hidden="true" />}>Новый проект</LinkButton>
         </header>
         <nav aria-label="Представления портфеля" className="-mt-1 flex gap-1 border-b border-line">
             {VIEWS.map(({ id, label, icon: Icon }) => {

@@ -74,7 +74,7 @@ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844
         await page.goto("/projects/DEMO");
         await expect(page.getByRole("region", { name: "Показатели проекта" }).getByText("50%", { exact: true })).toHaveCount(0);
         await expect(page.getByRole("heading", { name: "Сроки и вехи", exact: true })).toBeVisible();
-        await expect(page.getByRole("progressbar", { name: "Доля задач в стадии «В работе»" })).toHaveAttribute("aria-valuenow", "50");
+        await expect(page.getByRole("region", { name: "Фактический прогресс" }).getByText("В работе", { exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name: /Завершённая со старым сроком/ })).toHaveCount(0);
         await page.screenshot({ path: info.outputPath(`project-overview-${viewport.width}.png`) });
         await page.getByText(/Полный разбор ·/).click();
@@ -106,13 +106,13 @@ test("срок проекта и ближайшая реальная веха, �
     try {
         await page.goto("/projects/DEMO");
         await expect(page.getByRole("status", { name: "Загрузка вех" })).toBeVisible();
-        await expect(page.locator(".project-overview-header").getByTestId("project-icon-default")).toBeVisible();
+        await expect(page.locator(".project-header").getByTestId("project-icon-default")).toBeVisible();
     } finally { release(); }
     const schedule = page.getByRole("region", { name: "Сроки и вехи" });
     await expect(schedule.getByRole("link", { name: /Проверка готовности проекта/ })).toBeVisible();
     await expect(schedule.getByText("Выполненная контрольная точка")).toHaveCount(0);
     await expect(schedule.getByText("Осталось вех: 2. Все даты — в календаре.")).toBeVisible();
-    await expect(page.locator(".project-overview-header").getByTestId("project-icon-default")).toHaveCSS("width", "72px");
+    await expect(page.locator(".project-header").getByTestId("project-icon-default")).toHaveCSS("width", "40px");
     await page.screenshot({ path: info.outputPath("overview-1536.png") });
     await page.getByText(/Полный разбор ·/).scrollIntoViewIfNeeded();
     await page.screenshot({ path: info.outputPath("overview-insight-1536.png") });
@@ -162,10 +162,11 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 844, height: 390 }
         await expect(metrics).toBeInViewport();
         await page.getByText(/Полный разбор ·/).scrollIntoViewIfNeeded();
         await expect(page.getByText(/Полный разбор ·/)).toBeInViewport();
-        const identity = page.getByRole("group", { name: "Сведения о проекте" });
-        await identity.focus();
-        await page.keyboard.press("End");
-        await expect.poll(() => identity.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+        await expect(page.locator(".project-header")).not.toBeInViewport();
+        await page.locator(".project-workspace").evaluate(element => { element.scrollTop = 0; });
+        await page.getByRole("navigation", { name: "Разделы проекта" }).getByRole("link", { name: "Обзор", exact: true }).focus();
+        await page.keyboard.press("PageDown");
+        await expect.poll(() => page.locator(".project-workspace").evaluate(element => element.scrollTop)).toBeGreaterThan(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
 }
@@ -180,3 +181,60 @@ test("срок и веха доступны при ошибке независи
     await expect(page.getByRole("link", { name: /Независимая веха/ })).toBeVisible();
     await expect(page.getByRole("img", { name: /Выполнено .* задач:/ })).toHaveCount(0);
 });
+
+for (const viewport of [{ width: 1536, height: 1024 }, { width: 390, height: 844 }]) {
+    test(`визуальная приёмка портфеля, единой шапки и полного разбора на ${viewport.width}px`, async ({ page }, info) => {
+        await page.setViewportSize(viewport);
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        const state = await installOverviewApi(page);
+        state.projects[0].icon = "lucide:code";
+        state.projects[0].name = "Пространство проектной работы";
+        state.projects[0].due_date = "2999-12-31";
+        const taskRef = { id: 1, key: "DEMO-1", title: state.tasks[0].title, project_key: "DEMO", due_date: "2020-01-01", is_overdue: true };
+        const context = { project_key: "DEMO", project_name: state.projects[0].name, tasks: [taskRef] };
+        const rich: AnalyticsReport = {
+            ...report, headline: "Согласовать зависимости и закрепить ближайшие сроки", health: "WATCH",
+            health_note: "Основные работы продвигаются. Две зависимости требуют решения до следующей вехи.",
+            signals: { ...report.signals, total_tasks: 12, done_tasks: 7, overdue_tasks: 2, blocked_tasks: 1, due_soon_tasks: 3, high_risks: 1 },
+            context: { ...report.context, tasks_total: 12, tasks_included: 12, comments_included: 8, documents_included: 3 },
+            findings: [
+                { ...context, kind: "BLOCKER", severity: "HIGH", title: "Не согласован контракт интеграции", detail: "Проверка зависимой задачи откладывается до принятия интерфейса. Определите владельца решения и срок согласования." },
+                { ...context, kind: "OVERDUE", severity: "MEDIUM", title: "Срок согласования требует пересмотра", detail: "Открытая задача вышла за плановую дату. Уточните оставшийся объём перед новым обязательством." },
+            ],
+            progress: [
+                { ...context, title: "Определена структура проекта", detail: "Задачи распределены по разделам работ, сохранён общий контекст обсуждения." },
+                { ...context, title: "Подготовлены основные материалы", detail: "Команда может использовать документы для следующего этапа согласования." },
+            ],
+            recommendations: [
+                { ...context, horizon: "TODAY", title: "Назначить владельца интеграции", detail: "Согласовать интерфейс и связать решение с задачей проверки." },
+                { ...context, horizon: "WEEK", title: "Уточнить даты открытых задач", detail: "Проверить зависимости и зафиксировать реалистичный ближайший результат." },
+                { ...context, horizon: "LATER", title: "Подготовить следующую контрольную точку", detail: "Обновить материалы проекта после завершения согласования." },
+            ],
+        };
+        await page.route("**/api/v1/dashboard/analytics*", route => route.fulfill({ json: rich }));
+        await page.goto("/?view=summary");
+        await expect(page.getByRole("heading", { name: "Проекты по статусам", exact: true })).toBeVisible();
+        await page.screenshot({ path: info.outputPath(`summary-v2-${viewport.width}.png`) });
+        await page.goto("/?view=projects");
+        await expect(page.getByRole("region", { name: "Каталог проектов" })).toBeVisible();
+        await page.screenshot({ path: info.outputPath(`catalog-v2-${viewport.width}.png`) });
+        await page.goto("/projects/DEMO");
+        const header = page.locator(".project-header-details");
+        const identity = await header.innerText();
+        const height = (await header.boundingBox())!.height;
+        await page.screenshot({ path: info.outputPath(`project-v2-${viewport.width}.png`) });
+        await page.getByRole("navigation", { name: "Разделы проекта" }).getByRole("link", { name: "Задачи", exact: true }).click();
+        await expect(header).toHaveText(identity, { useInnerText: true });
+        expect((await header.boundingBox())!.height).toBe(height);
+        await page.getByRole("navigation", { name: "Разделы проекта" }).getByRole("link", { name: "Обзор", exact: true }).click();
+        const insight = page.getByRole("region", { name: "Вывод Ариса" });
+        await insight.getByText(/Полный разбор ·/).click();
+        await expect(insight.getByText("Подготовить следующую контрольную точку", { exact: true })).toBeVisible();
+        await insight.getByRole("heading", { name: "Вывод Ариса" }).evaluate(element => element.scrollIntoView({ block: "start" }));
+        await page.screenshot({ path: info.outputPath(`full-report-top-v2-${viewport.width}.png`) });
+        await insight.getByText("Подготовить следующую контрольную точку", { exact: true }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: info.outputPath(`full-report-bottom-v2-${viewport.width}.png`) });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        expect(state.errors).toEqual([]);
+    });
+}

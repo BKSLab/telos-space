@@ -58,7 +58,8 @@ describe("портфель", () => {
         expect(catalog.getByRole("progressbar", { name: "Прогресс проекта Подготовка" }).getAttribute("aria-valuenow")).toBe("0");
         expect(catalog.getByText("В архиве")).toBeTruthy();
         expect(catalog.getByText("Планирование")).toBeTruthy();
-        expect(screen.queryByRole("region", { name: "Показатели портфеля" })).toBeNull();
+        expect(screen.getByRole("region", { name: "Показатели портфеля" })).toBeTruthy();
+        expect(screen.queryByRole("region", { name: "Проекты по статусам" })).toBeNull();
         const navigation = within(screen.getByRole("navigation", { name: "Представления портфеля" }));
         await userEvent.click(navigation.getByRole("link", { name: "Сводка" }));
         expect(screen.getByRole("region", { name: "Показатели портфеля" })).toBeTruthy();
@@ -71,6 +72,7 @@ describe("портфель", () => {
         await userEvent.type(screen.getByRole("searchbox", { name: "Поиск проектов" }), "  demo ");
         const catalog = () => within(screen.getByRole("list", { name: "Проекты портфеля" }));
         expect(catalog().getAllByRole("listitem")).toHaveLength(1);
+        expect(within(screen.getByRole("region", { name: "Показатели портфеля" })).getByText("3")).toBeTruthy();
         expect(catalog().getByRole("link", { name: "Запуск продукта" }).getAttribute("href")).toBe("/projects/DEMO");
         await userEvent.selectOptions(screen.getByRole("combobox", { name: "Статус проекта" }), "ARCHIVED");
         expect(screen.getByText("Проекты не найдены")).toBeTruthy();
