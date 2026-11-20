@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { GitBranch } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
-import { Card, CollapsibleSection, Section } from "@/components/ui/Card";
+import { Card, Section, SettingsPanel } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
@@ -15,6 +16,28 @@ import { RepositoryConnectionProgress } from "./RepositoryConnectionProgress";
 
 const gitConnectionsKey = (projectId: number) => [...queryKeys.project(projectId), "git", "connections"];
 const connectionPath = (projectId: number, id: number) => `${contextApi.git(projectId)}/connections/${id}`;
+
+function connectionStatus(connection: GitConnection) {
+    if (connection.last_error_code === "rate_limited") return "Индексация приостановлена";
+    if (connection.last_error_code === "github_profile_pending") return "Ожидает проверки доступа";
+    return GIT_STATES[connection.state] ?? connection.state;
+}
+
+function RepositoryPreview({ page }: { page: GitConnectionPage }) {
+    if (page.total === 0) return <p className="text-[13px] text-muted">Репозитории не подключены.</p>;
+    const attention = (connection: GitConnection) => ["error", "access_lost"].includes(connection.state) || connection.last_error_code === "rate_limited";
+    const displayed = [...page.items].sort((a, b) => Number(attention(b)) - Number(attention(a))).slice(0, 3);
+    return <ul className="divide-y divide-line-subtle text-[13px]">
+        {displayed.map(connection => <li key={connection.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0">
+            <div className="min-w-0">
+                <p className="break-words font-medium text-secondary">{connection.name}</p>
+                <p className="break-all text-[12px] text-muted">{connection.ref.replace(/^heads\//, "")}</p>
+            </div>
+            <span className={attention(connection) ? "text-warning" : "text-muted"}>{connectionStatus(connection)}</span>
+        </li>)}
+        {page.total > displayed.length && <li className="pt-2 text-muted">Ещё {page.total - displayed.length}</li>}
+    </ul>;
+}
 
 function GitConnectionCard({ connection, canEdit, refresh }: { connection: GitConnection; canEdit: boolean; refresh: () => Promise<unknown> }) {
     const [draft, setDraft] = useState<{ name: string; purpose: string; ref: string; expected_revision: number; share_private_with_project: boolean } | null>(null);
@@ -42,7 +65,7 @@ function GitConnectionCard({ connection, canEdit, refresh }: { connection: GitCo
         <div className="flex flex-wrap justify-between gap-2">
             <div className="min-w-0"><h3 className="break-words font-medium text-secondary">{connection.name}</h3>
                 <p className="break-all text-[12px] text-muted">{connection.owner}/{connection.repo} · {connection.ref} · {connection.is_private ? "Закрытый" : "Публичный"}</p></div>
-            <p className="text-[12px] text-secondary">{GIT_STATES[connection.state] ?? connection.state}</p>
+            <p className="text-[12px] text-secondary">{connectionStatus(connection)}</p>
         </div>
         {connection.purpose && <p className="break-words text-[13px] text-secondary">{connection.purpose}</p>}
         <dl className="grid min-w-0 gap-1 text-[12px]">
@@ -116,8 +139,8 @@ export function ProjectGitSources({ projectId, canEdit, collapsible = false }: {
         else await git.start(projectId, repositories);
         await refresh();
     }
-    const Container = collapsible ? CollapsibleSection : Section;
-    return <Container title="Репозитории проекта" action={canEdit && !adding && <Button size="sm" onClick={() => setAdding(true)}>Добавить репозитории</Button>}>
+    const action = canEdit && !adding && <Button size="sm" onClick={() => setAdding(true)}>Добавить репозитории</Button>;
+    const content = <>
         <p className="text-[13px] text-muted">У каждого источника своя ветка и версия. Арис читает код и документацию; подключение не даёт прав изменять репозиторий.</p>
         {connections.isPending && <Skeleton className="h-24" />}
         {connections.error && <ErrorMessage message={connections.error.message} action={<Button onClick={() => void connections.refetch()}>Повторить</Button>} />}
@@ -166,5 +189,13 @@ export function ProjectGitSources({ projectId, canEdit, collapsible = false }: {
                 {file.data.next_offset !== null && <Button onClick={() => selected && file.data.next_offset !== null && setSelected({ ...selected, offset: file.data.next_offset })}>Читать дальше</Button>}
             </div>}
         </Modal>
-    </Container>;
+    </>;
+    if (!collapsible) return <Section title="Репозитории проекта" action={action}>{content}</Section>;
+    return <SettingsPanel title="Репозитории проекта" icon={<GitBranch size={16} aria-hidden="true" />}
+        controlLabel={canEdit ? "Управлять репозиториями" : "Посмотреть репозитории"}
+        action={action}
+        preview={connections.isPending ? <Skeleton className="h-8 w-full" />
+            : connections.error ? <p className="text-[13px] text-danger">Не удалось загрузить репозитории.</p>
+            : <RepositoryPreview page={connections.data} />}
+    >{content}</SettingsPanel>;
 }

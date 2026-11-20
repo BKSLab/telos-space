@@ -76,7 +76,7 @@ function setup() {
 }
 
 function openPassport() {
-    fireEvent.click(screen.getByText("О проекте", { exact: true }).closest("summary")!);
+    fireEvent.click(screen.getByText("Редактировать паспорт", { exact: true }));
 }
 
 function field(name: string) {

@@ -45,7 +45,7 @@ for (const viewport of [
             return route.fulfill({ json: project, headers: responseHeaders });
         });
         await page.goto("/projects/DEMO/settings");
-        await page.locator("summary").getByText("О проекте", { exact: true }).click();
+        await page.locator("summary").getByText("Редактировать паспорт", { exact: true }).click();
         const goal = page.getByLabel("Цель", { exact: true });
         await expect(goal).toHaveValue("Исходная цель");
         await page.getByLabel("Название", { exact: true }).fill(`  ${project.name}  `);
@@ -82,7 +82,7 @@ test("участник читает паспорт, редактирование
     state.projects[0].owner_id = 2;
     await installMockApi(page, state);
     await page.goto("/projects/DEMO/settings");
-    await page.locator("summary").getByText("О проекте", { exact: true }).click();
+    await page.locator("summary").getByText("Открыть паспорт", { exact: true }).click();
     await expect(page.getByText("Паспорт и настройки редактирует владелец проекта.")).toBeVisible();
     await expect(page.getByLabel("Цель", { exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Сохранить", exact: true })).toBeDisabled();

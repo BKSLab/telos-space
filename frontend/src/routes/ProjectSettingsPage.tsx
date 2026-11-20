@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { Columns3, FileText, GripVertical, Plus, Trash2, Users } from "lucide-react";
 import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
 import type { Project, ProjectStage } from "@/lib/types";
 import { PROJECT_COLORS } from "@/lib/types";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
 import { useCurrentUser } from "@/lib/useAuth";
 import { Button, IconButton } from "@/components/ui/Button";
-import { CollapsibleSection } from "@/components/ui/Card";
+import { CollapsibleSection, SettingsPanel } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import { StatusDot } from "@/components/ui/Badge";
+import { ProjectStatusBadge, StatusDot } from "@/components/ui/Badge";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { useToast } from "@/lib/toast";
+import { formatFullDate } from "@/lib/dates";
 import { ProjectForm } from "@/components/projects/ProjectForm";
 import { ProjectPeopleSummary } from "@/components/projects/ProjectPeopleSummary";
 import { ProjectDeadlineHistory } from "@/components/projects/ProjectDeadlineHistory";
@@ -135,10 +136,19 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
 
     return (
         <div className="scrollbar-thin h-full overflow-y-auto">
-            <div className="flex w-full min-w-0 max-w-5xl flex-col gap-3 px-3 pt-4 pb-16 sm:px-5 sm:pt-5">
-                <CollapsibleSection title="О проекте">
+            <div className="grid w-full min-w-0 max-w-[1440px] items-start gap-4 px-3 pt-4 pb-16 sm:px-5 sm:pt-5 lg:grid-cols-2">
+                <SettingsPanel title="О проекте" icon={<FileText size={16} aria-hidden="true" />}
+                    controlLabel={canEditProject ? "Редактировать паспорт" : "Открыть паспорт"}
+                    preview={<div className="space-y-3 text-[13px]">
+                        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            <div><dt className="mb-1 text-muted">Статус</dt><dd><ProjectStatusBadge status={project.status} /></dd></div>
+                            <div><dt className="mb-1 text-muted">Начало</dt><dd className="text-secondary">{project.start_date ? <time dateTime={project.start_date}>{formatFullDate(project.start_date)}</time> : "Не указано"}</dd></div>
+                            <div><dt className="mb-1 text-muted">Завершение</dt><dd className="text-secondary">{project.due_date ? <time dateTime={project.due_date}>{formatFullDate(project.due_date)}</time> : "Не указано"}</dd></div>
+                        </dl>
+                        <p className="line-clamp-3 break-words text-secondary"><span className="text-muted">Цель · </span>{project.description_sections?.goal?.trim() || "Не указана"}</p>
+                    </div>}
+                >
                     <div className="flex min-w-0 flex-col gap-5">
-                        <ProjectPeopleSummary project={project} />
                         {saveMutation.error && (
                             <ErrorMessage message={(saveMutation.error as Error).message} />
                         )}
@@ -176,13 +186,28 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
                             </Button>
                         </div>
                     </div>
-                </CollapsibleSection>
+                </SettingsPanel>
 
-                <CollapsibleSection title="Команда">
+                <SettingsPanel title="Команда" icon={<Users size={16} aria-hidden="true" />}
+                    controlLabel={canEditProject ? "Управлять командой" : "Посмотреть команду"}
+                    preview={<ProjectPeopleSummary project={project} limit={3} />}
+                >
                     <ProjectTeamPage embedded />
-                </CollapsibleSection>
+                </SettingsPanel>
 
-                <CollapsibleSection title="Стадии канбана">
+                <SettingsPanel title="Стадии канбана" icon={<Columns3 size={16} aria-hidden="true" />}
+                    controlLabel="Настроить стадии"
+                    preview={stagesQuery.isPending ? <Skeleton className="h-8 w-full" />
+                        : stagesQuery.error ? <p className="text-[13px] text-danger">Не удалось загрузить стадии.</p>
+                        : <ol className="flex flex-wrap gap-2 text-[13px] text-secondary">
+                            {stagesQuery.data.slice(0, 6).map(stage => <li key={stage.id} className="inline-flex min-w-0 items-center gap-2 rounded-[var(--radius-control)] border border-line-subtle px-2.5 py-1.5">
+                                <StatusDot color={stage.color} />
+                                <span className="break-words">{stage.name}{stage.is_done_stage && <span className="text-muted"> · Завершающая</span>}</span>
+                            </li>)}
+                            {stagesQuery.data.length > 6 && <li className="self-center text-muted">Ещё {stagesQuery.data.length - 6}</li>}
+                            {stagesQuery.data.length === 0 && <li className="text-muted">Стадий пока нет.</li>}
+                        </ol>}
+                >
                     <div className="flex min-w-0 flex-col gap-3">
                         {stagesQuery.isPending && <Skeleton className="h-24 w-full" />}
                         {stagesQuery.error && <ErrorMessage message={(stagesQuery.error as Error).message} action={<Button onClick={() => stagesQuery.refetch()}>Повторить</Button>} />}
@@ -297,16 +322,16 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
                             </Button>
                         </div>
                     </div>
-                </CollapsibleSection>
+                </SettingsPanel>
 
                 <ProjectGitSources key={project.id} projectId={project.id} canEdit={canEditProject} collapsible />
 
-                <CollapsibleSection title="История изменений">
+                <CollapsibleSection title="История изменений" className="lg:col-span-2">
                     <ProjectDeadlineHistory projectId={project.id} />
                     <ProjectContextHistory projectId={project.id} />
                 </CollapsibleSection>
 
-                <CollapsibleSection title="Опасная зона">
+                <CollapsibleSection title="Опасная зона" className="lg:col-span-2">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex min-w-0 flex-col gap-0.5">
                             <p className="text-[13px] font-medium text-secondary">Удалить проект</p>

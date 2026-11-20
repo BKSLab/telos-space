@@ -61,6 +61,34 @@ export function CollapsibleSection({ title, action, children, className }: Secti
     );
 }
 
+export function SettingsPanel({ title, icon, preview, controlLabel, action, children, className }: SectionProps & {
+    icon: ReactNode;
+    preview: ReactNode;
+    controlLabel: string;
+}) {
+    return (
+        <section className={cn("surface-card min-w-0 rounded-[var(--radius-card)] border border-line", className)}>
+            <div className="flex min-w-0 flex-col gap-4 px-4 pt-4 pb-2 sm:px-5 sm:pt-5">
+                <h2 className="flex items-center gap-2.5 text-sm font-semibold text-primary">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-[var(--radius-control)] bg-accent-soft text-accent">{icon}</span>
+                    {title}
+                </h2>
+                {preview}
+            </div>
+            <details className="group/panel">
+                <summary className="touch-target mx-2 flex cursor-pointer list-none items-center gap-2 rounded-[var(--radius-control)] px-2 text-[13px] font-medium text-accent hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent sm:px-3 [&::-webkit-details-marker]:hidden">
+                    {controlLabel}
+                    <ChevronRight size={14} aria-hidden="true" className="shrink-0 group-open/panel:rotate-90" />
+                </summary>
+                <div className="flex min-w-0 flex-col gap-4 border-t border-line-subtle px-4 py-4 sm:px-5">
+                    {action && <div className="self-start">{action}</div>}
+                    {children}
+                </div>
+            </details>
+        </section>
+    );
+}
+
 /** Секция рабочего экрана: заголовок, необязательное действие и содержимое. */
 export function Section({ title, action, children, className }: SectionProps) {
     return (

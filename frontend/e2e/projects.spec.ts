@@ -103,7 +103,7 @@ test("срок: причина обязательна для переноса, �
     const state = await mockProjects(page);
     await page.goto("/projects/DEMO/settings");
     await page.locator("summary").getByText("История изменений", { exact: true }).click();
-    await page.locator("summary").getByText("О проекте", { exact: true }).click();
+    await page.locator("summary").getByText("Редактировать паспорт", { exact: true }).click();
     await expect(page.getByLabel("Дополнительно", { exact: true })).toHaveValue("Старое **описание**");
     const save = page.getByRole("button", { name: "Сохранить", exact: true });
     const due = page.getByLabel("Плановое завершение", { exact: true });
@@ -163,7 +163,7 @@ test("первое назначение без причины, конфликт 
     const state = await mockProjects(page, { ...baseProject, due_date: null, due_date_has_been_set: false });
     await page.goto("/projects/DEMO/settings");
     await page.locator("summary").getByText("История изменений", { exact: true }).click();
-    await page.locator("summary").getByText("О проекте", { exact: true }).click();
+    await page.locator("summary").getByText("Редактировать паспорт", { exact: true }).click();
     await page.getByLabel("Плановое завершение", { exact: true }).fill("2026-10-01");
     await expect(page.getByLabel("Причина изменения срока", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Сохранить", exact: true }).click();
@@ -188,21 +188,31 @@ for (const width of [320, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         await page.goto("/projects/DEMO/settings");
         const summary = (title: string) => page.locator("summary").filter({ hasText: title });
-        const passport = summary("О проекте");
+        const passport = summary("Редактировать паспорт");
         const field = page.getByLabel("Дополнительно", { exact: true });
         await expect(field).toBeHidden();
-        for (const title of ["О проекте", "Команда", "Стадии канбана", "Репозитории проекта", "История изменений", "Опасная зона"]) {
+        for (const title of ["Редактировать паспорт", "Управлять командой", "Настроить стадии", "Управлять репозиториями", "История изменений", "Опасная зона"]) {
             await expect(summary(title).locator("..")).not.toHaveAttribute("open", "");
         }
+        const overview = page.getByRole("heading", { name: "О проекте", exact: true }).locator("xpath=ancestor::section[1]");
+        const team = page.getByRole("heading", { name: "Команда", exact: true }).locator("xpath=ancestor::section[1]");
+        await expect(overview.locator('time[datetime="2026-10-01"]')).toBeVisible();
+        await expect(team.getByText("Участники · 1")).toBeVisible();
+        await expect(page.getByText("Завершающая", { exact: false }).first()).toBeVisible();
+        await expect(page.getByText("Репозитории не подключены.", { exact: true })).toBeVisible();
+        const overviewBounds = (await overview.boundingBox())!;
+        const teamBounds = (await team.boundingBox())!;
+        if (width === 320) expect(teamBounds.y).toBeGreaterThan(overviewBounds.y);
+        else expect(teamBounds.x).toBeGreaterThan(overviewBounds.x);
 
         await page.screenshot({ path: testInfo.outputPath("settings-sections.png"), fullPage: true });
         await passport.press("Enter");
         await field.fill("Черновик паспорта");
         await passport.press("Enter");
         await expect(field).toBeHidden();
-        await summary("Стадии канбана").press("Space");
+        await summary("Настроить стадии").press("Space");
         await expect(page.getByLabel("Название новой стадии")).toBeVisible();
-        await summary("Репозитории проекта").click();
+        await summary("Управлять репозиториями").click();
         await expect(page.getByRole("button", { name: "Добавить репозитории" })).toBeVisible();
         await expect(page.getByRole("button", { name: "Удалить проект", exact: true })).toBeHidden();
         await passport.click();
