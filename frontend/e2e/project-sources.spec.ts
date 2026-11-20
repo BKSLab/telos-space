@@ -2,6 +2,26 @@ import { expect, test, type Page } from "@playwright/test";
 import { installMockApi, mockState } from "./support/taskMockApi";
 import type { GitConnection, KnowledgeMap } from "../src/lib/projectKnowledge";
 
+test.beforeEach(async ({ page }) => { await page.clock.setFixedTime(new Date("2026-11-20T12:00:00Z")); });
+
+function historyPage<T extends { id: string; kind: string; created_at: string; title: string; detail?: string | null }>(items: T[], url: URL) {
+    const query = url.searchParams;
+    const timezone = query.get("timezone") ?? "UTC";
+    const localDay = (stamp: string) => {
+        const parts = new Intl.DateTimeFormat("en", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(stamp));
+        return ["year", "month", "day"].map(type => parts.find(part => part.type === type)!.value).join("-");
+    };
+    const selected = items.filter(item => (!query.get("kind") || item.kind === query.get("kind"))
+        && (!query.get("event_id") || item.id === query.get("event_id"))
+        && (!query.get("since") || localDay(item.created_at) >= query.get("since")!)
+        && (!query.get("until") || localDay(item.created_at) <= query.get("until")!)
+        && (!query.get("q") || `${item.title} ${item.detail ?? ""}`.includes(query.get("q")!)))
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const offset = Number(query.get("offset") ?? 0);
+    const limit = Number(query.get("limit") ?? 20);
+    return { items: selected.slice(offset, offset + limit), next_offset: offset + limit < selected.length ? offset + limit : null };
+}
+
 function connection(id: number, name: string, ref: string): GitConnection {
     return { id, project_id: 1, repository_id: 100 + id, provider: "github", owner: "example", repo: name.toLowerCase(), name, purpose: `${name}: исходники и тесты`, ref, include_paths: [""], exclude_patterns: [], enabled: true, is_private: false, share_private_with_project: false, has_credential: false, has_webhook_secret: false, revision: 3, generation: 4, credential_revision: 0, state: id === 2 ? "partial" : "ready", observed_sha: "a".repeat(40), indexed_sha: id === 2 ? "b".repeat(40) : "a".repeat(40), observed_at: "2026-11-16T12:00:00Z", indexed_at: "2026-11-16T12:00:00Z", checked_at: "2026-11-16T12:00:00Z", last_error_code: null, coverage: { total_files: 10, indexed_files: 5, excluded_files: 5, failed_files: 0, truncated: id === 2 } };
 }
@@ -43,8 +63,7 @@ async function sourcesApi(page: Page) {
                 { id: "project_context:1:3", kind: "project_context", title: "Изменение паспорта проекта", detail: '["goal"]', actor_name: "Тестов Тест", task_id: null, created_at: "2026-11-20T09:35:00Z" },
                 { id: "document:1", kind: "document_created", title: "Создан документ · Решение по импорту", detail: null, actor_name: "Тестов Тест", task_id: null, document_ref: "d1_ZG9jdW1lbnQ6MQ", created_at: "2026-11-19T09:35:00Z" },
             ];
-            const kind = url.searchParams.get("kind");
-            return reply({ items: kind ? items.filter(item => item.kind === kind) : items, next_offset: null });
+            return reply(historyPage(items, url));
         }
         if (path === "/git/connections" && request.method() === "GET") return reply({ items: connections, total: 3, offset: 0, limit: 20, next_offset: null });
         if (path === "/git/connections/1" && request.method() === "PATCH") {
@@ -80,18 +99,19 @@ for (const width of [320, 1440]) {
             from_value: index % kinds.length === 0 ? "В работе" : null, to_value: index % kinds.length === 0 ? "Тестирование" : null,
             created_at: index < 12 ? "2026-11-20T09:30:00Z" : "2026-11-19T10:00:00Z", actor_name: "Иван Петров", task_id: null,
         }));
-        await page.route("**/api/v1/projects/1/history?**", route => route.fulfill({ json: { items, next_offset: null } }));
+        await page.route("**/api/v1/projects/1/history?**", route => route.fulfill({ json: historyPage(items, new URL(route.request().url())) }));
         await page.goto("/projects/DEMO/knowledge?view=history&timezone=Europe%2FSamara");
-        await expect(page.locator(".history-event:visible")).toHaveCount(8);
+        await expect(page.locator(".history-event:visible")).toHaveCount(4);
+        await expect(page.getByRole("button", { name: /Развернуть 19 ноября/ })).toHaveAttribute("aria-expanded", "false");
         const colors = await page.locator(".history-event-marker").evaluateAll(elements => elements.slice(0, 4).map(element => getComputedStyle(element).color));
         expect(new Set(colors).size).toBe(4);
         await page.screenshot({ path: info.outputPath("history-milestones.png"), animations: "disabled" });
         await page.getByRole("button", { name: "Ещё 8 событий за этот день" }).click();
-        await expect(page.locator(".history-event:visible")).toHaveCount(16);
+        await expect(page.locator(".history-event:visible")).toHaveCount(12);
         const day = page.getByRole("button", { name: /Свернуть 20 ноября/ });
         await day.focus();
         await page.keyboard.press("Enter");
-        await expect(page.locator(".history-event:visible")).toHaveCount(4);
+        await expect(page.locator(".history-event:visible")).toHaveCount(0);
         await page.getByRole("button", { name: "Свернуть даты" }).click();
         await expect(page.locator(".history-event:visible")).toHaveCount(0);
         await page.screenshot({ path: info.outputPath("history-collapsed.png"), animations: "disabled" });
@@ -100,6 +120,66 @@ for (const width of [320, 1440]) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
 }
+
+test("история загружает неделю целиком и добавляет старые даты только при прокрутке", async ({ page }, info) => {
+    await installMockApi(page, mockState());
+    await sourcesApi(page);
+    const makeEvent = (id: number, created_at: string) => ({ id: `task_comment:${id}`, kind: "task_comment", title: `Комментарий ${id}`, detail: "Обсуждение решения", created_at, actor_name: "Иван Петров", task_id: null });
+    const items = [
+        ...Array.from({ length: 4 }, (_, i) => makeEvent(i, "2026-11-20T10:00:00Z")),
+        ...Array.from({ length: 105 }, (_, i) => makeEvent(100 + i, "2026-11-19T10:00:00Z")),
+        makeEvent(300, "2026-11-14T10:00:00Z"),
+        makeEvent(400, "2026-11-13T10:00:00Z"),
+        makeEvent(500, "2026-10-30T10:00:00Z"),
+    ];
+    const requests: URL[] = [];
+    await page.route("**/api/v1/projects/1/history?**", route => {
+        const url = new URL(route.request().url()); requests.push(url);
+        return route.fulfill({ json: historyPage(items, url) });
+    });
+    await page.goto("/projects/DEMO/knowledge?view=history&timezone=Europe%2FSamara");
+    await expect(page.getByRole("button", { name: /Свернуть 20 ноября/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Развернуть 19 ноября/ })).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("button", { name: /Развернуть 14 ноября/ })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: /Развернуть 19 ноября/ })).toContainText("105 событий");
+    await expect(page.getByRole("button", { name: "Загрузить более ранние события" })).toHaveCount(1);
+    const requestedWindows = requests.filter(url => url.searchParams.get("limit") === "100").map(url => `${url.searchParams.get("since")}/${url.searchParams.get("until")}/${url.searchParams.get("offset")}`);
+    // React StrictMode may abort/restart the first request; completed windows must stay in the initial week.
+    expect([...new Set(requestedWindows)]).toEqual(["2026-11-14/2026-11-20/0", "2026-11-14/2026-11-20/100"]);
+    await expect(page.getByRole("heading", { name: /13 ноября/ })).toHaveCount(0);
+    await expect(page.getByText(/Страница \d+/)).toHaveCount(0);
+    await page.getByRole("button", { name: /Свернуть 20 ноября/ }).click();
+    await expect(page.getByRole("button", { name: /Развернуть 20 ноября/ })).toHaveAttribute("aria-expanded", "false");
+    const workspace = page.getByRole("region", { name: "Знания проекта", exact: true });
+    const box = await workspace.boundingBox();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height - 30);
+    await page.mouse.wheel(0, 1800);
+    await expect(page.getByRole("button", { name: /Развернуть 13 ноября/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Развернуть 20 ноября/ })).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("button", { name: /Развернуть 13 ноября/ })).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "Загрузить более ранние события" }).click();
+    await expect(page.getByRole("button", { name: /Развернуть 30 октября/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Загрузить более ранние события" })).toHaveCount(0);
+    const ids = await page.locator(".history-event").evaluateAll(elements => elements.map(element => element.id));
+    expect(new Set(ids).size).toBe(ids.length);
+    await page.screenshot({ path: info.outputPath("history-loaded-weeks.png"), animations: "disabled" });
+});
+
+test("история не подгружает события за границами выбранного периода", async ({ page }) => {
+    await installMockApi(page, mockState());
+    await sourcesApi(page);
+    const items = ["2026-11-20", "2026-11-19", "2026-11-13"].map((day, index) => ({ id: `task_comment:${index}`, kind: "task_comment", title: `Комментарий ${day}`, detail: null, created_at: `${day}T10:00:00Z`, actor_name: "Иван Петров", task_id: null }));
+    const requests: URL[] = [];
+    await page.route("**/api/v1/projects/1/history?**", route => {
+        const url = new URL(route.request().url()); requests.push(url);
+        return route.fulfill({ json: historyPage(items, url) });
+    });
+    await page.goto("/projects/DEMO/knowledge?view=history&since=2026-11-19&until=2026-11-20&timezone=Europe%2FSamara");
+    await expect(page.getByRole("heading", { name: /19 ноября/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Загрузить более ранние события" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /13 ноября/ })).toHaveCount(0);
+    expect(requests.every(url => url.searchParams.get("since") === "2026-11-19" && url.searchParams.get("until") === "2026-11-20")).toBe(true);
+});
 
 for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: "mobile", width: 390, height: 844 }]) {
     test(`показывает происхождение знаний и версии трёх repo — ${viewport.name}`, async ({ page }, info) => {
@@ -178,6 +258,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
         await expect(page.getByRole("heading", { name: /20 ноября/ })).toBeVisible();
         await expect(page.getByRole("heading", { name: /19 ноября/ })).toBeVisible();
         await expect(page.getByText("Цель", { exact: true })).toBeVisible();
+        await page.getByRole("button", { name: /Развернуть 19 ноября/ }).click();
         await expect(page.getByRole("link", { name: "Открыть документ" })).toHaveAttribute("href", "/projects/DEMO/docs/d1_ZG9jdW1lbnQ6MQ");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: info.outputPath("project-history.png"), animations: "disabled" });

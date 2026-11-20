@@ -13,6 +13,7 @@ import { projectContextLabel } from "@/lib/projectContext";
 import { fullName, type ProjectMember, type Task } from "@/lib/types";
 import { historyDayKey, historyPeriod, historyValue } from "@/lib/projectHistory";
 import { copyText } from "@/lib/clipboard";
+import { useProjectHistory, type TimelineEvent } from "@/lib/useProjectHistory";
 
 const LABELS = {
     task_activity: { label: "Задачи", icon: ClipboardList },
@@ -31,21 +32,15 @@ const TONES: Record<string, string> = {
 };
 const emptyFilters = { q: "", kind: "", actor: "", actor_user_id: "", task_id: "", since: "", until: "" };
 const FILTER_FIELDS = Object.keys(emptyFilters) as (keyof typeof emptyFilters)[];
-const PAGE_SIZE = 20;
 type Filters = typeof emptyFilters;
+interface DayDisplay { key: string; mode: "default" | "open" | "closed"; overrides: Record<string, boolean>; expanded: string[] }
+// Only presentation preferences; no event contents. Keep Back/document navigation at the same reading position.
+const dayViews = new Map<string, DayDisplay>();
 function eventCount(count: number) {
     const tail = count % 100;
     const word = tail >= 11 && tail <= 14 ? "событий" : count % 10 === 1 ? "событие" : count % 10 >= 2 && count % 10 <= 4 ? "события" : "событий";
     return `${count} ${word}`;
 }
-
-interface TimelineEvent {
-    id: string; kind: string; title: string; detail: string | null; created_at: string;
-    actor_name: string | null; actor_user_id?: number | null; task_id: number | null;
-    document_ref?: string | null; from_value?: string | null; to_value?: string | null;
-    comment_id?: number | null; report_id?: number | null; report_revision?: number | null; event_type?: string | null;
-}
-interface TimelinePage { items: TimelineEvent[]; next_offset: number | null }
 
 function validTimezone(value: string) {
     try { new Intl.DateTimeFormat("ru", { timeZone: value }).format(); return true; } catch { return false; }
@@ -80,26 +75,55 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
     const [edit, setEdit] = useState<{ key: string; value: Filters }>();
     const draft = edit?.key === filterKey ? edit.value : filters;
     const setDraft = (value: Filters) => setEdit({ key: filterKey, value });
-    const requestedOffset = Number(params.get("offset"));
-    const offset = Number.isSafeInteger(requestedOffset) && requestedOffset > 0 ? requestedOffset : 0;
     const selectedEvent = params.get("event");
-    const groupKey = `${projectId}:${filterKey}:${timezone}:${offset}:${selectedEvent ?? ""}`;
-    const [dayDisplay, setDayDisplay] = useState<{ key: string; collapsed: string[]; expanded: string[] }>({ key: "", collapsed: [], expanded: [] });
-    const collapsed = dayDisplay.key === groupKey ? dayDisplay.collapsed : [];
-    const expanded = dayDisplay.key === groupKey ? dayDisplay.expanded : [];
-    const changeDays = (nextCollapsed: string[], nextExpanded = expanded) => setDayDisplay({ key: groupKey, collapsed: nextCollapsed, expanded: nextExpanded });
+    const today = historyPeriod(1, timezone).until;
+    const yesterday = historyPeriod(2, timezone).since;
+    const groupKey = `${projectId}:${filterKey}:${timezone}:${selectedEvent ?? ""}`;
+    const [dayDisplay, setDayDisplay] = useState<DayDisplay>(() => dayViews.get(groupKey) ?? { key: groupKey, mode: "default", overrides: {}, expanded: [] });
+    const display = dayDisplay.key === groupKey ? dayDisplay : dayViews.get(groupKey) ?? { key: groupKey, mode: "default" as const, overrides: {}, expanded: [] };
+    const setDisplay = (change: Partial<DayDisplay>) => {
+        const next = { ...display, ...change, key: groupKey };
+        dayViews.set(groupKey, next);
+        if (dayViews.size > 80) dayViews.delete(dayViews.keys().next().value!);
+        setDayDisplay(next);
+    };
     const invalidDates = !!(draft.since && draft.until && draft.since > draft.until);
     const filtered = Object.values(filters).some(Boolean);
-    const results = useQuery({
-        queryKey: [...queryKeys.project(projectId), "history", filters, offset, timezone, selectedEvent],
-        queryFn: () => {
-            const query = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(selectedEvent ? 0 : offset), timezone });
-            if (selectedEvent) query.set("event_id", selectedEvent);
-            else for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
-            return api.get<TimelinePage>(`/api/v1/projects/${projectId}/history?${query}`);
-        },
-    });
-    const page = results.error ? undefined : results.data;
+    const results = useProjectHistory(projectId, filters, timezone, today, selectedEvent);
+    const weeks = results.error && !results.isFetchNextPageError ? undefined : results.data?.pages;
+    const page = weeks ? { items: [...new Map(weeks.flatMap(week => week.items).map(item => [item.id, item])).values()] } : undefined;
+    const sentinel = useRef<HTMLDivElement>(null);
+    const { hasNextPage, isFetching, isFetchNextPageError, fetchNextPage } = results;
+    useEffect(() => {
+        const element = sentinel.current;
+        if (!element || !hasNextPage || selectedEvent) return;
+        const root = element.closest<HTMLElement>('[aria-label="Знания проекта"]');
+        let userScrolled = false;
+        let requesting = false;
+        const maybeLoad = () => {
+            if (!userScrolled || requesting || isFetching || isFetchNextPageError) return;
+            const bounds = element.getBoundingClientRect();
+            const bottom = root?.getBoundingClientRect().bottom ?? window.innerHeight;
+            if (bounds.top <= bottom + 160 && bounds.bottom >= 0) {
+                requesting = true;
+                userScrolled = false;
+                void fetchNextPage();
+            }
+        };
+        const onScroll = () => { userScrolled = true; maybeLoad(); };
+        const target = root ?? window;
+        target.addEventListener("scroll", onScroll, { passive: true });
+        target.addEventListener("wheel", onScroll, { passive: true });
+        target.addEventListener("touchmove", onScroll, { passive: true });
+        const observer = typeof IntersectionObserver !== "undefined" ? new IntersectionObserver(maybeLoad, { root, rootMargin: "160px" }) : null;
+        observer?.observe(element);
+        return () => {
+            observer?.disconnect();
+            target.removeEventListener("scroll", onScroll);
+            target.removeEventListener("wheel", onScroll);
+            target.removeEventListener("touchmove", onScroll);
+        };
+    }, [hasNextPage, isFetching, isFetchNextPageError, fetchNextPage, selectedEvent, groupKey]);
     const members = useQuery({ queryKey: queryKeys.projectMembers(projectId), queryFn: () => api.get<ProjectMember[]>(endpoints.projectMembers(projectId)), enabled: advanced || !!filters.actor_user_id });
     const tasks = useQuery({ queryKey: queryKeys.tasks(projectId), queryFn: () => api.get<Task[]>(endpoints.projectTasks(projectId)), enabled: advanced || !!filters.task_id });
     const users = (members.data ?? []).map(member => member.user);
@@ -107,10 +131,7 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
     const selectedTask = (tasks.data ?? []).find(task => String(task.id) === filters.task_id);
     const formatDay = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", timeZone: timezone });
     const formatTime = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: timezone });
-    const today = historyPeriod(1, timezone).until;
-    const yesterday = historyPeriod(2, timezone).since;
-
-    function navigate(nextFilters: Filters, nextOffset = 0) {
+    function navigate(nextFilters: Filters) {
         const next = new URLSearchParams(params);
         for (const field of FILTER_FIELDS) {
             const value = nextFilters[field].trim();
@@ -118,7 +139,7 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
         }
         next.set("timezone", timezone);
         next.delete("event");
-        if (nextOffset) next.set("offset", String(nextOffset)); else next.delete("offset");
+        next.delete("offset");
         // Keep the applied draft while Router commits its navigation transition.
         // An immediate Enter/click must not resubmit the previous URL filters.
         setEdit({ key: filterKey, value: nextFilters });
@@ -133,8 +154,8 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
         catch { setCopyStatus("Не удалось скопировать ссылку"); }
     }
     useEffect(() => {
-        if (selectedEvent && results.data?.items.length) listRef.current?.focus({ preventScroll: true });
-    }, [selectedEvent, results.data]);
+        if (selectedEvent && page?.items.length) listRef.current?.focus({ preventScroll: true });
+    }, [selectedEvent, page?.items.length]);
 
     const chips: { field: keyof Filters; label: string }[] = [];
     if (filters.q) chips.push({ field: "q", label: `Поиск: ${filters.q}` });
@@ -180,31 +201,31 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
             </div>}
         </form>
         {!selectedEvent && chips.length > 0 && <div className="flex flex-wrap gap-1" aria-label="Применённые фильтры">{chips.map(chip => <Button key={chip.field} size="sm" variant="ghost" className="max-w-full bg-accent-soft text-accent" aria-label={`Убрать фильтр: ${chip.label}`} onClick={() => navigate({ ...filters, [chip.field]: "" })}><span className="truncate">{chip.label}</span><X size={13} aria-hidden="true" /></Button>)}</div>}
-        {selectedEvent && <div className="flex flex-wrap items-center gap-2 text-[13px]"><span>Событие по ссылке</span><Button size="sm" onClick={() => navigate(filters, offset)}>Вернуться к ленте</Button></div>}
+        {selectedEvent && <div className="flex flex-wrap items-center gap-2 text-[13px]"><span>Событие по ссылке</span><Button size="sm" onClick={() => navigate(filters)}>Вернуться к ленте</Button></div>}
         <div className="flex flex-wrap items-baseline justify-between gap-2 text-[12px] text-muted">
             <details><summary className="cursor-pointer py-2">Какие события здесь видны</summary><p className="mt-2 max-w-3xl">Сохранённые изменения задач и паспорта, комментарии, версии отчётов, сроки проекта, добавление рисков и документов. После переноса или удаления задачи история может быть неполной. Код доступен в разделе «Код и репозитории».</p></details>
             <span>Время: {timezone}</span>
         </div>
         {copyStatus && <p role="status" className="text-[12px] text-muted">{copyStatus}</p>}
         {results.isPending && <div role="status" aria-label="Загрузка истории" className="space-y-3"><Skeleton className="h-20" /><Skeleton className="h-20" /></div>}
-        {results.error && <ErrorMessage message={results.error.message} action={<Button size="sm" onClick={() => void results.refetch()}>Повторить</Button>} />}
-        {page?.items.length === 0 && <EmptyState title={selectedEvent ? "Событие недоступно или удалено" : filtered ? "События по фильтрам не найдены" : "История пока пуста"} />}
+        {results.error && !results.isFetchNextPageError && <ErrorMessage message={results.error.message} action={<Button size="sm" onClick={() => void results.refetch()}>Повторить</Button>} />}
+        {page?.items.length === 0 && <EmptyState title={selectedEvent ? "Событие недоступно или удалено" : results.hasNextPage ? "За загруженную неделю событий нет" : filtered ? "События по фильтрам не найдены" : "История пока пуста"} description={results.hasNextPage ? "Прокрутите вниз или загрузите более ранние события." : undefined} />}
         {days.size > 0 && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-subtle pb-2">
-            <span className="text-[12px] text-muted">На странице: {eventCount(page!.items.length)} · дат: {days.size}</span>
-            <div className="flex gap-1"><Button size="sm" variant="ghost" onClick={() => changeDays([...days.keys()])}>Свернуть даты</Button><Button size="sm" variant="ghost" onClick={() => changeDays([])}>Развернуть даты</Button></div>
+            <span className="text-[12px] text-muted">Загружено: {eventCount(page!.items.length)} · дат: {days.size}</span>
+            <div className="flex gap-1"><Button size="sm" variant="ghost" onClick={() => setDisplay({ mode: "closed", overrides: {} })}>Свернуть даты</Button><Button size="sm" variant="ghost" onClick={() => setDisplay({ mode: "open", overrides: {} })}>Развернуть даты</Button></div>
         </div>}
         <div ref={listRef} tabIndex={-1} aria-label="События проекта" className="history-timeline outline-none">
             {[...days].map(([day, events]) => {
                 const fullDay = formatDay.format(new Date(events[0].created_at));
-                const isCollapsed = collapsed.includes(day);
-                const allVisible = expanded.includes(day) || !!selectedEvent;
+                const isCollapsed = display.overrides[day] ?? (display.mode === "closed" || (display.mode === "default" && day !== today && !selectedEvent));
+                const allVisible = display.expanded.includes(day) || !!selectedEvent;
                 const visibleEvents = allVisible ? events : events.slice(0, 4);
                 const kinds = [...new Set(events.map(event => event.kind))];
                 return <section key={day} className="history-day min-w-0 pb-6">
                     <h3 className="relative mb-3">
                         <button type="button" aria-expanded={!isCollapsed} aria-controls={`events-${day}`} aria-label={`${isCollapsed ? "Развернуть" : "Свернуть"} ${fullDay}`}
                             className="history-day-toggle flex w-full min-w-0 items-center gap-3 rounded-lg py-3 pr-3 text-left focus-visible:outline-2 focus-visible:outline-accent"
-                            onClick={() => changeDays(isCollapsed ? collapsed.filter(value => value !== day) : [...collapsed, day])}>
+                            onClick={() => setDisplay({ overrides: { ...display.overrides, [day]: !isCollapsed } })}>
                             <span className="history-milestone grid size-9 shrink-0 place-items-center rounded-full border border-accent bg-surface text-accent"><CalendarDays size={17} aria-hidden="true" /></span>
                             <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-primary">{day === today ? "Сегодня" : day === yesterday ? "Вчера" : fullDay}</span>
                                 {(day === today || day === yesterday) && <span className="text-[12px] text-muted">{fullDay}</span>}
@@ -248,15 +269,17 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
                             </div>
                         </li>;
                     })}</ol>
-                    {events.length > 4 && <div className="ml-12 mt-3"><Button size="sm" variant="ghost" onClick={() => changeDays(collapsed, allVisible ? expanded.filter(value => value !== day) : [...expanded, day])}>{allVisible ? "Показать первые 4" : `Ещё ${eventCount(events.length - 4)} за этот день`}</Button></div>}
+                    {events.length > 4 && <div className="ml-12 mt-3"><Button size="sm" variant="ghost" onClick={() => setDisplay({ expanded: allVisible ? display.expanded.filter(value => value !== day) : [...display.expanded, day] })}>{allVisible ? "Показать первые 4" : `Ещё ${eventCount(events.length - 4)} за этот день`}</Button></div>}
                     </div>
                 </section>;
             })}
         </div>
-        {!selectedEvent && page && (offset > 0 || page.next_offset !== null) && <nav aria-label="Страницы истории проекта" className="flex flex-wrap items-center gap-2">
-            <Button size="sm" disabled={!offset} onClick={() => navigate(filters, Math.max(0, offset - PAGE_SIZE))}>Новее</Button>
-            <span className="text-[12px] text-muted">Страница {Math.floor(offset / PAGE_SIZE) + 1}</span>
-            <Button size="sm" disabled={page.next_offset === null} onClick={() => { if (page.next_offset !== null) navigate(filters, page.next_offset); }}>Раньше</Button>
-        </nav>}
+        {!selectedEvent && weeks && <div ref={sentinel} className="flex flex-col items-center gap-2 py-4 text-[12px] text-muted" aria-label="Подгрузка истории">
+            <p>Загружен период: {weeks.at(-1)!.since.split("-").reverse().join(".")} — {weeks[0].until.split("-").reverse().join(".")}</p>
+            {results.isFetchingNextPage && <p role="status">Загружаем более ранние события…</p>}
+            {results.isFetchNextPageError && <ErrorMessage message="Не удалось загрузить более раннюю историю. Уже загруженные события сохранены." />}
+            {results.hasNextPage ? <Button size="sm" disabled={results.isFetching} onClick={() => void results.fetchNextPage()}>{results.isFetchNextPageError ? "Повторить загрузку истории" : "Загрузить более ранние события"}</Button>
+                : <p>{filters.since ? "Все события выбранного периода загружены" : "Более ранних событий нет"}</p>}
+        </div>}
     </div>;
 }

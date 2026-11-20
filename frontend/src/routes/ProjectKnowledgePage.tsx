@@ -17,7 +17,7 @@ export function ProjectKnowledgePage() {
     const params = new URLSearchParams(location.search);
     const view = params.get("view") === "history" ? "history" : params.get("view") === "code" ? "code" : "map";
     const scrollParams = new URLSearchParams();
-    const fields = view === "map" ? ["mq", "category", "map_offset"] : view === "history" ? ["q", "kind", "actor", "actor_user_id", "since", "until", "offset", "task_id", "timezone", "event"] : [];
+    const fields = view === "map" ? ["mq", "category", "map_offset"] : view === "history" ? ["q", "kind", "actor", "actor_user_id", "since", "until", "task_id", "timezone", "event"] : [];
     for (const field of fields) if (params.has(field)) scrollParams.set(field, params.get(field)!);
     const positionKey = `${project.id}:${view}:${scrollParams}`;
     const scroll = useRef<HTMLElement>(null);
