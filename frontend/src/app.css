@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+/* Knowledge history: dated milestones and distinct, labelled event types. */
+@layer components {
+  .history-timeline { position: relative; }
+  .history-timeline::before {
+    content: ""; position: absolute; left: 17px; top: 28px; bottom: 24px;
+    width: 2px; background: var(--brand-edge-soft);
+  }
+  .history-day-toggle { background: linear-gradient(90deg, var(--color-accent-soft), transparent 85%); }
+  .history-milestone { position: relative; box-shadow: 0 0 0 5px var(--surface-workspace); }
+  .history-event-marker {
+    color: var(--history-tone); border: 1px solid color-mix(in srgb, var(--history-tone) 50%, var(--color-border));
+    background: var(--surface-workspace); box-shadow: 0 0 0 4px var(--surface-workspace);
+  }
+  .history-event-card {
+    border: 1px solid var(--color-border-subtle);
+    border-left: 3px solid var(--history-tone);
+    background: linear-gradient(105deg, color-mix(in srgb, var(--history-tone) 5%, var(--surface-workspace)), var(--surface-workspace) 75%);
+  }
+  .history-event-kind { color: var(--history-tone); background: color-mix(in srgb, var(--history-tone) 12%, transparent); }
+  @media (forced-colors: active) {
+    .history-timeline::before { background: CanvasText; }
+    .history-event-marker, .history-event-card, .history-milestone { border-color: CanvasText; }
+    .history-event-kind { color: CanvasText; }
+  }
+}
+
 /*
   Физическая модель интерфейса и семантические токены Tailwind задаются здесь.
 */

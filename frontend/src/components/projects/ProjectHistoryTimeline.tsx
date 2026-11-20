@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { CalendarDays, CircleDot, ClipboardList, FileText, Flag, Link2, MessageSquare, Search, ShieldAlert, X } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronDown, CircleDot, ClipboardList, FileText, Flag, Link2, MessageSquare, Search, ShieldAlert, X } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
@@ -23,10 +23,21 @@ const LABELS = {
     risk_created: { label: "Добавление рисков", icon: ShieldAlert },
     document_created: { label: "Добавление документов", icon: FileText },
 };
+const TONES: Record<string, string> = {
+    task_activity: "var(--color-accent)", task_comment: "var(--brand-cyan)",
+    task_report: "var(--color-purple)", project_deadline: "var(--color-warning)",
+    project_context: "var(--brand-violet)", risk_created: "var(--color-danger)",
+    document_created: "var(--color-success)",
+};
 const emptyFilters = { q: "", kind: "", actor: "", actor_user_id: "", task_id: "", since: "", until: "" };
 const FILTER_FIELDS = Object.keys(emptyFilters) as (keyof typeof emptyFilters)[];
 const PAGE_SIZE = 20;
 type Filters = typeof emptyFilters;
+function eventCount(count: number) {
+    const tail = count % 100;
+    const word = tail >= 11 && tail <= 14 ? "событий" : count % 10 === 1 ? "событие" : count % 10 >= 2 && count % 10 <= 4 ? "события" : "событий";
+    return `${count} ${word}`;
+}
 
 interface TimelineEvent {
     id: string; kind: string; title: string; detail: string | null; created_at: string;
@@ -50,7 +61,7 @@ function eventDetail(event: TimelineEvent) {
 function EventDetail({ text }: { text: string }) {
     const [expanded, setExpanded] = useState(false);
     return <div className="mt-1 text-[13px] text-secondary">
-        <p className={`whitespace-pre-wrap break-words ${!expanded && text.length > 220 ? "line-clamp-3" : ""}`}>{text}</p>
+        <p className={`max-w-[85ch] whitespace-pre-wrap break-words ${!expanded && text.length > 220 ? "line-clamp-2" : ""}`}>{text}</p>
         {text.length > 220 && <Button size="sm" variant="ghost" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "Свернуть текст" : "Показать подробнее"}</Button>}
     </div>;
 }
@@ -72,6 +83,11 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
     const requestedOffset = Number(params.get("offset"));
     const offset = Number.isSafeInteger(requestedOffset) && requestedOffset > 0 ? requestedOffset : 0;
     const selectedEvent = params.get("event");
+    const groupKey = `${projectId}:${filterKey}:${timezone}:${offset}:${selectedEvent ?? ""}`;
+    const [dayDisplay, setDayDisplay] = useState<{ key: string; collapsed: string[]; expanded: string[] }>({ key: "", collapsed: [], expanded: [] });
+    const collapsed = dayDisplay.key === groupKey ? dayDisplay.collapsed : [];
+    const expanded = dayDisplay.key === groupKey ? dayDisplay.expanded : [];
+    const changeDays = (nextCollapsed: string[], nextExpanded = expanded) => setDayDisplay({ key: groupKey, collapsed: nextCollapsed, expanded: nextExpanded });
     const invalidDates = !!(draft.since && draft.until && draft.since > draft.until);
     const filtered = Object.values(filters).some(Boolean);
     const results = useQuery({
@@ -135,13 +151,13 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
     }
 
     return <div className="flex min-w-0 flex-col gap-4">
-        <form onSubmit={applyFilters} className="grid min-w-0 gap-3 border-b border-line-subtle pb-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end">
-            <Field label="Поиск по истории">{id => <Input id={id} type="search" placeholder="Событие, задача или изменение…" maxLength={200} value={draft.q} onChange={event => setDraft({ ...draft, q: event.target.value })} />}</Field>
+        <form onSubmit={applyFilters} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 border-b border-line-subtle pb-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:gap-3">
+            <Field label="Поиск по истории" className="col-span-2 sm:col-span-1">{id => <Input id={id} type="search" placeholder="Событие, задача или изменение…" maxLength={200} value={draft.q} onChange={event => setDraft({ ...draft, q: event.target.value })} />}</Field>
             <Field label="Тип события">{id => <Select id={id} value={draft.kind} onChange={event => { const next = { ...draft, kind: event.target.value }; setDraft(next); if (!invalidDates) navigate(next); }}>
                 <option value="">Все события</option>{Object.entries(LABELS).map(([kind, { label }]) => <option key={kind} value={kind}>{label}</option>)}
             </Select>}</Field>
             <Button size="sm" type="submit" disabled={invalidDates} icon={<Search size={14} aria-hidden="true" />}>Найти</Button>
-            <div className="flex flex-wrap items-center gap-1 sm:col-span-3">
+            <div className="col-span-2 flex flex-wrap items-center gap-1 sm:col-span-3">
                 {[{ days: 1, label: "Сегодня" }, { days: 7, label: "7 дней" }, { days: 30, label: "30 дней" }].map(period => {
                     const range = historyPeriod(period.days, timezone);
                     return <Button key={period.days} size="sm" variant="ghost" aria-pressed={filters.since === range.since && filters.until === range.until} className="aria-pressed:bg-accent-soft aria-pressed:text-accent" onClick={() => navigate({ ...draft, ...range })}>{period.label}</Button>;
@@ -149,7 +165,7 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
                 <Button size="sm" variant="ghost" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>Автор, задача и период</Button>
                 {(filtered || Object.values(draft).some(Boolean)) && <Button size="sm" variant="ghost" onClick={() => navigate(emptyFilters)}>Сбросить</Button>}
             </div>
-            {advanced && <div className="grid min-w-0 gap-3 sm:col-span-3 sm:grid-cols-2 lg:grid-cols-4">
+            {advanced && <div className="col-span-2 grid min-w-0 gap-3 sm:col-span-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Field label="Автор">{id => <UserSelect id={id} label="Автор" users={users} selected={selectedUser ? [selectedUser] : []} emptyLabel="Все авторы" clearLabel="Все авторы" loading={members.isPending} error={members.error?.message}
                     fallbackSelection={draft.actor_user_id && !selectedUser ? { userId: Number(draft.actor_user_id), name: `Автор № ${draft.actor_user_id}` } : undefined}
                     onChange={selection => setDraft({ ...draft, actor_user_id: selection[0] ? String(selection[0].id) : "", actor: "" })} />}</Field>
@@ -173,26 +189,52 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
         {results.isPending && <div role="status" aria-label="Загрузка истории" className="space-y-3"><Skeleton className="h-20" /><Skeleton className="h-20" /></div>}
         {results.error && <ErrorMessage message={results.error.message} action={<Button size="sm" onClick={() => void results.refetch()}>Повторить</Button>} />}
         {page?.items.length === 0 && <EmptyState title={selectedEvent ? "Событие недоступно или удалено" : filtered ? "События по фильтрам не найдены" : "История пока пуста"} />}
-        <div ref={listRef} tabIndex={-1} aria-label="События проекта" className="space-y-5 outline-none">
+        {days.size > 0 && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-subtle pb-2">
+            <span className="text-[12px] text-muted">На странице: {eventCount(page!.items.length)} · дат: {days.size}</span>
+            <div className="flex gap-1"><Button size="sm" variant="ghost" onClick={() => changeDays([...days.keys()])}>Свернуть даты</Button><Button size="sm" variant="ghost" onClick={() => changeDays([])}>Развернуть даты</Button></div>
+        </div>}
+        <div ref={listRef} tabIndex={-1} aria-label="События проекта" className="history-timeline outline-none">
             {[...days].map(([day, events]) => {
                 const fullDay = formatDay.format(new Date(events[0].created_at));
-                return <section key={day} className="min-w-0 lg:grid lg:grid-cols-[10rem_minmax(0,1fr)] lg:gap-4">
-                    <h3 title={fullDay} className="mb-2 text-[13px] font-semibold text-secondary lg:pt-3">{day === today ? "Сегодня" : day === yesterday ? "Вчера" : fullDay}{(day === today || day === yesterday) && <span className="ml-2 font-normal text-muted lg:ml-0 lg:block">{fullDay}</span>}</h3>
-                    <ol className="divide-y divide-line-subtle border-y border-line-subtle">{events.map(event => {
+                const isCollapsed = collapsed.includes(day);
+                const allVisible = expanded.includes(day) || !!selectedEvent;
+                const visibleEvents = allVisible ? events : events.slice(0, 4);
+                const kinds = [...new Set(events.map(event => event.kind))];
+                return <section key={day} className="history-day min-w-0 pb-6">
+                    <h3 className="relative mb-3">
+                        <button type="button" aria-expanded={!isCollapsed} aria-controls={`events-${day}`} aria-label={`${isCollapsed ? "Развернуть" : "Свернуть"} ${fullDay}`}
+                            className="history-day-toggle flex w-full min-w-0 items-center gap-3 rounded-lg py-3 pr-3 text-left focus-visible:outline-2 focus-visible:outline-accent"
+                            onClick={() => changeDays(isCollapsed ? collapsed.filter(value => value !== day) : [...collapsed, day])}>
+                            <span className="history-milestone grid size-9 shrink-0 place-items-center rounded-full border border-accent bg-surface text-accent"><CalendarDays size={17} aria-hidden="true" /></span>
+                            <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-primary">{day === today ? "Сегодня" : day === yesterday ? "Вчера" : fullDay}</span>
+                                {(day === today || day === yesterday) && <span className="text-[12px] text-muted">{fullDay}</span>}
+                            </span>
+                            <span className="rounded-md bg-accent-soft px-2 py-1 text-[12px] font-medium text-accent">{eventCount(events.length)}</span>
+                            <ChevronDown size={16} aria-hidden="true" className={`shrink-0 text-muted transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                        </button>
+                    </h3>
+                    <div className="mb-3 ml-12 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted" aria-label={`Состав событий за ${fullDay}`}>
+                        {kinds.map(kind => <span key={kind} className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="size-1.5 rounded-full" style={{ backgroundColor: TONES[kind] ?? "var(--color-text-muted)" }} />{LABELS[kind as keyof typeof LABELS]?.label ?? "События"} · {events.filter(event => event.kind === kind).length}</span>)}
+                    </div>
+                    <div id={`events-${day}`} hidden={isCollapsed}>
+                    <ol className="space-y-3">{visibleEvents.map(event => {
                         const { label, icon: Icon } = LABELS[event.kind as keyof typeof LABELS] ?? { label: "Событие", icon: CircleDot };
                         const detail = eventDetail(event);
                         const structured = event.from_value != null || event.to_value != null;
-                        return <li key={event.id} id={`history-${event.id}`} className={`grid min-w-0 grid-cols-[1.25rem_minmax(0,1fr)] gap-2 py-3 sm:gap-3 ${selectedEvent === event.id ? "bg-accent-soft" : ""}`}>
-                            <Icon size={17} className="mt-0.5 text-muted" aria-hidden="true" />
-                            <div className="min-w-0">
+                        return <li key={event.id} id={`history-${event.id}`} style={{ "--history-tone": TONES[event.kind] ?? "var(--color-accent)" } as CSSProperties}
+                            className="history-event relative grid min-w-0 grid-cols-[2.25rem_minmax(0,1fr)] gap-3">
+                            <span className="history-event-marker z-10 mt-3 grid size-9 place-items-center rounded-full"><Icon size={16} aria-hidden="true" /></span>
+                            <div className={`history-event-card min-w-0 rounded-lg p-3 sm:px-4 ${selectedEvent === event.id ? "ring-1 ring-accent" : ""}`}>
+                                <div className="mb-2 flex items-center justify-between gap-2 text-[11px]">
+                                    <span className="history-event-kind rounded px-2 py-0.5 font-medium">{label}</span>
+                                    <time className="shrink-0 font-mono text-muted" dateTime={event.created_at} title={`${fullDay}, ${formatTime.format(new Date(event.created_at))} (${timezone})`}>{formatTime.format(new Date(event.created_at))}</time>
+                                </div>
                                 <p className="break-words text-[14px] font-medium text-primary">{event.title}</p>
-                                {structured && <dl className="mt-2 grid gap-1 text-[13px] sm:grid-cols-2"><div className="min-w-0"><dt className="text-[11px] text-muted">Было</dt><dd className="break-words whitespace-pre-wrap">{historyValue(event.from_value, event.event_type)}</dd></div><div className="min-w-0"><dt className="text-[11px] text-muted">Стало</dt><dd className="break-words whitespace-pre-wrap text-primary">{historyValue(event.to_value, event.event_type)}</dd></div></dl>}
+                                {structured && <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]"><span className="max-w-full whitespace-pre-wrap break-words rounded bg-surface px-2 py-1 text-muted"><span className="sr-only">Было: </span>{historyValue(event.from_value, event.event_type)}</span><ArrowRight size={14} className="text-muted" aria-hidden="true" /><span className="history-event-kind max-w-full whitespace-pre-wrap break-words rounded px-2 py-1"><span className="sr-only">Стало: </span>{historyValue(event.to_value, event.event_type)}</span></div>}
                                 {detail && !structured && <EventDetail text={detail} />}
                                 {detail && structured && <details className="mt-1 text-[13px] text-muted"><summary className="cursor-pointer py-1">Подробности изменения</summary><EventDetail text={detail} /></details>}
                                 <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">
-                                    <span>{label}</span><span aria-hidden="true">·</span>
                                     {event.actor_name ? <UserIdentity userId={event.actor_user_id} name={event.actor_name} size="xs" /> : <span>Автор не указан</span>}
-                                    <time dateTime={event.created_at} title={`${fullDay}, ${formatTime.format(new Date(event.created_at))} (${timezone})`}>{formatTime.format(new Date(event.created_at))}</time>
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-1">
                                     {event.task_id !== null && <Button size="sm" variant="ghost" onClick={() => {
@@ -206,6 +248,8 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
                             </div>
                         </li>;
                     })}</ol>
+                    {events.length > 4 && <div className="ml-12 mt-3"><Button size="sm" variant="ghost" onClick={() => changeDays(collapsed, allVisible ? expanded.filter(value => value !== day) : [...expanded, day])}>{allVisible ? "Показать первые 4" : `Ещё ${eventCount(events.length - 4)} за этот день`}</Button></div>}
+                    </div>
                 </section>;
             })}
         </div>

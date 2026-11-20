@@ -67,6 +67,40 @@ async function sourcesApi(page: Page) {
     return connections;
 }
 
+for (const width of [320, 1440]) {
+    test(`история с вехами и плотными днями — ${width}`, async ({ page }, info) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await installMockApi(page, mockState());
+        await sourcesApi(page);
+        const kinds = ["task_activity", "task_report", "task_comment", "project_deadline", "document_created", "risk_created"];
+        const titles = ["Смена стадии · Подключение репозитория", "Отчёт · Обновление раздела знаний · v2", "Комментарий · Обсуждение навигации", "Изменение срока проекта", "Создан документ · Решение команды", "Добавлен риск · Срок поставки"];
+        const items = Array.from({ length: 16 }, (_, index) => ({
+            id: `demo:${index}`, kind: kinds[index % kinds.length], title: titles[index % titles.length],
+            detail: index % kinds.length === 0 ? null : "Сохраняем обоснование решения и ссылки на исходные материалы. Подробности доступны в связанной записи проекта.",
+            from_value: index % kinds.length === 0 ? "В работе" : null, to_value: index % kinds.length === 0 ? "Тестирование" : null,
+            created_at: index < 12 ? "2026-11-20T09:30:00Z" : "2026-11-19T10:00:00Z", actor_name: "Иван Петров", task_id: null,
+        }));
+        await page.route("**/api/v1/projects/1/history?**", route => route.fulfill({ json: { items, next_offset: null } }));
+        await page.goto("/projects/DEMO/knowledge?view=history&timezone=Europe%2FSamara");
+        await expect(page.locator(".history-event:visible")).toHaveCount(8);
+        const colors = await page.locator(".history-event-marker").evaluateAll(elements => elements.slice(0, 4).map(element => getComputedStyle(element).color));
+        expect(new Set(colors).size).toBe(4);
+        await page.screenshot({ path: info.outputPath("history-milestones.png"), animations: "disabled" });
+        await page.getByRole("button", { name: "Ещё 8 событий за этот день" }).click();
+        await expect(page.locator(".history-event:visible")).toHaveCount(16);
+        const day = page.getByRole("button", { name: /Свернуть 20 ноября/ });
+        await day.focus();
+        await page.keyboard.press("Enter");
+        await expect(page.locator(".history-event:visible")).toHaveCount(4);
+        await page.getByRole("button", { name: "Свернуть даты" }).click();
+        await expect(page.locator(".history-event:visible")).toHaveCount(0);
+        await page.screenshot({ path: info.outputPath("history-collapsed.png"), animations: "disabled" });
+        await page.getByRole("button", { name: "Развернуть даты" }).click();
+        await expect(page.locator(".history-event:visible")).toHaveCount(16);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
+}
+
 for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: "mobile", width: 390, height: 844 }]) {
     test(`показывает происхождение знаний и версии трёх repo — ${viewport.name}`, async ({ page }, info) => {
         await page.setViewportSize(viewport);

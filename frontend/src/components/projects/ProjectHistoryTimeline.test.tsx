@@ -11,13 +11,13 @@ import { historyDayKey, historyPeriod, historyValue } from "@/lib/projectHistory
 const clients: QueryClient[] = [];
 const event = { id: "task_report:91", kind: "task_report", title: "Отчёт · Импорт · v2", detail: "Импорт реализован", created_at: "2026-11-20T21:30:00Z", actor_name: "Иван Петров", actor_user_id: 3, task_id: 12, report_id: 91, report_revision: 2 };
 function Location() { return <output data-testid="url">{useLocation().search}</output>; }
-function setup(search = "?view=history") {
+function setup(search = "?view=history", items = [event]) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     clients.push(client);
     const get = vi.spyOn(api, "get").mockImplementation(async path => {
         if (path.includes("/members")) return [{ user: { id: 3, username: "ivan", first_name: "Иван", last_name: "Петров", middle_name: null, has_avatar: false } }];
         if (path.endsWith("/tasks")) return [{ id: 12, title: "Импорт" }];
-        return { items: [event], next_offset: null };
+        return { items, next_offset: null };
     });
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[`/projects/DEMO/knowledge${search}`]}><ProjectHistoryTimeline projectId={7} projectKey="DEMO" /><Location /></MemoryRouter></QueryClientProvider>);
     return get;
@@ -28,6 +28,22 @@ afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear())
 it("uses the same timezone for local day grouping and inclusive calendar shortcuts", () => {
     expect(historyDayKey(new Date("2026-11-20T21:30:00Z"), "Europe/Samara")).toBe("2026-11-21");
     expect(historyPeriod(7, "America/New_York", new Date("2026-03-10T15:00:00Z"))).toEqual({ since: "2026-03-04", until: "2026-03-10" });
+});
+
+it("сворачивает даты и раскрывает большой день порциями без потери событий", async () => {
+    const items = Array.from({ length: 9 }, (_, index) => ({ ...event, id: `task_report:${index}`, title: `Публикация ${index}`, created_at: index === 8 ? "2026-11-19T10:00:00Z" : event.created_at }));
+    setup("?view=history&timezone=UTC", items);
+    await screen.findByText("Публикация 0");
+    expect(screen.queryByText("Публикация 4")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ещё 4 события за этот день" }));
+    expect(screen.getByText("Публикация 7")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Свернуть 20 ноября/ }));
+    expect(screen.getByText("Публикация 0").closest("[hidden]")).toBeTruthy();
+    expect(screen.getByText("Публикация 8").closest("[hidden]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Свернуть даты" }));
+    expect(screen.getByText("Публикация 8").closest("[hidden]")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Развернуть даты" }));
+    expect(screen.getByText("Публикация 7").closest("[hidden]")).toBeNull();
 });
 
 it("formats known change values without exposing priority enums", () => {
