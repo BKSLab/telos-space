@@ -170,6 +170,12 @@ async def test_map_versions_exact_evidence_conflicts_invalidation_delete_acl_and
         conflicts = [item for item in current.items if item.state == "conflicting"]
         assert len(conflicts) == 2
         assert all(item.acceptance == "unreviewed" and item.conflicts_with for item in conflicts)
+        visible = await env.service.read_map(
+            project_id=env.project_id, principal=env.principal, exclude_category="facts", limit=1
+        )
+        expected = [item for item in current.items if item.category != "facts"]
+        assert visible.total == len(expected) < current.total
+        assert [item.id for item in visible.items] == [item.id for item in expected[:1]]
         claim = next(item for item in current.items if f"document:{doc_id}" in item.source_ids)
         assert claim.provenance.author_user_id == env.owner_id
         assert claim.evidence[0].start == 0 and claim.evidence[0].end == len("API: private")

@@ -27473,6 +27473,40 @@
           }
         },
         {
+          "description": "Раздел, исключённый из выборки.",
+          "in": "query",
+          "name": "exclude_category",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "enum": [
+                  "problem",
+                  "goal",
+                  "expected_result",
+                  "additional",
+                  "audience",
+                  "capabilities",
+                  "boundaries",
+                  "constraints",
+                  "glossary",
+                  "decisions",
+                  "open_questions",
+                  "facts",
+                  "relations",
+                  "task_results"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Раздел, исключённый из выборки.",
+            "title": "Exclude Category"
+          }
+        },
+        {
           "description": "Подстрока актуального утверждения.",
           "in": "query",
           "name": "q",

@@ -43,6 +43,9 @@ async def read_map(
     limit: Annotated[int, Query(ge=1, le=50, description="Размер страницы утверждений.")] = 20,
     offset: Annotated[int, Query(ge=0, description="Смещение страницы.")] = 0,
     category: Annotated[KnowledgeCategory | None, Query(description="Раздел карты.")] = None,
+    exclude_category: Annotated[
+        KnowledgeCategory | None, Query(description="Раздел, исключённый из выборки.")
+    ] = None,
     q: Annotated[
         str | None,
         Query(max_length=200, pattern=r"^[^\x00]*$", description="Подстрока актуального утверждения."),
@@ -55,6 +58,7 @@ async def read_map(
             limit=limit,
             offset=offset,
             category=category,
+            exclude_category=exclude_category,
             query=q,
         )
     except ProjectKnowledgeServiceError as error:

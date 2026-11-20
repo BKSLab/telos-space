@@ -175,6 +175,7 @@ class ProjectKnowledgeService:
         limit: int = 20,
         offset: int = 0,
         category: str | None = None,
+        exclude_category: str | None = None,
         query: str | None = None,
     ) -> ProjectKnowledgeMapSchema:
         self._pagination(limit, offset)
@@ -183,7 +184,12 @@ class ProjectKnowledgeService:
             state = await db.knowledge.get_state(project_id)
             status = await self._status(db, project_id=project_id, state=state)
             page = await db.knowledge.get_claim_page(
-                project_id=project_id, limit=limit, offset=offset, category=category, query=query
+                project_id=project_id,
+                limit=limit,
+                offset=offset,
+                category=category,
+                exclude_category=exclude_category,
+                query=query,
             )
             items = [ProjectKnowledgeClaimSchema(**item) for item in page["items"]]
             observations = {}

@@ -45,7 +45,7 @@ async def test_map_http_contract_bounds_read_and_refresh_errors(current_principa
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
         response = await client.get(
-            "/api/v1/projects/7/knowledge/map?limit=20&offset=0&category=goal&q=delivery"
+            "/api/v1/projects/7/knowledge/map?limit=20&offset=0&category=goal&exclude_category=facts&q=delivery"
         )
         assert response.status_code == 200 and response.json()["observation"]["generation"] == 0
         assert service.read_map.await_args.kwargs == {
@@ -54,6 +54,7 @@ async def test_map_http_contract_bounds_read_and_refresh_errors(current_principa
             "limit": 20,
             "offset": 0,
             "category": "goal",
+            "exclude_category": "facts",
             "query": "delivery",
         }
         assert (await client.get("/api/v1/projects/7/knowledge/map/status")).status_code == 200

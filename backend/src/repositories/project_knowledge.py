@@ -293,6 +293,7 @@ class ProjectKnowledgeRepository:
         limit: int,
         offset: int,
         category: str | None = None,
+        exclude_category: str | None = None,
         claim_id: UUID | None = None,
         query: str | None = None,
     ) -> dict:
@@ -304,6 +305,7 @@ class ProjectKnowledgeRepository:
           SELECT * FROM current_claims WHERE
             ((CAST(:claim_id AS uuid) IS NULL AND fresh) OR id=CAST(:claim_id AS uuid))
             AND (CAST(:category AS text) IS NULL OR category=:category)
+            AND (CAST(:exclude_category AS text) IS NULL OR category<>:exclude_category)
             AND (CAST(:query AS text) IS NULL OR
                  (fresh AND strpos(lower(text), lower(CAST(:query AS text))) > 0))
         ), page AS (
@@ -328,6 +330,7 @@ class ProjectKnowledgeRepository:
                 "project_id": project_id,
                 "claim_id": claim_id,
                 "category": category,
+                "exclude_category": exclude_category,
                 "query": (query or "").strip() or None,
                 "limit": limit,
                 "offset": offset,

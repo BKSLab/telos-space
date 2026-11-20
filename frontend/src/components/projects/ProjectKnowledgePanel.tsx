@@ -18,7 +18,7 @@ const VERIFICATION: Record<string, string> = {
     participant_report: "Отчёт участника", status_only: "Только статус задачи",
     analysis: "Вывод анализа", unknown: "Подтверждение неизвестно",
 };
-const CATEGORY: Record<string, string> = { facts: "Сведения", relations: "Связи", task_results: "Результаты задач" };
+const CATEGORY: Record<string, string> = { relations: "Связи", task_results: "Результаты задач" };
 const TOPICS = [
     ["", "Все разделы"], ["goal", "Цели"], ["boundaries", "Границы"], ["decisions", "Решения"],
     ["task_results", "Результаты задач"], ["open_questions", "Открытые вопросы"],
@@ -87,7 +87,7 @@ export function ProjectKnowledgePanel({ projectId, projectKey, ownerId }: { proj
                 <p className="font-medium text-secondary">{KNOWLEDGE_STATES[map.status] ?? map.status}</p>
                 <dl className="space-y-1 text-muted">
                     <div className="flex flex-wrap justify-between gap-x-2"><dt>Источники</dt><dd>{map.coverage.sources_current} из {map.coverage.sources_total}</dd></div>
-                    <div className="flex flex-wrap justify-between gap-x-2"><dt>Утверждения</dt><dd>{map.coverage.claims_current}</dd></div>
+                    <div className="flex flex-wrap justify-between gap-x-2"><dt>{category || queryText ? "По фильтру" : "Утверждения на карте"}</dt><dd>{map.total}</dd></div>
                 </dl>
                 {!map.coverage.complete && <p className="text-muted">Карта пока охватывает не все материалы.</p>}
                 {map.updated_at && <time dateTime={map.updated_at} className="block text-[12px] text-muted">{new Date(map.updated_at).toLocaleString("ru-RU")}</time>}

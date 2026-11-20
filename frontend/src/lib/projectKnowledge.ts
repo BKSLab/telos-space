@@ -1,6 +1,6 @@
 export const contextApi = {
     map: (projectId: number, offset = 0, category = "", query = "") => {
-        const params = new URLSearchParams({ offset: String(offset), limit: "20" });
+        const params = new URLSearchParams({ offset: String(offset), limit: "20", exclude_category: "facts" });
         if (category) params.set("category", category);
         if (query) params.set("q", query);
         return `/api/v1/projects/${projectId}/knowledge/map?${params}`;

@@ -31,7 +31,9 @@ async function sourcesApi(page: Page) {
         if (path === "/knowledge/map") {
             const q = url.searchParams.get("q");
             const category = url.searchParams.get("category");
-            const items = knowledge.items.filter(item => (!category || item.category === category) && (!q || item.text?.includes(q)));
+            const exclude = url.searchParams.get("exclude_category");
+            const claims = [...knowledge.items, { ...knowledge.items[0], id: "raw-css", category: "facts", text: "В источнике указано: line-height: 1.35;" }];
+            const items = claims.filter(item => item.category !== exclude && (!category || item.category === category) && (!q || item.text?.includes(q)));
             return reply({ ...knowledge, items, total: items.length });
         }
         if (path === "/history") {
@@ -120,6 +122,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
         await sourcesApi(page);
         await page.goto("/projects/DEMO/knowledge");
         await expect(page.getByRole("heading", { name: "Результаты задач" })).toBeVisible();
+        await expect(page.getByText(/line-height: 1\.35/)).toHaveCount(0);
         await page.getByRole("combobox", { name: "Раздел", exact: true }).selectOption("task_results");
         const mapSearch = page.getByRole("searchbox", { name: "Поиск по утверждениям" });
         await mapSearch.fill("неизвестный текст");
