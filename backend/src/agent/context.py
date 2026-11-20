@@ -590,6 +590,12 @@ class AgentContextBudget:
         if key == "items" and "next_offset" in parent:
             # Старт страницы добавляется источником, не вычисляется по общей длине.
             parent["next_offset"] = parent.get("offset", 0) + keep
+            if "has_more" in parent:
+                parent["has_more"] = True
+            if "next_arguments" in parent and isinstance(parent.get("arguments"), dict):
+                parent["next_arguments"] = {
+                    **parent["arguments"], "offset": parent["next_offset"],
+                }
         return True
 
     @staticmethod

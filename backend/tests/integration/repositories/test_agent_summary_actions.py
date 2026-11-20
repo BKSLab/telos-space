@@ -12,7 +12,7 @@ from src.agent.action_catalog import PROJECT_ACTIONS
 from src.agent.action_scopes import ACTION_SCOPES, tools_for_scopes
 from src.exceptions.agent_tools import AgentToolAccessError, AgentToolArgumentsError
 from src.mcp_server.project_tools import action_allowed
-from src.utils.api_scopes import SCOPE_PROJECTS_READ, SCOPE_TASKS_READ
+from src.utils.api_scopes import SCOPE_KNOWLEDGE_READ, SCOPE_PROJECTS_READ, SCOPE_TASKS_READ
 from tests.integration.repositories.test_agent_project_actions import (
     actions_env as actions_env,
 )
@@ -21,7 +21,9 @@ from tests.integration.repositories.test_agent_project_actions import (
 )
 from tests.integration.repositories.test_agent_project_actions import invoke, result
 
-SUMMARY_TOOLS = ("telos_get_task_statistics", "telos_list_overdue_tasks", "telos_list_recent_activity")
+TASK_SUMMARY_TOOLS = ("telos_get_task_statistics", "telos_list_overdue_tasks")
+HISTORY_TOOL = "telos_list_project_history"
+SUMMARY_TOOLS = (*TASK_SUMMARY_TOOLS, HISTORY_TOOL)
 
 
 async def seed(env):
@@ -93,29 +95,29 @@ async def test_overdue_lists_open_late_tasks_oldest_first_with_sources(actions_e
         await invoke(env, "telos_list_overdue_tasks", {"limit": 31})
 
 
-async def test_recent_activity_names_tasks_by_key_and_title(actions_env):
+async def test_project_history_reads_real_comments_and_task_changes(actions_env):
     env = actions_env
     stages, late, later, *_ = await seed(env)
     await invoke(env, "telos_move_task", {"task_id": late["id"], "stage_id": stages["В работе"]})
     await invoke(env, "telos_add_comment", {"task_id": later["id"], "body_md": "Жду подпись"})
 
-    activity = await invoke(env, "telos_list_recent_activity")
+    activity = await invoke(env, HISTORY_TOOL)
 
     items = activity["items"]
     assert items, "история проекта пуста"
     newest = items[0]
-    assert newest["event_type"] == "COMMENT_ADDED"
-    assert newest["task_key"] == later["key"] and newest["title"] == "Обновить договор"
-    assert newest["source_id"] == f"task:{later['id']}"
+    assert newest["kind"] == "task_comment"
+    assert newest["task_id"] == later["id"] and "Обновить договор" in newest["title"]
+    assert newest["detail"] == "Жду подпись" and newest["comment_id"] is not None
     moved = next(item for item in items if item["event_type"] == "STAGE_CHANGED")
-    assert moved["task_key"] == late["key"] and moved["title"] == "Сверить акты"
+    assert moved["task_id"] == late["id"] and "Сверить акты" in moved["title"]
     assert moved["from_value"] and moved["to_value"]
     stamps = [item["created_at"] for item in items]
     assert stamps == sorted(stamps, reverse=True)
 
-    assert len((await invoke(env, "telos_list_recent_activity", {"limit": 1}))["items"]) == 1
+    assert len((await invoke(env, HISTORY_TOOL, {"limit": 1}))["items"]) == 1
     with pytest.raises(AgentToolArgumentsError):
-        await invoke(env, "telos_list_recent_activity", {"limit": 51})
+        await invoke(env, HISTORY_TOOL, {"limit": 101})
 
 
 async def test_summaries_stay_inside_accessible_project(actions_env):
@@ -130,27 +132,127 @@ async def test_summaries_stay_inside_accessible_project(actions_env):
     empty = replace(env.context, project_id=2)
     assert (await invoke(env, "telos_get_task_statistics", context=empty))["total"] == 0
     assert (await invoke(env, "telos_list_overdue_tasks", context=empty))["items"] == []
-    assert (await invoke(env, "telos_list_recent_activity", context=empty))["items"] == []
+    assert (await invoke(env, HISTORY_TOOL, context=empty))["items"] == []
+
+
+async def test_history_combines_project_sources_and_preserves_page_filters(actions_env):
+    from src.db.models.documents import Document
+    from src.db.models.project_deadline_changes import ProjectDeadlineChange
+    from src.db.models.project_risks import ProjectRisk
+    from src.db.models.projects import ProjectContextHistory
+    from src.db.models.task_reports import TaskReport
+    from src.repositories.project_history import ProjectHistoryRepository
+    from src.schemas.project_history import ProjectHistoryQuery
+    from src.services.project_history import ProjectHistoryService
+
+    env = actions_env
+    stages, late, later, *_ = await seed(env)
+    await invoke(env, "telos_move_task", {"task_id": late["id"], "stage_id": stages["В работе"]})
+    await invoke(env, "telos_add_comment", {"task_id": later["id"], "body_md": "Проверено"})
+    async with env.factory() as session:
+        session.add_all([
+            TaskReport(task_id=late["id"], revision=1, body_md="Результат", author_id=1, author_name="Участник 1"),
+            ProjectDeadlineChange(project_id=1, changed_by_user_id=1, changed_by_name="Участник 1"),
+            ProjectContextHistory(project_id=1, revision=1, changed_fields=["goal"], is_initial=False),
+            ProjectRisk(project_id=1, title="Задержка", description="Поставка",
+                        probability="LOW", impact="LOW", risk_level="LOW",
+                        response_strategy="ACCEPT", owner_user_id=1),
+            Document(project_id=1, slug="history-test", title="Паспорт поставки",
+                     content_md="Описание", authored_by_user_id=1),
+        ])
+        await session.commit()
+
+    first = await invoke(env, HISTORY_TOOL, {"limit": 3})
+    items = list(first["items"])
+    page = first
+    while page["has_more"]:
+        assert page["next_arguments"]["offset"] == page["next_offset"]
+        page = await invoke(env, HISTORY_TOOL, page["next_arguments"])
+        assert page["period"] == first["period"]
+        items.extend(page["items"])
+    assert {item["kind"] for item in items} == {
+        "task_activity", "task_comment", "task_report", "project_deadline",
+        "project_context", "risk_created", "document_created",
+    }
+    assert len({item["id"] for item in items}) == len(items)
+    # Тот же общий сервис, что у HTTP: форма событий и порядок полностью совпадают.
+    async with env.factory() as session:
+        expected = await ProjectHistoryService(ProjectHistoryRepository(session)).read(
+            1, ProjectHistoryQuery(limit=100, **first["period"])
+        )
+    assert items == [item.model_dump(mode="json") for item in expected.items]
+    document = next(item for item in items if item["kind"] == "document_created")
+    assert document["document_ref"].startswith("d1_")
+    for kind in {item["kind"] for item in items}:
+        filtered = await invoke(env, HISTORY_TOOL, {"kind": kind, **first["period"]})
+        assert filtered["items"] == [item for item in items if item["kind"] == kind]
+
+
+async def test_history_refreshes_key_scopes_and_project_membership(actions_env):
+    from sqlalchemy import delete, update
+
+    from src.db.models.api_keys import ApiKey
+    from src.db.models.project_members import ProjectMember
+    from src.utils.api_keys import generate_api_key, hash_api_key
+
+    env = actions_env
+    scopes = {SCOPE_PROJECTS_READ, SCOPE_TASKS_READ, SCOPE_KNOWLEDGE_READ}
+    raw, prefix = generate_api_key()
+    async with env.factory() as session:
+        key = ApiKey(label="Synthetic history key", key_hash=hash_api_key(raw),
+                     key_prefix=prefix, kind="personal", owner_user_id=2, scopes=list(scopes))
+        session.add(key)
+        await session.flush()
+        key_id = key.id
+        await session.commit()
+    async with env.actions.scope() as db:
+        principal = await db.auth.resolve_principal(session_token=None, bearer_secret=raw)
+    context = replace(env.context, user_id=2, principal=principal, can_write=False)
+    assert (await invoke(env, HISTORY_TOOL, context=context))["items"] == []
+    for missing in scopes:
+        async with env.factory() as session:
+            await session.execute(update(ApiKey).where(ApiKey.id == key_id).values(scopes=list(scopes - {missing})))
+            await session.commit()
+        with pytest.raises(AgentToolAccessError):
+            await invoke(env, HISTORY_TOOL, context=context)
+    async with env.factory() as session:
+        await session.execute(update(ApiKey).where(ApiKey.id == key_id).values(scopes=list(scopes)))
+        await session.commit()
+    assert (await invoke(env, HISTORY_TOOL, context=context))["items"] == []
+    async with env.factory() as session:
+        await session.execute(delete(ProjectMember).where(ProjectMember.project_id == 1, ProjectMember.user_id == 2))
+        await session.commit()
+    with pytest.raises(AgentToolAccessError):
+        await invoke(env, HISTORY_TOOL, context=context)
 
 
 def test_summaries_are_read_only_and_open_only_with_tasks_read_scope():
     definitions = {item.name: item for item in PROJECT_ACTIONS}
-    for name in SUMMARY_TOOLS:
+    for name in TASK_SUMMARY_TOOLS:
         assert definitions[name].mutating is False
         assert ACTION_SCOPES[name] == ACTION_SCOPES["telos_list_tasks"] == SCOPE_TASKS_READ
 
     def key(*scopes):
         return SimpleNamespace(api_key=object(), allows=lambda scope: scope in scopes)
 
-    # Ключ SD без tasks:read не видит и не исполняет сводки через MCP.
+    # Ключ без tasks:read не видит и не исполняет сводки через MCP.
     projects_only = key(SCOPE_PROJECTS_READ)
     assert not any(action_allowed(projects_only, name) for name in SUMMARY_TOOLS)
     assert not set(SUMMARY_TOOLS) & tools_for_scopes([SCOPE_PROJECTS_READ])
     reader = key(SCOPE_TASKS_READ)
-    assert all(action_allowed(reader, name) for name in SUMMARY_TOOLS)
-    assert set(SUMMARY_TOOLS) <= tools_for_scopes([SCOPE_TASKS_READ])
+    assert all(action_allowed(reader, name) for name in TASK_SUMMARY_TOOLS)
+    assert set(TASK_SUMMARY_TOOLS) <= tools_for_scopes([SCOPE_TASKS_READ])
+    history_scopes = {SCOPE_PROJECTS_READ, SCOPE_TASKS_READ, SCOPE_KNOWLEDGE_READ}
+    assert definitions[HISTORY_TOOL].mutating is False
+    assert definitions[HISTORY_TOOL].required_scopes == history_scopes
+    for missing in history_scopes:
+        partial = history_scopes - {missing}
+        assert not action_allowed(key(*partial), HISTORY_TOOL)
+        assert HISTORY_TOOL not in tools_for_scopes(list(partial))
+    assert action_allowed(key(*history_scopes), HISTORY_TOOL)
+    assert HISTORY_TOOL in tools_for_scopes(list(history_scopes))
     # Личный токен (без сервисного ключа) — по уровню токена, как telos_list_tasks.
-    person = SimpleNamespace(api_key=None, allows=lambda scope: False)
+    person = SimpleNamespace(api_key=None, allows=lambda scope: scope in history_scopes)
     assert all(action_allowed(person, name) for name in SUMMARY_TOOLS)
 
 

@@ -133,6 +133,9 @@
   `actor_user_id`, `task_id`, `event_id`, `timezone`, `since`, `until`,
   `offset`, `limit`. Прямой просмотр передаёт `event_id` без фильтров списка.
 - Серверная проекция: `backend/src/repositories/project_history.py`;
+  Арис и MCP используют тот же сервис через `telos_list_project_history`
+  с календарными периодами, фильтрами и `next_arguments` для продолжения
+  (контракт — [Арис](agent.md#история-событий-проекта)).
   полный контракт и ограничения — [knowledge.md](knowledge.md).
 - Переходы внутри задачи используют `taskNavigationTarget` в UI store и
   существующие секции комментариев/отчётов.

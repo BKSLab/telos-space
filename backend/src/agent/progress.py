@@ -71,7 +71,7 @@ PHRASES: dict[str, str] = {
     "telos_publish_task_report": "Публикую отчёт задачи{task}…",
     "telos_get_task_statistics": "Считаю статистику задач…",
     "telos_list_overdue_tasks": "Ищу просроченные задачи…",
-    "telos_list_recent_activity": "Смотрю последние изменения…",
+    "telos_list_project_history": "Читаю историю проекта за период…",
     "telos_get_task": "Читаю задачу{task}…",
     "telos_get_any_task": "Читаю задачу{task}…",
     "telos_create_task": "Создаю задачу…",

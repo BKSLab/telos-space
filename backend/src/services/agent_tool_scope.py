@@ -18,7 +18,6 @@ from src.repositories.agent_tool_runs import AgentToolRunsRepository
 from src.repositories.api_keys import ApiKeysRepository
 from src.repositories.chat_agent_turns import ChatAgentTurnsRepository
 from src.repositories.projects import ProjectsRepository
-from src.repositories.task_activity import TaskActivityRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import AgentToolUnitOfWork
 from src.repositories.users import UsersRepository
@@ -33,6 +32,7 @@ from src.services.calendar_scenarios import CalendarScenarioService
 from src.services.document_links import DocumentLinksService
 from src.services.documents import DocumentsService
 from src.services.milestones import MilestonesService
+from src.services.project_history import ProjectHistoryService
 from src.services.project_members import ProjectMembersService
 from src.services.project_risks import ProjectRiskService
 from src.services.project_stages import ProjectStagesService
@@ -66,6 +66,7 @@ class AgentProjectToolScope:
     scenarios: CalendarScenarioService
     risks: ProjectRiskService
     analytics_reader: AnalyticsReportReader
+    project_history: ProjectHistoryService
     access: AccessService
     users: UsersRepository
     conversations: AgentConversationsRepository
@@ -79,7 +80,6 @@ class AgentProjectToolScope:
     turns: ChatAgentTurnsRepository | None = None
     project_rows: ProjectsRepository | None = None
     task_rows: TasksRepository | None = None
-    activity_rows: TaskActivityRepository | None = None
     reports: TaskReportsService | None = None
     api_keys: ApiKeysRepository | None = None
     auth: AuthService | None = None

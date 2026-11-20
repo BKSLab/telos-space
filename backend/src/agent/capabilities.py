@@ -84,7 +84,7 @@ WORKFLOWS = (
     ),
     Workflow(
         "project",
-        "Паспорт проекта, состав команды, стадии канбана и последние изменения проекта.",
+        "Паспорт проекта, команда, стадии канбана и история событий за день или период.",
         frozenset(
             {
                 "telos_get_project",
@@ -97,7 +97,7 @@ WORKFLOWS = (
                 "telos_create_stage",
                 "telos_update_stage",
                 "telos_delete_stage",
-                "telos_list_recent_activity",
+                "telos_list_project_history",
             }
         ),
     ),

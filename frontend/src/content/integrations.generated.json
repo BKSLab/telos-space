@@ -3362,35 +3362,190 @@
       "write": false
     },
     {
-      "description": "История изменений задач проекта, свежие первыми: смена стадии, сроков, исполнителя, комментарии, время. Для вопросов «что менялось недавно», «что нового».",
-      "group": "tasks",
-      "id": "mcp-action-b31ceb5668eb4bd3",
+      "description": "События проекта: изменения задач, комментарии, отчёты, сроки, паспорт, риски и документы. Для «что произошло сегодня/вчера/за период» используй period или since/until; без периода — последние 7 местных дней. Сервер вычисляет даты. Фильтры kind, actor_user_id, task_id, q; новые события первыми. При has_more продолжай с next_arguments; часть выборки не является полной сводкой. detail — фрагмент; подробности читай инструментами задач, отчётов и документов по выданным ID.",
+      "group": "projects",
+      "id": "mcp-action-b4bd088d10819140",
       "inputSchema": {
         "additionalProperties": false,
+        "description": "Общий HTTP-фильтр и серверные календарные периоды для Ариса.",
         "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Подстрока имени автора.",
+            "title": "Actor"
+          },
+          "actor_user_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Точный ID автора события.",
+            "title": "Actor User Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "pattern": "^[a-z_]+:[0-9]+(?::[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Точный ID события для прямой ссылки.",
+            "title": "Event Id"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "task_activity",
+                  "task_comment",
+                  "task_report",
+                  "project_deadline",
+                  "project_context",
+                  "risk_created",
+                  "document_created"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Kind"
+          },
           "limit": {
-            "default": 30,
-            "description": "Максимум событий, свежие первыми.",
-            "maximum": 50,
+            "default": 20,
+            "maximum": 100,
             "minimum": 1,
             "title": "Limit",
             "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "maximum": 9223372036854775807,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "enum": [
+                  "today",
+                  "yesterday",
+                  "last_7_days"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Сегодня, вчера или последние 7 календарных дней, включая сегодня. Без period и дат — last_7_days. Не совмещать с since/until.",
+            "title": "Period"
+          },
+          "q": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Подстрока заголовка или деталей.",
+            "title": "Q"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Первый местный день периода включительно.",
+            "title": "Since"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Задача, события которой нужны.",
+            "title": "Task Id"
+          },
+          "timezone": {
+            "default": "UTC",
+            "description": "Часовой пояс IANA. Если не передан, используется пояс вопроса; в MCP — UTC.",
+            "maxLength": 100,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Последний местный день периода включительно.",
+            "title": "Until"
           }
         },
-        "title": "RecentActivityInput",
+        "title": "ProjectHistoryInput",
         "type": "object"
       },
       "kind": "action",
-      "name": "telos_list_recent_activity",
+      "name": "telos_list_project_history",
       "needsProject": true,
       "ownerOnly": false,
       "projectOptional": false,
       "requiresConfirmation": false,
       "scopes": [
         "projects:read",
+        "knowledge:read",
         "tasks:read"
       ],
-      "summary": "Последние изменения",
+      "summary": "История проекта за период",
       "tokens": [
         "READ",
         "WRITE"
@@ -44664,6 +44819,214 @@
         "boards:read"
       ],
       "summary": "Мои личные доски",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
+      "description": "Объединённая история проекта за день или период, фильтры и продолжение next_arguments. Без дат — последние 7 дней. Для местных дат передайте timezone IANA, иначе UTC. Требует также tasks:read и knowledge:read. При has_more выборка неполная; detail — фрагмент, полные исходники читайте по ID задачи, отчёта и document_ref. Требует право projects:read.",
+      "group": "projects",
+      "id": "mcp-b4bd088d10819140",
+      "inputSchema": {
+        "$defs": {
+          "ProjectHistoryInput": {
+            "additionalProperties": false,
+            "description": "Общий HTTP-фильтр и серверные календарные периоды для Ариса.",
+            "properties": {
+              "actor": {
+                "anyOf": [
+                  {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Подстрока имени автора.",
+                "title": "Actor"
+              },
+              "actor_user_id": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 2147483647,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Точный ID автора события.",
+                "title": "Actor User Id"
+              },
+              "event_id": {
+                "anyOf": [
+                  {
+                    "maxLength": 160,
+                    "pattern": "^[a-z_]+:[0-9]+(?::[0-9]+)?$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Точный ID события для прямой ссылки.",
+                "title": "Event Id"
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "task_activity",
+                      "task_comment",
+                      "task_report",
+                      "project_deadline",
+                      "project_context",
+                      "risk_created",
+                      "document_created"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Kind"
+              },
+              "limit": {
+                "default": 20,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "offset": {
+                "default": 0,
+                "maximum": 9223372036854775807,
+                "minimum": 0,
+                "title": "Offset",
+                "type": "integer"
+              },
+              "period": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "today",
+                      "yesterday",
+                      "last_7_days"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Сегодня, вчера или последние 7 календарных дней, включая сегодня. Без period и дат — last_7_days. Не совмещать с since/until.",
+                "title": "Period"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Подстрока заголовка или деталей.",
+                "title": "Q"
+              },
+              "since": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Первый местный день периода включительно.",
+                "title": "Since"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 2147483647,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Задача, события которой нужны.",
+                "title": "Task Id"
+              },
+              "timezone": {
+                "default": "UTC",
+                "description": "Часовой пояс IANA. Если не передан, используется пояс вопроса; в MCP — UTC.",
+                "maxLength": 100,
+                "title": "Timezone",
+                "type": "string"
+              },
+              "until": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Последний местный день периода включительно.",
+                "title": "Until"
+              }
+            },
+            "title": "ProjectHistoryInput",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "$ref": "#/$defs/ProjectHistoryInput"
+          },
+          "project_key": {
+            "title": "Project Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_key",
+          "arguments"
+        ],
+        "title": "list_project_historyArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "name": "telos_list_project_history",
+      "outputSchema": null,
+      "scopes": [
+        "projects:read",
+        "knowledge:read",
+        "tasks:read"
+      ],
+      "summary": "История проекта за период",
       "tokens": [
         "READ",
         "WRITE"

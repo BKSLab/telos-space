@@ -327,33 +327,3 @@ async def list_overdue_tasks(
         "items": [_task_brief(task, project_key, stage_by_id) for task in rows[: args.limit]],
         "truncated": len(rows) > args.limit,
     }
-
-
-async def list_recent_activity(
-    db: AgentProjectToolScope, ctx: AgentToolContext, args: inputs.RecentActivityInput
-) -> dict:
-    """Последние события истории задач проекта с ключами и названиями задач."""
-    events = await db.activity_rows.get_recent_by_project(ctx.project_id, limit=args.limit)
-    tasks_by_id = {
-        task.id: task for task in await db.task_rows.get_by_ids({item.task_id for item in events})
-    }
-    project_key = await _project_key(db, ctx.project_id)
-    items = []
-    for item in events:
-        task = tasks_by_id.get(item.task_id)
-        if task is None:
-            continue
-        items.append(
-            {
-                "task_id": task.id,
-                "task_key": build_task_key(project_key, task.number),
-                "title": task.title[:512],
-                "created_at": item.created_at.isoformat(),
-                "event_type": item.event_type.value,
-                "from_value": (item.from_value or "")[:TEXT_FRAGMENT_LIMIT],
-                "to_value": (item.to_value or "")[:TEXT_FRAGMENT_LIMIT],
-                "actor": item.actor_name,
-                "source_id": f"task:{task.id}",
-            }
-        )
-    return {"items": items}

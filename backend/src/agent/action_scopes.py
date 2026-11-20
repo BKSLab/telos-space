@@ -83,7 +83,7 @@ ACTION_SCOPES: dict[str, str] = {
     "telos_list_tasks": SCOPE_TASKS_READ,
     "telos_get_task_statistics": SCOPE_TASKS_READ,
     "telos_list_overdue_tasks": SCOPE_TASKS_READ,
-    "telos_list_recent_activity": SCOPE_TASKS_READ,
+    "telos_list_project_history": SCOPE_PROJECTS_READ,
     "telos_get_task": SCOPE_TASKS_READ,
     "telos_list_comments": SCOPE_TASKS_READ,
     "telos_list_dependencies": SCOPE_TASKS_READ,
@@ -138,7 +138,14 @@ def action_scope_options(name: str) -> frozenset[str]:
     return frozenset({scope}) if scope else frozenset()
 
 
+PROJECT_HISTORY_SCOPES = frozenset({SCOPE_PROJECTS_READ, SCOPE_TASKS_READ, SCOPE_KNOWLEDGE_READ})
+
+
 def tools_for_scopes(scopes: list[str] | frozenset[str]) -> frozenset[str]:
     """Действия каталога, которые открывают выданные ключу права."""
     granted = set(scopes)
-    return frozenset(name for name in ACTION_SCOPES if action_scope_options(name) & granted)
+    return frozenset(
+        name for name in ACTION_SCOPES
+        if action_scope_options(name) & granted
+        and (name != "telos_list_project_history" or PROJECT_HISTORY_SCOPES <= granted)
+    )

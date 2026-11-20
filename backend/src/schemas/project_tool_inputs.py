@@ -16,6 +16,7 @@ from src.schemas.calendar_scenarios import ScenarioApplyChangeSchema, ScenarioCh
 from src.schemas.document_catalog import DocumentUpdateRequestSchema
 from src.schemas.enums import TaskStatus
 from src.schemas.milestones import MilestoneCreateSchema, MilestoneUpdateSchema
+from src.schemas.project_history import ProjectHistoryQuery
 from src.schemas.project_risks import (
     ProjectRiskCreateSchema,
     ProjectRiskFilters,
@@ -158,8 +159,26 @@ class OverdueTasksInput(ToolInput):
     limit: int = Field(30, ge=1, le=30, description="Максимум задач, самые ранние сроки первыми.")
 
 
-class RecentActivityInput(ToolInput):
-    limit: int = Field(30, ge=1, le=50, description="Максимум событий, свежие первыми.")
+class ProjectHistoryInput(ProjectHistoryQuery, ToolInput):
+    """Общий HTTP-фильтр и серверные календарные периоды для Ариса."""
+
+    period: Literal["today", "yesterday", "last_7_days"] | None = Field(
+        None,
+        description="Сегодня, вчера или последние 7 календарных дней, включая сегодня. "
+        "Без period и дат — last_7_days. Не совмещать с since/until.",
+    )
+    timezone: str = Field(
+        "UTC", max_length=100,
+        description="Часовой пояс IANA. Если не передан, используется пояс вопроса; в MCP — UTC.",
+    )
+
+    @model_validator(mode="after")
+    def validate_period(self):
+        if self.period is not None and (self.since is not None or self.until is not None):
+            raise ValueError("Передайте period либо обе даты since/until.")
+        if (self.since is None) != (self.until is None):
+            raise ValueError("Для явного периода нужны обе даты since и until.")
+        return self
 
 
 class TaskPageInput(TaskInput, PageInput):

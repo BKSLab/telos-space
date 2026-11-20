@@ -56,6 +56,7 @@ from src.repositories.milestones import MilestonesRepository
 from src.repositories.project_chats import ProjectChatsRepository
 from src.repositories.project_deadline_changes import ProjectDeadlineChangesRepository
 from src.repositories.project_files import ProjectFilesRepository
+from src.repositories.project_history import ProjectHistoryRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_risks import ProjectRiskRepository
 from src.repositories.project_stages import ProjectStagesRepository
@@ -107,6 +108,7 @@ from src.services.project_files import (
     ProjectFilesScopeFactory,
     ProjectFilesService,
 )
+from src.services.project_history import ProjectHistoryService
 from src.services.project_members import ProjectMembersService
 from src.services.project_risks import ProjectRiskService
 from src.services.project_stages import ProjectStagesService
@@ -234,6 +236,7 @@ def build_agent_project_tool_scope(
 
                     try:
                         yield AgentProjectToolScope(
+                            project_history=ProjectHistoryService(ProjectHistoryRepository(session)),
                             document_catalog=build_bound_document_catalog_service(
                                 session=session, settings=settings, storage=files, unit_of_work=domain_uow,
                             ),
@@ -407,7 +410,6 @@ def build_agent_project_tool_scope(
                             turns=ChatAgentTurnsRepository(session),
                             project_rows=projects,
                             task_rows=tasks,
-                            activity_rows=activity,
                             api_keys=ApiKeysRepository(session),
                             auth=AuthService(
                                 users_repository=users,

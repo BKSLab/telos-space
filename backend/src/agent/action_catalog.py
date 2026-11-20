@@ -1,5 +1,6 @@
 """Полный перечень проектных инструментов и их правил исполнения."""
 
+from src.agent.action_scopes import PROJECT_HISTORY_SCOPES
 from src.agent.actions import ProjectAction
 from src.agent.aris import ALL_MODES, WIDGET_MODES
 from src.schemas import board_diagrams as diagrams
@@ -283,12 +284,18 @@ PROJECT_ACTIONS = CONTEXT_ACTIONS + (
         mutating=False,
     ),
     ProjectAction(
-        "telos_list_recent_activity",
-        "Последние изменения",
-        "История изменений задач проекта, свежие первыми: смена стадии, сроков, исполнителя, комментарии, время. Для вопросов «что менялось недавно», «что нового».",
-        p.RecentActivityInput,
-        tasks.list_recent_activity,
+        "telos_list_project_history",
+        "История проекта за период",
+        "События проекта: изменения задач, комментарии, отчёты, сроки, паспорт, риски и документы. "
+        "Для «что произошло сегодня/вчера/за период» используй period или since/until; "
+        "без периода — последние 7 местных дней. Сервер вычисляет даты. "
+        "Фильтры kind, actor_user_id, task_id, q; новые события первыми. "
+        "При has_more продолжай с next_arguments; часть выборки не является полной сводкой. "
+        "detail — фрагмент; подробности читай инструментами задач, отчётов и документов по выданным ID.",
+        p.ProjectHistoryInput,
+        projects.list_project_history,
         mutating=False,
+        required_scopes=PROJECT_HISTORY_SCOPES,
     ),
     ProjectAction(
         "telos_get_task",

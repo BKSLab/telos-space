@@ -1,14 +1,52 @@
 """Паспорт, команда, доски, стикеры и реестр рисков проекта."""
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from src.agent.tools import AgentToolContext
 from src.exceptions.agent_tools import AgentToolAccessError, AgentToolConflictError
 from src.schemas import project_tool_inputs as inputs
+from src.schemas.project_history import ProjectHistoryQuery
 from src.schemas.project_risks import ProjectRiskFilters
 from src.schemas.projects import ProjectSchema
 from src.schemas.task_formulation import TaskFormulationInput
 from src.services.agent_action_helpers import page
 from src.services.agent_tool_scope import AgentProjectToolScope
 from src.services.task_formulation import prepare_task_formulation
+
+
+async def list_project_history(
+    db: AgentProjectToolScope, ctx: AgentToolContext, args: inputs.ProjectHistoryInput
+) -> dict:
+    """Читает общий журнал; следующие страницы фиксируют вычисленные местные даты."""
+    timezone = args.timezone if "timezone" in args.model_fields_set else ctx.timezone
+    payload = args.model_dump(exclude={"period"})
+    payload["timezone"] = timezone
+    if args.since is None:
+        today = datetime.now(ZoneInfo(timezone)).date()
+        period = args.period or "last_7_days"
+        until = today - timedelta(days=1) if period == "yesterday" else today
+        payload["since"] = until - timedelta(days=6) if period == "last_7_days" else until
+        payload["until"] = until
+    filters = ProjectHistoryQuery.model_validate(payload)
+    page = await db.project_history.read(ctx.project_id, filters)
+    arguments = filters.model_dump(mode="json", exclude_none=True)
+    next_arguments = None
+    if page.next_offset is not None:
+        next_arguments = {**arguments, "offset": page.next_offset}
+    return {
+        **page.model_dump(mode="json"),
+        "project_id": ctx.project_id,
+        "offset": filters.offset,
+        "arguments": arguments,
+        "period": {
+            "since": filters.since.isoformat(),
+            "until": filters.until.isoformat(),
+            "timezone": filters.timezone,
+        },
+        "has_more": page.next_offset is not None,
+        "next_arguments": next_arguments,
+    }
 
 
 async def prepare_task(

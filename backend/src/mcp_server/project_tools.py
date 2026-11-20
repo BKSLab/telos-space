@@ -34,6 +34,7 @@ from src.schemas.context_selection import (
     KnowledgeMapReadInput,
 )
 from src.schemas.project_stages import StageCreateSchema
+from src.schemas.project_tool_inputs import ProjectHistoryInput
 from src.schemas.projects import ProjectCreateSchema, ProjectDescriptionSchema, ProjectStatus
 from src.schemas.web_research import WebReadSchema, WebSearchSchema, WebUrlApprovalSchema
 from src.utils.api_scopes import SCOPE_KNOWLEDGE_READ, SCOPE_PROJECTS_READ, SCOPE_PROJECTS_WRITE
@@ -339,6 +340,23 @@ async def _context_action(context, project_key, name, arguments, request_id=None
         arguments.model_dump(mode="json", exclude_unset=True),
         request_id=request_id,
     )
+
+
+@telos_tool(
+    name="telos_list_project_history",
+    scope=SCOPE_PROJECTS_READ,
+    title="История проекта за период",
+    description="Объединённая история проекта за день или период, фильтры и продолжение next_arguments. "
+    "Без дат — последние 7 дней. Для местных дат передайте timezone IANA, иначе UTC. "
+    "Требует также tasks:read и knowledge:read. При has_more выборка неполная; "
+    "detail — фрагмент, полные исходники читайте по ID задачи, отчёта и document_ref.",
+    strict_arguments=True,
+)
+async def list_project_history(
+    context: Context, project_key: str, arguments: ProjectHistoryInput
+) -> dict:
+    """Общий сценарий истории с текущими правами и членством в проекте."""
+    return await _context_action(context, project_key, "telos_list_project_history", arguments)
 
 
 @telos_tool(

@@ -1,6 +1,6 @@
 """Публичный контракт MCP: имена инструментов, входные схемы и форма ответа.
 
-Каталог содержит ровно 58 канонических telos_<действие>_<сущность> имён.
+Каталог содержит ровно 59 канонических telos_<действие>_<сущность> имён.
 Входные схемы и единые ответы с метаданными превью зафиксированы явно;
 представления принимают DTO общих сервисов.
 """
@@ -31,6 +31,7 @@ from src.services.project_query import (
 # Обязательные поля каждого инструмента: изменение этого множества ломает
 # уже настроенных внешних клиентов.
 EXPECTED_REQUIRED = {
+    "telos_list_project_history": {"project_key", "arguments"},
     "telos_select_context": {"project_key", "arguments"},
     "telos_get_knowledge_map": {"project_key", "arguments"},
     "telos_get_knowledge_claim": {"project_key", "arguments"},
@@ -107,7 +108,7 @@ async def test_tool_names_are_frozen() -> None:
     """Набор публичных инструментов не меняется рефакторингом."""
     tools = await mcp_server.list_tools()
 
-    assert len(EXPECTED_TOOLS) == 58
+    assert len(EXPECTED_TOOLS) == 59
     assert EXPECTED_TOOLS == {tool.name for tool in tools}
 
 
