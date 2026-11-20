@@ -15,6 +15,7 @@ from src.exceptions.context_selection import ContextSelectionChangedError
 from src.knowledge.catalog import build_catalog
 from src.schemas.git_sources import GitSourceProof
 from src.schemas.knowledge import (
+    AssertionReferenceSchema,
     ExternalSourceReferenceSchema,
     KnowledgeAnswerSchema,
     decode_answer_sources,
@@ -28,6 +29,27 @@ from src.services.auth import ApiKeyGrant
 from src.services.context_evidence import ContextEvidence, ContextEvidenceService
 from src.services.context_results import ContextReadResult
 from tests.unit.knowledge.test_knowledge_index import base_rows
+
+
+def test_only_selected_claims_are_displayed_and_unknown_handles_do_not_select_anything():
+    evidence = ContextEvidence()
+    claims = [
+        AssertionReferenceSchema(
+            project_id=1, claim_id=uuid4(), revision=1, text=f"Утверждение {i}",
+            kind="source_fact", verification="source_statement", source_ids=["project:1"],
+        )
+        for i in range(5)
+    ]
+    observation = ProjectKnowledgeObservationSchema(project_id=1, generation=8, sources=[])
+    evidence.register(ContextReadResult(
+        {}, project_id=1, assertions=tuple(claims), observations=(observation,)
+    ))
+    chosen = evidence.handles[str(claims[2].claim_id)]
+    result = evidence.references(chosen, source_handles=[chosen, "CLM_invented"])
+    assert [item.claim_id for item in result["assertion_references"]] == [claims[2].claim_id]
+    assert result["assertion_references"][0].is_primary
+    assert evidence.references(source_handles=[])["assertion_references"] == []
+    assert evidence.saved.observations == [observation]
 
 
 def evidence_environment():
@@ -97,8 +119,14 @@ async def test_all_used_sources_are_checked_even_without_selected_handles_and_re
         )
     )
     evidence.internal(1, build_catalog(1, state.rows).sources["task:7"])
+    assert evidence.references(source_handles=[]) == {
+        "external_sources": [], "assertion_references": []
+    }
+    assert evidence.saved.git_files == [proof]
+    assert evidence.references(source_handles=["invented"])["external_sources"] == []
     answer = KnowledgeAnswerSchema(
-        answer="Private code used without any model handle", sources=[], **evidence.references()
+        answer="Private code used with a selected handle", sources=[],
+        **evidence.references(source_handles=[evidence.handles[proof.source_id]])
     )
     answer._context_evidence = evidence, principal
     values = encode_answer_sources(answer)

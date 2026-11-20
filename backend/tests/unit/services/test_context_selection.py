@@ -102,6 +102,8 @@ async def test_empty_passport_does_not_invent_goal_or_block_clear_request_and_re
         "partial_search",
     }
     assert value["sufficiency"] == "question_specific" and value["writes_performed"] is False
+    assert value["search_scope"]["git_searched"] is False
+    assert value["search_scope"]["git_next_read"]["tool"] == "telos_list_git_connections"
     assert value["next_reads"] == [
         {"tool": "telos_read_source", "arguments": {"source_id": "document:9", "offset": 9000}}
     ]

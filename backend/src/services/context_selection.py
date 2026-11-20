@@ -274,6 +274,12 @@ class ContextSelectionService:
                     }
                     for item in candidates
                 ],
+                "search_scope": {
+                    "searched": "tracker_materials",
+                    "git_searched": False,
+                    "git_next_read": {"tool": "telos_list_git_connections", "arguments": {}},
+                    "rule": "Для вопросов об устройстве приложения проверь код через git. Пустой поиск материалов трекера не означает отсутствия данных в репозитории.",
+                },
                 "completion_evidence": completion,
                 "completion_next_reads": [
                     {"tool": "telos_list_task_git_links", "arguments": {"task_id": task_id}}

@@ -880,6 +880,7 @@ def _shrink_read_returns(messages: list[ModelMessage], *, include_pages: bool = 
                                 "description_md",
                                 "summary_md",
                                 "summary",
+                                "excerpt",
                             }
                             and isinstance(child, str)
                             and len(child) > 240

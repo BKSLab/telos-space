@@ -17,3 +17,13 @@ class AgentAnswerError(ServiceError):
 
     status_code = status.HTTP_502_BAD_GATEWAY
     detail = "Арис не смог сформировать ответ."
+
+
+class AgentContextChangedError(AgentAnswerError):
+    """Проверенные знания изменились во время подготовки ответа."""
+
+    status_code = status.HTTP_409_CONFLICT
+    detail = "Данные проекта обновились во время подготовки ответа"
+
+    def __init__(self) -> None:
+        super().__init__(self.detail)

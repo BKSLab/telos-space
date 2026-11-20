@@ -348,6 +348,40 @@ async def converge(env, predicate, *, ticks=30):
     assert await predicate(), "Durable Git queue did not converge"
 
 
+async def test_parallel_identical_observations_do_not_conflict_or_overwrite_newer_proof(engine):
+    async with environment(engine) as env:
+        connection = await connect(env)
+        async with env.service._open(
+            project_id=env.project, connection_id=connection.id, principal=env.principal
+        ) as (row, client):
+            metadata = await client.get_repository(row["owner"], row["repo"])
+            commit = await client.resolve_ref(row["owner"], row["repo"], row["ref"])
+        first = await env.service._observe(row, commit, metadata, principal=env.principal)
+        second = await env.service._observe(row, commit, metadata, principal=env.principal)
+        assert first["observed_sha"] == second["observed_sha"] == A
+        assert first["observation_revision"] == second["observation_revision"]
+        assert first["checked_at"] == second["checked_at"]
+        # Другая версия или видимость — уже не подтверждение того же наблюдения.
+        for changed_commit, changed_metadata in (
+            (commit.model_copy(update={"sha": B}), metadata),
+            (commit, metadata.model_copy(update={"private": True})),
+        ):
+            with pytest.raises(GitSourceConflictError):
+                await env.service._observe(
+                    row, changed_commit, changed_metadata, principal=env.principal
+                )
+        # Более поздняя ошибка не может быть затёрта ранее начатым успешным чтением.
+        async with env.sessions() as db:
+            await db.execute(
+                update(GitConnection).where(GitConnection.id == connection.id).values(
+                    state="error", last_error_code="rate_limited"
+                )
+            )
+            await db.commit()
+        with pytest.raises(GitSourceConflictError):
+            await env.service._observe(row, commit, metadata, principal=env.principal)
+
+
 async def test_index_restart_three_repositories_search_text_and_catalog_metadata(engine):
     async with environment(engine) as env:
         remote, service = env.remote, env.service

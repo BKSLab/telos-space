@@ -27,7 +27,7 @@ from src.agent.progress import ProgressSink
 from src.agent.tools import AgentToolContext
 from src.db.models.chat_agent_turns import ChatAgentTurn
 from src.exceptions.access import AccessServiceError, ResourceNotAvailableError
-from src.exceptions.ai import AiProviderError
+from src.exceptions.ai import AgentAnswerError, AgentContextChangedError, AiProviderError
 from src.exceptions.base import RepositoryError
 from src.schemas.agent_tools import AgentToolRunSchema
 from src.schemas.knowledge import (
@@ -105,8 +105,20 @@ class ArisChatService:
         try:
             async with agent_context_budget(self.agent):
                 async with asyncio.timeout(self.config.turn_timeout_seconds):
-                    answer = await self._generate(turn)
-                    await self._finish(turn, answer=answer)
+                    try:
+                        answer = await self._generate(turn)
+                        await self._finish(turn, answer=answer)
+                    except AgentContextChangedError:
+                        # Только один свежий read-only проход и лишь до любых
+                        # сохранённых действий/подтверждений текущего хода.
+                        async with self._scope() as db:
+                            actions = await db.runs.get_for_turns([turn.id])
+                        if actions:
+                            raise
+                        logger.info("Контекст хода id=%s обновился; повторное чтение.", turn.id)
+                        await self._progress_sink(turn)("Данные обновились, проверяю заново…")
+                        answer = await self._generate(turn, read_only=True)
+                        await self._finish(turn, answer=answer)
             logger.info("✅ Ответ Ариса в чате, ход=%s.", turn.id)
         except asyncio.CancelledError:
             try:
@@ -123,6 +135,9 @@ class ArisChatService:
         except AiProviderError:
             logger.error("❌ Модель не ответила на ход id=%s.", turn.id, exc_info=True)
             await self._finish(turn, error="модель сейчас недоступна")
+        except AgentAnswerError as error:
+            logger.warning("Ответ хода id=%s отклонён: %s.", turn.id, type(error).__name__)
+            await self._finish(turn, error=error.detail.rstrip("."))
         except Exception:
             # Граница фонового задания: любая ошибка становится видимым сообщением
             # в чате, а не вечным «Арис печатает».
@@ -130,7 +145,9 @@ class ArisChatService:
             await self._finish(turn, error="внутренняя ошибка")
         return True
 
-    async def _generate(self, turn: ChatAgentTurn) -> KnowledgeAnswerSchema:
+    async def _generate(
+        self, turn: ChatAgentTurn, *, read_only: bool = False
+    ) -> KnowledgeAnswerSchema:
         async with self._scope() as db:
             request = await db.messages.get(turn.chat_id, turn.request_message_id)
             if request is None or request.deleted_at is not None:
@@ -189,7 +206,7 @@ class ArisChatService:
         execution = AgentToolContext(
             project_id=turn.project_id,
             user_id=turn.requester_id,
-            can_write=grant.can_write,
+            can_write=grant.can_write and not read_only,
             chat_turn_id=turn.id,
             run_id=turn.run_id,
             timezone=getattr(turn, "timezone", None) or "UTC",

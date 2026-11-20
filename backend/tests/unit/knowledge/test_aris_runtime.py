@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from pydantic_ai.messages import (
+    ModelRequest,
     ModelResponse,
     RetryPromptPart,
     ToolCallPart,
@@ -20,7 +21,14 @@ from pydantic_ai.models.test import TestModel
 from src.agent.aris import ArisMode
 from src.agent.capabilities import WORKFLOWS
 from src.agent.context import AgentContextBudget, encode, estimate_tokens
-from src.agent.runtime import MAX_CALLS_PER_STEP, ArisDeps, ArisRuntime, WriteGate, tool_json_schema
+from src.agent.runtime import (
+    MAX_CALLS_PER_STEP,
+    ArisDeps,
+    ArisRuntime,
+    WriteGate,
+    _traffic_tokens,
+    tool_json_schema,
+)
 from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor
 from src.dependencies.services import ARIS_ACTIONS, build_project_tool_executor
 from src.prompts.project_agent import (
@@ -306,6 +314,39 @@ async def test_more_than_eight_calls_in_one_step_are_refused():
 
     assert read.await_count == MAX_CALLS_PER_STEP
     assert sum(item.get("refused") == "step_limit" for item in result.tool_calls) == 1
+
+
+async def test_parallel_git_search_previews_fit_without_losing_file_coordinates():
+    from types import SimpleNamespace
+
+    executor = AgentToolExecutor([])
+    runtime = ArisRuntime(model=TestModel(), executor=executor)
+    deps = deps_for(executor, context_tokens=12000)
+    items = [
+        {
+            "source_handle": f"EXT_{i}", "connection_id": 1, "repository_id": 12,
+            "commit_sha": "a" * 40, "path": f"src/module_{i}.py", "offset": i * 8000,
+            "excerpt": "Подробное описание функции авторизации. " * 70,
+        }
+        for i in range(8)
+    ]
+    returns = [
+        ToolReturnPart("telos_search_git_sources", {"items": items}, tool_call_id=f"call_{i}")
+        for i in range(3)
+    ]
+    messages = [ModelRequest(parts=returns)]
+    assert _traffic_tokens(messages) > deps.budget.max_tokens
+    fitted = await runtime._fit_history(SimpleNamespace(deps=deps), messages)
+    assert deps.budget.tokens(deps.content) + _traffic_tokens(fitted) <= 12000
+    for part in fitted[0].parts:
+        assert len(part.content["items"]) == len(items)
+        for original, compact in zip(items, part.content["items"], strict=True):
+            assert {k: compact[k] for k in original if k != "excerpt"} == {
+                k: v for k, v in original.items() if k != "excerpt"
+            }
+            assert original["excerpt"].startswith(compact["excerpt"])
+            if len(compact["excerpt"]) < len(original["excerpt"]):
+                assert compact["excerpt_truncated"] is True
 
 
 async def test_history_processor_keeps_input_within_context_budget():

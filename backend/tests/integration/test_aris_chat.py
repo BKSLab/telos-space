@@ -20,7 +20,7 @@ from src.db.models import AgentToolRun, ChatAgentTurn, ChatEvent, ChatMessage, P
 from src.dependencies.agent_context import build_context_evidence_service
 from src.dependencies.scopes import build_agent_project_tool_scope, build_aris_chat_scope
 from src.exceptions.agent_tools import AgentToolAccessError, AgentToolConflictError
-from src.exceptions.ai import AiProviderError
+from src.exceptions.ai import AgentAnswerError, AgentContextChangedError, AiProviderError
 from src.knowledge.catalog import build_catalog
 from src.repositories.chat_messages import ChatMessagesRepository
 from src.schemas.knowledge import KnowledgeAnswerSchema, KnowledgeSourceSchema
@@ -209,6 +209,59 @@ async def test_model_failure_becomes_visible_error_message_not_silence(aris):
         )
         reply = await db.get(ChatMessage, turn.reply_message_id)
     assert turn.status == "failed" and "не участник" in reply.content
+
+
+async def test_context_change_refreshes_once_read_only_and_never_repeats_actions(aris):
+    env = aris
+    await env.service.send(1, 1, message("Арис, как устроена авторизация?"))
+    env.agent.ask.side_effect = [
+        AgentContextChangedError(),
+        KnowledgeAnswerSchema(answer="Проверил свежие данные.", sources=[]),
+    ]
+    await env.aris.process_next()
+    reply = (await env.service.history(1, 1)).messages[-1]
+    assert reply.agent.status == "completed" and reply.content == "Проверил свежие данные."
+    assert env.agent.ask.await_count == 2
+    assert env.agent.ask.await_args_list[0].kwargs["execution"].can_write
+    assert not env.agent.ask.await_args_list[1].kwargs["execution"].can_write
+
+    # Повторное изменение не вызывает бесконечный цикл и не называется internal error.
+    env.agent.ask.reset_mock(side_effect=True)
+    env.agent.ask.side_effect = AgentContextChangedError()
+    await env.service.send(1, 1, message("Арис, объясни ещё раз"))
+    await env.aris.process_next()
+    reply = (await env.service.history(1, 1)).messages[-1]
+    assert env.agent.ask.await_count == 2 and reply.agent.status == "failed"
+    assert "Данные проекта обновились" in reply.content
+    assert "внутренняя ошибка" not in reply.content
+
+    # Сохранённое действие (в том числе ожидающее подтверждения) запрещает повтор хода.
+    env.agent.ask.reset_mock(side_effect=True)
+
+    async def propose_then_change(**kwargs):
+        await env.actions.execute(
+            context=kwargs["execution"], name="telos_remove_member", arguments={"user_id": 2}
+        )
+        raise AgentContextChangedError()
+
+    env.agent.ask.side_effect = propose_then_change
+    await env.service.send(1, 1, message("Арис, убери второго участника"))
+    await env.aris.process_next()
+    assert env.agent.ask.await_count == 1
+    async with env.factory() as db:
+        runs = (await db.execute(select(AgentToolRun))).scalars().all()
+    assert len(runs) == 1 and runs[0].status == "pending"
+
+
+async def test_answer_error_exposes_only_safe_detail_without_retry(aris):
+    env = aris
+    env.agent.ask.side_effect = AgentAnswerError("private database details")
+    await env.service.send(1, 1, message("Арис, вопрос"))
+    await env.aris.process_next()
+    reply = (await env.service.history(1, 1)).messages[-1]
+    assert reply.agent.status == "failed" and env.agent.ask.await_count == 1
+    assert "Арис не смог сформировать ответ" in reply.content
+    assert "private" not in reply.content and "внутренняя ошибка" not in reply.content
 
 
 async def test_live_progress_reaches_the_whole_chat_and_is_cleared_by_the_answer(aris):

@@ -33,7 +33,7 @@ from src.db.models.knowledge_index_jobs import (
     KnowledgeIndexStatus,
 )
 from src.db.models.projects import Project
-from src.exceptions.ai import AgentAnswerError, AiProviderError
+from src.exceptions.ai import AgentAnswerError, AgentContextChangedError, AiProviderError
 from src.exceptions.base import RepositoryError, ServiceError
 from src.exceptions.clients import ClientError
 from src.exceptions.knowledge import (
@@ -42,6 +42,7 @@ from src.exceptions.knowledge import (
     KnowledgeIndexJobsRepositoryError,
     KnowledgeServiceError,
 )
+from src.exceptions.project_knowledge import ProjectKnowledgeStaleError
 from src.exceptions.projects import ProjectNotFoundError
 from src.exceptions.unit_of_work import UnitOfWorkRepositoryError
 from src.knowledge.catalog import build_catalog, digest
@@ -567,7 +568,9 @@ class ProjectAgentService:
                     answer=answer,
                     sources=selected,
                     message_references=message_references,
-                    **registry.evidence.references(output.primary_reference),
+                    **registry.evidence.references(
+                        output.primary_reference, source_handles=output.source_ids
+                    ),
                 )
                 response._context_evidence = (registry.evidence, tool_context.principal)
                 await self.validate_answer(response)
@@ -859,7 +862,9 @@ class ProjectAgentService:
                 answer=answer,
                 sources=selected,
                 message_references=message_references,
-                **registry.evidence.references(output.primary_reference),
+                **registry.evidence.references(
+                    output.primary_reference, source_handles=output.source_ids
+                ),
             )
             response._context_evidence = (registry.evidence, tool_context.principal)
             await self.validate_answer(response)
@@ -1044,6 +1049,8 @@ class ProjectAgentService:
                         != item.source_hash
                     ):
                         raise AgentAnswerError("Источники изменились. Повторите вопрос.")
+        except ProjectKnowledgeStaleError as error:
+            raise AgentContextChangedError() from error
         except ServiceError as error:
             if isinstance(error, AgentAnswerError):
                 raise

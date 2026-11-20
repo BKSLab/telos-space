@@ -271,14 +271,20 @@ class ContextEvidence:
             target = getattr(self.saved, name)
             target.extend(item for item in getattr(guard, name) if item not in target)
 
-    def references(self, primary_handle=None):
+    def references(self, primary_handle=None, *, source_handles: list[str]):
+        """Показывает выбранные ссылки; серверный guard сохраняет всё прочитанное."""
+        selected = set(source_handles)
+        if primary_handle:
+            selected.add(primary_handle)
         external = [
             item.model_copy(update={"is_primary": self.handles[key] == primary_handle})
             for key, item in self.external.items()
+            if self.handles[key] in selected
         ]
         assertions = [
             item.model_copy(update={"is_primary": self.handles[key] == primary_handle})
             for key, item in self.assertions.items()
+            if self.handles[key] in selected
         ]
         return {"external_sources": external[:20], "assertion_references": assertions[:20]}
 

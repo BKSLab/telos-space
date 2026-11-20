@@ -48,6 +48,35 @@ from tests.unit.knowledge.agent_models import LegacyOutput as AgentOutput
 from tests.unit.knowledge.agent_models import legacy_model
 
 
+async def test_stale_knowledge_has_typed_conflict_but_access_failure_is_not_retryable():
+    from src.exceptions.ai import AgentAnswerError, AgentContextChangedError
+    from src.exceptions.project_knowledge import (
+        ProjectKnowledgeAccessError,
+        ProjectKnowledgeStaleError,
+    )
+    from src.schemas.knowledge import KnowledgeAnswerSchema
+    from src.services.context_evidence import ContextEvidence, ContextEvidenceService
+
+    @asynccontextmanager
+    async def read_budget(_budget):
+        yield None
+
+    service, _, _, _ = build_service()
+    validate = AsyncMock(side_effect=ProjectKnowledgeStaleError())
+    service.context_tools = SimpleNamespace(
+        evidence=SimpleNamespace(validate=validate),
+        git=SimpleNamespace(read_budget=read_budget),
+    )
+    answer = KnowledgeAnswerSchema(answer="Проверенный ответ", sources=[])
+    answer._context_evidence = ContextEvidence(), ContextEvidenceService.session_principal(1)
+    with pytest.raises(AgentContextChangedError):
+        await service.validate_answer(answer)
+    validate.side_effect = ProjectKnowledgeAccessError(status_code=403, detail="Доступ отозван")
+    with pytest.raises(AgentAnswerError) as failure:
+        await service.validate_answer(answer)
+    assert not isinstance(failure.value, AgentContextChangedError)
+
+
 def build_service(*, semantic_available: bool = True):
     now = datetime.now(UTC)
     project = Project(

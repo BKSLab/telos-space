@@ -484,9 +484,24 @@ class GitSourceService:
                 or current["revision"] != row["revision"]
                 or current["credential_revision"] != row["credential_revision"]
                 or current["generation"] != row["generation"]
-                or current["observation_revision"] != row["observation_revision"]
                 or (lease_id is not None and current["lease_id"] != lease_id)
             ):
+                raise GitSourceConflictError()
+            if current["observation_revision"] != row["observation_revision"]:
+                # Параллельные чтения одного SHA могут подтвердить один и тот же
+                # результат. Не перезаписываем более позднее наблюдение; потеря
+                # доступа, новый SHA/credential/generation по-прежнему запрещены.
+                if (
+                    lease_id is None
+                    and current["observed_sha"] == commit.sha
+                    and current["repository_id"] == metadata.id
+                    and current["is_private"] == metadata.private
+                    and (not metadata.private or current["share_private_with_project"])
+                    and current["scope_hash"] == self._scope_hash(current)
+                    and current["state"] not in {"error", "access_lost", "disabled"}
+                    and current["last_error_code"] is None
+                ):
+                    return current
                 raise GitSourceConflictError()
             if metadata.id != current["repository_id"] or (
                 metadata.private and not current["share_private_with_project"]
