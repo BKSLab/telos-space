@@ -30,6 +30,7 @@ from src.exceptions.git_sources import (
     GitHubBudgetExceededError,
     GitHubClientError,
     GitHubForbiddenError,
+    GitHubLimitError,
     GitHubNotFoundError,
     GitHubRateLimitError,
     GitProfileRequiredError,
@@ -82,11 +83,8 @@ from src.services.auth import AuthService, Principal
 from src.services.git_credentials import GitCredentialCodec
 from src.services.git_index import (
     analyze_file,
-    exclusion_reason,
-    has_secret,
     policy_hash,
     prepare_text,
-    safe_title,
     text_fragments,
 )
 from src.services.knowledge_events import KnowledgeEvents
@@ -131,14 +129,11 @@ def _bounded_read(method):
 class GitSourceLimits:
     """Явные пределы очереди и чтения, не измерения производительности."""
 
-    poll_interval_seconds: float = 60.0
+    poll_interval_seconds: float = 3600.0
     batch_files: int = 20
     batch_deadline_seconds: float = 45.0
     lease_seconds: int = 120
     max_connections_per_tick: int = 4
-    max_index_files: int = 10_000
-    max_snapshot_bytes: int = 20 * 1024 * 1024
-    max_file_bytes: int = 1024 * 1024
     max_fragment_chars: int = 8000
     max_http_requests_per_batch: int = 4
     max_foreground_requests: int = 32
@@ -279,23 +274,19 @@ class GitSourceService:
         return row, current, project, grant
 
     def _scope_hash(self, row: dict) -> str:
-        base = policy_hash(
-            row["include_paths"],
-            row["exclude_patterns"],
-            max_file_bytes=self.limits.max_file_bytes,
-            ref=row["ref"],
-        )
-        return hashlib.sha256(
-            f"{base}:{self.limits.max_snapshot_bytes}:{self.limits.max_index_files}".encode()
-        ).hexdigest()
+        return policy_hash(ref=row["ref"])
 
-    @staticmethod
-    def _dto(row: dict) -> GitConnection:
+    def _dto(self, row: dict) -> GitConnection:
         fields = {name: row[name] for name in GitConnection.model_fields if name in row}
         return GitConnection(
             **fields,
             has_credential=row.get("credential_owner_id") is not None,
             has_webhook_secret=bool(row.get("webhook_secret_ciphertext")),
+            poll_interval_seconds=self.limits.poll_interval_seconds,
+            sync_pending=(
+                row.get("sync_requested_revision", 0) > row.get("sync_completed_revision", 0)
+                or row.get("lease_id") is not None
+            ),
         )
 
     async def _profile_credential(self, db, user_id: int | None) -> SecretStr:
@@ -433,9 +424,11 @@ class GitSourceService:
                     coverage = {
                         "total_files": len(snapshot["manifest"]),
                         "indexed_files": counts["indexed_files"],
-                        "excluded_files": counts["excluded_files"],
+                        "cataloged_files": counts["processed"],
+                        "metadata_files": counts["metadata_files"],
+                        "metadata_counts": counts.get("metadata_counts", {}),
                         "failed_files": counts["failed_files"],
-                        "truncated": snapshot["tree_truncated"] or counts["budget_excluded"] > 0,
+                        "truncated": snapshot["tree_truncated"],
                         "reasons": ["preparing"],
                         "commit_sha": snapshot["commit_sha"],
                         "generation": current["generation"],
@@ -724,8 +717,6 @@ class GitSourceService:
             "name": data.name.strip(),
             "purpose": data.purpose,
             "ref": ref,
-            "include_paths": data.include_paths,
-            "exclude_patterns": data.exclude_patterns,
             "share_private_with_project": data.share_private_with_project,
             "is_private": metadata.private,
             "credential_owner_id": current.user_id,
@@ -733,6 +724,9 @@ class GitSourceService:
             "observed_sha": commit.sha,
             "observed_at": now,
             "checked_at": now,
+            "sync_requested_revision": 1,
+            "last_sync_reason": "configuration",
+            "last_sync_requested_at": now,
         }
         values["scope_hash"] = self._scope_hash(values)
         async with self.scope() as db:
@@ -779,7 +773,7 @@ class GitSourceService:
         principal: Principal,
         data: GitConnectionUpdate,
     ) -> GitConnection:
-        """Меняет только выбранный binding; generation защищает ref/filter A→B→A."""
+        """Меняет только выбранный binding; generation защищает ref/policy A→B→A."""
         changes = data.model_dump(exclude_unset=True, exclude={"expected_revision"})
         if "ref" in changes and changes["ref"] is None:
             async with self.scope() as db:
@@ -816,8 +810,28 @@ class GitSourceService:
                 raise GitSourceConflictError()
             if "ref" in changes and changes["ref"] is None:
                 raise GitSourceValidationError()
+            if "sync_stage_ids" in changes:
+                valid = await db.sources.valid_stage_ids(
+                    project_id=project_id, stage_ids=changes["sync_stage_ids"]
+                )
+                if valid != set(changes["sync_stage_ids"]):
+                    raise GitSourceValidationError()
+            changes = {key: value for key, value in changes.items() if row.get(key) != value}
+            if not changes:
+                return self._dto(row)
+            if changes.keys() <= {"sync_stage_ids", "name", "purpose"}:
+                changes["revision"] = row["revision"] + 1
+                updated = await db.sources.update_connection(
+                    project_id=project_id, connection_id=connection_id,
+                    data=changes, expected_revision=data.expected_revision,
+                )
+                await db.unit_of_work.commit()
+                return self._dto(updated)
             combined = {**row, **changes}
             changes.update(
+                sync_requested_revision=row.get("sync_requested_revision", 0) + 1,
+                last_sync_reason="configuration",
+                last_sync_requested_at=datetime.now(UTC),
                 revision=row["revision"] + 1,
                 generation=row["generation"] + 1,
                 scope_hash=self._scope_hash(combined),
@@ -914,27 +928,20 @@ class GitSourceService:
                 raise GitSourceConflictError()
             changes = {
                 "revision": row["revision"] + 1,
-                "generation": row["generation"] + 1,
-                "credential_revision": row["credential_revision"] + 1,
-                "next_poll_at": datetime.now(UTC),
-                "state": "pending" if row["enabled"] else "disabled",
-                "lease_id": None,
-                "lease_until": None,
+                "webhook_secret_ciphertext": (
+                    self.credential_codec.encrypt(data.webhook_secret) if data.webhook_secret else None
+                ),
+                "last_webhook_received_at": None,
+                "last_webhook_event": None,
+                "last_webhook_processed_at": None,
+                "last_webhook_request_revision": None,
             }
-            changes["webhook_secret_ciphertext"] = (
-                self.credential_codec.encrypt(data.webhook_secret) if data.webhook_secret else None
-            )
             updated = await db.sources.update_connection(
                 project_id=project_id,
                 connection_id=connection_id,
                 expected_revision=data.expected_revision,
                 data=changes,
             )
-            await db.sources.supersede_jobs(
-                connection_id=connection_id, generation=updated["generation"]
-            )
-            await db.sources.request_evidence_refresh(connection_id=connection_id, invalidate=True)
-            await db.knowledge_events.reindex_project(project_id)
             await db.unit_of_work.commit()
         return self._dto(updated)
 
@@ -955,7 +962,12 @@ class GitSourceService:
             )
             if not row["enabled"]:
                 raise GitSourceNotAvailableError()
-            changes = {"next_poll_at": datetime.now(UTC)}
+            changes = {
+                "next_poll_at": datetime.now(UTC),
+                "sync_requested_revision": row.get("sync_requested_revision", 0) + 1,
+                "last_sync_reason": "manual",
+                "last_sync_requested_at": datetime.now(UTC),
+            }
             if row["credential_owner_id"] != project.owner_id or (
                 row["last_error_code"] == "github_profile_required"
             ):
@@ -972,7 +984,8 @@ class GitSourceService:
                 await db.sources.request_evidence_refresh(connection_id=connection_id, invalidate=True)
                 await db.knowledge_events.reindex_project(project_id)
             elif row["last_error_code"] == "rate_limited" and row["next_poll_at"] > datetime.now(UTC):
-                return self._dto(row)
+                changes["next_poll_at"] = row["next_poll_at"]
+            await db.sources.request_evidence_refresh(connection_id=connection_id)
             updated = await db.sources.update_connection(
                 project_id=project_id,
                 connection_id=connection_id,
@@ -980,16 +993,6 @@ class GitSourceService:
             )
             await db.unit_of_work.commit()
         return self._dto(updated)
-
-    def _allowed(self, row: dict, entry: dict) -> str | None:
-        return exclusion_reason(
-            entry["path"],
-            row["include_paths"],
-            row["exclude_patterns"],
-            mode=entry.get("mode", "100644"),
-            size=entry.get("size") or 0,
-            max_file_bytes=self.limits.max_file_bytes,
-        )
 
     async def _snapshot(self, row: dict, *, sha: str | None = None) -> dict:
         selected = sha or row["indexed_sha"] or row["observed_sha"]
@@ -1040,9 +1043,9 @@ class GitSourceService:
             updated = await db.sources.update_snapshot(
                 snapshot_id=snapshot["id"],
                 data={
-                    "manifest": entries[: self.limits.max_index_files],
+                    "manifest": entries,
                     "tree_loaded": True,
-                    "tree_truncated": tree.truncated or len(entries) > self.limits.max_index_files,
+                    "tree_truncated": tree.truncated,
                 },
             )
             await db.unit_of_work.commit()
@@ -1060,7 +1063,7 @@ class GitSourceService:
         offset: int = 0,
         limit: int = 200,
     ) -> GitTreePage:
-        """Читает только разрешённое дерево recorded snapshot, явно сохраняя неполноту."""
+        """Читает все объекты recorded snapshot после проверки доступа, явно сохраняя неполноту."""
         if not 1 <= limit <= 200 or offset < 0:
             raise GitSourceValidationError()
         if prefix:
@@ -1075,24 +1078,33 @@ class GitSourceService:
             allowed = [
                 entry
                 for entry in snapshot["manifest"]
-                if not self._allowed(row, entry)
-                and (
-                    not prefix or entry["path"] == prefix or entry["path"].startswith(prefix + "/")
-                )
+                if not prefix or entry["path"] == prefix or entry["path"].startswith(prefix + "/")
             ]
             entries = allowed[offset : offset + limit]
+            async with self.scope() as db:
+                statuses = await db.sources.snapshot_file_states(
+                    snapshot_id=snapshot["id"], paths=[entry["path"] for entry in entries]
+                )
+            by_path = {item["path"]: item for item in statuses}
             await self._current_rows([row], project_id=project_id, principal=principal)
             return GitTreePage(
                 connection_id=connection_id,
                 repository_id=row["repository_id"],
                 commit_sha=snapshot["commit_sha"],
-                items=[GitTreeEntry.model_validate(entry) for entry in entries],
+                items=[
+                    GitTreeEntry.model_validate({
+                        **entry,
+                        "index_state": by_path.get(entry["path"], {}).get("state", "pending"),
+                        "index_reason": by_path.get(entry["path"], {}).get("reason"),
+                    })
+                    for entry in entries
+                ],
                 offset=offset,
                 limit=limit,
                 next_offset=offset + len(entries) if offset + len(entries) < len(allowed) else None,
                 truncated=snapshot["tree_truncated"],
                 stale=snapshot["commit_sha"] != row["observed_sha"],
-                excluded_files=len(snapshot["manifest"]) - len(allowed),
+                total_files=len(allowed),
             )
 
     @staticmethod
@@ -1124,10 +1136,9 @@ class GitSourceService:
         entry: dict,
         client: GitHubClient,
         principal: Principal,
-        *,
-        forced_reason: str | None = None,
     ) -> dict:
-        reason = forced_reason or self._allowed(row, entry)
+        reason = "submodule" if entry["mode"] == "160000" else None
+        failed = False
         text, analysis = None, {}
         async with self.scope() as db:
             ready = await db.sources.get_snapshot_file(
@@ -1140,7 +1151,7 @@ class GitSourceService:
                 if ready is None and reason is None
                 else None
             )
-        if ready is not None:
+        if ready is not None and ready["state"] != "error":
             return {**ready, "commit_sha": snapshot["commit_sha"]}
         if reason is None and reusable is not None:
             text, reason = reusable["text"], reusable["reason"]
@@ -1149,21 +1160,27 @@ class GitSourceService:
         elif reason is None:
             try:
                 blob = await client.read_blob(row["owner"], row["repo"], entry["sha"])
-            except (GitHubAuthenticationError, GitHubForbiddenError, GitHubNotFoundError) as error:
-                await self._remote_failure(row, error)
-                raise
-            if blob.size != entry["size"]:
-                raise GitSourceConflictError()
-            text, reason = prepare_text(blob.content)
-            if text is not None:
-                analysis = analyze_file(entry["path"], text)
+            except GitHubClientError as error:
+                if isinstance(error, GitHubBudgetExceededError):
+                    raise
+                if isinstance(error, (GitHubAuthenticationError, GitHubForbiddenError, GitHubNotFoundError, GitHubRateLimitError)):
+                    await self._remote_failure(row, error)
+                    raise
+                reason = "transport_limit" if isinstance(error, GitHubLimitError) else "read_error"
+                failed = True
+            else:
+                if blob.size != entry["size"]:
+                    raise GitSourceConflictError()
+                text, reason = prepare_text(blob.content)
+                if text is not None:
+                    analysis = analyze_file(entry["path"], text)
         values = {
             "snapshot_id": snapshot["id"],
             "connection_id": row["id"],
             "path": entry["path"],
             "blob_sha": entry["sha"],
             "size": entry.get("size") or 0,
-            "state": "excluded" if reason else "ready",
+            "state": "error" if failed else "metadata" if reason else "ready",
             "reason": reason,
             "text": text,
             "text_hash": hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -1184,29 +1201,17 @@ class GitSourceService:
                 or current["credential_revision"] != row["credential_revision"]
             ):
                 raise GitSourceConflictError()
-            coverage = await db.sources.snapshot_coverage(snapshot_id=snapshot["id"])
-            if (
-                text is not None
-                and coverage["bytes_processed"] + values["size"] > self.limits.max_snapshot_bytes
-            ):
-                text = None
-                values.update(
-                    state="excluded",
-                    reason="snapshot_byte_limit",
-                    text=None,
-                    text_hash=None,
-                    analysis={},
-                )
             file = await db.sources.insert_file(data=values)
             if file is None:
                 file = await db.sources.get_snapshot_file(
                     snapshot_id=snapshot["id"], path=entry["path"]
                 )
             elif text is not None:
-                await db.sources.insert_fragments(
-                    file_id=file["id"],
-                    fragments=text_fragments(text, max_chars=self.limits.max_fragment_chars),
-                )
+                fragments = text_fragments(text, max_chars=self.limits.max_fragment_chars)
+                for offset in range(0, len(fragments), 250):
+                    await db.sources.insert_fragments(
+                        file_id=file["id"], fragments=fragments[offset:offset + 250]
+                    )
             await db.unit_of_work.commit()
         return {**file, "commit_sha": snapshot["commit_sha"]}
 
@@ -1251,6 +1256,8 @@ class GitSourceService:
                     file = await self._store_file(row, snapshot, entry, client, principal)
                 except GitHubClientError:
                     raise GitSourceIncompleteError() from None
+            if file["state"] == "error":
+                raise GitSourceIncompleteError()
             if file["state"] != "ready" or file["text"] is None:
                 raise GitSourceNotAvailableError()
             if offset > len(file["text"]):
@@ -1279,7 +1286,7 @@ class GitSourceService:
                 stale=snapshot["commit_sha"] != row["observed_sha"],
                 partial=not snapshot["complete"]
                 or snapshot["tree_truncated"]
-                or bool(snapshot["coverage"].get("excluded_files")),
+                or bool(snapshot["coverage"].get("failed_files")),
             )
 
     async def _readable_connections(
@@ -1382,7 +1389,7 @@ class GitSourceService:
                     stale=hit["commit_sha"] != row["observed_sha"],
                     partial=not hit["snapshot_complete"]
                     or hit["tree_truncated"]
-                    or bool(row["coverage"].get("excluded_files")),
+                    or bool(row["coverage"].get("failed_files")),
                 )
             )
         return GitSearchResult(
@@ -1755,7 +1762,7 @@ class GitSourceService:
             return {
                 "kind": kind,
                 "provider_id": provider_id,
-                "title": safe_title(pr.title),
+                "title": pr.title[:512],
                 "head_sha": pr.head_sha,
                 "merge_sha": pr.merge_sha,
                 "status": "merged" if pr.merged else pr.state,
@@ -1764,7 +1771,7 @@ class GitSourceService:
         return {
             "kind": "commit",
             "provider_id": provider_id,
-            "title": safe_title(commit.message.splitlines()[0] if commit.message else "Commit"),
+            "title": (commit.message.splitlines()[0] if commit.message else "Commit")[:512],
             "head_sha": commit.sha,
             "merge_sha": None,
             "status": "committed",
@@ -1909,7 +1916,7 @@ class GitSourceService:
                         partial |= not page.complete
                         for candidate in page.items:
                             content = candidate.title + " " + (candidate.branch or "")
-                            if not pattern.search(content) or has_secret(content):
+                            if not pattern.search(content):
                                 continue
                             keys = {
                                 match.upper()
@@ -1924,7 +1931,7 @@ class GitSourceService:
                                     kind=kind,
                                     commit_sha=candidate.sha,
                                     pull_number=candidate.pull_number,
-                                    title=safe_title(candidate.title),
+                                    title=candidate.title[:512],
                                     source_url=f"https://github.com/{row['owner']}/{row['repo']}/"
                                     + (
                                         f"pull/{candidate.pull_number}"
@@ -2038,24 +2045,31 @@ class GitSourceService:
                     if row["ref"].startswith(("heads/", "tags/"))
                     else row["ref"]
                 )
+            now = datetime.now(UTC)
+            changes = {
+                "last_webhook_received_at": now,
+                "last_webhook_event": event_type,
+                "last_webhook_processed_at": None,
+                "last_webhook_request_revision": None,
+            }
             if accepted:
-                if row["last_error_code"] != "rate_limited":
-                    await db.sources.update_connection(
-                        project_id=project_id,
-                        connection_id=connection_id,
-                        data={"next_poll_at": datetime.now(UTC)},
-                    )
+                requested = current.get("sync_requested_revision", 0) + 1
+                changes.update(
+                    sync_requested_revision=requested,
+                    last_webhook_request_revision=requested,
+                    last_sync_reason="webhook",
+                    last_sync_requested_at=now,
+                )
+                if current["last_error_code"] != "rate_limited" or current["next_poll_at"] <= now:
+                    changes["next_poll_at"] = now
                 await db.sources.request_evidence_refresh(connection_id=connection_id)
+            await db.sources.update_connection(
+                project_id=project_id, connection_id=connection_id, data=changes
+            )
             await db.unit_of_work.commit()
         return GitEventAccepted()
 
-    def _check_evidence(self, row: dict, check) -> dict | None:
-        if (
-            has_secret(check.name)
-            or has_secret(check.status)
-            or (check.conclusion and has_secret(check.conclusion))
-        ):
-            return None
+    def _check_evidence(self, row: dict, check) -> dict:
         return GitEvidence(
             kind="check",
             provider_type=check.provider_type,
@@ -2220,10 +2234,7 @@ class GitSourceService:
                     )
                     for check in checks.items:
                         item = self._check_evidence(row, check)
-                        if item is None:
-                            state["unavailable"].append("check_secret_metadata")
-                        else:
-                            state["checks"].append(item)
+                        state["checks"].append(item)
                     state.update(checks_complete=checks.complete, phase="statuses")
                 elif phase == "statuses":
                     statuses = await client.get_commit_statuses(
@@ -2231,10 +2242,7 @@ class GitSourceService:
                     )
                     for check in statuses.items:
                         item = self._check_evidence(row, check)
-                        if item is None:
-                            state["unavailable"].append("status_secret_metadata")
-                        else:
-                            state["checks"].append(item)
+                        state["checks"].append(item)
                     state.update(statuses_complete=statuses.complete, phase="deployments")
                 elif phase == "deployments":
                     deployments = await client.list_deployments(row["owner"], row["repo"], limit=10)
@@ -2261,25 +2269,22 @@ class GitSourceService:
                             statuses.items, key=lambda status: (status.created_at, status.id)
                         )
                         environment = latest.environment or deployment["environment"]
-                        if has_secret(environment):
-                            state["unavailable"].append("deployment_secret_metadata")
-                        else:
-                            state["deploy_evidence"].append(
-                                GitEvidence(
-                                    kind="deployment",
-                                    provider_type="deployment",
-                                    provider_id=str(deployment["id"]),
-                                    connection_id=row["id"],
-                                    repository_id=row["repository_id"],
-                                    commit_sha=deployment["sha"],
-                                    status=latest.state,
-                                    environment=environment,
-                                    source_url=f"https://github.com/{row['owner']}/{row['repo']}/deployments/{deployment['id']}",
-                                    observed_at=datetime.now(UTC),
-                                    upstream_at=latest.created_at,
-                                    is_current=False if latest.state == "inactive" else None,
-                                ).model_dump(mode="json")
-                            )
+                        state["deploy_evidence"].append(
+                            GitEvidence(
+                                kind="deployment",
+                                provider_type="deployment",
+                                provider_id=str(deployment["id"]),
+                                connection_id=row["id"],
+                                repository_id=row["repository_id"],
+                                commit_sha=deployment["sha"],
+                                status=latest.state,
+                                environment=environment,
+                                source_url=f"https://github.com/{row['owner']}/{row['repo']}/deployments/{deployment['id']}",
+                                observed_at=datetime.now(UTC),
+                                upstream_at=latest.created_at,
+                                is_current=False if latest.state == "inactive" else None,
+                            ).model_dump(mode="json")
+                        )
                     else:
                         state["unavailable"].append("deployment_status_unknown")
                     state["deployment_cursor"] = cursor + 1
@@ -2364,7 +2369,12 @@ class GitSourceService:
             lease_id=lease_id,
             soon=rate_error is None
             and (not complete or more_due or row["indexed_sha"] != row["observed_sha"]),
-            data={"next_poll_at": self._retry_at(rate_error)} if rate_error is not None else None,
+            data={
+                "next_poll_at": self._retry_at(rate_error),
+                "last_error_code": "rate_limited",
+            } if rate_error is not None else None,
+            complete=complete and not state.get("unavailable") and not more_due
+            and row["indexed_sha"] == row["observed_sha"],
         )
         return True
 
@@ -2404,21 +2414,47 @@ class GitSourceService:
             await db.unit_of_work.commit()
 
     async def _release(
-        self, row: dict, *, lease_id: UUID, data: dict | None = None, soon: bool = False
+        self, row: dict, *, lease_id: UUID, data: dict | None = None,
+        soon: bool = False, complete: bool = False,
     ) -> None:
+        """Release the lease without overwriting a signal received during remote work."""
         async with self.scope() as db:
+            current = await db.sources.get_connection(
+                project_id=row["project_id"], connection_id=row["id"], for_update=True
+            )
+            if (
+                current is None or current["lease_id"] != lease_id
+                or current["generation"] != row["generation"]
+            ):
+                return
+            now = datetime.now(UTC)
+            claimed_revision = row.get("lease_sync_revision", 0)
+            newer = current.get("sync_requested_revision", 0) > claimed_revision
+            retry_seconds = 60 if current["state"] in {"error", "access_lost"} else self.limits.poll_interval_seconds
+            values = {
+                "lease_id": None,
+                "lease_until": None,
+                "next_poll_at": now + timedelta(seconds=1 if soon or newer else retry_seconds),
+                **(data or {}),
+            }
+            if current["last_error_code"] == "rate_limited" and current.get("next_poll_at", now) > now:
+                values["next_poll_at"] = max(current["next_poll_at"], values["next_poll_at"])
+            if complete:
+                values["sync_completed_revision"] = max(
+                    current.get("sync_completed_revision", 0), claimed_revision
+                )
+                webhook_revision = current.get("last_webhook_request_revision")
+                if (
+                    webhook_revision is not None and webhook_revision <= claimed_revision
+                    and current.get("last_webhook_processed_at") is None
+                ):
+                    values["last_webhook_processed_at"] = now
             await db.sources.update_connection(
                 project_id=row["project_id"],
                 connection_id=row["id"],
                 lease_id=lease_id,
                 expected_generation=row["generation"],
-                data={
-                    "lease_id": None,
-                    "lease_until": None,
-                    "next_poll_at": datetime.now(UTC)
-                    + timedelta(seconds=1 if soon else self.limits.poll_interval_seconds),
-                    **(data or {}),
-                },
+                data=values,
             )
             await db.unit_of_work.commit()
 
@@ -2433,6 +2469,9 @@ class GitSourceService:
             return False
         snapshot = await self._tree(row, snapshot, client, principal)
         cursor, byte_count = job["cursor"], job["bytes_processed"]
+        if cursor >= len(snapshot["manifest"]) and snapshot["coverage"].get("failed_files"):
+            # Retry failed objects on a later reconciliation; cached successful files do no HTTP.
+            cursor, byte_count = 0, 0
         processed, started, error_code = 0, time.monotonic(), None
         while (
             cursor < len(snapshot["manifest"])
@@ -2483,19 +2522,21 @@ class GitSourceService:
                 raise GitSourceConflictError()
             counts = await db.sources.snapshot_coverage(snapshot_id=snapshot["id"])
             finished = cursor >= len(snapshot["manifest"])
-            truncated = snapshot["tree_truncated"] or counts["budget_excluded"] > 0
+            truncated = snapshot["tree_truncated"]
             coverage = {
                 "total_files": len(snapshot["manifest"]),
                 "indexed_files": counts["indexed_files"],
-                "excluded_files": counts["excluded_files"],
+                "cataloged_files": counts["processed"],
+                "metadata_files": counts["metadata_files"],
+                "metadata_counts": counts.get("metadata_counts", {}),
                 "failed_files": counts["failed_files"] + (1 if error_code else 0),
                 "truncated": truncated,
                 "reasons": [
                     reason
                     for reason, present in (
                         ("tree_limit", snapshot["tree_truncated"]),
-                        ("snapshot_byte_limit", counts["budget_excluded"] > 0),
-                        ("filtered_files", counts["excluded_files"] > 0),
+                        ("metadata_only", counts["metadata_files"] > 0),
+                        ("file_errors", counts["failed_files"] > 0),
                         ("read_error", error_code is not None),
                         ("preparing", not finished),
                     )
@@ -2504,7 +2545,7 @@ class GitSourceService:
                 "commit_sha": snapshot["commit_sha"],
                 "generation": row["generation"],
             }
-            complete = finished and not truncated and error_code is None
+            complete = finished and not truncated and error_code is None and not counts["failed_files"]
             await db.sources.update_snapshot(
                 snapshot_id=snapshot["id"], data={"complete": complete, "coverage": coverage}
             )
@@ -2519,7 +2560,7 @@ class GitSourceService:
                 values = {
                     "indexed_sha": snapshot["commit_sha"],
                     "indexed_at": datetime.now(UTC),
-                    "state": "partial" if counts["excluded_files"] else "ready",
+                    "state": "ready",
                     "coverage": coverage,
                     "last_error_code": None,
                     "work_phase": "evidence",
@@ -2542,7 +2583,8 @@ class GitSourceService:
             more_due = bool(await db.sources.due_changes(connection_id=row["id"], limit=1))
             await db.unit_of_work.commit()
         await self._release(
-            row, lease_id=lease_id, soon=error_code is None and (not finished or more_due)
+            row, lease_id=lease_id, soon=error_code is None and (not finished or more_due),
+            complete=complete and not more_due,
         )
         return not finished
 
@@ -2576,7 +2618,7 @@ class GitSourceService:
                     if current["indexed_sha"] == snapshot["commit_sha"]
                     else datetime.now(UTC),
                     "coverage": snapshot["coverage"],
-                    "state": "partial" if snapshot["coverage"].get("excluded_files") else "ready",
+                    "state": "ready",
                     "last_error_code": None,
                     "work_phase": "evidence",
                 },
@@ -2585,7 +2627,7 @@ class GitSourceService:
                 await db.knowledge_events.reindex_project(row["project_id"])
             more_due = bool(await db.sources.due_changes(connection_id=row["id"], limit=1))
             await db.unit_of_work.commit()
-        await self._release(row, lease_id=lease_id, soon=more_due)
+        await self._release(row, lease_id=lease_id, soon=more_due, complete=not more_due)
 
     async def tick(self) -> int:
         """Обрабатывает bounded очередь; каждый lease имеет отдельные 4 HTTP attempts/45 секунд."""
@@ -2632,8 +2674,11 @@ class GitSourceService:
                         ):
                             continue
                         await self._index_batch(row, client, principal, lease_id)
+            except GitSourceConflictError:
+                # A concurrent metadata edit invalidates the probe, not the queued work.
+                # Retry the retained lease work promptly; _release preserves rate-limit backoff.
+                await self._release(row, lease_id=lease_id, soon=True)
             except (
-                GitSourceConflictError,
                 GitSourceNotAvailableError,
                 GitCredentialUnavailableError,
                 GitProfileRequiredError,

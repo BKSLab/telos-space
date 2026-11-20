@@ -58,9 +58,8 @@ from src.schemas.git_sources import (
 GITHUB_API_URL = "https://api.github.com"
 GITHUB_API_VERSION = "2026-03-10"
 DEFAULT_TIMEOUT_SECONDS = 10.0
-DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-DEFAULT_MAX_BLOB_BYTES = 1024 * 1024
-DEFAULT_MAX_TREE_ENTRIES = 10_000
+DEFAULT_MAX_RESPONSE_BYTES = 48 * 1024 * 1024
+DEFAULT_MAX_BLOB_BYTES = 32 * 1024 * 1024
 DEFAULT_MAX_PATCH_CHARS = 64_000
 GITHUB_COMPARE_FILE_LIMIT = 300
 GITHUB_PAGE_SIZE = 100
@@ -154,7 +153,6 @@ class GitHubClient:
         attempts: int = 2,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         max_blob_bytes: int = DEFAULT_MAX_BLOB_BYTES,
-        max_tree_entries: int = DEFAULT_MAX_TREE_ENTRIES,
         max_compare_files: int = GITHUB_COMPARE_FILE_LIMIT,
         max_patch_chars: int = DEFAULT_MAX_PATCH_CHARS,
         max_requests: int | None = None,
@@ -163,7 +161,6 @@ class GitHubClient:
         limits = (
             max_response_bytes,
             max_blob_bytes,
-            max_tree_entries,
             max_compare_files,
             max_patch_chars,
         )
@@ -183,7 +180,6 @@ class GitHubClient:
         self.attempts = attempts
         self.max_response_bytes = max_response_bytes
         self.max_blob_bytes = max_blob_bytes
-        self.max_tree_entries = max_tree_entries
         self.max_compare_files = max_compare_files
         self.max_patch_chars = max_patch_chars
         self.max_requests = max_requests
@@ -639,12 +635,12 @@ class GitHubClient:
                 mode=entry["mode"],
                 size=entry.get("size"),
             )
-            for entry in raw[: self.max_tree_entries]
+            for entry in raw
         )
         result = GitTree(
             sha=data["sha"],
             entries=entries,
-            truncated=data["truncated"] or len(raw) > self.max_tree_entries,
+            truncated=data["truncated"],
         )
         if result.sha != sha or len({entry.path for entry in entries}) != len(entries):
             raise ValueError("Invalid tree identity.")

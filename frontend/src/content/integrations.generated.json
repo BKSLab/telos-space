@@ -24994,7 +24994,7 @@
     },
     {
       "access": "authenticated",
-      "description": "Owner-only PATCH с expected_revision; ref/filter/revoke инвалидируют старое поколение.",
+      "description": "Owner-only PATCH с expected_revision; смена ref/отзыв доступа инвалидируют старое поколение.",
       "group": "git-sources",
       "id": "api-25ad21a6a08b418e",
       "kind": "http",
@@ -25628,7 +25628,7 @@
     },
     {
       "access": "authenticated",
-      "description": "Только recorded repository/SHA/область после текущего ACL и live Contents proof; секретные пути скрыты.",
+      "description": "Все объекты recorded repository/SHA после текущего ACL и live Contents proof; статусы текста, метаданных и ошибок.",
       "group": "git-sources",
       "id": "api-786cc7d21374b496",
       "kind": "http",
@@ -25755,7 +25755,7 @@
               }
             }
           },
-          "description": "Bounded manifest с явным truncated/stale."
+          "description": "Постраничный полный каталог с явным truncated/stale и состоянием обработки объектов."
         },
         "401": {
           "description": "Требуется действующая локальная аутентификация."
@@ -25876,7 +25876,7 @@
               }
             }
           },
-          "description": "Безопасные metadata с новой credential revision."
+          "description": "Метаданные с новой версией настройки webhook; токен чтения GitHub не меняется."
         },
         "401": {
           "description": "Требуется действующая локальная аутентификация."
@@ -57073,13 +57073,6 @@
           "title": "Enabled",
           "type": "boolean"
         },
-        "exclude_patterns": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Exclude Patterns",
-          "type": "array"
-        },
         "generation": {
           "title": "Generation",
           "type": "integer"
@@ -57096,13 +57089,6 @@
         "id": {
           "title": "Id",
           "type": "integer"
-        },
-        "include_paths": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Include Paths",
-          "type": "array"
         },
         "indexed_at": {
           "anyOf": [
@@ -57141,6 +57127,71 @@
             }
           ],
           "title": "Last Error Code"
+        },
+        "last_sync_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "poll",
+                "manual",
+                "webhook",
+                "task_stage",
+                "configuration"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Sync Reason"
+        },
+        "last_sync_requested_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Sync Requested At"
+        },
+        "last_webhook_event": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Webhook Event"
+        },
+        "last_webhook_processed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Webhook Processed At"
+        },
+        "last_webhook_received_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Webhook Received At"
         },
         "name": {
           "title": "Name",
@@ -57184,6 +57235,11 @@
         "owner": {
           "title": "Owner",
           "type": "string"
+        },
+        "poll_interval_seconds": {
+          "default": 3600.0,
+          "title": "Poll Interval Seconds",
+          "type": "number"
         },
         "project_id": {
           "title": "Project Id",
@@ -57232,6 +57288,18 @@
           "title": "State",
           "type": "string"
         },
+        "sync_pending": {
+          "default": false,
+          "title": "Sync Pending",
+          "type": "boolean"
+        },
+        "sync_stage_ids": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Sync Stage Ids",
+          "type": "array"
+        },
         "updated_at": {
           "format": "date-time",
           "title": "Updated At",
@@ -57247,8 +57315,6 @@
         "name",
         "purpose",
         "ref",
-        "include_paths",
-        "exclude_patterns",
         "enabled",
         "is_private",
         "share_private_with_project",
@@ -57273,25 +57339,6 @@
       "additionalProperties": false,
       "description": "Разрешённая область подключения; секрет доступен только UI-сценарию владельца.",
       "properties": {
-        "exclude_patterns": {
-          "description": "Дополнительные POSIX glob-исключения поверх обязательной политики.",
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "title": "Exclude Patterns",
-          "type": "array"
-        },
-        "include_paths": {
-          "description": "Разрешённые корни; пустой путь означает корень репозитория.",
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 64,
-          "minItems": 1,
-          "title": "Include Paths",
-          "type": "array"
-        },
         "name": {
           "description": "Имя подключения в проекте.",
           "maxLength": 160,
@@ -57402,44 +57449,11 @@
           "description": "Включение/отключение без удаления истории.",
           "title": "Enabled"
         },
-        "exclude_patterns": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "maxItems": 64,
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Новые дополнительные исключения.",
-          "title": "Exclude Patterns"
-        },
         "expected_revision": {
           "description": "Прочитанная версия настройки.",
           "minimum": 1.0,
           "title": "Expected Revision",
           "type": "integer"
-        },
-        "include_paths": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "maxItems": 64,
-              "minItems": 1,
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Новые разрешённые корни.",
-          "title": "Include Paths"
         },
         "name": {
           "anyOf": [
@@ -57491,6 +57505,23 @@
           ],
           "description": "Согласие на общий закрытый корпус.",
           "title": "Share Private With Project"
+        },
+        "sync_stage_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              "maxItems": 100,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ID стадий этого проекта, запускающих сверку; [] отключает.",
+          "title": "Sync Stage Ids"
         }
       },
       "required": [
@@ -57502,6 +57533,11 @@
     "GitCoverage": {
       "description": "Фактический охват версии, а не обещание анализа всего репозитория.",
       "properties": {
+        "cataloged_files": {
+          "default": 0,
+          "title": "Cataloged Files",
+          "type": "integer"
+        },
         "commit_sha": {
           "anyOf": [
             {
@@ -57512,11 +57548,6 @@
             }
           ],
           "title": "Commit Sha"
-        },
-        "excluded_files": {
-          "default": 0,
-          "title": "Excluded Files",
-          "type": "integer"
         },
         "failed_files": {
           "default": 0,
@@ -57537,6 +57568,18 @@
         "indexed_files": {
           "default": 0,
           "title": "Indexed Files",
+          "type": "integer"
+        },
+        "metadata_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Metadata Counts",
+          "type": "object"
+        },
+        "metadata_files": {
+          "default": 0,
+          "title": "Metadata Files",
           "type": "integer"
         },
         "reasons": {
@@ -58701,6 +58744,28 @@
       "additionalProperties": false,
       "description": "Элемент дерева; symlink и submodule описаны, но не разыменованы.",
       "properties": {
+        "index_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Index Reason"
+        },
+        "index_state": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "ready",
+            "metadata",
+            "error"
+          ],
+          "title": "Index State",
+          "type": "string"
+        },
         "mode": {
           "description": "Git mode, отличающий обычный файл от ссылки и submodule.",
           "enum": [
@@ -58781,11 +58846,6 @@
           "title": "Connection Id",
           "type": "integer"
         },
-        "excluded_files": {
-          "default": 0,
-          "title": "Excluded Files",
-          "type": "integer"
-        },
         "items": {
           "items": {
             "$ref": "#/components/schemas/GitTreeEntry"
@@ -58819,6 +58879,11 @@
         "stale": {
           "title": "Stale",
           "type": "boolean"
+        },
+        "total_files": {
+          "default": 0,
+          "title": "Total Files",
+          "type": "integer"
         },
         "truncated": {
           "title": "Truncated",

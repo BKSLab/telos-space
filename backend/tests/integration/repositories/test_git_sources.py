@@ -55,7 +55,7 @@ from src.schemas.git_sources import (
 )
 from src.services.auth import ApiKeyGrant, Principal
 from src.services.git_credentials import GitCredentialCodec
-from src.services.git_sources import GitSourceLimits, GitSourceService
+from src.services.git_sources import GitSourceService
 
 A, B, C = (char * 40 for char in "abc")
 
@@ -348,13 +348,16 @@ async def converge(env, predicate, *, ticks=30):
     assert await predicate(), "Durable Git queue did not converge"
 
 
-async def test_index_restart_three_repositories_search_exact_source_and_secret_exclusions(engine):
+async def test_index_restart_three_repositories_search_text_and_catalog_metadata(engine):
     async with environment(engine) as env:
         remote, service = env.remote, env.service
         allowed = {
             "src/main.py": "from src.api import run\nclass App:\n    pass\n# архитектура\n".encode(),
             "src/api.py": b"def run():\n    return 'architecture'\n",
             "README.md": "архитектура проекта\n".encode(),
+            ".env": b"never read this",
+            "safe.py": b"API_KEY = 'synthetic-password-value'\n",
+            "external.md": b"outside",
         }
         remote.add_version(
             A,
@@ -380,15 +383,15 @@ async def test_index_restart_three_repositories_search_exact_source_and_secret_e
         )
         await converge(env, ready)
         assert max(remote.batches) <= 4
-        assert not any(
-            path.endswith("/" + blob(b"never read this")) or path.endswith("/" + blob(b"outside"))
-            for path in remote.requests
+        assert all(
+            any(path.endswith("/" + blob(content)) for path in remote.requests)
+            for content in (b"never read this", b"outside")
         )
         result = await service.search(
             project_id=env.project, principal=env.principal, query="архитектура"
         )
         assert {item.connection_id for item in result.items} == {item.id for item in connections}
-        assert result.partial and all(item.commit_sha == A for item in result.items)
+        assert not result.partial and all(item.commit_sha == A for item in result.items)
         proof = result.items[0]
         read = await service.read_file(
             project_id=env.project,
@@ -416,7 +419,7 @@ async def test_index_restart_three_repositories_search_exact_source_and_secret_e
             ],
         )
         map_result = await service.get_map(project_id=env.project, principal=env.member)
-        assert len(map_result.manifest) == 3 and len(map_result.sources) == 9
+        assert len(map_result.manifest) == 3 and len(map_result.sources) == 18
         assert any(component.kind == "python_module" for component in map_result.components)
         assert all(
             relation["confidence"] in {"declared", "candidate"} for relation in map_result.relations
@@ -750,8 +753,9 @@ async def test_task_many_to_many_exact_sha_ci_deployment_rollback_and_hmac_dedup
         rotated = await service.get_task_links(
             project_id=env.project, principal=env.principal, task_id=env.tasks[1]
         )
-        assert rotated.items[0].evidence == [] and rotated.items[0].evidence_partial
-        assert rotated.items[0].revision > remaining.items[0].revision
+        # Webhook HMAC rotation is not a change to GitHub reading credentials.
+        assert rotated.items[0].evidence == remaining.items[0].evidence
+        assert rotated.items[0].revision == remaining.items[0].revision
         body = json.dumps(
             {"repository": {"id": 101}, "ref": "refs/heads/main", "after": B}
         ).encode()
@@ -970,36 +974,7 @@ async def test_persisted_loss_closes_an_inflight_cached_read_and_recovers_by_new
         ).text
 
 
-async def test_bounded_map_partial_empty_search_and_snapshot_byte_coverage(engine):
-    async with environment(engine, limits=GitSourceLimits(max_snapshot_bytes=5)) as env:
-        env.remote.add_version(A, {"a.md": b"one!", "b.md": b"longer than limit"})
-        source = await connect(env)
-        empty = await env.service.search(
-            project_id=env.project, principal=env.principal, query="absent"
-        )
-        assert empty.items == [] and empty.partial
-
-        async def finished():
-            async with env.sessions() as db:
-                job = await db.scalar(
-                    select(GitSyncJob).where(GitSyncJob.connection_id == source.id)
-                )
-                return job.state == "partial"
-
-        await converge(env, finished)
-        state = await env.service.get_connection(
-            project_id=env.project, principal=env.principal, connection_id=source.id
-        )
-        assert (
-            state.indexed_sha is None
-            and state.coverage.truncated
-            and "snapshot_byte_limit" in state.coverage.reasons
-        )
-        assert (
-            await env.service.search(
-                project_id=env.project, principal=env.principal, query="absent"
-            )
-        ).partial
+async def test_bounded_map_keeps_complete_source_catalog(engine):
     async with environment(engine) as env:
         # Identical blobs are reused; component and symbol projections remain bounded.
         env.remote.add_version(A, {f"docs/f{i}.md": b"same source" for i in range(105)})
@@ -1189,7 +1164,7 @@ async def test_final_source_gate_rechecks_earlier_connections_after_last_remote_
                         elif change == "sharing":
                             values.update(share_private_with_project=False)
                         else:
-                            values.update(include_paths=["src"], scope_hash="d" * 64)
+                            values.update(scope_hash="d" * 64)
                         await db.execute(
                             update(GitConnection)
                             .where(GitConnection.id == connections["app"].id)

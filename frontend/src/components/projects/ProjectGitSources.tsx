@@ -6,7 +6,8 @@ import { Card, Section, SettingsPanel } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
-import { api, ApiError, queryKeys } from "@/lib/api";
+import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
+import type { ProjectStage } from "@/lib/types";
 import { validRepositoryDrafts, type RepositoryDraft } from "@/lib/github";
 import { contextApi, type GitConnection, type GitConnectionPage, type GitFilePage, type GitSourceHit } from "@/lib/projectKnowledge";
 import { useGitHubPause } from "@/lib/useGitHubPause";
@@ -14,6 +15,8 @@ import { useRepositoryConnections } from "@/lib/useRepositoryConnections";
 import { GitHubRepositoryPicker } from "./GitHubRepositoryPicker";
 import { RepositoryConnectionProgress } from "./RepositoryConnectionProgress";
 import { GitIndexBadge, GitIndexDetails, GitIndexSummary } from "./GitIndexStatus";
+import { GitWebhookSettings } from "./GitWebhookSettings";
+import { GitFileCatalog } from "./GitFileCatalog";
 
 const gitConnectionsKey = (projectId: number) => [...queryKeys.project(projectId), "git", "connections"];
 const connectionPath = (projectId: number, id: number) => `${contextApi.git(projectId)}/connections/${id}`;
@@ -34,17 +37,30 @@ function RepositoryPreview({ page }: { page: GitConnectionPage }) {
     </ul>;
 }
 
-function GitConnectionCard({ connection, canEdit, refresh }: { connection: GitConnection; canEdit: boolean; refresh: () => Promise<unknown> }) {
-    const [draft, setDraft] = useState<{ name: string; purpose: string; ref: string; expected_revision: number; share_private_with_project: boolean } | null>(null);
+function GitConnectionCard({ connection, canEdit, refresh, onRead }: { connection: GitConnection; canEdit: boolean; refresh: () => Promise<unknown>; onRead: (hit: Pick<GitSourceHit, "connection_id" | "commit_sha" | "path">) => void }) {
+    const [draft, setDraft] = useState<{ name: string; purpose: string; ref: string; expected_revision: number; share_private_with_project: boolean; sync_stage_ids: number[] } | null>(null);
     const [notice, setNotice] = useState("");
     const rateLimited = connection.last_error_code === "rate_limited";
     const profilePending = connection.last_error_code === "github_profile_pending";
     const retryAt = rateLimited && connection.next_poll_at ? Date.parse(connection.next_poll_at) : NaN;
     const paused = useGitHubPause(Number.isFinite(retryAt) ? retryAt : null);
     const path = connectionPath(connection.project_id, connection.id);
+    const stages = useQuery({ queryKey: queryKeys.stages(connection.project_id), queryFn: () => api.get<ProjectStage[]>(endpoints.projectStages(connection.project_id)), enabled: canEdit && draft !== null });
+    const stageOptions = Array.isArray(stages.data) ? stages.data : null;
     const mutation = useMutation({
         mutationFn: async (action: "save" | "sync" | "disable" | "enable") => {
-            if (action === "save" && draft) return api.patch(path, draft);
+            if (action === "save" && draft) {
+                const settings: Record<string, unknown> = { expected_revision: draft.expected_revision };
+                for (const field of ["name", "purpose", "ref", "share_private_with_project"] as const) {
+                    if (draft[field] !== connection[field]) settings[field] = draft[field];
+                }
+                if (stageOptions !== null) {
+                    const selected = draft.sync_stage_ids.filter(id => stageOptions.some(stage => stage.id === id));
+                    const saved = connection.sync_stage_ids ?? [];
+                    if (selected.length !== saved.length || selected.some(id => !saved.includes(id))) settings.sync_stage_ids = selected;
+                }
+                return api.patch(path, settings);
+            }
             if (action === "sync") return api.post(`${path}/sync`);
             if (action === "disable") return api.delete(path);
             if (action === "enable") return api.patch(path, { expected_revision: connection.revision, enabled: true });
@@ -55,7 +71,7 @@ function GitConnectionCard({ connection, canEdit, refresh }: { connection: GitCo
             await refresh();
         },
     });
-    const beginEdit = () => { mutation.reset(); setNotice(""); setDraft({ name: connection.name, purpose: connection.purpose, ref: connection.ref, expected_revision: connection.revision, share_private_with_project: connection.share_private_with_project }); };
+    const beginEdit = () => { mutation.reset(); setNotice(""); setDraft({ name: connection.name, purpose: connection.purpose, ref: connection.ref, expected_revision: connection.revision, share_private_with_project: connection.share_private_with_project, sync_stage_ids: connection.sync_stage_ids ?? [] }); };
     return <Card variant="inset" className="flex min-w-0 flex-col gap-3 p-4">
         <div className="flex flex-col items-start gap-2 sm:flex-row sm:justify-between">
             <div className="flex min-w-0 flex-1 items-start gap-2.5"><GitBranch size={18} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" /><div className="min-w-0"><h3 className="break-words font-medium text-secondary">{connection.name}</h3>
@@ -72,6 +88,7 @@ function GitConnectionCard({ connection, canEdit, refresh }: { connection: GitCo
         {notice && <p role="status" className="text-[12px] text-secondary">{notice}</p>}
         {mutation.error && <ErrorMessage message={mutation.error.message} />}
         {mutation.error instanceof ApiError && mutation.error.status === 409 && <Button size="sm" onClick={async () => { await refresh(); setDraft(null); mutation.reset(); }}>Загрузить актуальные настройки</Button>}
+        <GitFileCatalog key={connection.observed_sha ?? "pending"} connection={connection} onRead={onRead} />
         {canEdit && <>
             <div className="flex flex-wrap gap-2">
                 <Button size="sm" disabled={mutation.isPending} onClick={beginEdit}>Настроить</Button>
@@ -84,9 +101,19 @@ function GitConnectionCard({ connection, canEdit, refresh }: { connection: GitCo
                 <Field label="Назначение">{id => <Input id={id} value={draft.purpose} onChange={event => setDraft({ ...draft, purpose: event.target.value })} maxLength={1000} />}</Field>
                 <Field label="Ветка или ref">{id => <Input id={id} value={draft.ref} onChange={event => setDraft({ ...draft, ref: event.target.value })} required />}</Field>
                 {connection.is_private && <label className="touch-target flex items-center gap-2 text-[13px] text-secondary"><input type="checkbox" checked={draft.share_private_with_project} onChange={event => setDraft({ ...draft, share_private_with_project: event.target.checked })} />Разрешить команде проекта читать этот закрытый репозиторий</label>}
+                <fieldset className="space-y-2 border-t border-line-subtle pt-3" disabled={mutation.isPending}>
+                    <legend className="pt-3 text-[13px] font-medium text-secondary">Проверять Git при переходе задачи</legend>
+                    <p className="text-[12px] text-muted">Выберите стадии запуска для этого репозитория. Без выбранных стадий правило выключено. Переименование стадии сохраняет настройку.</p>
+                    {stages.isPending && <p className="text-[12px] text-muted">Загружаем стадии…</p>}
+                    {stages.error && <ErrorMessage message="Не удалось загрузить стадии. Сохранённое правило остаётся без изменений." action={<Button size="sm" onClick={() => void stages.refetch()}>Повторить загрузку стадий</Button>} />}
+                    {stageOptions !== null && <div className="flex flex-wrap gap-x-5 gap-y-1">{stageOptions.map(stage => <label key={stage.id} className="touch-target flex min-w-0 items-center gap-2 text-[13px] text-secondary"><input type="checkbox" checked={draft.sync_stage_ids.includes(stage.id)} onChange={event => setDraft({ ...draft, sync_stage_ids: event.target.checked ? [...draft.sync_stage_ids, stage.id] : draft.sync_stage_ids.filter(id => id !== stage.id) })} /><span className="break-words">{stage.name}</span></label>)}</div>}
+                    {stageOptions !== null && draft.sync_stage_ids.some(id => !stageOptions.some(stage => stage.id === id)) && <p className="text-[12px] text-warning">Удалённые стадии будут исключены из правила при сохранении.</p>}
+                    <p className="text-[12px] text-muted">При явной Git-связи задачи проверяются только связанные репозитории. Если связей нет — подключённые источники с таким правилом. Переход задачи не подтверждает push или выкладку.</p>
+                </fieldset>
                 <p className="text-[12px] text-muted">Изменение ref обновит только этот источник. При конфликте перечитайте настройки перед повторным сохранением.</p>
                 <div className="flex gap-2"><Button type="submit" disabled={mutation.isPending}>Сохранить источник</Button><Button disabled={mutation.isPending} onClick={() => { setDraft(null); mutation.reset(); }}>Отменить</Button></div>
             </form>}
+            {!draft && <GitWebhookSettings connection={connection} refresh={refresh} />}
         </>}
     </Card>;
 }
@@ -110,6 +137,7 @@ export function ProjectGitSources({ projectId, canEdit, collapsible = false }: {
         queryClient.invalidateQueries({ queryKey: [...queryKeys.project(projectId), "git", "search"] }),
         queryClient.invalidateQueries({ queryKey: [...queryKeys.project(projectId), "git", "file"] }),
         queryClient.invalidateQueries({ queryKey: [...queryKeys.project(projectId), "git", "map"] }),
+        queryClient.invalidateQueries({ queryKey: [...queryKeys.project(projectId), "git", "tree"] }),
     ]);
     const connections = useQuery({ queryKey: [...gitConnectionsKey(projectId), offset], queryFn: () => api.get<GitConnectionPage>(`${contextApi.git(projectId)}/connections?offset=${offset}&limit=20`), refetchInterval: 15000 });
     const search = useQuery({ queryKey: [...queryKeys.project(projectId), "git", "search", searchText], queryFn: () => api.get<{ items: GitSourceHit[]; partial: boolean }>(`${contextApi.git(projectId)}/search?q=${encodeURIComponent(searchText)}&limit=10`), enabled: Boolean(searchText) });
@@ -130,7 +158,7 @@ export function ProjectGitSources({ projectId, canEdit, collapsible = false }: {
     }
     const action = canEdit && !adding && <Button size="sm" onClick={() => setAdding(true)}>Добавить репозитории</Button>;
     const content = <>
-        <p className="text-[13px] text-muted">У каждого источника своя ветка и версия. Арис читает код и документацию; подключение не даёт прав изменять репозиторий.</p>
+        <p className="text-[13px] text-muted">У каждого источника своя ветка и версия. В каталог попадают все файлы выбранного ref, без фильтров по пути и содержимому. Арис читает доступный текст; двоичные файлы и внешние объекты учитываются по метаданным. Подключение не даёт прав изменять репозиторий.</p>
         {connections.isPending && <Skeleton className="h-24" />}
         {connections.error && <ErrorMessage message={connections.error.message} action={<Button onClick={() => void connections.refetch()}>Повторить</Button>} />}
         {adding && canEdit && <Card className="space-y-3 p-4">
@@ -146,7 +174,7 @@ export function ProjectGitSources({ projectId, canEdit, collapsible = false }: {
         </Card>}
         {!connections.error && connections.data?.total === 0 && <p className="text-[13px] text-muted">Репозитории не подключены. Контекст из паспорта и документов доступен без Git.</p>}
         {connections.data && !connections.error && <GitIndexSummary page={connections.data} />}
-        <div className="grid min-w-0 gap-3">{!connections.error && connections.data?.items.map(connection => <GitConnectionCard key={connection.id} connection={connection} canEdit={canEdit} refresh={refresh} />)}</div>
+        <div className="grid min-w-0 gap-3">{!connections.error && connections.data?.items.map(connection => <GitConnectionCard key={connection.id} connection={connection} canEdit={canEdit} refresh={refresh} onRead={hit => setSelected({ hit, offset: 0 })} />)}</div>
         {connections.data && !connections.error && (offset > 0 || connections.data.next_offset !== null) && <nav aria-label="Страницы репозиториев" className="flex gap-2"><Button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>Назад</Button><Button disabled={connections.data.next_offset === null} onClick={() => connections.data.next_offset !== null && setOffset(connections.data.next_offset)}>Дальше</Button></nav>}
         <details onToggle={event => setMapOpen(event.currentTarget.open)}>
             <summary className="touch-target cursor-pointer text-accent">Карта компонентов репозиториев</summary>

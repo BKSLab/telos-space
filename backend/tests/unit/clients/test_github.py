@@ -208,10 +208,10 @@ async def test_gets_metadata_resolves_exact_ref_and_reads_immutable_objects():
     assert client.worst_case_seconds == pytest.approx(21.2)
 
 
-async def test_tree_preserves_upstream_and_local_incompleteness_and_omits_false_recursive():
+async def test_tree_preserves_all_entries_and_upstream_incompleteness():
     calls = []
     responses = [
-        {"sha": TREE_SHA, "truncated": False, "tree": [tree_entry(str(i)) for i in range(3)]},
+        {"sha": TREE_SHA, "truncated": False, "tree": [tree_entry(str(i)) for i in range(10_001)]},
         {"sha": TREE_SHA, "truncated": True, "tree": []},
     ]
 
@@ -219,11 +219,11 @@ async def test_tree_preserves_upstream_and_local_incompleteness_and_omits_false_
         calls.append(request)
         return httpx.Response(200, json=responses.pop(0))
 
-    client = build_client(reply, max_tree_entries=2)
+    client = build_client(reply)
     async with client.http_client:
         local = await client.get_tree(OWNER, REPO, TREE_SHA)
         upstream = await client.get_tree(OWNER, REPO, TREE_SHA, recursive=False)
-    assert [entry.path for entry in local.entries] == ["0", "1"] and local.truncated
+    assert len(local.entries) == 10_001 and local.entries[-1].path == "10000" and not local.truncated
     assert upstream.entries == () and upstream.truncated
     assert "recursive" not in calls[1].url.params
 
@@ -651,7 +651,6 @@ async def test_immutable_snapshots_and_constructor_limits_have_explicit_contract
             {"attempts": True},
             {"max_response_bytes": 0},
             {"max_blob_bytes": -1},
-            {"max_tree_entries": 0},
             {"max_compare_files": 301},
             {"max_patch_chars": 0},
         ):

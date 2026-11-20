@@ -8,54 +8,31 @@ from src.exceptions.git_sources import GitCredentialUnavailableError
 from src.services.git_credentials import GitCredentialCodec
 from src.services.git_index import (
     analyze_file,
-    exclusion_reason,
     policy_hash,
     prepare_text,
     text_fragments,
 )
 
 
-def test_mandatory_filters_are_not_overridden_by_user_scope():
-    excluded = {
-        ".env": "secret_path",
-        "src/.env.local": "secret_path",
-        "private.pem": "secret_path",
-        "credentials.json": "secret_path",
-        "node_modules/app.js": "generated_or_dependency",
-        "dist/app.js": "generated_or_dependency",
-        "package-lock.json": "generated_or_dependency",
-        "bundle.min.js": "generated_or_dependency",
-        "photo.png": "unsupported_format",
-    }
-    assert {path: exclusion_reason(path, [""], []) for path in excluded} == excluded
-    assert exclusion_reason("src/app.py", ["src"], []) is None
-    assert exclusion_reason("src2/app.py", ["src"], []) == "outside_allowed_roots"
-    assert exclusion_reason("src/app.py", [""], ["src/*"]) == "excluded_pattern"
-    assert exclusion_reason("src/app.py", [""], [], size=2, max_file_bytes=1) == "file_too_large"
-    assert all(
-        exclusion_reason("src/app.py", [""], [], mode=mode) == "symlink_or_submodule"
-        for mode in ("120000", "160000")
-    )
-    assert policy_hash(["src", "docs"], [], max_file_bytes=5) == policy_hash(
-        ["docs", "src"], [], max_file_bytes=5
-    )
-    assert policy_hash(["src"], [], max_file_bytes=5) != policy_hash(
-        ["src"], [], max_file_bytes=5, ref="heads/main"
-    )
+def test_text_names_contents_and_encodings_do_not_filter_tracked_content():
+    texts = [
+        "TOKEN = 'synthetic-long-value'", "-----BEGIN PRIVATE KEY-----\nsynthetic",
+        "ghp_" + "a" * 30, "# Пример 🧭", "binary-extension-but-text",
+    ]
+    for text in texts:
+        for encoding in ("utf-8", "utf-8-sig", "utf-16", "utf-32"):
+            assert prepare_text(text.encode(encoding)) == (text, None)
+    assert policy_hash(ref="heads/main") != policy_hash(ref="heads/feature")
+    assert policy_hash(ref="heads/main") == policy_hash(ref="heads/main")
 
 
-def test_secret_binary_lfs_text_is_never_a_chunk_or_static_analysis_input():
+def test_actual_nontext_and_lfs_have_metadata_reasons():
     for content, expected in (
         (b"binary\0text", "binary_file"),
         (b"\xff", "unsupported_encoding"),
         (b"version https://git-lfs.github.com/spec/v1\noid sha256:1", "lfs_pointer"),
-        (b"API_KEY = 'synthetic-long-value'", "secret_content"),
-        (b"-----BEGIN PRIVATE KEY-----\nsynthetic", "secret_content"),
-        (b"ghp_" + b"a" * 30, "secret_content"),
     ):
         assert prepare_text(content) == (None, expected)
-    assert prepare_text("# Пример 🧭\n".encode()) == ("# Пример 🧭\n", None)
-    assert prepare_text(b"API_KEY = ''\n") == ("API_KEY = ''\n", None)
 
 
 def test_chunks_preserve_original_unicode_offsets_and_cover_all_text():

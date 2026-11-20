@@ -10,7 +10,6 @@ from pydantic import (
     ConfigDict,
     Field,
     SecretStr,
-    field_validator,
     model_validator,
 )
 
@@ -133,6 +132,9 @@ class GitTreeEntry(GitSnapshot):
         examples=[512],
     )
 
+    index_state: Literal["pending", "ready", "metadata", "error"] = "pending"
+    index_reason: str | None = None
+
     @model_validator(mode="after")
     def consistent_object(self) -> "GitTreeEntry":
         """Не превращает неизвестный mode в обычный файл."""
@@ -161,7 +163,7 @@ class GitTree(GitSnapshot):
         description="Проверенные элементы в upstream порядке."
     )
     truncated: bool = Field(
-        description="Upstream или локальный лимит сделал manifest неполным.", examples=[False]
+        description="GitHub сообщил о неполноте manifest.", examples=[False]
     )
 
 
@@ -327,43 +329,12 @@ class GitConnectionCreate(BaseModel):
     ref: GitRef | None = Field(
         default=None, description="heads/ветка, tags/тег или SHA; null выбирает default branch."
     )
-    include_paths: list[str] = Field(
-        default_factory=lambda: [""],
-        min_length=1,
-        max_length=64,
-        description="Разрешённые корни; пустой путь означает корень репозитория.",
-    )
-    exclude_patterns: list[str] = Field(
-        default_factory=list,
-        max_length=64,
-        description="Дополнительные POSIX glob-исключения поверх обязательной политики.",
-    )
     share_private_with_project: bool = Field(
         default=False,
         description="Явное согласие владельца на чтение закрытого корпуса командой проекта.",
     )
 
-    @field_validator("include_paths")
-    @classmethod
-    def valid_roots(cls, paths: list[str]) -> list[str]:
-        """Не нормализует область в более широкую и не принимает traversal."""
-        return list(dict.fromkeys(validate_git_path(path) if path else "" for path in paths))
-
-    @field_validator("exclude_patterns")
-    @classmethod
-    def valid_patterns(cls, patterns: list[str]) -> list[str]:
-        """Шаблоны не являются файловыми путями сервера."""
-        if any(
-            not value
-            or len(value) > 256
-            or value.startswith("/")
-            or "\\" in value
-            or ".." in value.split("/")
-            or any(ord(char) < 32 for char in value)
-            for value in patterns
-        ):
-            raise ValueError("Некорректное исключение Git.")
-        return list(dict.fromkeys(patterns))
+StageIds = Annotated[list[Annotated[int, Field(gt=0, strict=True)]], Field(max_length=100)]
 
 
 class GitConnectionUpdate(BaseModel):
@@ -371,16 +342,13 @@ class GitConnectionUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=1, description="Прочитанная версия настройки.")
+    sync_stage_ids: StageIds | None = Field(
+        default=None, description="ID стадий этого проекта, запускающих сверку; [] отключает.",
+    )
     name: str | None = Field(default=None, min_length=1, max_length=160, description="Новое имя.")
     purpose: str | None = Field(default=None, max_length=1000, description="Новое назначение.")
     ref: GitRef | None = Field(
         default=None, description="Новый ref; явный null выбирает default branch."
-    )
-    include_paths: list[str] | None = Field(
-        default=None, min_length=1, max_length=64, description="Новые разрешённые корни."
-    )
-    exclude_patterns: list[str] | None = Field(
-        default=None, max_length=64, description="Новые дополнительные исключения."
     )
     enabled: bool | None = Field(
         default=None, description="Включение/отключение без удаления истории."
@@ -394,10 +362,8 @@ class GitConnectionUpdate(BaseModel):
         """Проверяет только присутствующие поля, различая null выбранного ref."""
         if any(getattr(self, name) is None for name in self.model_fields_set - {"ref"}):
             raise ValueError("Параметр настройки не может быть null.")
-        if self.include_paths is not None:
-            self.include_paths = GitConnectionCreate.valid_roots(self.include_paths)
-        if self.exclude_patterns is not None:
-            self.exclude_patterns = GitConnectionCreate.valid_patterns(self.exclude_patterns)
+        if self.sync_stage_ids is not None:
+            self.sync_stage_ids = list(dict.fromkeys(self.sync_stage_ids))
         return self
 
 
@@ -434,7 +400,9 @@ class GitCoverage(BaseModel):
 
     total_files: int = 0
     indexed_files: int = 0
-    excluded_files: int = 0
+    cataloged_files: int = 0
+    metadata_files: int = 0
+    metadata_counts: dict[str, int] = Field(default_factory=dict)
     failed_files: int = 0
     truncated: bool = False
     reasons: list[str] = Field(default_factory=list)
@@ -454,13 +422,19 @@ class GitConnection(BaseModel):
     name: str
     purpose: str
     ref: str
-    include_paths: list[str]
-    exclude_patterns: list[str]
     enabled: bool
     is_private: bool
     share_private_with_project: bool
     has_credential: bool
     has_webhook_secret: bool = False
+    sync_stage_ids: list[int] = Field(default_factory=list)
+    sync_pending: bool = False
+    poll_interval_seconds: float = 3600.0
+    last_sync_reason: Literal["poll", "manual", "webhook", "task_stage", "configuration"] | None = None
+    last_sync_requested_at: datetime | None = None
+    last_webhook_received_at: datetime | None = None
+    last_webhook_event: str | None = None
+    last_webhook_processed_at: datetime | None = None
     revision: int
     generation: int
     credential_revision: int
@@ -546,7 +520,7 @@ class GitTreePage(BaseModel):
     next_offset: int | None
     truncated: bool
     stale: bool
-    excluded_files: int = 0
+    total_files: int = 0
 
 
 class GitComponent(BaseModel):

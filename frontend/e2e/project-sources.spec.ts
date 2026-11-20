@@ -23,7 +23,70 @@ function historyPage<T extends { id: string; kind: string; created_at: string; t
 }
 
 function connection(id: number, name: string, ref: string): GitConnection {
-    return { id, project_id: 1, repository_id: 100 + id, provider: "github", owner: "example", repo: name.toLowerCase(), name, purpose: `${name}: исходники и тесты`, ref, include_paths: [""], exclude_patterns: [], enabled: true, is_private: false, share_private_with_project: false, has_credential: false, has_webhook_secret: false, revision: 3, generation: 4, credential_revision: 0, state: id === 2 ? "partial" : "ready", observed_sha: "a".repeat(40), indexed_sha: id === 2 ? "b".repeat(40) : "a".repeat(40), observed_at: "2026-11-16T12:00:00Z", indexed_at: "2026-11-16T12:00:00Z", checked_at: "2026-11-16T12:00:00Z", last_error_code: null, coverage: { total_files: 10, indexed_files: 5, excluded_files: 5, failed_files: 0, truncated: id === 2 } };
+    return { id, project_id: 1, repository_id: 100 + id, provider: "github", owner: "example", repo: name.toLowerCase(), name, purpose: `${name}: исходники и тесты`, ref, enabled: true, is_private: false, share_private_with_project: false, has_credential: false, has_webhook_secret: false, revision: 3, generation: 4, credential_revision: 0, state: id === 2 ? "partial" : "ready", observed_sha: "a".repeat(40), indexed_sha: id === 2 ? "b".repeat(40) : "a".repeat(40), observed_at: "2026-11-16T12:00:00Z", indexed_at: "2026-11-16T12:00:00Z", checked_at: "2026-11-16T12:00:00Z", last_error_code: null, coverage: { total_files: 10, cataloged_files: 10, indexed_files: 5, metadata_files: 5, metadata_counts: { binary_file: 5 }, failed_files: 0, truncated: id === 2 } };
+}
+
+for (const width of [320, 1440]) {
+    test(`webhook и правила стадий доступны на ${width}px`, async ({ page }, info) => {
+        await page.setViewportSize({ width, height: 1000 });
+        const state = mockState();
+        state.stages.push({ ...state.stages[0], id: 20, name: "Тестирование", order_index: 1 }, { ...state.stages[0], id: 30, name: "Готово", order_index: 2, is_done_stage: true });
+        await installMockApi(page, state);
+        await sourcesApi(page);
+        let item: GitConnection = { ...connection(1, "Frontend", "heads/main"), sync_stage_ids: [], poll_interval_seconds: 3600, last_sync_reason: "manual", last_sync_requested_at: "2026-11-20T11:00:00Z", next_poll_at: "2026-11-20T13:00:00Z", last_webhook_received_at: "2026-11-20T11:30:00Z", last_webhook_event: "ping", last_webhook_processed_at: null, coverage: { total_files: 700, cataloged_files: 700, indexed_files: 689, metadata_files: 11, failed_files: 0, truncated: false, metadata_counts: { binary_file: 6, submodule: 2, lfs_pointer: 3 } } };
+        const writes: Record<string, unknown>[] = [];
+        await page.route("**/api/v1/projects/1/git/connections**", async route => {
+            const request = route.request();
+            const headers = { "access-control-allow-origin": request.headers()["origin"] ?? "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET,POST,PATCH,DELETE,PUT,OPTIONS" };
+            if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+            if (new URL(request.url()).pathname.endsWith("/tree")) return route.fulfill({ headers, json: { connection_id: 1, repository_id: 101, commit_sha: "a".repeat(40), total_files: 4, offset: 0, limit: 30, next_offset: null, truncated: false, stale: false, items: [
+                { path: ".env.example", sha: "c".repeat(40), mode: "100644", type: "blob", size: 128, index_state: "ready", index_reason: null },
+                { path: "dependencies/generated/проверка-длинного-пути/package-lock.json", sha: "d".repeat(40), mode: "100644", type: "blob", size: 1000000, index_state: "ready", index_reason: null },
+                { path: "assets/cover.png", sha: "e".repeat(40), mode: "100644", type: "blob", size: 12000, index_state: "metadata", index_reason: "binary_file" },
+                { path: "large-file.log", sha: "f".repeat(40), mode: "100644", type: "blob", size: 100000000, index_state: "error", index_reason: "transport_limit" },
+            ] } });
+            if (request.method() === "GET") return route.fulfill({ headers, json: { items: [item], total: 1, next_offset: null } });
+            const body = request.postDataJSON(); writes.push(body);
+            if (request.method() === "PATCH") item = { ...item, ...body, revision: item.revision + 1 };
+            if (request.method() === "PUT") item = { ...item, has_webhook_secret: Boolean(body.webhook_secret), revision: item.revision + 1 };
+            return route.fulfill({ headers, json: item });
+        });
+        await page.goto("/projects/DEMO/settings");
+        await page.locator("summary").getByText("Управлять репозиториями", { exact: true }).click();
+        await expect(page.getByText("Раз в час", { exact: true })).toBeVisible();
+        await page.getByText("Почему только метаданные", { exact: true }).click();
+        await expect(page.getByText("Двоичные файлы", { exact: true })).toBeVisible();
+        await page.getByText("Каталог файлов", { exact: true }).click();
+        await expect(page.getByText(".env.example", { exact: true })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Читать .env.example", exact: true })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Читать assets/cover.png", exact: true })).toHaveCount(0);
+        await expect(page.getByText("Ошибка чтения", { exact: true })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath(`git-file-catalog-${width}.png`), animations: "disabled" });
+        await page.getByRole("list", { name: "Файлы репозитория" }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: info.outputPath(`git-file-catalog-rows-${width}.png`), animations: "disabled" });
+        await page.getByText("Каталог файлов", { exact: true }).click();
+        await page.getByRole("button", { name: "Настроить", exact: true }).click();
+        await page.getByLabel("Тестирование", { exact: true }).check();
+        await page.getByLabel("Готово", { exact: true }).check();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath(`git-stage-settings-${width}.png`), fullPage: true, animations: "disabled" });
+        await page.getByRole("button", { name: "Сохранить источник", exact: true }).click();
+        await expect.poll(() => writes[0]?.sync_stage_ids).toEqual([20, 30]);
+        await page.locator("summary").filter({ hasText: "Webhook GitHub" }).click();
+        await page.getByText("Как подключить webhook в GitHub", { exact: true }).click();
+        await expect(page.getByText(/Нужны права владельца или администратора/)).toBeVisible();
+        const payloadUrl = page.getByLabel("Payload URL", { exact: true });
+        if (await payloadUrl.count()) await expect(payloadUrl).toHaveValue(/\/api\/v1\/projects\/1\/git\/connections\/1\/events$/);
+        await expect(page.getByText(/Проверка связи \(ping\)/)).toBeVisible();
+        await page.getByLabel("Новый секрет webhook", { exact: true }).fill("synthetic-webhook-secret-for-ui-only");
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath(`git-webhook-settings-${width}.png`), fullPage: true, animations: "disabled" });
+        await page.getByRole("button", { name: "Сохранить секрет", exact: true }).click();
+        await expect(page.getByLabel("Новый секрет webhook", { exact: true })).toHaveCount(0);
+        await expect(page.getByText(/Успешная сверка события ещё не подтверждена/)).toBeVisible();
+        expect(state.errors).toEqual([]);
+    });
 }
 
 const knowledge: KnowledgeMap = {
@@ -279,12 +342,12 @@ for (const width of [320, 1440]) {
         await page.setViewportSize({ width, height: 1000 });
         await installMockApi(page, mockState());
         await sourcesApi(page);
-        const ready = { ...connection(1, "Frontend", "main"), coverage: { total_files: 120, indexed_files: 120, excluded_files: 0, failed_files: 0, truncated: false } };
+        const ready = { ...connection(1, "Frontend", "main"), coverage: { total_files: 120, cataloged_files: 120, indexed_files: 120, metadata_files: 0, metadata_counts: {}, failed_files: 0, truncated: false } };
         const items = [
             ready,
             { ...ready, id: 2, name: "API · обновление", state: "syncing", observed_sha: "b".repeat(40) },
-            { ...ready, id: 3, name: "Документация · очередь", state: "pending", indexed_sha: null, coverage: { total_files: 0, indexed_files: 0, excluded_files: 0, failed_files: 0, truncated: false } },
-            { ...ready, id: 4, name: "Архив · неполный охват", state: "partial", coverage: { total_files: 100, indexed_files: 60, excluded_files: 30, failed_files: 2, truncated: true } },
+            { ...ready, id: 3, name: "Документация · очередь", state: "pending", indexed_sha: null, coverage: { total_files: 0, cataloged_files: 0, indexed_files: 0, metadata_files: 0, metadata_counts: {}, failed_files: 0, truncated: false } },
+            { ...ready, id: 4, name: "Архив · неполный охват", state: "partial", coverage: { total_files: 100, cataloged_files: 92, indexed_files: 60, metadata_files: 30, metadata_counts: { binary_file: 30 }, failed_files: 2, truncated: true } },
             { ...ready, id: 5, name: "Сервис · доступ потерян", state: "access_lost", last_error_code: "credential_missing" },
         ];
         await page.route("**/api/v1/projects/1/git/connections?**", route => route.fulfill({ json: { items, total: 5, offset: 0, limit: 20, next_offset: null } }));
@@ -302,7 +365,7 @@ for (const width of [320, 1440]) {
         await expect(page.getByText("Это охват файлов, а не процент выполнения текущего обновления.")).toBeVisible();
         await page.screenshot({ path: info.outputPath("git-index-active.png"), animations: "disabled" });
         await page.getByText("Охват ограничен. Данные не отражают весь репозиторий.").scrollIntoViewIfNeeded();
-        await expect(page.getByRole("img", { name: "Охват файлов: в индексе 60, исключено 30, ошибок 2, всего 100" })).toBeVisible();
+        await expect(page.getByRole("img", { name: "Охват файлов: текст 60, только метаданные 30, ошибок 2, в каталоге 92, всего 100" })).toBeVisible();
         await expect(page.getByLabel("b".repeat(40), { exact: true })).toHaveText("bbbbbbbb");
         await expect(page.getByRole("button", { name: "Настроить", exact: true })).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

@@ -16,6 +16,13 @@ from src.db.models import Base
 PARENT = "c26a202611160001"
 REVISION = "c29a202611160001"
 PROFILE_REVISION = "c30a202611200001"
+SYNC_REVISION = "c31a202611200001"
+ALL_FILES_REVISION = "c32a202611200001"
+SYNC_COLUMNS = {
+    "sync_stage_ids", "sync_requested_revision", "sync_completed_revision", "lease_sync_revision",
+    "last_sync_reason", "last_sync_requested_at", "last_webhook_received_at", "last_webhook_event",
+    "last_webhook_processed_at", "last_webhook_request_revision",
+}
 
 
 async def test_git_migration_replays_preserves_primary_and_refuses_destructive_downgrade(
@@ -81,7 +88,9 @@ async def test_git_migration_replays_preserves_primary_and_refuses_destructive_d
 
         def include_object(obj, name, kind, reflected, compare_to):
             table = name if kind == "table" else getattr(getattr(obj, "table", None), "name", None)
-            return table in tables
+            return table in tables and not (
+                kind == "column" and table == "git_connections" and name in SYNC_COLUMNS | {"include_paths", "exclude_patterns"}
+            )
 
         context = MigrationContext.configure(
             connection, opts={"include_object": include_object, "compare_server_default": True}
@@ -134,6 +143,48 @@ async def test_git_migration_replays_preserves_primary_and_refuses_destructive_d
             connection.execute(text("SELECT content_md FROM documents WHERE id=1")).scalar_one()
             == "Original content"
         )
+
+        connection.commit()
+        command.upgrade(config, SYNC_REVISION)
+        connection.commit()
+        assert connection.execute(text("SELECT sync_stage_ids,sync_requested_revision FROM git_connections")).one() == ([], 0)
+        assert connection.execute(text("SELECT cursor FROM git_sync_jobs")).scalar_one() == 27
+        assert connection.execute(text("SELECT count(*) FROM pg_trigger WHERE tgname='git_stage_sync'")).scalar_one() == 1
+        context = MigrationContext.configure(connection, opts={
+            "include_object": lambda obj, name, kind, reflected, compare_to: (
+                name if kind == "table" else getattr(getattr(obj, "table", None), "name", None)
+            ) in tables and not (kind == "column" and name in {"include_paths", "exclude_patterns"}),
+            "compare_server_default": True,
+        })
+        assert compare_metadata(context, Base.metadata) == []
+        connection.commit()
+        command.downgrade(config, PROFILE_REVISION)
+        connection.commit()
+        command.upgrade(config, SYNC_REVISION)
+        connection.commit()
+        connection.execute(text("UPDATE git_connections SET sync_requested_revision=1"))
+        connection.commit()
+        with pytest.raises(RuntimeError):
+            command.downgrade(config, PROFILE_REVISION)
+        connection.rollback()
+        connection.execute(text("UPDATE git_connections SET sync_completed_revision=sync_requested_revision"))
+        connection.commit()
+        previous_files = connection.execute(text("SELECT count(*) FROM git_snapshots")).scalar_one()
+        command.upgrade(config, ALL_FILES_REVISION)
+        connection.commit()
+        columns = {item["name"] for item in inspect(connection).get_columns("git_connections")}
+        assert "include_paths" not in columns and "exclude_patterns" not in columns
+        assert connection.execute(text("SELECT count(*) FROM git_snapshots")).scalar_one() == previous_files
+        assert connection.execute(text("SELECT cursor FROM git_sync_jobs")).scalar_one() == 27
+        assert connection.execute(text("SELECT indexed_sha, scope_hash FROM git_connections")).one() == (None, "0" * 64)
+        context = MigrationContext.configure(connection, opts={
+            "include_object": lambda obj, name, kind, reflected, compare_to: (
+                name if kind == "table" else getattr(getattr(obj, "table", None), "name", None)
+            ) in tables,
+            "compare_server_default": True,
+        })
+        assert compare_metadata(context, Base.metadata) == []
+        connection.commit()
 
     try:
         async with engine.connect() as connection:

@@ -156,7 +156,7 @@ async def get_git_connection(
     response_model=GitConnection,
     responses=RESPONSES,
     summary="Изменить Git-подключение",
-    description="Owner-only PATCH с expected_revision; ref/filter/revoke инвалидируют старое поколение.",
+    description="Owner-only PATCH с expected_revision; смена ref/отзыв доступа инвалидируют старое поколение.",
     response_description="Новая версия настройки и фактическое состояние очереди.",
 )
 async def update_git_connection(
@@ -201,7 +201,7 @@ async def delete_git_connection(
     responses=RESPONSES,
     summary="Заменить секрет Git webhook",
     description="Только UI session текущего владельца; SecretStr входы шифруются отдельным ключом и не возвращаются.",
-    response_description="Безопасные metadata с новой credential revision.",
+    response_description="Метаданные с новой версией настройки webhook; токен чтения GitHub не меняется.",
 )
 async def set_git_webhook_secret(
     project_id: ProjectId,
@@ -244,8 +244,8 @@ async def sync_git_connection(
     response_model=GitTreePage,
     responses=RESPONSES,
     summary="Прочитать дерево Git snapshot",
-    description="Только recorded repository/SHA/область после текущего ACL и live Contents proof; секретные пути скрыты.",
-    response_description="Bounded manifest с явным truncated/stale.",
+    description="Все объекты recorded repository/SHA после текущего ACL и live Contents proof; статусы текста, метаданных и ошибок.",
+    response_description="Постраничный полный каталог с явным truncated/stale и состоянием обработки объектов.",
 )
 async def get_git_tree(
     project_id: ProjectId,

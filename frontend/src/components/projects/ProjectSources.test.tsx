@@ -25,7 +25,7 @@ const map: KnowledgeMap = {
 };
 
 function connection(id: number, name: string, ref: string): GitConnection {
-    return { id, project_id: 7, repository_id: 100 + id, provider: "github", owner: "example", repo: name.toLowerCase(), name, purpose: "", ref, include_paths: [""], exclude_patterns: [], enabled: true, is_private: false, share_private_with_project: false, has_credential: false, has_webhook_secret: false, revision: 3, generation: 4, credential_revision: 0, state: id === 2 ? "partial" : "ready", observed_sha: "a".repeat(40), indexed_sha: "b".repeat(40), observed_at: null, indexed_at: null, checked_at: null, last_error_code: null, coverage: { total_files: 10, indexed_files: 5, excluded_files: 5, failed_files: 0, truncated: id === 2 } };
+    return { id, project_id: 7, repository_id: 100 + id, provider: "github", owner: "example", repo: name.toLowerCase(), name, purpose: "", ref, enabled: true, is_private: false, share_private_with_project: false, has_credential: false, has_webhook_secret: false, revision: 3, generation: 4, credential_revision: 0, state: id === 2 ? "partial" : "ready", observed_sha: "a".repeat(40), indexed_sha: "b".repeat(40), observed_at: null, indexed_at: null, checked_at: null, last_error_code: null, coverage: { total_files: 10, cataloged_files: 10, indexed_files: 5, metadata_files: 5, metadata_counts: { binary_file: 5 }, failed_files: 0, truncated: id === 2 } };
 }
 
 it("показывает происхождение отчёта и неполноту карты без объявления продового результата", async () => {
@@ -82,9 +82,9 @@ it("не показывает формы credentials участнику и хр�
     vi.spyOn(api, "get").mockResolvedValue({ items: [connection(2, "Auth", "release")], total: 1, offset: 0, limit: 20, next_offset: null });
     render(wrap(<ProjectGitSources projectId={7} canEdit={false} />));
     await screen.findByRole("heading", { name: "Auth" });
-    expect(screen.getByText("a".repeat(40))).toBeTruthy();
-    expect(screen.getByText("b".repeat(40))).toBeTruthy();
-    expect(screen.getByText("Неполный охват")).toBeTruthy();
+    expect(screen.getByLabelText("a".repeat(40))).toBeTruthy();
+    expect(screen.getByLabelText("b".repeat(40))).toBeTruthy();
+    expect(screen.getAllByText("Неполный охват").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Изменить доступ" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Добавить репозитории" })).toBeNull();
 });
@@ -97,4 +97,32 @@ it("показывает срок паузы существующего исто
     const message = await screen.findByText(/Следующая проверка после/);
     expect(message.querySelector("time")?.dateTime).toBe(nextPoll);
     expect((screen.getByRole("button", { name: "Повторить проверку" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("сохраняет выбранные стадии по ID и выключает правило пустым выбором", async () => {
+    const item = { ...connection(1, "Frontend", "main"), sync_stage_ids: [30, 99] };
+    const stages = [{ id: 20, name: "Проверка качества" }, { id: 30, name: "Выпущено" }];
+    vi.spyOn(api, "get").mockImplementation(async path => path.endsWith("/stages") ? stages : { items: [item], total: 1, next_offset: null });
+    const patch = vi.spyOn(api, "patch").mockImplementation(async (_, body) => { Object.assign(item, body); return item; });
+    render(wrap(<ProjectGitSources projectId={7} canEdit />));
+    fireEvent.click(await screen.findByRole("button", { name: "Настроить" }));
+    expect((await screen.findByLabelText("Выпущено") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText("Удалённые стадии будут исключены из правила при сохранении.")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Проверка качества"));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить источник" }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("/api/v1/projects/7/git/connections/1", { sync_stage_ids: [30, 20], expected_revision: 3 }));
+    await waitFor(() => expect(screen.queryByLabelText("Проверка качества")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Настроить" }));
+    fireEvent.click(await screen.findByLabelText("Проверка качества"));
+    fireEvent.click(screen.getByLabelText("Выпущено"));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить источник" }));
+    await waitFor(() => expect(patch).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ sync_stage_ids: [] })));
+});
+
+it("участнику недоступны настройка стадий и секрет webhook", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ items: [connection(1, "Frontend", "main")], total: 1, next_offset: null });
+    render(wrap(<ProjectGitSources projectId={7} canEdit={false} />));
+    await screen.findByRole("heading", { name: "Frontend" });
+    expect(screen.queryByRole("button", { name: "Настроить" })).toBeNull();
+    expect(screen.queryByLabelText("Новый секрет webhook")).toBeNull();
 });

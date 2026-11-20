@@ -53,8 +53,6 @@ def source():
         name="App",
         purpose="",
         ref="heads/main",
-        include_paths=[""],
-        exclude_patterns=[],
         enabled=True,
         is_private=False,
         share_private_with_project=False,

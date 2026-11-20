@@ -88,19 +88,65 @@ class GitConnection(Base, TimestampMixin):
         doc="Выбранный ref.",
         comment="heads/branch, tags/tag или полный SHA.",
     )
-    include_paths: Mapped[list] = mapped_column(
-        JSONB,
-        nullable=False,
-        doc="Разрешённые корни.",
-        comment="Пустая строка в списке означает корень Git.",
-    )
-    exclude_patterns: Mapped[list] = mapped_column(
+    sync_stage_ids: Mapped[list] = mapped_column(
         JSONB,
         nullable=False,
         default=list,
         server_default="[]",
-        doc="Дополнительные исключения.",
-        comment="Обязательная политика безопасности применяется сверх них.",
+        doc="Стадии запуска сверки.",
+        comment="Opt-in: ID стадий своего проекта.",
+    )
+    sync_requested_revision: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        doc="Поколение запроса сверки.",
+        comment="Поколение запроса сверки.",
+    )
+    sync_completed_revision: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        doc="Завершённый запрос.",
+        comment="Завершённый запрос.",
+    )
+    lease_sync_revision: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        doc="Запрос на момент захвата lease.",
+        comment="Запрос на момент захвата lease.",
+    )
+    last_sync_reason: Mapped[str | None] = mapped_column(
+        String(24),
+        doc="Причина запуска: poll/manual/webhook/task_stage/configuration.",
+        comment="Причина запуска: poll/manual/webhook/task_stage/configuration.",
+    )
+    last_sync_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), doc="UTC сигнала сверки.", comment="UTC сигнала сверки."
+    )
+    last_webhook_received_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        doc="Последняя подписанная новая доставка своего repository.",
+        comment="Последняя подписанная новая доставка своего repository.",
+    )
+    last_webhook_event: Mapped[str | None] = mapped_column(
+        String(40),
+        doc="Тип доставки; получение не означает обработку.",
+        comment="Тип доставки; получение не означает обработку.",
+    )
+    last_webhook_processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        doc="Успешная сверка последней релевантной доставки.",
+        comment="Успешная сверка последней релевантной доставки.",
+    )
+    last_webhook_request_revision: Mapped[int | None] = mapped_column(
+        Integer,
+        doc="Запрос доставки: старый lease не подтверждает новое событие.",
+        comment="Запрос доставки: старый lease не подтверждает новое событие.",
     )
     scope_hash: Mapped[str] = mapped_column(
         String(64),

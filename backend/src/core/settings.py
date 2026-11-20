@@ -195,7 +195,7 @@ class GitSettings(SettingsBase):
     """Серверные Git credentials отделены от сессионных секретов."""
 
     git_credentials_key: SecretStr = SecretStr("")
-    git_poll_interval_seconds: float = Field(default=60.0, ge=10.0)
+    git_poll_interval_seconds: float = Field(default=3600.0, ge=10.0)
     git_sync_batch_files: int = Field(default=20, ge=1, le=100)
 
 

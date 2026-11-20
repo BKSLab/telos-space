@@ -1,6 +1,7 @@
 from src.db.chat_ddl import register_chat_ddl
 from src.db.document_catalog_ddl import register_document_catalog_ddl
 from src.db.file_processing_ddl import register_file_processing_ddl
+from src.db.git_sync_outbox import register_git_sync_ddl
 from src.db.knowledge_outbox import register_outbox_ddl
 from src.db.task_attention_ddl import register_attention_ddl
 from src.knowledge.project_events import register_project_knowledge_ddl
@@ -178,3 +179,5 @@ register_attention_ddl(Base.metadata)
 register_file_processing_ddl(Base.metadata)
 register_document_catalog_ddl(Base.metadata)
 register_project_knowledge_ddl(Base.metadata)
+
+register_git_sync_ddl(Base.metadata)

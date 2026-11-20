@@ -5,203 +5,36 @@ import hashlib
 import json
 import re
 from bisect import bisect_right
-from fnmatch import fnmatchcase
 from pathlib import PurePosixPath
 
-POLICY_VERSION = 1
-EXCLUDED_DIRECTORIES = frozenset(
-    {
-        ".git",
-        ".svn",
-        "node_modules",
-        "vendor",
-        "venv",
-        ".venv",
-        "env",
-        "__pycache__",
-        ".pytest_cache",
-        ".mypy_cache",
-        ".ruff_cache",
-        "dist",
-        "build",
-        "coverage",
-        ".next",
-        ".nuxt",
-        ".cache",
-        ".idea",
-        "uploads",
-    }
-)
-SECRET_NAMES = frozenset(
-    {
-        ".netrc",
-        ".npmrc",
-        ".pypirc",
-        ".git-credentials",
-        "id_rsa",
-        "id_dsa",
-        "id_ed25519",
-        "credentials",
-        "credentials.json",
-        "secrets.json",
-        "secrets.yaml",
-        "secrets.yml",
-    }
-)
-TEXT_EXTENSIONS = frozenset(
-    {
-        ".md",
-        ".mdx",
-        ".txt",
-        ".rst",
-        ".adoc",
-        ".py",
-        ".pyi",
-        ".ts",
-        ".tsx",
-        ".js",
-        ".jsx",
-        ".mjs",
-        ".cjs",
-        ".json",
-        ".toml",
-        ".yaml",
-        ".yml",
-        ".go",
-        ".rs",
-        ".java",
-        ".kt",
-        ".c",
-        ".h",
-        ".cpp",
-        ".hpp",
-        ".cs",
-        ".css",
-        ".scss",
-        ".html",
-        ".sql",
-        ".sh",
-        ".ps1",
-        ".ini",
-        ".cfg",
-        ".xml",
-        ".vue",
-        ".svelte",
-        ".rb",
-        ".php",
-        ".proto",
-        ".graphql",
-    }
-)
-TEXT_NAMES = frozenset(
-    {
-        "dockerfile",
-        "makefile",
-        "readme",
-        "license",
-        "procfile",
-        "gemfile",
-        ".gitignore",
-        ".dockerignore",
-    }
-)
-TOKEN_PATTERN = re.compile(
-    r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\btelos_(?:key|token)_[A-Za-z0-9_]{12,}|\bsk-[A-Za-z0-9_-]{20,}"
-)
-ASSIGNMENT_PATTERN = re.compile(
-    r"(?m)^\s*([A-Za-z_][A-Za-z0-9_]{0,79})\s*[:=]\s*['\"]([^'\"\r\n]{8,})['\"]"
-)
-SECRET_WORDS = ("PASSWORD", "PASSWD", "SECRET", "TOKEN", "API_KEY", "ACCESS_KEY", "PRIVATE_KEY")
+POLICY_VERSION = 3
 SYMBOL_LIMIT = 200
 IMPORT_LIMIT = 100
 
 
-def policy_hash(
-    include_paths: list[str], exclude_patterns: list[str], *, max_file_bytes: int, ref: str = ""
-) -> str:
-    """Хэширует версию фильтров и разрешённую область, не содержимое credential."""
-    value = {
-        "version": POLICY_VERSION,
-        "ref": ref,
-        "include": sorted(set(include_paths)),
-        "exclude": sorted(set(exclude_patterns)),
-        "max_file_bytes": max_file_bytes,
-    }
+def policy_hash(*, ref: str = "") -> str:
+    """Version the all-files catalog and decoding policy, never a path filter."""
+    value = {"version": POLICY_VERSION, "ref": ref}
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()
 
 
-def exclusion_reason(
-    path: str,
-    include_paths: list[str],
-    exclude_patterns: list[str],
-    *,
-    mode: str = "100644",
-    size: int = 0,
-    max_file_bytes: int = 1024 * 1024,
-) -> str | None:
-    """Возвращает явную причину пропуска; пользовательские фильтры не снимают обязательные."""
-    pure = PurePosixPath(path)
-    name = pure.name.lower()
-    if mode not in {"100644", "100755"}:
-        return "symlink_or_submodule"
-    if not any(not root or path == root or path.startswith(root + "/") for root in include_paths):
-        return "outside_allowed_roots"
-    if any(part.lower() in EXCLUDED_DIRECTORIES for part in pure.parts[:-1]):
-        return "generated_or_dependency"
-    if (
-        name.startswith(".env")
-        or name in SECRET_NAMES
-        or pure.suffix.lower() in {".key", ".pem", ".p12", ".pfx", ".jks", ".keystore"}
-        or "credentials" in name
-        or name.startswith("secrets.")
-    ):
-        return "secret_path"
-    if any(
-        fnmatchcase(path, pattern) or fnmatchcase(name, pattern) for pattern in exclude_patterns
-    ):
-        return "excluded_pattern"
-    if size > max_file_bytes:
-        return "file_too_large"
-    if name.endswith((".min.js", ".min.css", ".map", ".lock", "-lock.json")):
-        return "generated_or_dependency"
-    if (
-        pure.suffix.lower() not in TEXT_EXTENSIONS
-        and name not in TEXT_NAMES
-        and not name.startswith("requirements")
-    ):
-        return "unsupported_format"
-    return None
-
-
-def has_secret(text: str) -> bool:
-    """Консервативно исключает ключи/секретные литералы вместо отправки их модели."""
-    if TOKEN_PATTERN.search(text):
-        return True
-    for match in ASSIGNMENT_PATTERN.finditer(text):
-        if any(word in match[1].upper() for word in SECRET_WORDS):
-            return True
-    return False
-
-
-def safe_title(text: str) -> str:
-    """Upstream подпись не передаёт обнаруженный credential даже в метаданных."""
-    return "Скрыто политикой секретов" if has_secret(text) else text[:512]
-
-
 def prepare_text(content: bytes) -> tuple[str | None, str | None]:
-    """UTF-8 original либо явное исключение binary/LFS/секрета."""
-    if b"\x00" in content:
-        return None, "binary_file"
+    """Decode text regardless of path/content; classify actual non-text objects."""
     try:
-        text = content.decode("utf-8")
+        if content.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
+            text = content.decode("utf-32")
+        elif content.startswith((b"\xff\xfe", b"\xfe\xff")):
+            text = content.decode("utf-16")
+        else:
+            text = content.decode("utf-8-sig")
     except UnicodeDecodeError:
-        return None, "unsupported_encoding"
+        return None, "binary_file" if b"\x00" in content else "unsupported_encoding"
+    if "\x00" in text:
+        return None, "binary_file"
     if text.startswith("version https://git-lfs.github.com/spec/v1"):
         return None, "lfs_pointer"
-    if has_secret(text):
-        return None, "secret_content"
     return text, None
 
 

@@ -11,6 +11,8 @@ describe("поиск по справке", () => {
         expect(searchHelp("проверить токен GitHub").some(result => result.article.id === "github-token")).toBe(true);
         expect(searchHelp("индексация охват").some(result => result.article.id === "git-sources")).toBe(true);
         expect(searchHelp("история сегодня").some(result => result.article.id === "project-history")).toBe(true);
+        expect(searchHelp("webhook стадия").some(result => result.article.id === "git-updates")).toBe(true);
+        expect(searchHelp("раз в час").some(result => result.article.id === "git-updates")).toBe(true);
     });
     it("объединяет слова запроса и учитывает русские буквы независимо от регистра и ё", () => {
         expect(searchHelp("MCP 401").some(result => result.article.id === "mcp-troubleshooting")).toBe(true);

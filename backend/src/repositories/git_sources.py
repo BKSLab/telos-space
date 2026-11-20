@@ -20,6 +20,7 @@ from src.db.models.git_sources import (
     GitTaskChangeLink,
 )
 from src.db.models.project_members import ProjectMember, ProjectRole
+from src.db.models.project_stages import ProjectStage
 from src.db.models.projects import Project
 from src.db.models.tasks import Task
 from src.db.models.users import User
@@ -169,6 +170,15 @@ class GitSourcesRepository:
             update(C).where(*conditions).values(**data, updated_at=func.now()).returning(C)
         )
 
+    async def valid_stage_ids(self, *, project_id: int, stage_ids: list[int]) -> set[int]:
+        """Validate configured stage IDs against the owning project."""
+        result = await self._execute(
+            select(ProjectStage.id).where(
+                ProjectStage.project_id == project_id, ProjectStage.id.in_(stage_ids)
+            )
+        )
+        return set(result.scalars())
+
     async def claim_connections(
         self, *, lease_id: UUID, lease_seconds: int, limit: int
     ) -> list[dict]:
@@ -188,7 +198,19 @@ class GitSourcesRepository:
         return await self._many(
             update(C)
             .where(C.c.id.in_(eligible))
-            .values(lease_id=lease_id, lease_until=func.now() + timedelta(seconds=lease_seconds))
+            .values(
+                lease_id=lease_id,
+                lease_until=func.now() + timedelta(seconds=lease_seconds),
+                lease_sync_revision=C.c.sync_requested_revision,
+                last_sync_reason=sa_case(
+                    (C.c.sync_requested_revision == C.c.sync_completed_revision, "poll"),
+                    else_=C.c.last_sync_reason,
+                ),
+                last_sync_requested_at=sa_case(
+                    (C.c.sync_requested_revision == C.c.sync_completed_revision, func.now()),
+                    else_=C.c.last_sync_requested_at,
+                ),
+            )
             .returning(C)
         )
 
@@ -315,10 +337,18 @@ class GitSourcesRepository:
         """Проверяет idempotent checkpoint без сетевого повторения blob."""
         return await self._one(select(F).where(F.c.snapshot_id == snapshot_id, F.c.path == path))
 
+    async def snapshot_file_states(self, *, snapshot_id: int, paths: list[str]) -> list[dict]:
+        """Return processing states for the bounded tree page, including metadata/errors."""
+        return await self._many(
+            select(F.c.path, F.c.state, F.c.reason).where(
+                F.c.snapshot_id == snapshot_id, F.c.path.in_(paths)
+            )
+        )
+
     async def reusable_file(
         self, *, connection_id: int, blob_sha: str, scope_hash: str
     ) -> dict | None:
-        """Переиспользует только проверенный blob прежней версии той же политики/connection."""
+        """Переиспользует готовый текст того же blob/connection; metadata требует той же политики."""
         return await self._one(
             select(F)
             .select_from(F.join(S, S.c.id == F.c.snapshot_id))
@@ -328,25 +358,25 @@ class GitSourcesRepository:
                 or_(
                     F.c.state == "ready",
                     and_(
-                        F.c.state == "excluded",
-                        F.c.reason.in_(
-                            ["binary_file", "unsupported_encoding", "lfs_pointer", "secret_content"]
-                        ),
+                        F.c.state == "metadata",
+                        F.c.reason.in_(["binary_file", "unsupported_encoding", "lfs_pointer"]),
+                        S.c.scope_hash == scope_hash,
                     ),
                 ),
-                S.c.scope_hash == scope_hash,
             )
             .order_by(F.c.id.desc())
             .limit(1)
         )
 
     async def insert_file(self, *, data: dict) -> dict | None:
-        """Не заменяет байты и identity уже сохранённого файла версии."""
+        """Retry failed extraction without replacing a successfully processed immutable blob."""
+        statement = pg_insert(F).values(**data)
         return await self._one(
-            pg_insert(F)
-            .values(**data)
-            .on_conflict_do_nothing(constraint="uq_git_file_snapshot_path")
-            .returning(F)
+            statement.on_conflict_do_update(
+                constraint="uq_git_file_snapshot_path",
+                set_={key: value for key, value in data.items() if key not in {"snapshot_id", "connection_id", "path"}},
+                where=F.c.state == "error",
+            ).returning(F)
         )
 
     async def insert_fragments(self, *, file_id: int, fragments: list[dict]) -> None:
@@ -366,13 +396,19 @@ class GitSourcesRepository:
         )
 
     async def snapshot_coverage(self, *, snapshot_id: int) -> dict:
-        """Считает охват и объём SQL-агрегатами."""
+        """Считает охват и безопасные категории исключений SQL-агрегатами."""
+        grouped = (
+            select(F.c.reason, func.count().label("count"))
+            .where(F.c.snapshot_id == snapshot_id, F.c.state == "metadata", F.c.reason.is_not(None))
+            .group_by(F.c.reason).subquery()
+        )
+        exclusions = select(func.jsonb_object_agg(grouped.c.reason, grouped.c.count)).scalar_subquery()
         return await self._one(
             select(
+                func.coalesce(exclusions, func.jsonb_build_object()).label("metadata_counts"),
                 func.count().label("processed"),
                 func.count().filter(F.c.state == "ready").label("indexed_files"),
-                func.count().filter(F.c.state == "excluded").label("excluded_files"),
-                func.count().filter(F.c.reason == "snapshot_byte_limit").label("budget_excluded"),
+                func.count().filter(F.c.state == "metadata").label("metadata_files"),
                 func.count().filter(F.c.state == "error").label("failed_files"),
                 func.coalesce(func.sum(F.c.size).filter(F.c.state == "ready"), 0).label(
                     "bytes_processed"
@@ -581,7 +617,11 @@ class GitSourcesRepository:
         self, *, connection_id: int, invalidate: bool = False
     ) -> None:
         """Queues a bounded provider check; a new credential never inherits old facts."""
-        values = {"next_refresh_at": func.now()}
+        values = {
+            "next_refresh_at": func.now(),
+            "refresh_state": {},
+            "revision": G.c.revision + 1,
+        }
         if invalidate:
             values.update(
                 evidence=[],

@@ -213,7 +213,7 @@ async def test_move_clears_wbs_and_preserves_files_comments_report(db_session, p
     node = await WbsNodesRepository(db_session).save(data={"project_id": project.id, "title": "Раздел", "position": 1000})
     task = await service.create_task(project_id=project.id, data={"title": "Задача с итогом", "wbs_node_id": node.id}, created_by_user_id=user.id)
     related_task = await service.create_task(project_id=project.id, data={"title": "Другая задача того же PR"}, created_by_user_id=user.id)
-    connection = GitConnection(project_id=project.id, repository_id=101, owner="example", repo="repo", name="Repo", ref="main", include_paths=[""], scope_hash="0" * 64, is_private=False)
+    connection = GitConnection(project_id=project.id, repository_id=101, owner="example", repo="repo", name="Repo", ref="main", scope_hash="0" * 64, is_private=False)
     db_session.add(connection)
     await db_session.flush()
     change = GitChange(connection_id=connection.id, kind="pull_request", provider_id="17", title="PR для двух задач", head_sha="a" * 40, status="open")

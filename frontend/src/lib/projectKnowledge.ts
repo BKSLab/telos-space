@@ -38,14 +38,22 @@ export interface KnowledgeMap extends KnowledgeMapStatus {
 export interface GitConnection {
     id: number; project_id: number; provider: "github"; repository_id: number;
     owner: string; repo: string; name: string; purpose: string; ref: string;
-    include_paths: string[]; exclude_patterns: string[]; enabled: boolean;
+    enabled: boolean;
     is_private: boolean; share_private_with_project: boolean; has_credential: boolean;
     has_webhook_secret: boolean; revision: number; generation: number; credential_revision: number;
     state: string; observed_sha: string | null; indexed_sha: string | null;
     observed_at: string | null; indexed_at: string | null; checked_at: string | null;
     next_poll_at?: string | null;
+    sync_stage_ids?: number[];
+    sync_pending?: boolean;
+    poll_interval_seconds?: number;
+    last_sync_reason?: "poll" | "manual" | "webhook" | "task_stage" | "configuration" | null;
+    last_sync_requested_at?: string | null;
+    last_webhook_received_at?: string | null;
+    last_webhook_event?: string | null;
+    last_webhook_processed_at?: string | null;
     last_error_code: string | null;
-    coverage: { total_files: number; indexed_files: number; excluded_files: number; failed_files: number; truncated: boolean };
+    coverage: { total_files: number; cataloged_files: number; indexed_files: number; metadata_files: number; metadata_counts: Record<string, number>; failed_files: number; truncated: boolean };
 }
 export interface GitConnectionPage {
     items: GitConnection[]; total: number; offset: number; limit: number; next_offset: number | null;
@@ -59,6 +67,22 @@ export interface GitFilePage {
     line_start: number; line_end: number; offset: number; next_offset: number | null;
     total_chars: number; stale: boolean; partial: boolean;
 }
+export interface GitTreeEntry {
+    path: string; sha: string; type: "blob" | "tree" | "commit";
+    mode: "100644" | "100755" | "040000" | "120000" | "160000";
+    size: number | null;
+    index_state: "pending" | "ready" | "metadata" | "error";
+    index_reason: string | null;
+}
+export interface GitTreePage {
+    connection_id: number; repository_id: number; commit_sha: string;
+    items: GitTreeEntry[]; offset: number; limit: number; next_offset: number | null;
+    truncated: boolean; stale: boolean; total_files: number;
+}
+export const GIT_METADATA_REASONS: Record<string, string> = {
+    binary_file: "Двоичные файлы", unsupported_encoding: "Кодировка не распознана",
+    lfs_pointer: "Указатели Git LFS", submodule: "Подмодули Git",
+};
 export interface GitTaskLink {
     id: number; task_id: number; change_id: number; connection_id: number; repository_id: number;
     kind: "commit" | "pull_request"; title: string; source_url: string; commit_sha: string;
