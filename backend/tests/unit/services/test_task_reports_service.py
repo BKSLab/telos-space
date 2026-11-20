@@ -87,6 +87,8 @@ async def test_inaccessible_task_does_not_leak_report_or_history():
     for operation in (
         service.get(5, actor()),
         service.history(5, actor()),
+        service.history(5, actor(), report_id=7),
+        service.history(5, actor(), revision=1),
         service.publish(5, actor(), 0, "text"),
     ):
         with pytest.raises(ResourceNotAvailableError):

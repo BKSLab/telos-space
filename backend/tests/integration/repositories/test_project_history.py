@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from httpx import ASGITransport, AsyncClient
 
@@ -49,6 +49,9 @@ async def test_member_reads_combined_project_history(
                 task_id=task.id,
                 event_type=TaskActivityEventType.STAGE_CHANGED,
                 actor_name="Анна",
+                actor_user_id=user.id,
+                from_value="Ожидание",
+                to_value="Готово",
                 created_at=timestamp,
             ),
             TaskActivity(
@@ -57,7 +60,11 @@ async def test_member_reads_combined_project_history(
                 created_at=timestamp,
             ),
             TaskComment(
-                task_id=task.id, body_md="Готово на 100%", author_name="Анна", created_at=timestamp
+                task_id=task.id,
+                body_md="Готово на 100%",
+                author_name="Анна",
+                author_id=user.id,
+                created_at=timestamp,
             ),
             TaskReport(
                 task_id=task.id,
@@ -174,7 +181,32 @@ async def test_member_reads_combined_project_history(
             "actor_name",
             "task_id",
             "document_ref",
+            "actor_user_id",
+            "event_type",
+            "from_value",
+            "to_value",
+            "comment_id",
+            "report_id",
+            "report_revision",
         }
+        activity = by_kind["task_activity"]
+        assert activity["actor_user_id"] == user.id
+        assert (activity["event_type"], activity["from_value"], activity["to_value"]) == (
+            "STAGE_CHANGED",
+            "Ожидание",
+            "Готово",
+        )
+        assert by_kind["task_comment"]["comment_id"] is not None
+        assert by_kind["task_report"]["report_revision"] == 1
+        assert by_kind["task_report"]["report_id"] is not None
+        response = await client.get(path, params={"actor_user_id": user.id, "task_id": task.id})
+        assert {item["kind"] for item in response.json()["items"]} == {
+            "task_comment",
+            "task_activity",
+        }
+        response = await client.get(path, params={"event_id": activity["id"]})
+        assert response.json() == {"items": [activity], "next_offset": None}
+        assert (await client.get(path, params={"task_id": moved_task.id})).json()["items"] == []
         response = await client.get(
             path,
             params={
@@ -192,6 +224,14 @@ async def test_member_reads_combined_project_history(
         assert response.json() == {"items": [], "next_offset": None}
         for query in (
             "kind=git",
+            "timezone=Unknown/Zone",
+            "actor_user_id=0",
+            "actor_user_id=99999999999999999",
+            "task_id=-1",
+            "task_id=99999999999999999",
+            "event_id=bad",
+            "since=0001-01-01&timezone=Europe/Samara",
+            "until=9999-12-31&timezone=America/New_York",
             "limit=101",
             "offset=-1",
             "since=12345",
@@ -200,3 +240,42 @@ async def test_member_reads_combined_project_history(
             assert (await client.get(f"{path}?{query}")).status_code == 422
         principal = replace(principal, user_id=user.id + 1000)
         assert (await client.get(path)).status_code == 404
+
+
+async def test_local_day_bounds_follow_dst(db_session, project):
+    from src.repositories.project_history import ProjectHistoryRepository
+    from src.schemas.project_history import ProjectHistoryQuery
+
+    repository = ProjectHistoryRepository(db_session)
+    # New York spring day is 23h, autumn day is 25h. Adjacent UTC days differ.
+    for local_day, start, end in [
+        (
+            date(2026, 3, 8),
+            datetime(2026, 3, 8, 5, tzinfo=UTC),
+            datetime(2026, 3, 9, 4, tzinfo=UTC),
+        ),
+        (
+            date(2026, 11, 1),
+            datetime(2026, 11, 1, 4, tzinfo=UTC),
+            datetime(2026, 11, 2, 5, tzinfo=UTC),
+        ),
+    ]:
+        records = [
+            ProjectDeadlineChange(project_id=project.id, created_at=instant, changed_by_name="Тест")
+            for instant in [
+                start - timedelta(microseconds=1),
+                start,
+                end - timedelta(microseconds=1),
+                end,
+            ]
+        ]
+        db_session.add_all(records)
+        await db_session.flush()
+        items = await repository.read(
+            project.id,
+            ProjectHistoryQuery(since=local_day, until=local_day, timezone="America/New_York"),
+        )
+        assert {item.id for item in items} == {
+            f"project_deadline:{records[1].id}",
+            f"project_deadline:{records[2].id}",
+        }

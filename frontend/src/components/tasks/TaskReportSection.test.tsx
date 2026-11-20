@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { TaskReportSection } from "./TaskReportSection";
@@ -7,6 +7,17 @@ import { api } from "@/lib/api";
 import type { TaskComment } from "@/lib/types";
 vi.mock("@/lib/api", () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 const report = { id: 12, task_id: 5, revision: 1, body_md: "Первый результат", author_name: "Кирилл", created_at: null, source_comment_id: null, source_comment_original_id: null, source_author_name: null };
+it("переход из истории показывает выбранную публикацию отдельно от текущего отчёта", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.mocked(api.get).mockImplementation(async path => path.includes("/history") ? [report] : { ...report, id: 13, revision: 2, body_md: "Текущий результат" });
+    render(<QueryClientProvider client={client}><TaskReportSection taskId={5} active selectedComment={null} clearComment={() => {}} targetReportId={12} targetRevision={1} /></QueryClientProvider>);
+    await screen.findByText("Версия 1 из истории");
+    expect(within(screen.getByRole("region", { name: "Отчёт из истории" })).getByText("Первый результат")).toBeTruthy();
+    expect(await screen.findByText("Текущий результат")).toBeTruthy();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.get).toHaveBeenCalledWith("/api/v1/tasks/5/report/history?report_id=12");
+    client.clear();
+});
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 function mount(selectedComment: TaskComment | null = null, canEdit = true, initial = report) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });

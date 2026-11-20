@@ -66,13 +66,21 @@ async def get_report(
     "/tasks/{task_id}/report/history",
     response_model=list[TaskReportSchema],
     summary="История отчёта",
-    description="Последние 50 полных версий результата.",
+    description="Последние 50 полных версий либо конкретная публикация по ID или номеру версии с теми же правами задачи.",
     operation_id="getTaskReportHistory",
     response_description="Снимки публикаций.",
     responses=ERRORS,
 )
 async def report_history(
-    task_id: TaskId, principal: PrincipalDep, service: TaskReportsServiceDep
+    task_id: TaskId,
+    principal: PrincipalDep,
+    service: TaskReportsServiceDep,
+    report_id: Annotated[
+        int | None, Query(gt=0, le=2**31 - 1, description="Точный ID публикации.")
+    ] = None,
+    revision: Annotated[
+        int | None, Query(gt=0, le=2**31 - 1, description="Номер версии отчёта.")
+    ] = None,
 ) -> list[TaskReportSchema]:
     """Читает историю публикаций.
 
@@ -87,7 +95,7 @@ async def report_history(
         HTTPException: Типизированный отказ в доступе или ошибка операции.
     """
     try:
-        return await service.history(task_id, principal)
+        return await service.history(task_id, principal, report_id=report_id, revision=revision)
     except ServiceError as error:
         raise HTTPException(error.status_code, detail=error.detail) from error
 

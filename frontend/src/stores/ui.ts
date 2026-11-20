@@ -8,12 +8,20 @@ export interface BoardSelectionContext {
 }
 
 export type WbsLayoutMode = "horizontal" | "vertical";
+export interface TaskNavigationTarget {
+    section: "reports" | "comments";
+    reportId?: number;
+    reportRevision?: number;
+    commentId?: number;
+}
 
 interface UiState {
     boardSelection: BoardSelectionContext | null;
     setBoardSelection: (selection: BoardSelectionContext | null) => void;
     /** Открытая карточка задачи — общая для канбана, списка и структуры. */
     selectedTaskId: number | null;
+    taskNavigationTarget: TaskNavigationTarget | null;
+    openTaskTarget: (taskId: number, target: TaskNavigationTarget) => void;
     setSelectedTaskId: (taskId: number | null) => void;
     selectedRisk: { projectId: number; riskId: number } | null;
     setSelectedRisk: (risk: { projectId: number; riskId: number } | null) => void;
@@ -45,9 +53,11 @@ export const useUiStore = create<UiState>()(persist((set) => ({
         return { boardSelection: selection };
     }),
     selectedTaskId: null,
-    setSelectedTaskId: (taskId) => set(taskId === null ? { selectedTaskId: null } : { selectedTaskId: taskId, selectedRisk: null }),
+    taskNavigationTarget: null,
+    openTaskTarget: (taskId, target) => set({ selectedTaskId: taskId, taskNavigationTarget: target, selectedRisk: null }),
+    setSelectedTaskId: (taskId) => set(taskId === null ? { selectedTaskId: null, taskNavigationTarget: null } : { selectedTaskId: taskId, selectedRisk: null, taskNavigationTarget: null }),
     selectedRisk: null,
-    setSelectedRisk: (risk) => set(risk === null ? { selectedRisk: null } : { selectedRisk: risk, selectedTaskId: null }),
+    setSelectedRisk: (risk) => set(risk === null ? { selectedRisk: null } : { selectedRisk: risk, selectedTaskId: null, taskNavigationTarget: null }),
 
     sidebarCollapsed: false,
     toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),

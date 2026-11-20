@@ -53,3 +53,25 @@ async def test_versions_and_source_snapshot_survive_comment_deletion(db_session)
     assert versions[1].source_comment_id is None
     assert versions[1].source_comment_original_id == source_id
     assert versions[1].source_author_name == "Автор"
+
+
+@pytest.mark.asyncio
+async def test_exact_old_report_lookup_is_scoped_to_task(db_session):
+    from src.db.models.task_reports import TaskReport
+
+    tasks = [Task(number=n, title=f"Task {n}", status=TaskStatus.NEW) for n in (1, 2)]
+    db_session.add_all(tasks)
+    await db_session.flush()
+    reports = [
+        TaskReport(task_id=tasks[0].id, revision=n, body_md=f"Version {n}", author_name="Автор")
+        for n in range(1, 56)
+    ]
+    other = TaskReport(task_id=tasks[1].id, revision=1, body_md="Private", author_name="Автор")
+    db_session.add_all([*reports, other])
+    await db_session.flush()
+    repo = TaskReportsRepository(db_session)
+    assert len(await repo.history(tasks[0].id)) == 50
+    assert [r.revision for r in await repo.history(tasks[0].id, report_id=reports[0].id)] == [1]
+    assert [r.id for r in await repo.history(tasks[0].id, revision=1)] == [reports[0].id]
+    assert await repo.history(tasks[0].id, report_id=other.id) == []
+    assert await repo.history(tasks[0].id, report_id=reports[0].id, revision=2) == []

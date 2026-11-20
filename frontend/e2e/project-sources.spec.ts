@@ -28,6 +28,7 @@ async function sourcesApi(page: Page) {
         const reply = (json: unknown, status = 200) => route.fulfill({ status, headers, json });
         if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
         if (path === "/knowledge/map/status") return reply(knowledge);
+        if (path.startsWith("/knowledge/map/claims/")) return reply(knowledge.items[0]);
         if (path === "/knowledge/map") {
             const q = url.searchParams.get("q");
             const category = url.searchParams.get("category");
@@ -78,6 +79,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
         await page.getByText("Источники и версии (1)", { exact: true }).click();
         await expect(page.getByText("Импорт реализован", { exact: true })).toBeVisible();
         await page.screenshot({ path: info.outputPath(`knowledge-${viewport.name}.png`) });
+        await page.getByRole("button", { name: "Закрыть источники" }).click();
         await page.goto("/projects/DEMO/settings");
         const paused = page.getByRole("listitem").filter({ hasText: "Индексация приостановлена" });
         await expect(paused).toContainText("Auth");
@@ -123,16 +125,18 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
         await page.goto("/projects/DEMO/knowledge");
         await expect(page.getByRole("heading", { name: "Результаты задач" })).toBeVisible();
         await expect(page.getByText(/line-height: 1\.35/)).toHaveCount(0);
-        await page.getByRole("combobox", { name: "Раздел", exact: true }).selectOption("task_results");
+        if (viewport.name === "mobile") await page.getByRole("combobox", { name: "Раздел", exact: true }).selectOption("task_results");
+        else await page.getByRole("navigation", { name: "Темы знаний" }).getByRole("button", { name: "Результаты задач", exact: true }).click();
         const mapSearch = page.getByRole("searchbox", { name: "Поиск по утверждениям" });
         await mapSearch.fill("неизвестный текст");
         await page.getByRole("button", { name: "Найти", exact: true }).click();
         await expect(page.getByText("По заданным условиям утверждений нет.")).toBeVisible();
         await page.getByRole("button", { name: "Сбросить", exact: true }).click();
         await expect(page.getByRole("heading", { name: "Результаты задач" })).toBeVisible();
-        await page.getByRole("button", { name: "Код и репозитории" }).click();
+        await page.getByRole("link", { name: "Код и репозитории" }).click();
         await expect(page.getByRole("heading", { name: "Frontend" })).toBeVisible();
-        await page.getByRole("button", { name: "Код и репозитории" }).click();
+        await page.getByRole("link", { name: "Карта", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "Результаты задач" })).toBeVisible();
         await page.screenshot({ path: info.outputPath("knowledge-map.png") });
 
         await page.getByRole("link", { name: "История", exact: true }).click();
@@ -152,5 +156,50 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
         await expect(page.getByLabel("Тип события")).toHaveValue("task_report");
         await expect(page.getByText("Отчёт · Импорт · v2")).toBeVisible();
         await expect(page.getByText("Изменение паспорта проекта", { exact: true })).toHaveCount(0);
+    });
+}
+
+for (const width of [320, 1440]) {
+    test(`сохраняет выборку и открывает источник вне страницы — ${width}`, async ({ page }, info) => {
+        await page.setViewportSize({ width, height: 900 });
+        await installMockApi(page, mockState());
+        await sourcesApi(page);
+        const items = Array.from({ length: 45 }, (_, index) => ({ ...knowledge.items[0], id: `claim-${index}`, text: `Решение ${index + 1}: сохранять источник и историю изменений. ${"Обоснование решения. ".repeat(8)}`, state: index === 2 ? "conflicting" : "current" }));
+        await page.route("**/api/v1/projects/1/knowledge/map**", async route => {
+            const url = new URL(route.request().url());
+            if (url.pathname.includes("/claims/")) {
+                const selected = items.find(item => item.id === url.pathname.split("/").at(-1));
+                return route.fulfill({ status: selected ? 200 : 404, json: selected ?? { detail: "Недоступно" } });
+            }
+            const offset = Number(url.searchParams.get("offset") ?? 0);
+            const q = url.searchParams.get("q");
+            const filtered = items.filter(item => !q || item.text.includes(q));
+            return route.fulfill({ json: { ...knowledge, items: filtered.slice(offset, offset + 20), total: filtered.length, offset, has_more: offset + 20 < filtered.length, next_offset: offset + 20 < filtered.length ? offset + 20 : null } });
+        });
+        await page.goto("/projects/DEMO/knowledge");
+        const first = page.getByRole("button", { name: `Источники и версии: ${items[0].text}`, exact: true });
+        await expect(first).toBeVisible();
+        expect((await first.boundingBox())!.y).toBeLessThan(800);
+        await page.screenshot({ path: info.outputPath("dense-map.png") });
+        await page.getByRole("searchbox", { name: "Поиск по утверждениям" }).fill("Решение");
+        await page.getByRole("button", { name: "Найти", exact: true }).click();
+        await expect(page).toHaveURL(/mq=/);
+        await page.getByRole("link", { name: "История", exact: true }).click();
+        await expect(page.getByLabel("Тип события")).toBeVisible();
+        await page.getByLabel("Тип события").selectOption("task_report");
+        await page.getByRole("button", { name: "Найти", exact: true }).click();
+        await expect(page).toHaveURL(/kind=task_report/);
+        await page.getByRole("link", { name: "Карта", exact: true }).click();
+        await expect(page.getByRole("searchbox", { name: "Поиск по утверждениям" })).toHaveValue("Решение");
+        await page.goto("/projects/DEMO/knowledge?mq=Решение&claim=claim-44");
+        const drawer = page.getByRole("dialog", { name: "Источники знания" });
+        await expect(drawer.getByText(items[44].text, { exact: true })).toBeVisible();
+        await page.screenshot({ path: info.outputPath("source-drawer.png"), animations: "disabled" });
+        await page.getByRole("button", { name: "Закрыть источники" }).click();
+        await expect(drawer).toHaveCount(0);
+        await expect(page.getByRole("searchbox", { name: "Поиск по утверждениям" })).toHaveValue("Решение");
+        await page.goto("/projects/DEMO/knowledge?claim=removed");
+        await expect(page.getByText("Знание недоступно или было удалено.")).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
 }

@@ -26687,7 +26687,80 @@
           }
         },
         {
-          "description": "Первый день периода UTC включительно.",
+          "description": "Точный ID автора события.",
+          "in": "query",
+          "name": "actor_user_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Точный ID автора события.",
+            "title": "Actor User Id"
+          }
+        },
+        {
+          "description": "Задача, события которой нужны.",
+          "in": "query",
+          "name": "task_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Задача, события которой нужны.",
+            "title": "Task Id"
+          }
+        },
+        {
+          "description": "Точный ID события для прямой ссылки.",
+          "in": "query",
+          "name": "event_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "pattern": "^[a-z_]+:[0-9]+(?::[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Точный ID события для прямой ссылки.",
+            "title": "Event Id"
+          }
+        },
+        {
+          "description": "Часовой пояс IANA для границ периода.",
+          "in": "query",
+          "name": "timezone",
+          "required": false,
+          "schema": {
+            "default": "UTC",
+            "description": "Часовой пояс IANA для границ периода.",
+            "maxLength": 100,
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        {
+          "description": "Первый местный день периода включительно.",
           "in": "query",
           "name": "since",
           "required": false,
@@ -26701,12 +26774,12 @@
                 "type": "null"
               }
             ],
-            "description": "Первый день периода UTC включительно.",
+            "description": "Первый местный день периода включительно.",
             "title": "Since"
           }
         },
         {
-          "description": "Последний день периода UTC включительно.",
+          "description": "Последний местный день периода включительно.",
           "in": "query",
           "name": "until",
           "required": false,
@@ -26720,7 +26793,7 @@
                 "type": "null"
               }
             ],
-            "description": "Последний день периода UTC включительно.",
+            "description": "Последний местный день периода включительно.",
             "title": "Until"
           }
         },
@@ -37877,7 +37950,7 @@
     },
     {
       "access": "authenticated",
-      "description": "Последние 50 полных версий результата.",
+      "description": "Последние 50 полных версий либо конкретная публикация по ID или номеру версии с теми же правами задачи.",
       "group": "task-reports",
       "id": "api-eb277720443e539b",
       "kind": "http",
@@ -37895,6 +37968,46 @@
             "exclusiveMinimum": 0,
             "title": "Task Id",
             "type": "integer"
+          }
+        },
+        {
+          "description": "Точный ID публикации.",
+          "in": "query",
+          "name": "report_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Точный ID публикации.",
+            "title": "Report Id"
+          }
+        },
+        {
+          "description": "Номер версии отчёта.",
+          "in": "query",
+          "name": "revision",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Номер версии отчёта.",
+            "title": "Revision"
           }
         },
         {
@@ -61080,6 +61193,28 @@
           ],
           "title": "Actor Name"
         },
+        "actor_user_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Actor User Id"
+        },
+        "comment_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Comment Id"
+        },
         "created_at": {
           "format": "date-time",
           "title": "Created At",
@@ -61107,6 +61242,28 @@
           ],
           "title": "Document Ref"
         },
+        "event_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Event Type"
+        },
+        "from_value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "From Value"
+        },
         "id": {
           "title": "Id",
           "type": "string"
@@ -61124,6 +61281,28 @@
           "title": "Kind",
           "type": "string"
         },
+        "report_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Report Id"
+        },
+        "report_revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Report Revision"
+        },
         "task_id": {
           "anyOf": [
             {
@@ -61138,6 +61317,17 @@
         "title": {
           "title": "Title",
           "type": "string"
+        },
+        "to_value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "To Value"
         }
       },
       "required": [

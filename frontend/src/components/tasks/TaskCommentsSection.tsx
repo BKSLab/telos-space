@@ -1,5 +1,5 @@
 import { UserIdentity } from "@/components/users/UserIdentity";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
@@ -18,7 +18,9 @@ import { DocumentPagination } from "@/components/documents/DocumentPagination";
 import { useDocuments } from "@/lib/useDocuments";
 import { FileUploadControl } from "@/components/files/FileUploadControl";
 
-export function TaskCommentsSection({ taskId, comments, currentUserId, onChange, onReport, loading, error }: {
+export function TaskCommentsSection({ taskId, comments, currentUserId, onChange, onReport, loading, error, highlightedCommentId, active = true }: {
+    active?: boolean;
+    highlightedCommentId?: number;
     taskId: number;
     comments: TaskComment[];
     currentUserId?: number;
@@ -29,6 +31,16 @@ export function TaskCommentsSection({ taskId, comments, currentUserId, onChange,
 }) {
     const client = useQueryClient();
     const composerRef = useRef<HTMLDivElement>(null);
+    const highlightedRef = useRef<HTMLElement>(null);
+    const focusedComment = useRef<number | undefined>(undefined);
+    useEffect(() => {
+        if (!active || !highlightedCommentId) { focusedComment.current = undefined; return; }
+        if (!loading && highlightedRef.current && focusedComment.current !== highlightedCommentId) {
+            focusedComment.current = highlightedCommentId;
+            highlightedRef.current?.scrollIntoView?.({ block: "center" });
+            highlightedRef.current?.focus({ preventScroll: true });
+        }
+    }, [active, loading, highlightedCommentId, comments]);
     const request = useRef<{ signature: string; id: string } | null>(null);
     const [body, setBody] = useState("");
     const [drafts, setDrafts] = useState<FileUploadDraft[]>([]);
@@ -70,7 +82,8 @@ export function TaskCommentsSection({ taskId, comments, currentUserId, onChange,
         {error && <ErrorMessage title="Не удалось загрузить комментарии" message={error} action={<Button onClick={() => void client.invalidateQueries({ queryKey: queryKeys.taskComments(taskId) })}>Повторить загрузку комментариев</Button>} />}
         {remove.error && <ErrorMessage title="Не удалось удалить комментарий" message={remove.error.message} />}
         {edit.error && <ErrorMessage title="Не удалось изменить комментарий" message={edit.error.message} />}
-        {comments.map(comment => <article key={comment.id} className="min-w-0 rounded-md border-l-2 border-accent-border bg-white/[0.025] px-2.5 py-2">
+        {!loading && !error && highlightedCommentId && !comments.some(comment => comment.id === highlightedCommentId) && <p role="status" className="text-[13px] text-muted">Комментарий из истории больше недоступен.</p>}
+        {comments.map(comment => <article key={comment.id} ref={comment.id === highlightedCommentId ? highlightedRef : undefined} tabIndex={comment.id === highlightedCommentId ? -1 : undefined} className={`min-w-0 rounded-md border-l-2 border-accent-border bg-white/[0.025] px-2.5 py-2 ${comment.id === highlightedCommentId ? "ring-2 ring-accent bg-accent-soft" : ""}`}>
             <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                 <MessageSquare size={11} aria-hidden="true" />
                 <UserIdentity user={comment.author} name={comment.author ? undefined : comment.author_name ?? "Без подписи"} className="font-medium text-secondary" />

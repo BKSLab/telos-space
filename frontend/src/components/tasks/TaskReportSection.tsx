@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { TaskComment } from "@/lib/types";
@@ -22,7 +22,8 @@ interface Report {
     source_author_name: string | null;
 }
 
-export function TaskReportSection({ taskId, active, selectedComment, clearComment, onPublishingChange, canEdit = true, readOnlyHint }: {
+export function TaskReportSection({ taskId, active, selectedComment, clearComment, onPublishingChange, canEdit = true, readOnlyHint, targetRevision, targetReportId }: {
+    targetRevision?: number; targetReportId?: number;
     taskId: number; active: boolean; selectedComment: TaskComment | null; clearComment: () => void; onPublishingChange?: (busy: boolean) => void; canEdit?: boolean; readOnlyHint?: string;
 }) {
     const client = useQueryClient();
@@ -30,7 +31,18 @@ export function TaskReportSection({ taskId, active, selectedComment, clearCommen
     const key = ["tasks", taskId, "report"];
     const report = useQuery({ queryKey: key, queryFn: () => api.get<Report>(path), enabled: active, retry: false });
     const [historyOpen, setHistoryOpen] = useState(false);
+    const targeted = targetRevision !== undefined || targetReportId !== undefined;
     const history = useQuery({ queryKey: [...key, "history"], queryFn: () => api.get<Report[]>(path + "/history"), enabled: active && historyOpen });
+    const targetQuery = useQuery({ queryKey: [...key, "history", "target", targetReportId, targetRevision],
+        queryFn: () => api.get<Report[]>(path + "/history" + (targetReportId !== undefined ? `?report_id=${targetReportId}` : `?revision=${targetRevision}`)), enabled: active && targeted });
+    const selectedReport = targetQuery.data?.find(item => targetReportId !== undefined ? item.id === targetReportId : item.revision === targetRevision);
+    const targetRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (active && selectedReport) {
+            targetRef.current?.scrollIntoView?.({ block: "start" });
+            targetRef.current?.focus({ preventScroll: true });
+        }
+    }, [active, selectedReport]);
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState("");
     const [baseRevision, setBaseRevision] = useState(0);
@@ -71,6 +83,13 @@ export function TaskReportSection({ taskId, active, selectedComment, clearCommen
     if (report.error) return <div><ErrorMessage title="Не удалось загрузить отчёт" message={(report.error as Error).message} /><Button variant="ghost" onClick={() => void report.refetch()}>Повторить</Button></div>;
     const hasReport = Boolean(report.data?.body_md);
     return <div className="flex flex-col gap-3">
+        {targeted && <section ref={targetRef} tabIndex={-1} aria-label="Отчёт из истории" className="rounded-md border border-accent-border bg-accent-soft p-3">
+            {targetQuery.isPending && <Skeleton className="h-16" />}
+            {targetQuery.error && <ErrorMessage message={targetQuery.error.message} action={<Button onClick={() => void targetQuery.refetch()}>Повторить загрузку версии</Button>} />}
+            {selectedReport && <><p className="mb-2 text-[12px] font-medium">Версия {selectedReport.revision} из истории</p><p className="whitespace-pre-wrap break-words text-[13px]">{selectedReport.body_md || "Отчёт очищен."}</p></>}
+            {targetQuery.data && !selectedReport && <p role="status">Версия отчёта больше недоступна.</p>}
+        </section>}
+        {targeted && <h4 className="text-[13px] font-semibold">Текущий отчёт</h4>}
         {hasReport
             ? <div className="markdown-body text-[13px]" dangerouslySetInnerHTML={{ __html: reportHtml }} />
             : <p className="text-[13px] text-muted">Отчёт пока не добавлен.</p>}

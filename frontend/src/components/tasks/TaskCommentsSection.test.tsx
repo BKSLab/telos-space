@@ -20,6 +20,24 @@ function setup(comments: TaskComment[] = []) {
 }
 afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.restoreAllMocks(); });
 
+it("выделяет комментарий только в активной вкладке и не перехватывает фокус при refetch", async () => {
+    vi.spyOn(api, "get").mockResolvedValue(documentPageFixture([]));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    clients.push(client);
+    const comment = { id: 7, task_id: 5, body_md: "Целевая запись", created_at: "2026-11-20T10:00:00Z" } as TaskComment;
+    const content = (active: boolean) => <QueryClientProvider client={client}><TaskCommentsSection taskId={5} comments={[{ ...comment }]} onChange={() => {}} onReport={() => {}} loading={false} highlightedCommentId={7} active={active} /></QueryClientProvider>;
+    const { rerender } = render(content(false));
+    const entry = screen.getByText("Целевая запись").closest("article")!;
+    expect(globalThis.document.activeElement).not.toBe(entry);
+    rerender(content(true));
+    expect(globalThis.document.activeElement).toBe(entry);
+    screen.getByLabelText("Текст комментария").focus();
+    rerender(content(true));
+    expect(globalThis.document.activeElement).toBe(screen.getByLabelText("Текст комментария"));
+    rerender(content(false));
+    expect(globalThis.document.activeElement).not.toBe(entry);
+});
+
 it("сохраняет текст, подписи и ссылки при ошибке и повторяет UUID; затем очищает черновик", async () => {
     const requests: FormData[] = []; let release: (() => void) | undefined;
     vi.spyOn(api, "postForm").mockImplementation(async (_path, body) => {

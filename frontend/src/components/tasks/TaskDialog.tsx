@@ -113,7 +113,13 @@ export function TaskDialog() {
 function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () => void }) {
     const queryClient = useQueryClient();
     const vertical = useMediaQuery("(min-width: 640px)");
-    const [section, setSection] = useState<TaskSection>("overview");
+    const target = useUiStore(state => state.taskNavigationTarget);
+    const [section, setSection] = useState<TaskSection>(target?.section === "reports" ? "report" : target?.section ?? "overview");
+    const [previousTarget, setPreviousTarget] = useState(target);
+    if (previousTarget !== target) {
+        setPreviousTarget(target);
+        if (target) setSection(target.section === "reports" ? "report" : "comments");
+    }
     const [isEditingDescription, setIsEditingDescription] = useState(false);
     const [descriptionDraft, setDescriptionDraft] = useState("");
     const [descriptionRevision, setDescriptionRevision] = useState<number | undefined>();
@@ -482,13 +488,13 @@ function TaskDialogContent({ taskId, onClose }: { taskId: number; onClose: () =>
                             </TabPanel>
                             <TabPanel id="comments" shouldForceMount className={PANEL_CLASS}>
                                 <DrawerSection title="Комментарии" count={commentsQuery.data?.length ?? null}>
-                                    <TaskCommentsSection taskId={taskId} comments={commentsQuery.data ?? []}
+                                    <TaskCommentsSection taskId={taskId} comments={commentsQuery.data ?? []} highlightedCommentId={target?.commentId} active={selectedSection === "comments"}
                                         currentUserId={currentUserQuery.data?.id} onChange={invalidateTask} loading={commentsQuery.isPending} error={commentsQuery.error?.message}
                                         onReport={comment => { setReportComment(comment); setSection("report"); requestAnimationFrame(() => reportTabRef.current?.focus()); }} />
                                 </DrawerSection>
                             </TabPanel>
                             <TabPanel id="report" shouldForceMount className={PANEL_CLASS}>
-                                <DrawerSection title="Итоговый отчёт"><TaskReportSection taskId={taskId} active={selectedSection === "report"} selectedComment={reportComment} clearComment={() => setReportComment(null)} />
+                                <DrawerSection title="Итоговый отчёт"><TaskReportSection taskId={taskId} active={selectedSection === "report"} selectedComment={reportComment} clearComment={() => setReportComment(null)} targetRevision={target?.reportRevision} targetReportId={target?.reportId} />
                                     {projectId !== undefined && <TaskGitEvidence key={`${projectId}-${taskId}`} projectId={projectId} taskId={taskId} active={selectedSection === "report"} />}
                                 </DrawerSection>
                             </TabPanel>

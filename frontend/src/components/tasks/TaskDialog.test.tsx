@@ -81,6 +81,16 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+it("переход к комментарию выбирает вкладку и сообщает об удалённой записи", async () => {
+    setup();
+    await screen.findByRole("heading", { name: task.title });
+    act(() => useUiStore.getState().openTaskTarget(5, { section: "comments", commentId: 999 }));
+    await screen.findByText("Комментарий из истории больше недоступен.");
+    expect(screen.getByRole("tab", { name: "Комментарии" }).getAttribute("aria-selected")).toBe("true");
+    act(() => useUiStore.getState().setSelectedTaskId(null));
+    expect(useUiStore.getState().taskNavigationTarget).toBeNull();
+});
+
 it("копирует полное сохранённое название из общей карточки, включая успешное переименование", async () => {
     const copy = vi.spyOn(clipboard, "copyText").mockResolvedValue(undefined);
     const title = `Проверить Unicode 🧭 — ${"длинное название задачи ".repeat(14)}финал`;

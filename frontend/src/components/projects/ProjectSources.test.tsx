@@ -29,19 +29,19 @@ function connection(id: number, name: string, ref: string): GitConnection {
 }
 
 it("показывает происхождение отчёта и неполноту карты без объявления продового результата", async () => {
-    vi.spyOn(api, "get").mockResolvedValue(map);
+    vi.spyOn(api, "get").mockImplementation(async path => path.includes("/claims/") ? map.items[0] : map);
     render(wrap(<ProjectKnowledgePanel projectId={7} projectKey="DEMO" ownerId={1} />));
     await screen.findByText("Участник сообщил о выполнении импорта");
     expect(screen.getByText("Отчёт участника")).toBeTruthy();
-    expect(screen.getByText(/Карта пока охватывает не все материалы/)).toBeTruthy();
+    expect(screen.getByText(/Неполный охват/)).toBeTruthy();
     fireEvent.click(screen.getByText(/Источники и версии/));
-    expect(screen.getByText("Импорт реализован")).toBeTruthy();
+    expect(await screen.findByText("Импорт реализован")).toBeTruthy();
     expect(screen.getByText(/task_report:12 · версия 2/)).toBeTruthy();
     expect(screen.queryByText("Функция доступна на проде")).toBeNull();
 });
 
 it("оставляет просмотр карты участнику, а ручное обновление владельцу", async () => {
-    vi.spyOn(api, "get").mockResolvedValue(map);
+    vi.spyOn(api, "get").mockImplementation(async path => path.includes("/claims/") ? map.items[0] : map);
     render(wrap(<ProjectKnowledgePanel projectId={7} projectKey="DEMO" ownerId={8} />));
     await screen.findByText("Участник сообщил о выполнении импорта");
     expect(screen.queryByRole("button", { name: "Обновить знания" })).toBeNull();

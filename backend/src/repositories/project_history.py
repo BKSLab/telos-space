@@ -1,6 +1,7 @@
 """SQL-проекция публичных источников истории проекта."""
 
 from datetime import UTC, datetime, time
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import Integer, Text, case, cast, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +32,24 @@ _TASK_TITLES = {
 }
 
 
-def _event(source, kind, title, *, detail=None, actor=None, task_id=None, key=None, prefix=None):
+def _event(
+    source,
+    kind,
+    title,
+    *,
+    detail=None,
+    actor=None,
+    actor_user_id=None,
+    task_id=None,
+    key=None,
+    prefix=None,
+    event_type=None,
+    from_value=None,
+    to_value=None,
+    comment_id=None,
+    report_id=None,
+    report_revision=None,
+):
     return select(
         func.concat(prefix or kind, ":", source.id if key is None else key).label("id"),
         literal(kind, type_=Text).label("kind"),
@@ -40,6 +58,13 @@ def _event(source, kind, title, *, detail=None, actor=None, task_id=None, key=No
         source.created_at.label("created_at"),
         cast(actor, Text).label("actor_name"),
         cast(task_id, Integer).label("task_id"),
+        cast(actor_user_id, Integer).label("actor_user_id"),
+        cast(event_type, Text).label("event_type"),
+        cast(from_value, Text).label("from_value"),
+        cast(to_value, Text).label("to_value"),
+        cast(comment_id, Integer).label("comment_id"),
+        cast(report_id, Integer).label("report_id"),
+        cast(report_revision, Integer).label("report_revision"),
     ).select_from(source)
 
 
@@ -96,6 +121,10 @@ class ProjectHistoryRepository:
                         activity.reason,
                     ),
                     actor=activity.actor_name,
+                    actor_user_id=activity.actor_user_id,
+                    event_type=activity.event_type,
+                    from_value=activity.from_value,
+                    to_value=activity.to_value,
                     task_id=activity.task_id,
                 )
                 .join(tasks, tasks.c.id == activity.task_id)
@@ -116,6 +145,8 @@ class ProjectHistoryRepository:
                     func.concat("Комментарий · ", tasks.c.title),
                     detail=comment.body_md,
                     actor=comment.author_name,
+                    actor_user_id=comment.author_id,
+                    comment_id=comment.id,
                     task_id=comment.task_id,
                 ).join(tasks, tasks.c.id == comment.task_id)
             ],
@@ -126,6 +157,9 @@ class ProjectHistoryRepository:
                     func.concat("Отчёт · ", tasks.c.title, " · v", report.revision),
                     detail=report.body_md,
                     actor=report.author_name,
+                    actor_user_id=report.author_id,
+                    report_id=report.id,
+                    report_revision=report.revision,
                     task_id=report.task_id,
                 ).join(tasks, tasks.c.id == report.task_id)
             ],
@@ -146,6 +180,9 @@ class ProjectHistoryRepository:
                         deadline.comment,
                     ),
                     actor=deadline.changed_by_name,
+                    actor_user_id=deadline.changed_by_user_id,
+                    from_value=func.to_char(deadline.previous_due_date, "YYYY-MM-DD"),
+                    to_value=func.to_char(deadline.new_due_date, "YYYY-MM-DD"),
                 ).where(deadline.project_id == project_id)
             ],
             "project_context": [
@@ -155,6 +192,7 @@ class ProjectHistoryRepository:
                     "Изменение паспорта проекта",
                     detail=cast(context.changed_fields, Text),
                     actor=context.changed_by_name,
+                    actor_user_id=context.changed_by_user_id,
                     key=func.concat(context.project_id, ":", context.revision),
                 ).where(context.project_id == project_id, context.revision > 0)
             ],
@@ -175,6 +213,7 @@ class ProjectHistoryRepository:
                     func.concat("Создан документ · ", Document.title),
                     actor=_user_name(),
                     prefix="document",
+                    actor_user_id=Document.authored_by_user_id,
                 )
                 .outerjoin(User, User.id == Document.authored_by_user_id)
                 .where(
@@ -191,6 +230,7 @@ class ProjectHistoryRepository:
                     ),
                     actor=_user_name(),
                     prefix="project_file",
+                    actor_user_id=ProjectFile.uploaded_by_user_id,
                 )
                 .outerjoin(User, User.id == ProjectFile.uploaded_by_user_id)
                 .where(ProjectFile.project_id == project_id, ProjectFile.deleted_at.is_(None)),
@@ -208,13 +248,22 @@ class ProjectHistoryRepository:
             )
         if filters.actor:
             query = query.where(events.c.actor_name.icontains(filters.actor, autoescape=True))
+        if filters.actor_user_id is not None:
+            query = query.where(events.c.actor_user_id == filters.actor_user_id)
+        if filters.task_id is not None:
+            query = query.where(events.c.task_id == filters.task_id)
+        if filters.event_id:
+            query = query.where(events.c.id == filters.event_id)
+        timezone = ZoneInfo(filters.timezone)
         if filters.since:
             query = query.where(
-                events.c.created_at >= datetime.combine(filters.since, time.min, UTC)
+                events.c.created_at
+                >= datetime.combine(filters.since, time.min, timezone).astimezone(UTC)
             )
         if filters.until:
             query = query.where(
-                events.c.created_at <= datetime.combine(filters.until, time.max, UTC)
+                events.c.created_at
+                <= datetime.combine(filters.until, time.max, timezone).astimezone(UTC)
             )
         rows = await self.session.execute(
             query.order_by(events.c.created_at.desc(), events.c.id.collate("C").desc())

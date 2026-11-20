@@ -57,12 +57,22 @@ class TaskReportsService:
         except TaskReportsRepositoryError as error:
             raise TaskReportsServiceError(str(error)) from error
 
-    async def history(self, task_id: int, actor: Principal) -> list[TaskReportSchema]:
+    async def history(
+        self,
+        task_id: int,
+        actor: Principal,
+        *,
+        report_id: int | None = None,
+        revision: int | None = None,
+    ) -> list[TaskReportSchema]:
         """Возвращает последние 50 публикаций, не подменяя историю текущим текстом."""
         await self._authorize(task_id, actor)
         try:
             return [
-                TaskReportSchema.model_validate(row) for row in await self.reports.history(task_id)
+                TaskReportSchema.model_validate(row)
+                for row in await self.reports.history(
+                    task_id, report_id=report_id, revision=revision
+                )
             ]
         except TaskReportsRepositoryError as error:
             raise TaskReportsServiceError(str(error)) from error

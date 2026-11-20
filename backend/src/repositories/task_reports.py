@@ -26,14 +26,23 @@ class TaskReportsRepository:
             await self.db_session.rollback()
             raise TaskReportsRepositoryError("Ошибка чтения отчёта.") from error
 
-    async def history(self, task_id: int, limit: int = 50) -> list[TaskReport]:
+    async def history(
+        self,
+        task_id: int,
+        limit: int = 50,
+        *,
+        report_id: int | None = None,
+        revision: int | None = None,
+    ) -> list[TaskReport]:
         """Возвращает ограниченную историю от новых версий к старым."""
         try:
+            query = select(TaskReport).where(TaskReport.task_id == task_id)
+            if report_id is not None:
+                query = query.where(TaskReport.id == report_id)
+            if revision is not None:
+                query = query.where(TaskReport.revision == revision)
             result = await self.db_session.execute(
-                select(TaskReport)
-                .where(TaskReport.task_id == task_id)
-                .order_by(TaskReport.revision.desc())
-                .limit(limit)
+                query.order_by(TaskReport.revision.desc()).limit(limit)
             )
             return list(result.scalars())
         except SQLAlchemyError as error:
