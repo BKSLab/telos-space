@@ -609,13 +609,10 @@ def build_project_agent_config(settings: Settings) -> ProjectAgentConfig:
     """Собирает неизменяемую конфигурацию Арис из настроек."""
     return ProjectAgentConfig(
         knowledge_enabled=settings.knowledge.knowledge_enabled,
-        semantic_limit=settings.knowledge.knowledge_agent_semantic_limit,
-        score_threshold=settings.knowledge.qdrant_score_threshold,
         chunk_target_chars=settings.knowledge.knowledge_chunk_target_chars,
         chunk_overlap_chars=settings.knowledge.knowledge_chunk_overlap_chars,
         tool_rounds=settings.agent.agent_tool_rounds,
         context_tokens=settings.agent.agent_context_tokens,
-        retrieval_limit=settings.agent.agent_retrieval_limit,
         history_tokens=settings.agent.agent_history_tokens,
         app_public_url=settings.app.app_public_url,
     )

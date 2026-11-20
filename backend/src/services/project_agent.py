@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import secrets
@@ -16,7 +15,7 @@ from pydantic_ai.models import Model
 
 from src.agent.aris import ArisMode
 from src.agent.context import AgentContextBudget
-from src.agent.progress import SEARCH_PROJECT, ProgressReporter, ProgressSink
+from src.agent.progress import ProgressReporter, ProgressSink
 from src.agent.runtime import (
     PROJECT_ACTION_TOOL,
     ArisAnswer,
@@ -29,7 +28,7 @@ from src.agent.runtime import metrics as runtime_metrics
 from src.agent.tools import AgentTool, AgentToolContext, AgentToolExecutor, AgentToolRequest
 from src.clients.embedding import EmbeddingClient
 from src.clients.llm import LlmClient
-from src.clients.qdrant import KnowledgeSearchHit, ProjectQdrantClient
+from src.clients.qdrant import ProjectQdrantClient
 from src.db.models.knowledge_index_jobs import (
     KnowledgeIndexStatus,
 )
@@ -52,7 +51,6 @@ from src.knowledge.context import (
     coverage,
     document_fragment,
     file_issues,
-    retrieve,
 )
 from src.prompts.project_agent import (
     ARIS_BASE_PROMPTS,
@@ -120,20 +118,6 @@ def _git_read_budget(operation):
     return run
 
 
-def retrieval_query(question: str, history: list[KnowledgeChatMessageSchema]) -> str:
-    """Запрос стартового поиска: вопрос, а в продолжении беседы — ещё и прошлый вопрос.
-
-    Раньше запрос переписывал отдельный вызов модели (4–6 с до старта агента).
-    Первый вопрос беседы самодостаточен; в продолжении («а кто по ней исполнитель?»)
-    предыдущая реплика участника несёт предмет разговора. Дальше агент ищет сам
-    инструментами, стартовый поиск — только подсказка.
-    """
-    previous = next((item.content for item in reversed(history) if item.role == "user"), "").strip()
-    if not previous:
-        return question
-    return f"{previous[:TEXT_FRAGMENT_LIMIT]}\n{question}"
-
-
 class _SourceRegistry:
     """Связывает реальные source_id с непредсказуемыми хэндлами одного запроса."""
 
@@ -199,19 +183,16 @@ class ProjectAgentConfig:
     """
 
     knowledge_enabled: bool
-    semantic_limit: int
-    score_threshold: float
     chunk_target_chars: int = 2200
     chunk_overlap_chars: int = 300
     tool_rounds: int = 4
-    context_tokens: int = 12000
-    retrieval_limit: int = 5
+    context_tokens: int = 30000
     history_tokens: int = 1200
     app_public_url: str = ""
 
 
 class ProjectAgentService:
-    """RAG-агент: semantic retrieval плюс обязательный актуальный SQL-срез."""
+    """Арис с компактным начальным контекстом и адресным чтением инструментами."""
 
     def __init__(
         self,
@@ -276,7 +257,7 @@ class ProjectAgentService:
         conversation_id: str | None = None,
         on_progress: ProgressSink | None = None,
     ) -> KnowledgeAnswerSchema:
-        """Ищет по всем источникам и позволяет модели дочитать текст и связи.
+        """Запускает ответ с адресным чтением данных через инструменты.
 
         Это ответ Ариса в проектном режиме: общий чат проекта или личный виджет
         на странице проекта. ``mode`` выбирает секцию системного промпта и
@@ -337,7 +318,6 @@ class ProjectAgentService:
         progress = ProgressReporter(on_progress)
         deps: ArisDeps | None = None
         try:
-            query = retrieval_query(question, history)
             registry = _SourceRegistry()
             registry.evidence.policy(tool_context.origin_read_scopes)
             registry.evidence.project(project_id)
@@ -350,7 +330,11 @@ class ProjectAgentService:
                 "dialog_history": [message.model_dump() for message in history],
                 "dialog_memory": memory,
                 "current_participant": actor,
-                "project_reference": {"id": project.id, "key": project.key},
+                "project_reference": {
+                    "id": project.id,
+                    "key": project.key,
+                    "name": project.name[:512],
+                },
                 "writes_allowed": tool_context.can_write,
                 "previous_actions": action_history or [],
                 "uploaded_files": uploaded_files or [],
@@ -377,77 +361,9 @@ class ProjectAgentService:
                 history_tokens=self.config.history_tokens,
             )
             budget.prepare(content)
-            state: dict[str, Any] = {
-                "catalog": None,
-                "stale": False,
-                "semantic_loaded": False,
-                "fts_hits": [],
-            }
-            context_lock = asyncio.Lock()
-
-            async def load_context(group_id: str) -> None:
-                """Читает данные только после выбора рабочей области моделью."""
-                if group_id == "chat_history":
-                    return
-                async with context_lock:
-                    progress.report(SEARCH_PROJECT)
-                    if state["catalog"] is None:
-                        current_project, catalog, fts_hits, stages = await self._load_project_base(
-                            project_id, query, phases
-                        )
-                        state["catalog"], state["fts_hits"] = catalog, fts_hits
-                        for source in catalog.sources.values():
-                            if (
-                                source.source_id == f"project:{project_id}"
-                                or source.kind == "stage"
-                            ):
-                                registry.evidence.internal(
-                                    project_id,
-                                    source,
-                                    projection="stage_summary"
-                                    if source.kind == "stage"
-                                    else "source",
-                                )
-                        content.update(
-                            retrieval_query=query,
-                            current_postgres_state=self._build_postgres_context(
-                                project=current_project, stages=stages, registry=registry
-                            ),
-                            catalog={
-                                "counts": catalog.counts,
-                                "file_issues": file_issues(catalog)[:5],
-                                "file_issues_total": len(file_issues(catalog)),
-                                "semantic_available": False,
-                            },
-                        )
-                        content["retrieval_context"] = retrieve(
-                            catalog,
-                            fts_hits=fts_hits,
-                            semantic_hits=[],
-                            query=query,
-                            target_chars=self.config.chunk_target_chars,
-                            overlap_chars=self.config.chunk_overlap_chars,
-                            limit=self.config.retrieval_limit,
-                        )
-                    # Точные операции с задачами/досками читают SQL-инструментами.
-                    # Embeddings нужны только для выбранной области поиска по знаниям.
-                    if (
-                        group_id in {"sources", "documents", "reports"}
-                        and not state["semantic_loaded"]
-                    ):
-                        hits, available = await self._semantic_search(project_id, query, phases)
-                        state["semantic_loaded"] = True
-                        content["catalog"]["semantic_available"] = available
-                        content["retrieval_context"] = retrieve(
-                            state["catalog"],
-                            fts_hits=state["fts_hits"],
-                            semantic_hits=hits,
-                            query=query,
-                            target_chars=self.config.chunk_target_chars,
-                            overlap_chars=self.config.chunk_overlap_chars,
-                            limit=self.config.retrieval_limit,
-                        )
-                    self._register_views(content, state["catalog"], registry)
+            # Каталог служит только серверной проверке прочитанных источников.
+            # Загрузка capability открывает схемы, но сама не читает данные проекта.
+            state: dict[str, Any] = {"catalog": None, "stale": False}
 
             deps = ArisDeps(
                 execution=tool_context,
@@ -457,7 +373,6 @@ class ProjectAgentService:
                 budget=budget,
                 tool_rounds=self.config.tool_rounds,
                 defer_workflows=True,
-                load_context=load_context,
                 write_gate_factory=(
                     lambda: self._write_gate(
                         question=question,
@@ -494,14 +409,17 @@ class ProjectAgentService:
                 mutating = tool.mutating or tool.name == PROJECT_ACTION_TOOL
                 # Новая сущность должна получить проверенный handle уже в результате
                 # создавшего её инструмента, до следующего шага модели.
-                if state["stale"] or mutating:
+                if self._needs_source_catalog(result) and (
+                    state["catalog"] is None or state["stale"] or mutating
+                ):
                     async with self.scope() as db:
                         await self._require_project(db, project_id=project_id)
                         state["catalog"] = build_catalog(
                             project_id, await db.sources.get_project_rows(project_id)
                         )
                     state["stale"] = False
-                self._register_views(result, state["catalog"], registry)
+                if state["catalog"] is not None:
+                    self._register_views(result, state["catalog"], registry)
                 if tool.name in {"telos_get_task", "telos_get_any_task"}:
                     source_id = result.get("source_id")
                     if (
@@ -1139,6 +1057,24 @@ class ProjectAgentService:
         return f"{base}/?task={{key}}" if base else None
 
     @staticmethod
+    def _needs_source_catalog(value: Any) -> bool:
+        """Нужна ли проверка source handles, включая родителя текущего отчёта."""
+        if isinstance(value, dict):
+            if isinstance(value.get("source_id"), str):
+                return True
+            report = value.get("report")
+            if isinstance(report, dict) and isinstance(report.get("task_id"), int):
+                return True
+            return any(
+                ProjectAgentService._needs_source_catalog(item)
+                for key, item in value.items()
+                if key not in {"properties", "dialog_history"}
+            )
+        if isinstance(value, list):
+            return any(ProjectAgentService._needs_source_catalog(item) for item in value)
+        return False
+
+    @staticmethod
     def _register_views(value, catalog, registry) -> None:
         if isinstance(value, dict):
             report = value.get("report")
@@ -1461,95 +1397,3 @@ class ProjectAgentService:
             max_completion_tokens=700,
         )
         return result.write_intent
-
-    async def _semantic_search(
-        self, project_id: int, query: str, phases: dict[str, float | None]
-    ) -> tuple[list[KnowledgeSearchHit], bool]:
-        """Векторный поиск по проекту; недоступный индекс — не ошибка ответа."""
-        if not self.config.knowledge_enabled:
-            return [], False
-        phase = perf_counter()
-        try:
-            vector = await self.embedding_client.get_embedding(query)
-            phases["embedding"] = self._elapsed_ms(phase)
-            phase = perf_counter()
-            hits = await self.qdrant_client.search(
-                project_id=project_id,
-                vector=vector,
-                limit=self.config.semantic_limit,
-                score_threshold=self.config.score_threshold,
-                entity_type=None,
-            )
-            phases["qdrant"] = self._elapsed_ms(phase)
-            return hits, True
-        except ClientError:
-            phases["qdrant" if phases["embedding"] is not None else "embedding"] = self._elapsed_ms(
-                phase
-            )
-            logger.warning(
-                "Семантический поиск проекта %s недоступен; читаю PostgreSQL.",
-                project_id,
-                exc_info=True,
-            )
-            return [], False
-
-    async def _load_project_base(
-        self, project_id: int, query: str, phases: dict[str, float | None]
-    ) -> tuple[Project, Any, list[Any], list[Any]]:
-        """Проект, каталог источников, полнотекстовый поиск и стадии — одной короткой сессией."""
-        phase = perf_counter()
-        try:
-            async with self.scope() as db:
-                project = await self._require_project(db, project_id=project_id)
-                catalog = build_catalog(project_id, await db.sources.get_project_rows(project_id))
-                fts_hits = await db.sources.search(project_id, query, entity_type=None, limit=30)
-                stages = await db.stages.get_by_project(project_id)
-        except RepositoryError as error:
-            raise AgentAnswerError(str(error)) from error
-        phases["ranked_fts"] = self._elapsed_ms(phase)
-        return project, catalog, fts_hits, stages
-
-    def _build_postgres_context(
-        self,
-        *,
-        project: Project,
-        stages: list[Any],
-        registry: _SourceRegistry,
-    ) -> dict[str, Any]:
-        """Паспорт проекта и его стадии — актуальная база ответа из PostgreSQL.
-
-        Остальное (сводки, просрочки, календарь, риски) агент читает сам
-        инструментами — раньше это подкладывал планировщик до старта агента.
-        """
-        from src.utils.project_context import compact_project_context
-
-        project_source = KnowledgeSourceSchema(
-            source_id=f"project:{project.id}",
-            entity_type="project",
-            entity_id=project.id,
-            title=f"{project.key} · {project.name}"[:512],
-            excerpt=(project.description_md or "")[:SOURCE_EXCERPT_LIMIT] or None,
-        )
-        return {
-            "project": {
-                "source_handle": registry.register(project_source),
-                "key": project.key,
-                "name": project.name[:512],
-                "status": getattr(project.status, "value", str(project.status)),
-                "start_date": str(project.start_date) if project.start_date else None,
-                "due_date": str(project.due_date) if project.due_date else None,
-                "context_revision": getattr(project, "context_revision", 0) or 0,
-                "context": compact_project_context(
-                    sections=getattr(project, "description_sections", None),
-                    description_md=project.description_md,
-                    revision=getattr(project, "context_revision", 0) or 0,
-                ),
-                "context_read": {
-                    "tool": "telos_read_source",
-                    "arguments": {"source_id": f"project:{project.id}"},
-                },
-            },
-            "stages": [
-                {"name": stage.name[:255], "is_done_stage": stage.is_done_stage} for stage in stages
-            ],
-        }

@@ -83,7 +83,7 @@ def final(answer: str = "", source_ids: list[str] | None = None, primary_referen
     )
 
 
-def legacy_model(llm_client) -> FunctionModel:
+def legacy_model(llm_client, *, search_first: bool = False) -> FunctionModel:
     """FunctionModel, делегирующая шаги прежнему дублёру ``get_structured_response``."""
 
     async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -116,6 +116,12 @@ def legacy_model(llm_client) -> FunctionModel:
                         instructions += "\n" + str(part.content.get("instructions", ""))
         payload = prompt_payload(messages)
         results = tool_results(messages)
+        if search_first and not results and any(
+            tool.name == "telos_search_sources" for tool in info.function_tools
+        ):
+            return ModelResponse(parts=[ToolCallPart(
+                "telos_search_sources", {"query": payload["question"], "limit": 5}
+            )])
         if results:
             payload["read_results"] = results
         output = await llm_client.get_structured_response(

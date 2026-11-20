@@ -323,25 +323,39 @@ class GitSourceService:
             account = GitAccountSnapshot(id=profile["github_account_id"], login=profile["github_login"])
         return GitHubProfile(account=account)
 
+    async def check_github_profile(self, principal: Principal, token: SecretStr) -> GitHubProfile:
+        """Проверяет аккаунт токена без сохранения credentials и изменения подключений."""
+        self._require_profile_session(principal)
+        async with self.scope() as db:
+            current = await db.auth.refresh_principal(principal)
+            self._require_profile_session(current)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,1024}", token.get_secret_value()):
+            raise GitSourceValidationError()
+        async with self._client(token) as client:
+            try:
+                account = await client.get_authenticated_account()
+            except GitHubAuthenticationError:
+                raise GitSourceValidationError() from None
+            except GitHubRateLimitError as error:
+                raise self._rate_limited(error) from None
+            except GitHubClientError:
+                raise GitSourceIncompleteError() from None
+        async with self.scope() as db:
+            current = await db.auth.refresh_principal(principal)
+            self._require_profile_session(current)
+        return GitHubProfile(account=account)
+
     async def set_github_profile(
         self, principal: Principal, token: SecretStr | None
     ) -> GitHubProfile:
         self._require_profile_session(principal)
         account, ciphertext = None, None
         if token is not None:
-            if not re.fullmatch(r"[A-Za-z0-9_-]{1,1024}", token.get_secret_value()):
-                raise GitSourceValidationError()
+            account = (await self.check_github_profile(principal, token)).account
             ciphertext = self.credential_codec.encrypt(token)
-            async with self._client(token) as client:
-                try:
-                    account = await client.get_authenticated_account()
-                except GitHubAuthenticationError:
-                    raise GitSourceValidationError() from None
-                except GitHubRateLimitError as error:
-                    raise self._rate_limited(error) from None
-                except GitHubClientError:
-                    raise GitSourceIncompleteError() from None
         async with self.scope() as db:
+            current = await db.auth.refresh_principal(principal)
+            self._require_profile_session(current)
             if await db.sources.github_profile(principal.user_id, lock=True) is None:
                 raise GitSourceNotAvailableError()
             await db.sources.update_github_profile(

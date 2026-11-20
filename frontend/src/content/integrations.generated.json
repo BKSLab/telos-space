@@ -41148,6 +41148,94 @@
     },
     {
       "access": "session",
+      "description": "Проверяет аккаунт переданного токена без сохранения и изменения подключений. Требует действующую локальную сессию. Доступ к отдельным репозиториям не проверяет.",
+      "group": "github-profile",
+      "id": "api-bc3b2eee6e0e6084",
+      "kind": "http",
+      "method": "POST",
+      "name": "POST /api/v1/users/me/github/check",
+      "operationId": "checkGitHubProfile",
+      "parameters": [
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/users/me/github/check",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/GitHubProfileUpdate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubProfile"
+              }
+            }
+          },
+          "description": "Аккаунт проверенного токена без credentials."
+        },
+        "401": {
+          "description": "Сессия отсутствует или больше не действует."
+        },
+        "403": {
+          "description": "Требуется локальная сессия активного пользователя."
+        },
+        "422": {
+          "description": "Недопустимый токен или параметры без отражения secret input."
+        },
+        "429": {
+          "description": "Лимит GitHub; время ожидания в Retry-After."
+        },
+        "500": {
+          "description": "Не удалось проверить токен."
+        },
+        "503": {
+          "description": "GitHub временно недоступен."
+        }
+      },
+      "scopes": null,
+      "summary": "Проверить токен GitHub",
+      "tokens": []
+    },
+    {
+      "access": "session",
       "description": "",
       "group": "github-profile",
       "id": "api-30f680eb68caaf26",
@@ -57848,6 +57936,10 @@
       "additionalProperties": false,
       "properties": {
         "token": {
+          "description": "Личный токен GitHub для проверки аккаунта или сохранения в профиле.",
+          "examples": [
+            "github_pat_example"
+          ],
           "format": "password",
           "maxLength": 1024,
           "minLength": 1,

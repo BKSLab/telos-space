@@ -547,6 +547,35 @@ async def test_forcepush_rollback_generation_revocation_and_project_membership(e
         assert len(remote.requests) == count
 
 
+async def test_candidate_profile_check_preserves_saved_token_connection_and_outbox(engine):
+    async with environment(engine) as env:
+        source = await connect(env)
+
+        async def persisted_state():
+            async with env.sessions() as db:
+                repository = GitSourcesRepository(db)
+                profile = await repository.github_profile(env.principal.user_id)
+                connection = await repository.get_connection(
+                    project_id=env.project, connection_id=source.id
+                )
+                job = await repository.get_job(
+                    connection_id=source.id, generation=source.generation
+                )
+                outbox_count = await db.scalar(
+                    select(func.count()).select_from(KnowledgeIndexJob).where(
+                        KnowledgeIndexJob.project_id == env.project
+                    )
+                )
+                return profile, connection, job, outbox_count
+
+        before = await persisted_state()
+        result = await env.service.check_github_profile(
+            env.principal, SecretStr("synthetic-unsaved-candidate")
+        )
+        assert result.model_dump() == {"account": {"id": 42, "login": "example"}}
+        assert await persisted_state() == before
+
+
 async def test_private_binding_owner_session_current_scopes_and_immediate_revoke(engine):
     async with environment(engine) as env:
         env.remote.private = True

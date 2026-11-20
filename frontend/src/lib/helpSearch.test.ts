@@ -8,6 +8,9 @@ describe("поиск по справке", () => {
         expect(searchHelp("baseline").some(result => result.article.id === "calendar")).toBe(true);
         expect(searchHelp("подтверждением").some(result => result.article.id === "aris-and-chats")).toBe(true);
         expect(searchHelp("как создать задачу").some(result => result.article.id === "task-card")).toBe(true);
+        expect(searchHelp("проверить токен GitHub").some(result => result.article.id === "github-token")).toBe(true);
+        expect(searchHelp("индексация охват").some(result => result.article.id === "git-sources")).toBe(true);
+        expect(searchHelp("история сегодня").some(result => result.article.id === "project-history")).toBe(true);
     });
     it("объединяет слова запроса и учитывает русские буквы независимо от регистра и ё", () => {
         expect(searchHelp("MCP 401").some(result => result.article.id === "mcp-troubleshooting")).toBe(true);

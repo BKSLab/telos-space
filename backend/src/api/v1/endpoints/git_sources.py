@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from src.dependencies.git_sources import GitSourcePrincipalDep, GitSourceServiceDep
+from src.exceptions.auth import AuthServiceError
 from src.exceptions.git_sources import GitSourceRateLimitedError, GitSourceServiceError
 from src.schemas.git_sources import (
     GitComparison,
@@ -64,7 +65,7 @@ class GitRoute(APIRoute):
                     detail=error.detail,
                     headers={"Retry-After": str(error.retry_after)},
                 ) from None
-            except GitSourceServiceError as error:
+            except (GitSourceServiceError, AuthServiceError) as error:
                 raise HTTPException(status_code=error.status_code, detail=error.detail) from None
 
         return handler
@@ -528,6 +529,32 @@ async def set_github_profile(
     data: GitHubProfileUpdate, service: GitSourceServiceDep, principal: GitSourcePrincipalDep
 ) -> GitHubProfile:
     return await service.set_github_profile(principal, data.token)
+
+
+@profile_router.post(
+    "/check",
+    operation_id="checkGitHubProfile",
+    response_model=GitHubProfile,
+    summary="Проверить токен GitHub",
+    description=(
+        "Проверяет аккаунт переданного токена без сохранения и изменения подключений. "
+        "Требует действующую локальную сессию. Доступ к отдельным репозиториям не проверяет."
+    ),
+    response_description="Аккаунт проверенного токена без credentials.",
+    responses={
+        401: {"description": "Сессия отсутствует или больше не действует."},
+        403: {"description": "Требуется локальная сессия активного пользователя."},
+        422: {"description": "Недопустимый токен или параметры без отражения secret input."},
+        429: {"description": "Лимит GitHub; время ожидания в Retry-After."},
+        500: {"description": "Не удалось проверить токен."},
+        503: {"description": "GitHub временно недоступен."},
+    },
+)
+async def check_github_profile(
+    data: GitHubProfileUpdate, service: GitSourceServiceDep, principal: GitSourcePrincipalDep
+) -> GitHubProfile:
+    """Возвращает аккаунт кандидата, не изменяя сохранённый профиль."""
+    return await service.check_github_profile(principal, data.token)
 
 
 @profile_router.delete(

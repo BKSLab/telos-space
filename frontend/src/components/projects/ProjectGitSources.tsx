@@ -8,20 +8,15 @@ import { Modal } from "@/components/ui/Modal";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { api, ApiError, queryKeys } from "@/lib/api";
 import { validRepositoryDrafts, type RepositoryDraft } from "@/lib/github";
-import { contextApi, GIT_STATES, type GitConnection, type GitConnectionPage, type GitFilePage, type GitSourceHit } from "@/lib/projectKnowledge";
+import { contextApi, type GitConnection, type GitConnectionPage, type GitFilePage, type GitSourceHit } from "@/lib/projectKnowledge";
 import { useGitHubPause } from "@/lib/useGitHubPause";
 import { useRepositoryConnections } from "@/lib/useRepositoryConnections";
 import { GitHubRepositoryPicker } from "./GitHubRepositoryPicker";
 import { RepositoryConnectionProgress } from "./RepositoryConnectionProgress";
+import { GitIndexBadge, GitIndexDetails, GitIndexSummary } from "./GitIndexStatus";
 
 const gitConnectionsKey = (projectId: number) => [...queryKeys.project(projectId), "git", "connections"];
 const connectionPath = (projectId: number, id: number) => `${contextApi.git(projectId)}/connections/${id}`;
-
-function connectionStatus(connection: GitConnection) {
-    if (connection.last_error_code === "rate_limited") return "Индексация приостановлена";
-    if (connection.last_error_code === "github_profile_pending") return "Ожидает проверки доступа";
-    return GIT_STATES[connection.state] ?? connection.state;
-}
 
 function RepositoryPreview({ page }: { page: GitConnectionPage }) {
     if (page.total === 0) return <p className="text-[13px] text-muted">Репозитории не подключены.</p>;
@@ -33,7 +28,7 @@ function RepositoryPreview({ page }: { page: GitConnectionPage }) {
                 <p className="break-words font-medium text-secondary">{connection.name}</p>
                 <p className="break-all text-[12px] text-muted">{connection.ref.replace(/^heads\//, "")}</p>
             </div>
-            <span className={attention(connection) ? "text-warning" : "text-muted"}>{connectionStatus(connection)}</span>
+            <GitIndexBadge connection={connection} />
         </li>)}
         {page.total > displayed.length && <li className="pt-2 text-muted">Ещё {page.total - displayed.length}</li>}
     </ul>;
@@ -62,19 +57,13 @@ function GitConnectionCard({ connection, canEdit, refresh }: { connection: GitCo
     });
     const beginEdit = () => { mutation.reset(); setNotice(""); setDraft({ name: connection.name, purpose: connection.purpose, ref: connection.ref, expected_revision: connection.revision, share_private_with_project: connection.share_private_with_project }); };
     return <Card variant="inset" className="flex min-w-0 flex-col gap-3 p-4">
-        <div className="flex flex-wrap justify-between gap-2">
-            <div className="min-w-0"><h3 className="break-words font-medium text-secondary">{connection.name}</h3>
-                <p className="break-all text-[12px] text-muted">{connection.owner}/{connection.repo} · {connection.ref} · {connection.is_private ? "Закрытый" : "Публичный"}</p></div>
-            <p className="text-[12px] text-secondary">{connectionStatus(connection)}</p>
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:justify-between">
+            <div className="flex min-w-0 flex-1 items-start gap-2.5"><GitBranch size={18} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" /><div className="min-w-0"><h3 className="break-words font-medium text-secondary">{connection.name}</h3>
+                <p className="break-all text-[12px] text-muted">{connection.owner}/{connection.repo} · {connection.ref} · {connection.is_private ? "Закрытый" : "Публичный"}</p></div></div>
+            <GitIndexBadge connection={connection} />
         </div>
         {connection.purpose && <p className="break-words text-[13px] text-secondary">{connection.purpose}</p>}
-        <dl className="grid min-w-0 gap-1 text-[12px]">
-            <div><dt className="text-muted">Обнаруженная версия</dt><dd className="break-all font-mono text-secondary">{connection.observed_sha ?? "Не проверена"}</dd></div>
-            <div><dt className="text-muted">Проиндексированная версия</dt><dd className="break-all font-mono text-secondary">{connection.indexed_sha ?? "Индексация не завершена"}</dd></div>
-        </dl>
-        <p className="text-[12px] text-muted">Файлов: {connection.coverage.indexed_files} из {connection.coverage.total_files}; исключено {connection.coverage.excluded_files}; ошибок {connection.coverage.failed_files}.
-            {connection.coverage.truncated && " Дерево получено не полностью."}
-            {connection.checked_at && <> Проверено: <time dateTime={connection.checked_at}>{new Date(connection.checked_at).toLocaleString("ru-RU")}</time>.</>}</p>
+        <GitIndexDetails connection={connection} />
         {rateLimited && <p role="status" className="text-[12px] text-warning">
             {paused ? <>Лимит GitHub исчерпан. Следующая проверка после <time dateTime={connection.next_poll_at ?? undefined}>{new Date(retryAt).toLocaleString("ru-RU")}</time>.</> : "Лимит GitHub исчерпан. Можно запросить повторную проверку."}
         </p>}
@@ -156,6 +145,7 @@ export function ProjectGitSources({ projectId, canEdit, collapsible = false }: {
             <Button className="ml-2" disabled={git.isPending} onClick={() => { setAdding(false); setRepositories([]); git.reset(); }}>{git.items.length ? "Закрыть" : "Отмена"}</Button>
         </Card>}
         {!connections.error && connections.data?.total === 0 && <p className="text-[13px] text-muted">Репозитории не подключены. Контекст из паспорта и документов доступен без Git.</p>}
+        {connections.data && !connections.error && <GitIndexSummary page={connections.data} />}
         <div className="grid min-w-0 gap-3">{!connections.error && connections.data?.items.map(connection => <GitConnectionCard key={connection.id} connection={connection} canEdit={canEdit} refresh={refresh} />)}</div>
         {connections.data && !connections.error && (offset > 0 || connections.data.next_offset !== null) && <nav aria-label="Страницы репозиториев" className="flex gap-2"><Button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>Назад</Button><Button disabled={connections.data.next_offset === null} onClick={() => connections.data.next_offset !== null && setOffset(connections.data.next_offset)}>Дальше</Button></nav>}
         <details onToggle={event => setMapOpen(event.currentTarget.open)}>

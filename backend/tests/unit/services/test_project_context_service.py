@@ -23,7 +23,6 @@ from src.schemas.knowledge import KnowledgeReadRequest
 from src.schemas.project_tool_inputs import EmptyInput, ProjectChangesInput
 from src.schemas.projects import ProjectDescriptionSchema, ProjectSchema, ProjectUpdateSchema
 from src.services import agent_project_actions
-from src.services.project_agent import ProjectAgentService, _SourceRegistry
 from src.services.project_query import ProjectOverviewDto, ProjectSummaryDto
 from src.utils.project_context import PROJECT_CONTEXT_FIELD_NAMES, compact_project_context
 from src.utils.project_description import compose_project_description
@@ -334,12 +333,6 @@ async def test_model_tools_and_prompt_use_compact_passport_while_source_reader_k
         assert result["project"]["context_revision"] == 7
         assert result["project"]["context_read"]["arguments"]["source_id"] == "project:7"
         assert len(json.dumps(result, ensure_ascii=False)) < 5000
-    prompt = ProjectAgentService._build_postgres_context(
-        SimpleNamespace(), project=project, stages=[], registry=_SourceRegistry()
-    )
-    assert "description" not in prompt["project"]
-    assert prompt["project"]["context"]["fields"]["goal"] == long[:160]
-
     rows = {
         "projects": [
             {

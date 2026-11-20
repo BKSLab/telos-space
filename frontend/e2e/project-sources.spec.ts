@@ -275,6 +275,43 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
 }
 
 for (const width of [320, 1440]) {
+    test(`индексация Git: охват, очередь, ошибки и версии — ${width}`, async ({ page }, info) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await installMockApi(page, mockState());
+        await sourcesApi(page);
+        const ready = { ...connection(1, "Frontend", "main"), coverage: { total_files: 120, indexed_files: 120, excluded_files: 0, failed_files: 0, truncated: false } };
+        const items = [
+            ready,
+            { ...ready, id: 2, name: "API · обновление", state: "syncing", observed_sha: "b".repeat(40) },
+            { ...ready, id: 3, name: "Документация · очередь", state: "pending", indexed_sha: null, coverage: { total_files: 0, indexed_files: 0, excluded_files: 0, failed_files: 0, truncated: false } },
+            { ...ready, id: 4, name: "Архив · неполный охват", state: "partial", coverage: { total_files: 100, indexed_files: 60, excluded_files: 30, failed_files: 2, truncated: true } },
+            { ...ready, id: 5, name: "Сервис · доступ потерян", state: "access_lost", last_error_code: "credential_missing" },
+        ];
+        await page.route("**/api/v1/projects/1/git/connections?**", route => route.fulfill({ json: { items, total: 5, offset: 0, limit: 20, next_offset: null } }));
+        await page.goto("/projects/DEMO/knowledge?view=code");
+        await expect(page.getByText("Актуальны: 1", { exact: true })).toBeVisible();
+        await expect(page.getByText("В работе: 2", { exact: true })).toBeVisible();
+        await expect(page.getByText("Требуют внимания: 2", { exact: true })).toBeVisible();
+        await expect(page.getByText("Индекс актуален", { exact: true })).toBeVisible();
+        await expect(page.getByRole("list", { name: "Этапы индексации" })).toHaveCount(5);
+        await expect(page.getByRole("progressbar")).toHaveCount(0);
+        await expect(page.getByText(/100%/)).toHaveCount(0);
+        await page.screenshot({ path: info.outputPath("git-index-overview.png"), animations: "disabled" });
+        await page.getByText("Индексируется", { exact: true }).scrollIntoViewIfNeeded();
+        await expect(page.getByText("Предыдущая версия", { exact: true })).toBeVisible();
+        await expect(page.getByText("Это охват файлов, а не процент выполнения текущего обновления.")).toBeVisible();
+        await page.screenshot({ path: info.outputPath("git-index-active.png"), animations: "disabled" });
+        await page.getByText("Охват ограничен. Данные не отражают весь репозиторий.").scrollIntoViewIfNeeded();
+        await expect(page.getByRole("img", { name: "Охват файлов: в индексе 60, исключено 30, ошибок 2, всего 100" })).toBeVisible();
+        await expect(page.getByLabel("b".repeat(40), { exact: true })).toHaveText("bbbbbbbb");
+        await expect(page.getByRole("button", { name: "Настроить", exact: true })).toHaveCount(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath("git-index-partial.png"), animations: "disabled" });
+        await page.goto("/projects/DEMO/settings");
+        await page.locator("summary").getByText("Управлять репозиториями", { exact: true }).click();
+        await expect(page.getByRole("link", { name: "Настроить доступ к GitHub" })).toHaveAttribute("href", "/profile?tab=github");
+    });
+
     test(`сохраняет выборку и открывает источник вне страницы — ${width}`, async ({ page }, info) => {
         await page.setViewportSize({ width, height: 900 });
         await installMockApi(page, mockState());

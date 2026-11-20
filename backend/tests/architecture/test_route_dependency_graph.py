@@ -30,6 +30,7 @@ PUBLIC_READ_ROUTES = {
 # Управление токенами закрыто для самих токенов: скомпрометированный токен
 # не должен уметь выпустить себе замену и отозвать чужие.
 SESSION_ONLY_ROUTES = {
+    ("POST", "/api/v1/users/me/github/check"),
     ("PUT", "/api/v1/users/me/github"),
     ("DELETE", "/api/v1/users/me/github"),
     ("POST", "/api/v1/projects/{project_id}/web-research/topics"),
@@ -107,6 +108,7 @@ DETACHED_AUTH_ROUTES = DOCUMENT_ROUTES | STREAMING_ROUTES | DETACHED_WRITE_SERVI
 # Все context routes используют свежую авторизацию сервиса в короткой DB-области.
 # Webhook аутентифицирует HMAC и repository binding вместо user credentials.
 CONTEXT_READ_SERVICES = {
+    ('POST', '/api/v1/users/me/github/check'): "get_git_source_service",
     ('GET', '/api/v1/users/me/github'): "get_git_source_service",
     ('GET', '/api/v1/users/me/github/repositories'): "get_git_source_service",
     ("POST", "/api/v1/aris/requests"): "get_agent_requests_service",
@@ -146,7 +148,7 @@ ACTION_DECISION_SERVICES = {
 }
 SERVICE_WRITE_GUARDS = DETACHED_WRITE_SERVICES | ACTION_DECISION_SERVICES
 
-EXPECTED_NON_GET_TOTAL = 140
+EXPECTED_NON_GET_TOTAL = 141
 EXPECTED_MUTATION_TOTAL = 113
 
 
@@ -368,7 +370,7 @@ def test_authentication_is_required_everywhere_except_public_routes() -> None:
         if (method, path) not in SESSION_ONLY_ROUTES:
             continue
         deps = route_dependencies(route)
-        if path == "/api/v1/users/me/github":
+        if path in {"/api/v1/users/me/github", "/api/v1/users/me/github/check"}:
             # GitSourceService enforces session-only operations in the detached service.
             assert {"get_git_source_principal", "get_git_source_service"} <= deps
         else:

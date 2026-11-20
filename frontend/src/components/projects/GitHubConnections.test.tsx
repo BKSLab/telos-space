@@ -28,8 +28,11 @@ it.each([null, { id: 7, login: "octocat" }])("предлагает только 
     expect(get).toHaveBeenCalledTimes(account ? 2 : 1);
 });
 
-it("сохраняет, заменяет и удаляет токен в профиле", async () => {
+it("проверяет без сохранения, затем сохраняет, заменяет и удаляет токен в профиле", async () => {
     vi.spyOn(api, "get").mockResolvedValue({ account: null });
+    const check = vi.spyOn(api, "post")
+        .mockResolvedValueOnce({ account: { id: 7, login: "octocat" } })
+        .mockResolvedValueOnce({ account: { id: 8, login: "other" } });
     const put = vi.spyOn(api, "put")
         .mockResolvedValueOnce({ account: { id: 7, login: "octocat" } })
         .mockResolvedValueOnce({ account: { id: 8, login: "other" } });
@@ -38,12 +41,25 @@ it("сохраняет, заменяет и удаляет токен в про�
     const token = await screen.findByLabelText("Токен GitHub") as HTMLInputElement;
     expect(token.type).toBe("password");
     fireEvent.change(token, { target: { value: "synthetic" } });
-    fireEvent.click(screen.getByRole("button", { name: "Подключить GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Проверить токен" }));
+    await screen.findByText("Токен проверен");
+    expect(check).toHaveBeenNthCalledWith(1, `${githubPath}/check`, { token: "synthetic" });
+    expect(put).not.toHaveBeenCalled();
+    expect(screen.queryByText("Токен сохранён")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить токен" }));
     await screen.findByText("Аккаунт GitHub: octocat");
     expect(put).toHaveBeenNthCalledWith(1, githubPath, { token: "synthetic" });
-    expect(token.value).toBe("");
-    fireEvent.change(token, { target: { value: "synthetic-replacement" } });
+    expect(screen.getByText("Токен сохранён")).toBeTruthy();
+    expect(screen.queryByLabelText("Токен GitHub")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Заменить токен" }));
+    const replacement = screen.getByLabelText("Токен GitHub") as HTMLInputElement;
+    expect(replacement.value).toBe("");
+    fireEvent.change(replacement, { target: { value: "synthetic-replacement" } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить токен" }));
+    await screen.findByText("Токен проверен");
+    expect(screen.getByText("Аккаунт GitHub: octocat")).toBeTruthy();
+    expect(put).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить токен" }));
     await screen.findByText("Аккаунт GitHub: other");
     expect(put).toHaveBeenNthCalledWith(2, githubPath, { token: "synthetic-replacement" });
     fireEvent.click(screen.getByRole("button", { name: "Удалить токен" }));
@@ -51,6 +67,72 @@ it("сохраняет, заменяет и удаляет токен в про�
     fireEvent.click(screen.getByRole("button", { name: "Удалить токен" }));
     await screen.findByText("Аккаунт GitHub не подключён.");
     expect(remove).toHaveBeenCalledWith(githubPath);
+});
+
+it("при открытии показывает сохранённый токен, а отмена замены очищает черновик", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ account: { id: 7, login: "octocat" } });
+    const put = vi.spyOn(api, "put");
+    mount(<GitHubAccountPanel />);
+    await screen.findByText("Токен сохранён");
+    expect(screen.queryByLabelText("Токен GitHub")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Заменить токен" }));
+    fireEvent.change(screen.getByLabelText("Токен GitHub"), { target: { value: "synthetic-unsaved" } });
+    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    expect(screen.queryByLabelText("Токен GitHub")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Заменить токен" }));
+    expect((screen.getByLabelText("Токен GitHub") as HTMLInputElement).value).toBe("");
+    expect(put).not.toHaveBeenCalled();
+});
+
+it("после изменения проверенного токена требует новой проверки и не сохраняет ошибочный", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ account: null });
+    vi.spyOn(api, "post").mockResolvedValueOnce({ account: { id: 7, login: "octocat" } })
+        .mockRejectedValueOnce(new ApiError(409, "synthetic-private-upstream-error"));
+    const put = vi.spyOn(api, "put");
+    mount(<GitHubAccountPanel />);
+    const input = await screen.findByLabelText("Токен GitHub");
+    fireEvent.change(input, { target: { value: "synthetic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить токен" }));
+    await screen.findByText("Токен проверен");
+    fireEvent.change(input, { target: { value: "synthetic-other" } });
+    expect(screen.queryByText("Токен проверен")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Сохранить токен" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Проверить токен" }));
+    await screen.findByRole("alert");
+    expect(screen.queryByText("synthetic-private-upstream-error")).toBeNull();
+    expect(screen.queryByText("Токен сохранён")).toBeNull();
+    expect(put).not.toHaveBeenCalled();
+});
+
+it("ошибка сохранения не заменяет текущий аккаунт и сбрасывает успешную проверку", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ account: { id: 7, login: "octocat" } });
+    vi.spyOn(api, "post").mockResolvedValue({ account: { id: 8, login: "other" } });
+    vi.spyOn(api, "put").mockRejectedValue(new ApiError(409, "Token revoked after check"));
+    mount(<GitHubAccountPanel />);
+    fireEvent.click(await screen.findByRole("button", { name: "Заменить токен" }));
+    fireEvent.change(screen.getByLabelText("Токен GitHub"), { target: { value: "synthetic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить токен" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Сохранить токен" }));
+    await screen.findByRole("alert");
+    expect(screen.getByText("Аккаунт GitHub: octocat")).toBeTruthy();
+    expect(screen.queryByText("Аккаунт GitHub: other")).toBeNull();
+    expect(screen.queryByText("Токен проверен")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Сохранить токен" })).toBeNull();
+});
+
+it("после ограничения GitHub блокирует проверку до Retry-After", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ account: null });
+    const post = vi.spyOn(api, "post").mockRejectedValue(new ApiError(429, "rate_limited", "1"));
+    mount(<GitHubAccountPanel />);
+    const input = await screen.findByLabelText("Токен GitHub");
+    fireEvent.change(input, { target: { value: "synthetic" } });
+    const check = screen.getByRole("button", { name: "Проверить токен" }) as HTMLButtonElement;
+    fireEvent.click(check);
+    await screen.findByText(/GitHub ограничил запросы/);
+    expect(check.disabled).toBe(true);
+    fireEvent.click(check);
+    expect(post).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(check.disabled).toBe(false), { timeout: 2500 });
 });
 
 it("в настройках выбирает репозитории с нескольких страниц, требует согласия и передаёт ref", async () => {

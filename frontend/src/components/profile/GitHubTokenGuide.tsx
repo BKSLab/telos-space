@@ -40,7 +40,7 @@ export function GitHubTokenGuide({ initiallyOpen }: { initiallyOpen: boolean }) 
                 <li>В <strong>Resource owner</strong> выберите владельца репозиториев: себя или организацию. В <strong>Repository access</strong> выберите <strong>Only select repositories</strong> и отметьте нужные в <strong>Selected repositories</strong>.</li>
                 <li>В <strong>Permissions</strong> проверьте разрешения репозиториев ниже. У каждого — <strong>Read-only</strong>.</li>
                 <li>Нажмите <strong>Generate token</strong> и сразу скопируйте токен.</li>
-                <li>Вставьте его в поле «Токен GitHub» ниже и нажмите «Подключить GitHub» или «Заменить токен».</li>
+                <li>Вставьте его в поле «Токен GitHub» ниже и нажмите «Проверить токен». После успешной проверки нажмите «Сохранить токен». Зелёная отметка «Токен сохранён» подтвердит сохранение.</li>
             </ol>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs sm:text-sm">

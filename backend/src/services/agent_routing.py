@@ -119,7 +119,7 @@ class AgentRoutingService:
         scope: AgentRoutingScopeFactory,
         agent: ProjectAgentService,
         llm_client: LlmClient,
-        context_tokens: int = 12000,
+        context_tokens: int = 30000,
         history_tokens: int = 1200,
     ) -> None:
         self.scope = scope

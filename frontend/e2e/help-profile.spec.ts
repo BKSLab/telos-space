@@ -47,20 +47,36 @@ async function installAccountApi(page: Page) {
     const keys = [key, { ...key, id: "k-second", label: "Сверка на сервере", key_prefix: "de000002", scopes: ["projects:read"] }];
     const tokens: ApiToken[] = [{ id: 1, name: "Клиент токена", prefix: "token001", scope: "READ", created_at: user.created_at, expires_at: null, revoked_at: null, last_used_at: null }];
     const writes: { path: string; method: string; body: Record<string, unknown> }[] = [];
+    let githubAccount: { id: number; login: string } | null = { id: 7, login: "octocat" };
+    const githubChecks: string[] = [];
     await page.route("**/api/v1/**", async route => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
         const method = request.method();
-        const headers = { "access-control-allow-origin": request.headers()["origin"] ?? "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS" };
+        const headers = { "access-control-allow-origin": request.headers()["origin"] ?? "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS" };
         const reply = (json: unknown, status = 200) => route.fulfill({ json, status, headers });
         if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
         if (path === "/api/v1/auth/me") return reply(user);
         if (path === "/api/v1/users/me/api-keys/scopes") return reply(scopeCatalog);
         if (path === "/api/v1/users/me/api-keys" && method === "GET") return reply(keys);
         if (path === "/api/v1/users/me/tokens" && method === "GET") return reply(tokens);
-        if (path === "/api/v1/users/me/github" && method === "GET") return reply({ account: { id: 7, login: "octocat" } });
+        if (path === "/api/v1/users/me/github" && method === "GET") return reply({ account: githubAccount });
         if (method === "GET") return route.fallback();
         const body = request.postData() ? request.postDataJSON() : {};
+        if (path === "/api/v1/users/me/github/check" && method === "POST") {
+            githubChecks.push(body.token);
+            return body.token === "synthetic-invalid" ? reply({ detail: "Invalid candidate" }, 409) : reply({ account: { id: 8, login: "verified-account" } });
+        }
+        if (path === "/api/v1/users/me/github" && method === "PUT") {
+            writes.push({ path, method, body });
+            githubAccount = { id: 8, login: "verified-account" };
+            return reply({ account: githubAccount });
+        }
+        if (path === "/api/v1/users/me/github" && method === "DELETE") {
+            writes.push({ path, method, body });
+            githubAccount = null;
+            return route.fulfill({ status: 204, headers });
+        }
         if (path === "/api/v1/users/me/api-keys" && method === "POST") {
             writes.push({ path, method, body });
             const created = { ...key, ...body, id: "k-2", key_prefix: "de000003" };
@@ -87,7 +103,7 @@ async function installAccountApi(page: Page) {
         if (path === "/api/v1/users/me" && method === "PATCH") { writes.push({ path, method, body }); Object.assign(user, body); return reply(user); }
         return route.fallback();
     });
-    return { state, writes, user, keys, tokens, scopeCatalog };
+    return { state, writes, user, keys, tokens, scopeCatalog, githubChecks };
 }
 
 for (const width of [1440, 1024, 768, 390, 320]) {
@@ -130,10 +146,57 @@ for (const width of [1440, 1024, 768, 390, 320]) {
         await page.screenshot({ path: info.outputPath(`profile-keys-${width}.png`) });
         await tabs.getByRole("link", { name: "GitHub", exact: true }).click();
         await expect(page.getByText("Аккаунт GitHub: octocat", { exact: true })).toBeVisible();
-        await expect(page.getByLabel("Токен GitHub", { exact: true })).toHaveAttribute("type", "password");
+        await expect(page.getByText("Токен сохранён", { exact: true })).toBeVisible();
+        await expect(page.getByLabel("Токен GitHub", { exact: true })).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         expect(server.state.errors).toEqual([]);
         expect(server.writes).toEqual([]);
+    });
+}
+
+for (const width of [1440, 320]) {
+    test(`GitHub: проверка, сохранение и понятный статус ${width}px`, async ({ page }, info) => {
+        const server = await installAccountApi(page);
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/profile?tab=github");
+        await expect(page.getByText("Токен сохранён", { exact: true })).toBeVisible();
+        await expect(page.getByLabel("Токен GitHub", { exact: true })).toHaveCount(0);
+        await page.screenshot({ path: info.outputPath(`github-saved-${width}.png`) });
+        await page.getByRole("button", { name: "Заменить токен", exact: true }).click();
+        const token = page.getByLabel("Токен GitHub", { exact: true });
+        await expect(token).toHaveAttribute("type", "password");
+        await token.fill("synthetic-invalid");
+        await page.getByRole("button", { name: "Проверить токен", exact: true }).click();
+        await expect(page.getByRole("alert")).toBeVisible();
+        await expect.poll(() => browserErrors.get(page)).toEqual(["Failed to load resource: the server responded with a status of 409 (Conflict)"]);
+        browserErrors.get(page)!.pop(); // This request deliberately exercises an invalid token.
+        await expect(page.getByRole("button", { name: "Сохранить токен", exact: true })).toHaveCount(0);
+        expect(server.writes).toEqual([]);
+        await token.fill("synthetic-valid");
+        await page.getByRole("button", { name: "Проверить токен", exact: true }).click();
+        await expect(page.getByText("Токен проверен", { exact: true })).toBeVisible();
+        await expect(page.getByText("Аккаунт GitHub: octocat", { exact: true })).toBeVisible();
+        expect(server.writes).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.getByRole("button", { name: "Отмена", exact: true }).click({ trial: true });
+        await page.screenshot({ path: info.outputPath(`github-checked-${width}.png`) });
+        await page.getByRole("button", { name: "Сохранить токен", exact: true }).click();
+        await expect(page.getByText("Аккаунт GitHub: verified-account", { exact: true })).toBeVisible();
+        await expect(token).toHaveCount(0);
+        expect(server.writes).toEqual([{ path: "/api/v1/users/me/github", method: "PUT", body: { token: "synthetic-valid" } }]);
+        expect(server.githubChecks).toEqual(["synthetic-invalid", "synthetic-valid"]);
+        await page.reload();
+        await expect(page.getByText("Токен сохранён", { exact: true })).toBeVisible();
+        await expect(page.getByText("Аккаунт GitHub: verified-account", { exact: true })).toBeVisible();
+        await expect(token).toHaveCount(0);
+        await page.getByRole("button", { name: "Удалить токен", exact: true }).click();
+        expect(server.writes).toHaveLength(1);
+        await page.getByRole("button", { name: "Удалить токен", exact: true }).click();
+        await expect(page.getByText("Аккаунт GitHub не подключён.", { exact: true })).toBeVisible();
+        await expect(token).toHaveValue("");
+        expect(server.writes).toHaveLength(2);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        expect(server.state.errors).toEqual([]);
     });
 }
 

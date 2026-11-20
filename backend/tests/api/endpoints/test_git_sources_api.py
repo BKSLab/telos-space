@@ -8,14 +8,18 @@ from fastapi import FastAPI
 
 from src.api.v1.endpoints.git_sources import profile_router, router
 from src.dependencies.git_sources import get_git_source_principal, get_git_source_service
+from src.exceptions.auth import NotAuthenticatedError
 from src.exceptions.git_sources import (
     GitCredentialUnavailableError,
     GitSourceConflictError,
     GitSourceNotAvailableError,
     GitSourceOwnerRequiredError,
     GitSourceRateLimitedError,
+    GitSourceSessionRequiredError,
+    GitSourceValidationError,
 )
 from src.schemas.git_sources import (
+    GitAccountSnapshot,
     GitConnection,
     GitConnectionPage,
     GitEventAccepted,
@@ -108,6 +112,64 @@ async def test_git_metadata_read_bounds_config_queue_and_typed_errors(current_pr
             response = await client.get(base + "/1")
             assert response.status_code == status and response.json() == {"detail": error.detail}
         assert (await client.delete(base + "/1")).status_code == 204
+
+
+async def test_profile_candidate_check_contract_and_safe_errors(current_principal):
+    app, service = transport(current_principal)
+    service.check_github_profile.return_value = GitHubProfile(
+        account=GitAccountSnapshot(id=42, login="candidate")
+    )
+    marker = "synthetic-candidate-secret"
+    path = "/api/v1/users/me/github/check"
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(path, json={"token": marker})
+        assert response.status_code == 200
+        assert response.json() == {"account": {"id": 42, "login": "candidate"}}
+        assert marker not in response.text
+        token = service.check_github_profile.await_args.args[1]
+        assert token.get_secret_value() == marker and marker not in repr(token)
+        for payload in ({}, {"token": {marker: marker}}, {"token": marker, marker: marker}):
+            response = await client.post(path, json=payload)
+            assert response.status_code == 422 and marker not in response.text
+        assert service.check_github_profile.await_count == 1
+        for error, status in (
+            (GitSourceValidationError(), 422),
+            (GitSourceSessionRequiredError(), 403),
+            (NotAuthenticatedError(), 401),
+            (GitSourceRateLimitedError(120), 429),
+        ):
+            service.check_github_profile.side_effect = error
+            response = await client.post(path, json={"token": marker})
+            assert response.status_code == status and response.json() == {"detail": error.detail}
+            assert marker not in response.text
+            if status == 429:
+                assert response.headers["Retry-After"] == "120"
+        service.set_github_profile.assert_not_awaited()
+
+
+async def test_profile_candidate_check_uses_cookie_authentication(current_principal):
+    app, service = transport(current_principal)
+    del app.dependency_overrides[get_git_source_principal]
+    service.resolve_principal.side_effect = NotAuthenticatedError()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post("/api/v1/users/me/github/check", json={"token": "candidate"})
+        assert response.status_code == 401
+        service.check_github_profile.assert_not_awaited()
+        service.resolve_principal.side_effect = None
+        service.resolve_principal.return_value = current_principal
+        service.check_github_profile.return_value = GitHubProfile(
+            account=GitAccountSnapshot(id=42, login="candidate")
+        )
+        client.cookies.set("telos_session", "synthetic-session")
+        response = await client.post("/api/v1/users/me/github/check", json={"token": "candidate"})
+        assert response.status_code == 200
+        service.resolve_principal.assert_awaited_with(
+            session_token="synthetic-session", bearer_secret=None
+        )
 
 
 async def test_secret_input_is_never_reflected_in_validation_or_response(current_principal):

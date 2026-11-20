@@ -419,7 +419,14 @@ class GitHubProfile(BaseModel):
 
 class GitHubProfileUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    token: SecretStr = Field(min_length=1, max_length=1024, repr=False, exclude=True)
+    token: SecretStr = Field(
+        min_length=1,
+        max_length=1024,
+        repr=False,
+        exclude=True,
+        description="Личный токен GitHub для проверки аккаунта или сохранения в профиле.",
+        examples=["github_pat_example"],
+    )
 
 
 class GitCoverage(BaseModel):

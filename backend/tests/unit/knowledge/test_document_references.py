@@ -13,7 +13,7 @@ from src.services.project_agent import ProjectAgentService, _SourceRegistry
 from src.utils.document_refs import document_text_hash, encode_document_ref
 from tests.unit.knowledge.agent_models import LegacyOutput
 from tests.unit.knowledge.test_knowledge_index import base_rows
-from tests.unit.knowledge.test_project_agent import build_service
+from tests.unit.knowledge.test_project_agent import build_service, domain_results, search_results
 
 
 def document_rows():
@@ -107,13 +107,13 @@ async def test_answer_selects_verified_primary_among_sources_and_rechecks_curren
 
         async def respond(*, content, rows=rows, source=source, tail_offset=tail_offset, deleted=deleted, **_kwargs):
             payload = json.loads(content)
-            if not payload.get("read_results"):
+            if not domain_results(payload):
                 return LegacyOutput(tool_calls=[
                     AgentToolRequest(name="telos_read_source", arguments={"source_id": "document:9", "offset": tail_offset}),
                     AgentToolRequest(name="telos_read_source", arguments={"source_id": "document:9", "offset": source.document_text_start}),
                 ])
-            first, second = [item["result"] for item in payload["read_results"]]
-            task_handle = next(item["source_handle"] for item in payload["retrieval_context"] if item["source_id"] == "task:7")
+            first, second = [item["result"] for item in domain_results(payload)]
+            task_handle = next(item["source_handle"] for item in search_results(payload) if item["source_id"] == "task:7")
             if deleted:
                 rows["documents"] = []
             else:

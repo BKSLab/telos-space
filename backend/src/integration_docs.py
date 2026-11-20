@@ -31,6 +31,7 @@ DETACHED_WRITE_ROUTES = {
 SERVICE_SESSION_ROUTES = {
     (method, "/api/v1/users/me/github") for method in ("GET", "PUT", "DELETE")
 } | {
+    ("POST", "/api/v1/users/me/github/check"),
     ("GET", "/api/v1/users/me/github/repositories"),
     ("PUT", "/api/v1/projects/{project_id}/git/connections/{connection_id}/webhook-secret"),
 }

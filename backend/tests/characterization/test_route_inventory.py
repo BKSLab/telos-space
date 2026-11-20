@@ -8,6 +8,7 @@ from main import app
 
 FROZEN_ROUTES: set[tuple[str, str]] = {
     ('GET', '/api/v1/users/me/github'),
+    ('POST', '/api/v1/users/me/github/check'),
     ('PUT', '/api/v1/users/me/github'),
     ('DELETE', '/api/v1/users/me/github'),
     ('GET', '/api/v1/users/me/github/repositories'),
@@ -253,6 +254,7 @@ PUBLIC_ROUTES: set[tuple[str, str]] = {
 
 # Управление токенами закрыто для самих токенов: только сессия интерфейса.
 SESSION_ONLY_ROUTES: set[tuple[str, str]] = {
+    ('POST', '/api/v1/users/me/github/check'),
     ('PUT', '/api/v1/users/me/github'),
     ('DELETE', '/api/v1/users/me/github'),
     ("POST", "/api/v1/projects/{project_id}/web-research/topics"),
@@ -334,7 +336,7 @@ def test_non_get_routes_are_fully_classified() -> None:
     )
 
     mutations = non_get - explicit
-    assert len(non_get) == 140, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
+    assert len(non_get) == 141, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
     assert len(mutations) == 111, f"Изменилось число доменных мутаций: {len(mutations)}"
 
 
