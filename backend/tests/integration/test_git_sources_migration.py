@@ -15,6 +15,7 @@ from src.db.models import Base
 
 PARENT = "c26a202611160001"
 REVISION = "c29a202611160001"
+PROFILE_REVISION = "c30a202611200001"
 
 
 async def test_git_migration_replays_preserves_primary_and_refuses_destructive_downgrade(
@@ -108,6 +109,27 @@ async def test_git_migration_replays_preserves_primary_and_refuses_destructive_d
             == REVISION
         )
         assert connection.execute(text("SELECT count(*) FROM git_connections")).scalar_one() == 1
+        connection.execute(text("""
+            UPDATE git_connections
+            SET credential_ciphertext='legacy-ciphertext', credential_owner_id=1, generation=5
+        """))
+        connection.execute(text("""
+            INSERT INTO git_snapshots(connection_id,commit_sha,tree_sha,scope_hash)
+            SELECT id,repeat('b',40),repeat('c',40),scope_hash FROM git_connections
+        """))
+        connection.execute(text("""
+            INSERT INTO git_sync_jobs(connection_id,snapshot_id,generation,credential_revision,cursor)
+            SELECT connection_id,id,5,0,27 FROM git_snapshots
+        """))
+        connection.commit()
+        command.upgrade(config, PROFILE_REVISION)
+        connection.commit()
+        assert connection.execute(text("""
+            SELECT state,last_error_code,generation,credential_ciphertext,credential_owner_id
+            FROM git_connections
+        """)).one() == ("access_lost", "github_profile_required", 5, None, None)
+        assert connection.execute(text("SELECT cursor FROM git_sync_jobs")).scalar_one() == 27
+        assert connection.execute(text("SELECT github_token_ciphertext FROM users")).scalar_one() is None
         assert (
             connection.execute(text("SELECT content_md FROM documents WHERE id=1")).scalar_one()
             == "Original content"

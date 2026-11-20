@@ -94,6 +94,16 @@ class GitRepositorySnapshot(GitSnapshot):
     private: bool = Field(description="Текущая приватность upstream репозитория.", examples=[True])
 
 
+class GitAccountSnapshot(GitSnapshot):
+    id: int = Field(gt=0)
+    login: str = Field(min_length=1, max_length=255)
+
+
+class GitRepositoryPage(GitSnapshot):
+    repositories: tuple[GitRepositorySnapshot, ...]
+    next_page: int | None
+
+
 class GitCommit(GitSnapshot):
     """Результат однократного разрешения mutable ref в immutable commit."""
 
@@ -332,12 +342,6 @@ class GitConnectionCreate(BaseModel):
         default=False,
         description="Явное согласие владельца на чтение закрытого корпуса командой проекта.",
     )
-    credential: SecretStr | None = Field(
-        default=None,
-        repr=False,
-        exclude=True,
-        description="Ограниченный credential; только ввод из сессии владельца, никогда не ответ.",
-    )
 
     @field_validator("include_paths")
     @classmethod
@@ -397,23 +401,25 @@ class GitConnectionUpdate(BaseModel):
         return self
 
 
-class GitCredentialUpdate(BaseModel):
+class GitWebhookSecretUpdate(BaseModel):
     """Секретные поля задаёт только сессия текущего владельца проекта."""
 
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=1, description="Прочитанная версия подключения.")
-    credential: SecretStr | None = Field(
-        default=None,
-        repr=False,
-        exclude=True,
-        description="Новый credential; явный null отзывает прежний.",
-    )
     webhook_secret: SecretStr | None = Field(
-        default=None,
         repr=False,
         exclude=True,
         description="Секрет проверки входящих событий; null отключает webhook.",
     )
+
+
+class GitHubProfile(BaseModel):
+    account: GitAccountSnapshot | None
+
+
+class GitHubProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: SecretStr = Field(min_length=1, max_length=1024, repr=False, exclude=True)
 
 
 class GitCoverage(BaseModel):
@@ -457,6 +463,7 @@ class GitConnection(BaseModel):
     observed_at: datetime | None
     indexed_at: datetime | None
     checked_at: datetime | None
+    next_poll_at: datetime | None = None
     last_error_code: str | None
     coverage: GitCoverage = Field(default_factory=GitCoverage)
     created_at: datetime

@@ -30,6 +30,7 @@ from src.exceptions.git_sources import (
     GitHubTransportError,
 )
 from src.schemas.git_sources import (
+    GitAccountSnapshot,
     GitBlob,
     GitCandidatePage,
     GitCandidateSnapshot,
@@ -47,6 +48,7 @@ from src.schemas.git_sources import (
     GitPullRequestSnapshot,
     GitRef,
     GitRepositoryName,
+    GitRepositoryPage,
     GitRepositorySnapshot,
     GitSha,
     GitTree,
@@ -101,6 +103,16 @@ def _timestamp(value: str | None) -> datetime | None:
     if result.tzinfo is None:
         raise ValueError("Timestamp without timezone.")
     return result
+
+
+def _repository_snapshot(data: dict[str, Any]) -> GitRepositorySnapshot:
+    return GitRepositorySnapshot(
+        id=data["id"],
+        owner=data["owner"]["login"],
+        name=data["name"],
+        default_branch=data["default_branch"],
+        private=data["private"],
+    )
 
 
 @dataclass(slots=True)
@@ -183,6 +195,25 @@ class GitHubClient:
         """Верхняя оценка одного метода: hard deadline попыток плюс backoff/jitter."""
         return worst_case_seconds(timeout=self.timeout, attempts=self.attempts)
 
+    async def get_authenticated_account(self) -> GitAccountSnapshot:
+        data, _ = await self._get_json("/user")
+        return _parsed(lambda: GitAccountSnapshot(id=data["id"], login=data["login"]))
+
+    async def list_authenticated_repositories(self, *, page: int = 1) -> GitRepositoryPage:
+        if type(page) is not int or page < 1:
+            raise GitHubRequestError()
+        data, has_next = await self._get_json(
+            "/user/repos", params={"page": str(page), "per_page": str(GITHUB_PAGE_SIZE)}
+        )
+        if not isinstance(data, list) or len(data) > GITHUB_PAGE_SIZE:
+            raise GitHubResponseError()
+        return _parsed(
+            lambda: GitRepositoryPage(
+                repositories=tuple(_repository_snapshot(item) for item in data),
+                next_page=page + 1 if has_next else None,
+            )
+        )
+
     async def get_repository(self, owner: str, repo: str) -> GitRepositorySnapshot:
         """Читает identity репозитория, отбрасывая остальные upstream поля.
 
@@ -198,15 +229,9 @@ class GitHubClient:
         """
         path = self._repository_path(owner, repo)
         data, _ = await self._get_json(path)
-        result = _parsed(
-            lambda: GitRepositorySnapshot(
-                id=data["id"],
-                owner=data["owner"]["login"],
-                name=data["name"],
-                default_branch=data["default_branch"],
-                private=data["private"],
-            )
-        )
+        if not isinstance(data, dict):
+            raise GitHubResponseError()
+        result = _parsed(lambda: _repository_snapshot(data))
         if result.owner.lower() != owner.lower() or result.name.lower() != repo.lower():
             raise GitHubResponseError()
         return result

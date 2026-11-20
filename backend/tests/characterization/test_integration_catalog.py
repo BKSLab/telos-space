@@ -46,7 +46,7 @@ async def test_context_catalog_describes_actual_credentials_and_combined_scopes(
     for suffix in ("topics", "pages"):
         row = api[f"POST {base}/web-research/{suffix}"]
         assert row["access"] == "session" and row["tokens"] == []
-    credential = api[f"PUT {base}/git/connections/{{connection_id}}/credential"]
+    credential = api[f"PUT {base}/git/connections/{{connection_id}}/webhook-secret"]
     assert credential["access"] == "session" and credential["scopes"] is None
     event = api[f"POST {base}/git/connections/{{connection_id}}/events"]
     assert event["access"] == "signature" and event["tokens"] == []

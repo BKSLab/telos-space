@@ -57,6 +57,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
         await expect(page.getByText("Импорт реализован", { exact: true })).toBeVisible();
         await page.screenshot({ path: info.outputPath(`knowledge-${viewport.name}.png`) });
         await page.goto("/projects/DEMO/settings");
+        await page.locator("summary").getByText("Репозитории проекта", { exact: true }).click();
         await expect(page.getByRole("heading", { name: "Frontend", exact: true })).toBeVisible();
         await expect(page.getByRole("heading", { name: "Auth", exact: true })).toBeVisible();
         await expect(page.getByRole("heading", { name: "Gateway", exact: true })).toBeVisible();
@@ -74,6 +75,7 @@ test("конфликт ref сохраняет draft до явной загруз
     await installMockApi(page, mockState());
     await sourcesApi(page);
     await page.goto("/projects/DEMO/settings");
+    await page.locator("summary").getByText("Репозитории проекта", { exact: true }).click();
     await page.getByRole("button", { name: "Настроить", exact: true }).first().click();
     await page.getByLabel("Ветка или ref", { exact: true }).fill("my-draft");
     await page.getByRole("button", { name: "Сохранить источник", exact: true }).click();

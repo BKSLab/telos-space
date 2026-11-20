@@ -8,7 +8,7 @@ import { PROJECT_COLORS } from "@/lib/types";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
 import { useCurrentUser } from "@/lib/useAuth";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Card, Section } from "@/components/ui/Card";
+import { CollapsibleSection } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { StatusDot } from "@/components/ui/Badge";
@@ -135,9 +135,9 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
 
     return (
         <div className="scrollbar-thin h-full overflow-y-auto">
-            <div className="mx-auto flex w-full min-w-0 max-w-none flex-col gap-6 px-3 py-4 pb-24 sm:px-5 sm:py-5">
-                <Section title="О проекте">
-                    <div className="flex min-w-0 flex-col gap-5 rounded-[var(--radius-card)] bg-surface/40 p-3 sm:p-5">
+            <div className="flex w-full min-w-0 max-w-5xl flex-col gap-3 px-3 pt-4 pb-16 sm:px-5 sm:pt-5">
+                <CollapsibleSection title="О проекте">
+                    <div className="flex min-w-0 flex-col gap-5">
                         <ProjectPeopleSummary project={project} />
                         {saveMutation.error && (
                             <ErrorMessage message={(saveMutation.error as Error).message} />
@@ -176,15 +176,14 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
                             </Button>
                         </div>
                     </div>
-                </Section>
+                </CollapsibleSection>
 
-                <ProjectDeadlineHistory projectId={project.id} />
-                <ProjectContextHistory projectId={project.id} />
-                <ProjectGitSources key={project.id} projectId={project.id} canEdit={canEditProject} />
-                <ProjectTeamPage embedded />
+                <CollapsibleSection title="Команда">
+                    <ProjectTeamPage embedded />
+                </CollapsibleSection>
 
-                <Section title="Стадии канбана">
-                    <Card className="flex flex-col gap-3 p-4">
+                <CollapsibleSection title="Стадии канбана">
+                    <div className="flex min-w-0 flex-col gap-3">
                         {stagesQuery.isPending && <Skeleton className="h-24 w-full" />}
                         {stagesQuery.error && <ErrorMessage message={(stagesQuery.error as Error).message} action={<Button onClick={() => stagesQuery.refetch()}>Повторить</Button>} />}
                         {stagesQuery.data?.map((stage, index) => (
@@ -201,7 +200,7 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
                                 <Input
                                     aria-label={`Название стадии ${stage.name}`}
                                     defaultValue={stage.name}
-                                    className="w-40"
+                                    className="w-40 min-w-0 max-w-full"
                                     onBlur={(event) => {
                                         const name = event.target.value.trim();
                                         if (name !== "" && name !== stage.name) {
@@ -280,7 +279,7 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
                             </div>
                         ))}
 
-                        <div className="flex gap-2 border-t border-line-subtle pt-3">
+                        <div className="flex flex-wrap gap-2 border-t border-line-subtle pt-3 sm:flex-nowrap">
                             <Input
                                 value={newStageName}
                                 aria-label="Название новой стадии"
@@ -297,11 +296,18 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
                                 Добавить
                             </Button>
                         </div>
-                    </Card>
-                </Section>
+                    </div>
+                </CollapsibleSection>
 
-                <Section title="Опасная зона">
-                    <Card className="flex flex-wrap items-center justify-between gap-3 border-danger/25 p-4">
+                <ProjectGitSources key={project.id} projectId={project.id} canEdit={canEditProject} collapsible />
+
+                <CollapsibleSection title="История изменений">
+                    <ProjectDeadlineHistory projectId={project.id} />
+                    <ProjectContextHistory projectId={project.id} />
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Опасная зона">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex min-w-0 flex-col gap-0.5">
                             <p className="text-[13px] font-medium text-secondary">Удалить проект</p>
                             <p className="text-[12px] text-muted">
@@ -311,8 +317,8 @@ function ProjectSettingsEditor({ project }: { project: Project }) {
                         <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
                             Удалить проект
                         </Button>
-                    </Card>
-                </Section>
+                    </div>
+                </CollapsibleSection>
             </div>
 
             <Modal

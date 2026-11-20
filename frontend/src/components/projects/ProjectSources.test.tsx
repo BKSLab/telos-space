@@ -86,5 +86,15 @@ it("не показывает формы credentials участнику и хр�
     expect(screen.getByText("b".repeat(40))).toBeTruthy();
     expect(screen.getByText("Неполный охват")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Изменить доступ" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Добавить репозиторий" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Добавить репозитории" })).toBeNull();
+});
+
+it("показывает срок паузы существующего источника и блокирует ручную синхронизацию", async () => {
+    const nextPoll = new Date(Date.now() + 60_000).toISOString();
+    const paused = { ...connection(1, "Frontend", "main"), last_error_code: "rate_limited", next_poll_at: nextPoll };
+    vi.spyOn(api, "get").mockResolvedValue({ items: [paused], total: 1, next_offset: null });
+    render(wrap(<ProjectGitSources projectId={7} canEdit />));
+    const message = await screen.findByText(/Следующая проверка после/);
+    expect(message.querySelector("time")?.dateTime).toBe(nextPoll);
+    expect((screen.getByRole("button", { name: "Повторить проверку" }) as HTMLButtonElement).disabled).toBe(true);
 });

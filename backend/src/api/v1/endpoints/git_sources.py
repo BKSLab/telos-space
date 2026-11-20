@@ -8,24 +8,27 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from src.dependencies.git_sources import GitSourcePrincipalDep, GitSourceServiceDep
-from src.exceptions.git_sources import GitSourceServiceError
+from src.exceptions.git_sources import GitSourceRateLimitedError, GitSourceServiceError
 from src.schemas.git_sources import (
     GitComparison,
     GitConnection,
     GitConnectionCreate,
     GitConnectionPage,
     GitConnectionUpdate,
-    GitCredentialUpdate,
     GitEventAccepted,
     GitFileRead,
+    GitHubProfile,
+    GitHubProfileUpdate,
     GitProjectMap,
     GitQueued,
+    GitRepositoryPage,
     GitSearchResult,
     GitTaskCandidates,
     GitTaskLink,
     GitTaskLinkCreate,
     GitTaskLinks,
     GitTreePage,
+    GitWebhookSecretUpdate,
 )
 
 
@@ -55,6 +58,12 @@ class GitRoute(APIRoute):
                         ]
                     },
                 )
+            except GitSourceRateLimitedError as error:
+                raise HTTPException(
+                    status_code=error.status_code,
+                    detail=error.detail,
+                    headers={"Retry-After": str(error.retry_after)},
+                ) from None
             except GitSourceServiceError as error:
                 raise HTTPException(status_code=error.status_code, detail=error.detail) from None
 
@@ -106,7 +115,7 @@ async def list_git_connections(
     status_code=201,
     responses=RESPONSES,
     summary="Подключить GitHub repository",
-    description="Текущий владелец явно выбирает ref/область; private sharing требует согласия, ввод credential — UI session.",
+    description="Текущий владелец явно выбирает ref/область; private sharing требует согласия, токен берётся из профиля владельца.",
     response_description="Проверенная привязка; индекс готовится в durable очереди.",
 )
 async def create_git_connection(
@@ -185,23 +194,23 @@ async def delete_git_connection(
 
 
 @router.put(
-    "/connections/{connection_id}/credential",
-    operation_id="setGitCredential",
+    "/connections/{connection_id}/webhook-secret",
+    operation_id="setGitWebhookSecret",
     response_model=GitConnection,
     responses=RESPONSES,
-    summary="Заменить Git credentials",
+    summary="Заменить секрет Git webhook",
     description="Только UI session текущего владельца; SecretStr входы шифруются отдельным ключом и не возвращаются.",
     response_description="Безопасные metadata с новой credential revision.",
 )
-async def set_git_credential(
+async def set_git_webhook_secret(
     project_id: ProjectId,
     connection_id: ConnectionId,
-    data: GitCredentialUpdate,
+    data: GitWebhookSecretUpdate,
     service: GitSourceServiceDep,
     principal: GitSourcePrincipalDep,
 ) -> GitConnection:
-    """Ротирует/отзывает credential и webhook HMAC secret без их выдачи."""
-    return await service.set_credential(
+    """Ротирует или отзывает webhook HMAC secret."""
+    return await service.set_webhook_secret(
         project_id=project_id, connection_id=connection_id, principal=principal, data=data
     )
 
@@ -502,3 +511,41 @@ async def accept_git_event(
         delivery_id=delivery_id,
         event_type=event_type,
     )
+
+
+profile_router = APIRouter(prefix="/users/me/github", tags=["github-profile"], route_class=GitRoute)
+
+
+@profile_router.get("", operation_id="getGitHubProfile", summary="Получить подключение GitHub")
+async def get_github_profile(
+    service: GitSourceServiceDep, principal: GitSourcePrincipalDep
+) -> GitHubProfile:
+    return await service.github_profile(principal)
+
+
+@profile_router.put("", operation_id="setGitHubProfile", summary="Подключить аккаунт GitHub")
+async def set_github_profile(
+    data: GitHubProfileUpdate, service: GitSourceServiceDep, principal: GitSourcePrincipalDep
+) -> GitHubProfile:
+    return await service.set_github_profile(principal, data.token)
+
+
+@profile_router.delete(
+    "", operation_id="deleteGitHubProfile", summary="Отключить аккаунт GitHub", status_code=204
+)
+async def delete_github_profile(
+    service: GitSourceServiceDep, principal: GitSourcePrincipalDep
+) -> Response:
+    await service.set_github_profile(principal, None)
+    return Response(status_code=204)
+
+
+@profile_router.get(
+    "/repositories", operation_id="listGitHubProfileRepositories", summary="Получить репозитории GitHub"
+)
+async def list_github_profile_repositories(
+    service: GitSourceServiceDep,
+    principal: GitSourcePrincipalDep,
+    page: Annotated[int, Query(ge=1, le=10000)] = 1,
+) -> GitRepositoryPage:
+    return await service.list_github_repositories(principal, page)

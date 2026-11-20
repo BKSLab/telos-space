@@ -29,7 +29,10 @@ DETACHED_WRITE_ROUTES = {
     ("POST", "/api/v1/tasks/{task_id}/comments/with-files"),
 }
 SERVICE_SESSION_ROUTES = {
-    ("PUT", "/api/v1/projects/{project_id}/git/connections/{connection_id}/credential"),
+    (method, "/api/v1/users/me/github") for method in ("GET", "PUT", "DELETE")
+} | {
+    ("GET", "/api/v1/users/me/github/repositories"),
+    ("PUT", "/api/v1/projects/{project_id}/git/connections/{connection_id}/webhook-secret"),
 }
 SIGNED_ROUTES = {
     ("POST", "/api/v1/projects/{project_id}/git/connections/{connection_id}/events"),

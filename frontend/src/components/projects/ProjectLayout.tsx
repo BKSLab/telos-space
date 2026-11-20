@@ -11,9 +11,9 @@ import "./ProjectIdentity.css";
 
 const TABS = [
     { path: "", label: "Обзор", end: true },
+    { path: "tasks", label: "Задачи", end: false },
     { path: "chat", label: "Чат", end: false },
     { path: "team", label: "Команда", end: false },
-    { path: "tasks", label: "Задачи", end: false },
     { path: "calendar", label: "Календарь", end: false },
     { path: "structure", label: "Структура", end: false },
     { path: "risks", label: "Риски", end: false },

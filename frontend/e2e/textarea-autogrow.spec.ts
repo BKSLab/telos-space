@@ -74,6 +74,7 @@ test("готовый текст при открытии настроек вид�
     const content = `${lines}\n${lines}`;
     const state = await installForms(page, content);
     await page.goto("/projects/DEMO/settings");
+    await page.locator("summary").getByText("О проекте", { exact: true }).click();
     const additional = page.getByLabel("Дополнительно", { exact: true });
     await expect(additional).toHaveValue(content);
     await expect.poll(async () => (await metrics(additional)).height).toBeGreaterThan(250);

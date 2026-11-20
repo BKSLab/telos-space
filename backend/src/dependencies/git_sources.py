@@ -55,13 +55,10 @@ def build_git_source_scope(
 
 
 @asynccontextmanager
-async def github_client_scope(credential: SecretStr | None) -> AsyncIterator[GitHubClient]:
+async def github_client_scope(credential: SecretStr) -> AsyncIterator[GitHubClient]:
     """Токен закреплён только за fixed GitHub API и не смешан с общим AI HTTP pool."""
-    headers = {}
-    if credential is not None:
-        headers["Authorization"] = "Bearer " + credential.get_secret_value()
     async with httpx.AsyncClient(
-        headers=headers,
+        headers={"Authorization": "Bearer " + credential.get_secret_value()},
         timeout=10.0,
         trust_env=False,
         follow_redirects=False,

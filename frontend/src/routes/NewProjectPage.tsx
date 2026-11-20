@@ -13,6 +13,10 @@ import { ErrorMessage } from "@/components/ui/States";
 import { ProjectForm } from "@/components/projects/ProjectForm";
 import { Field, Input } from "@/components/ui/Field";
 import { ProjectStagesDraft } from "@/components/projects/ProjectStagesDraft";
+import { GitHubRepositoryPicker } from "@/components/projects/GitHubRepositoryPicker";
+import { RepositoryConnectionProgress } from "@/components/projects/RepositoryConnectionProgress";
+import { useRepositoryConnections } from "@/lib/useRepositoryConnections";
+import { validRepositoryDrafts, type RepositoryDraft } from "@/lib/github";
 import { validStageDrafts, type StageDraft } from "@/lib/projectStages";
 import {
     EMPTY_PROJECT_FORM,
@@ -30,6 +34,10 @@ export function NewProjectPage() {
     const currentUser = useCurrentUser();
     const [memberNames, setMemberNames] = useState("");
     const [stageDrafts, setStageDrafts] = useState<StageDraft[] | null>(null);
+    const [repositories, setRepositories] = useState<RepositoryDraft[]>([]);
+    const [showRepositories, setShowRepositories] = useState(false);
+    const [createdProject, setCreatedProject] = useState<Project | null>(null);
+    const git = useRepositoryConnections();
     const defaults = useQuery({
         queryKey: queryKeys.projectDefaults,
         queryFn: () => api.get<{ stages: Pick<ProjectStage, "name" | "color" | "is_done_stage">[] }>(endpoints.projectDefaults()),
@@ -50,12 +58,29 @@ export function NewProjectPage() {
             }
             return project;
         },
-        onSuccess: (project) => {
+        onSuccess: async (project) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.projects });
             queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
-            navigate(`/projects/${project.key}`);
+            if (repositories.length === 0) {
+                navigate(`/projects/${project.key}`);
+                return;
+            }
+            setCreatedProject(project);
+            await git.start(project.id, repositories);
         },
     });
+
+    if (createdProject) return <Page className="max-w-3xl">
+        <h1 className="text-[22px] font-semibold text-primary">Проект создан</h1>
+        <div className="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-surface/45 p-5 sm:p-6">
+            <h2 className="text-base font-semibold text-primary">Подключение репозиториев</h2>
+            <RepositoryConnectionProgress items={git.items} retryAt={git.retryAt} pending={git.isPending} onRetry={() => void git.retry(createdProject.id)} />
+            <div className="flex flex-wrap gap-2">
+                <LinkButton to={`/projects/${createdProject.key}`} variant="primary">Открыть проект</LinkButton>
+                <LinkButton to={`/projects/${createdProject.key}/settings`}>Настройки проекта</LinkButton>
+            </div>
+        </div>
+    </Page>;
 
     return (
         <Page className="max-w-3xl">
@@ -91,12 +116,18 @@ export function NewProjectPage() {
                         : defaults.isPending ? <p role="status" className="text-[13px] text-muted">Загрузка стадий…</p>
                         : <ProjectStagesDraft stages={stages} onChange={setStageDrafts} />}
                 </div>
+                <div className="space-y-3 border-t border-line-subtle pt-5">
+                    <h2 className="text-base font-semibold text-primary">Репозитории GitHub</h2>
+                    {!showRepositories
+                        ? <Button disabled={createMutation.isPending} onClick={() => setShowRepositories(true)}>Выбрать репозитории</Button>
+                        : <GitHubRepositoryPicker value={repositories} onChange={setRepositories} disabled={createMutation.isPending} />}
+                </div>
 
                 <div className="flex justify-end gap-2 pt-1">
                     <LinkButton to="/?view=projects">Отмена</LinkButton>
                     <Button
                         variant="primary"
-                        disabled={!isProjectFormValid(values) || !values.start_date || !validMembers || !validStageDrafts(stages) || createMutation.isPending || defaults.isPending || defaults.isError}
+                        disabled={!isProjectFormValid(values) || !values.start_date || !validMembers || !validStageDrafts(stages) || !validRepositoryDrafts(repositories) || createMutation.isPending || defaults.isPending || defaults.isError}
                         onClick={() => createMutation.mutate()}
                     >
                         Создать проект

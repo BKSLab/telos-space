@@ -32,6 +32,7 @@ async function mockProjects(page: Page, initial = baseProject) {
         if (path.endsWith("/projects/defaults")) return reply({ stages: defaults });
         if (path.endsWith("/deadline-history")) return reply(state.history);
         if (path.endsWith("/context-history")) return reply({ items: [], total: 0, offset: 0, limit: 20, has_more: false, next_offset: null });
+        if (path.endsWith("/git/connections")) return reply({ items: [], total: 0, offset: 0, limit: 20, next_offset: null });
         if (path.endsWith("/members")) return reply([{ id: 1, project_id: 1, role: "OWNER", user, created_at: timestamp }]);
         if (path.endsWith("/stages")) return reply(state.stages);
         if (path.endsWith("/stats")) return reply({ project_id: 1, total_tasks: 0, done_tasks: 0, in_progress_tasks: 0, overdue_tasks: 0, due_soon_tasks: 0, unassigned_tasks: 0, completion_rate: 0, next_due_date: null, stage_breakdown: [] });
@@ -101,6 +102,8 @@ test("создание: паспорт, руководитель, команда
 test("срок: причина обязательна для переноса, удаления и повторного назначения", async ({ page }, testInfo) => {
     const state = await mockProjects(page);
     await page.goto("/projects/DEMO/settings");
+    await page.locator("summary").getByText("История изменений", { exact: true }).click();
+    await page.locator("summary").getByText("О проекте", { exact: true }).click();
     await expect(page.getByLabel("Дополнительно", { exact: true })).toHaveValue("Старое **описание**");
     const save = page.getByRole("button", { name: "Сохранить", exact: true });
     const due = page.getByLabel("Плановое завершение", { exact: true });
@@ -129,9 +132,38 @@ test("срок: причина обязательна для переноса, �
     expect(state.errors).toEqual([]);
 });
 
+for (const width of [320, 1440]) {
+    test(`выбор GitHub в новом проекте доступен на ${width}px`, async ({ page }) => {
+        await mockProjects(page);
+        await page.route(/\/api\/v1\/users\/me\/github(?:\/repositories\?page=1)?$/, route => {
+            const url = new URL(route.request().url());
+            const headers = {
+                "access-control-allow-origin": route.request().headers()["origin"] ?? "http://127.0.0.1:4179",
+                "access-control-allow-credentials": "true",
+                "access-control-allow-headers": "content-type",
+            };
+            if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+            const json = url.pathname.endsWith("/repositories")
+                ? { repositories: [{ id: 7, owner: "team", name: "repository-with-a-long-name-for-narrow-screens", default_branch: "main", private: true }], next_page: null }
+                : { account: { id: 1, login: "tester" } };
+            return route.fulfill({ headers, json });
+        });
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/projects/new");
+        await page.getByRole("button", { name: "Выбрать репозитории" }).click();
+        await page.getByRole("searchbox", { name: "Поиск репозиториев" }).fill("long-name");
+        await page.getByRole("checkbox", { name: /team\/repository/ }).check();
+        await expect(page.getByPlaceholder("main")).toBeVisible();
+        await page.getByRole("checkbox", { name: /Разрешаю команде/ }).check();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
+}
+
 test("первое назначение без причины, конфликт требует повторного ввода причины", async ({ page }) => {
     const state = await mockProjects(page, { ...baseProject, due_date: null, due_date_has_been_set: false });
     await page.goto("/projects/DEMO/settings");
+    await page.locator("summary").getByText("История изменений", { exact: true }).click();
+    await page.locator("summary").getByText("О проекте", { exact: true }).click();
     await page.getByLabel("Плановое завершение", { exact: true }).fill("2026-10-01");
     await expect(page.getByLabel("Причина изменения срока", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Сохранить", exact: true }).click();
@@ -149,6 +181,38 @@ test("первое назначение без причины, конфликт 
     expect(state.history).toHaveLength(1);
     expect(state.errors).toEqual([]);
 });
+
+for (const width of [320, 1440]) {
+    test(`настройки проекта: секции и черновик на ${width}px`, async ({ page }, testInfo) => {
+        const state = await mockProjects(page);
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/projects/DEMO/settings");
+        const summary = (title: string) => page.locator("summary").filter({ hasText: title });
+        const passport = summary("О проекте");
+        const field = page.getByLabel("Дополнительно", { exact: true });
+        await expect(field).toBeHidden();
+        for (const title of ["О проекте", "Команда", "Стадии канбана", "Репозитории проекта", "История изменений", "Опасная зона"]) {
+            await expect(summary(title).locator("..")).not.toHaveAttribute("open", "");
+        }
+
+        await page.screenshot({ path: testInfo.outputPath("settings-sections.png"), fullPage: true });
+        await passport.press("Enter");
+        await field.fill("Черновик паспорта");
+        await passport.press("Enter");
+        await expect(field).toBeHidden();
+        await summary("Стадии канбана").press("Space");
+        await expect(page.getByLabel("Название новой стадии")).toBeVisible();
+        await summary("Репозитории проекта").click();
+        await expect(page.getByRole("button", { name: "Добавить репозитории" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Удалить проект", exact: true })).toBeHidden();
+        await passport.click();
+        await expect(field).toHaveValue("Черновик паспорта");
+        const contentWidth = await passport.locator("..").evaluate(element => element.getBoundingClientRect().width);
+        expect(contentWidth).toBeLessThanOrEqual(Math.min(width, 1024));
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        expect(state.errors).toEqual([]);
+    });
+}
 
 for (const width of [1440, 390, 320]) {
     test(`оформление проекта: модалка, круглые цвета и отмена на ${width}px`, async ({ page }, testInfo) => {

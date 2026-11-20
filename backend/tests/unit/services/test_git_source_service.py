@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
+from cryptography.fernet import Fernet
+from pydantic import SecretStr
 
 from src.exceptions.git_sources import (
     GitHubForbiddenError,
@@ -58,11 +60,16 @@ def connection():
 
 def harness(principal, row=None, client=None):
     row = row if row is not None else connection()
+    row["credential_owner_id"] = principal.user_id
+    codec = GitCredentialCodec(SecretStr(Fernet.generate_key().decode()))
     sources = SimpleNamespace(
+        github_profile=AsyncMock(return_value={
+            "github_token_ciphertext": codec.encrypt(SecretStr("synthetic-token")),
+        }),
         get_connection=AsyncMock(side_effect=lambda **_: dict(row)),
         update_connection=AsyncMock(),
         supersede_jobs=AsyncMock(),
-        get_snapshot=AsyncMock(return_value={"id": 1}),
+        get_snapshot=AsyncMock(return_value={"id": 1, "manifest": []}),
         insert_job=AsyncMock(),
         due_changes=AsyncMock(),
         request_evidence_refresh=AsyncMock(),
@@ -98,7 +105,7 @@ def harness(principal, row=None, client=None):
         yield client
 
     service = GitSourceService(
-        scope=scope, client_factory=client_factory, credential_codec=GitCredentialCodec(None)
+        scope=scope, client_factory=client_factory, credential_codec=codec
     )
     row["scope_hash"] = service._scope_hash(row)
     return service, row, db

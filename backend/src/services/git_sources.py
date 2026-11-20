@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import math
 import re
 import time
 from collections.abc import AsyncIterator, Callable, Sequence
@@ -31,11 +32,13 @@ from src.exceptions.git_sources import (
     GitHubForbiddenError,
     GitHubNotFoundError,
     GitHubRateLimitError,
+    GitProfileRequiredError,
     GitSourceBudgetError,
     GitSourceConflictError,
     GitSourceIncompleteError,
     GitSourceNotAvailableError,
     GitSourceOwnerRequiredError,
+    GitSourceRateLimitedError,
     GitSourceScopeRequiredError,
     GitSourceServiceError,
     GitSourceSessionRequiredError,
@@ -46,18 +49,20 @@ from src.repositories.projects import ProjectsRepository
 from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.schemas.git_sources import (
+    GitAccountSnapshot,
     GitChangeProof,
     GitComponent,
     GitConnection,
     GitConnectionCreate,
     GitConnectionPage,
     GitConnectionUpdate,
-    GitCredentialUpdate,
     GitEventAccepted,
     GitEvidence,
     GitFileRead,
+    GitHubProfile,
     GitProjectMap,
     GitQueued,
+    GitRepositoryPage,
     GitSearchHit,
     GitSearchResult,
     GitSourceProof,
@@ -68,6 +73,7 @@ from src.schemas.git_sources import (
     GitTaskLinks,
     GitTreeEntry,
     GitTreePage,
+    GitWebhookSecretUpdate,
     validate_git_path,
     validate_git_sha,
 )
@@ -103,7 +109,7 @@ class GitSourceScope:
 
 
 GitSourceScopeFactory = Callable[[], AbstractAsyncContextManager[GitSourceScope]]
-GitHubClientFactory = Callable[[SecretStr | None], AbstractAsyncContextManager[GitHubClient]]
+GitHubClientFactory = Callable[[SecretStr], AbstractAsyncContextManager[GitHubClient]]
 _READ_BUDGET: ContextVar[GitRequestBudget | None] = ContextVar("git_read_budget", default=None)
 
 
@@ -181,7 +187,7 @@ class GitSourceService:
             _READ_BUDGET.reset(token)
 
     @asynccontextmanager
-    async def _client(self, credential: SecretStr | None) -> AsyncIterator[GitHubClient]:
+    async def _client(self, credential: SecretStr) -> AsyncIterator[GitHubClient]:
         async with self.client_factory(credential) as client:
             if (budget := _READ_BUDGET.get()) is not None:
                 client.request_budget = budget
@@ -288,18 +294,85 @@ class GitSourceService:
         fields = {name: row[name] for name in GitConnection.model_fields if name in row}
         return GitConnection(
             **fields,
-            has_credential=bool(row.get("credential_ciphertext")),
+            has_credential=row.get("credential_owner_id") is not None,
             has_webhook_secret=bool(row.get("webhook_secret_ciphertext")),
         )
 
-    def _credential(self, row: dict, project_owner_id: int | None) -> SecretStr | None:
-        if row.get("credential_ciphertext"):
-            if row.get("credential_owner_id") != project_owner_id:
+    async def _profile_credential(self, db, user_id: int | None) -> SecretStr:
+        profile = await db.sources.github_profile(user_id) if user_id is not None else None
+        if profile is None or not profile["github_token_ciphertext"]:
+            raise GitProfileRequiredError()
+        return self.credential_codec.decrypt(profile["github_token_ciphertext"])
+
+    async def _credential(self, db, row: dict, project_owner_id: int | None) -> SecretStr:
+        if row.get("credential_owner_id") != project_owner_id:
+            raise GitProfileRequiredError()
+        return await self._profile_credential(db, project_owner_id)
+
+    @staticmethod
+    def _require_profile_session(principal: Principal) -> None:
+        if principal.via_api_token:
+            raise GitSourceSessionRequiredError()
+
+    async def github_profile(self, principal: Principal) -> GitHubProfile:
+        self._require_profile_session(principal)
+        async with self.scope() as db:
+            profile = await db.sources.github_profile(principal.user_id)
+        account = None
+        if profile and profile["github_account_id"] is not None:
+            account = GitAccountSnapshot(id=profile["github_account_id"], login=profile["github_login"])
+        return GitHubProfile(account=account)
+
+    async def set_github_profile(
+        self, principal: Principal, token: SecretStr | None
+    ) -> GitHubProfile:
+        self._require_profile_session(principal)
+        account, ciphertext = None, None
+        if token is not None:
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,1024}", token.get_secret_value()):
+                raise GitSourceValidationError()
+            ciphertext = self.credential_codec.encrypt(token)
+            async with self._client(token) as client:
+                try:
+                    account = await client.get_authenticated_account()
+                except GitHubAuthenticationError:
+                    raise GitSourceValidationError() from None
+                except GitHubRateLimitError as error:
+                    raise self._rate_limited(error) from None
+                except GitHubClientError:
+                    raise GitSourceIncompleteError() from None
+        async with self.scope() as db:
+            if await db.sources.github_profile(principal.user_id, lock=True) is None:
                 raise GitSourceNotAvailableError()
-            return self.credential_codec.decrypt(row["credential_ciphertext"])
-        if row["is_private"]:
-            raise GitSourceNotAvailableError()
-        return None
+            await db.sources.update_github_profile(
+                principal.user_id,
+                ciphertext=ciphertext,
+                account_id=account.id if account else None,
+                login=account.login if account else None,
+            )
+            affected = await db.sources.invalidate_profile_connections(
+                principal.user_id, connected=account is not None
+            )
+            for row in affected:
+                await db.sources.request_evidence_refresh(connection_id=row["id"], invalidate=True)
+            for project_id in sorted({row["project_id"] for row in affected}):
+                await db.knowledge_events.reindex_project(project_id)
+            await db.unit_of_work.commit()
+        return GitHubProfile(account=account)
+
+    async def list_github_repositories(self, principal: Principal, page: int) -> GitRepositoryPage:
+        self._require_profile_session(principal)
+        async with self.scope() as db:
+            credential = await self._profile_credential(db, principal.user_id)
+        async with self._client(credential) as client:
+            try:
+                return await client.list_authenticated_repositories(page=page)
+            except GitHubAuthenticationError:
+                raise GitProfileRequiredError() from None
+            except GitHubRateLimitError as error:
+                raise self._rate_limited(error) from None
+            except GitHubClientError:
+                raise GitSourceIncompleteError() from None
 
     @staticmethod
     def _error_code(error: GitHubClientError) -> str:
@@ -334,14 +407,36 @@ class GitSourceService:
             unavailable = isinstance(
                 error, (GitHubAuthenticationError, GitHubForbiddenError, GitHubNotFoundError)
             )
+            coverage = current["coverage"]
+            if isinstance(error, GitHubRateLimitError) and current["observed_sha"]:
+                snapshot = await db.sources.get_snapshot(
+                    connection_id=current["id"],
+                    sha=current["observed_sha"],
+                    scope_hash=current["scope_hash"],
+                )
+                if snapshot and snapshot["manifest"] and not snapshot["complete"]:
+                    counts = await db.sources.snapshot_coverage(snapshot_id=snapshot["id"])
+                    coverage = {
+                        "total_files": len(snapshot["manifest"]),
+                        "indexed_files": counts["indexed_files"],
+                        "excluded_files": counts["excluded_files"],
+                        "failed_files": counts["failed_files"],
+                        "truncated": snapshot["tree_truncated"] or counts["budget_excluded"] > 0,
+                        "reasons": ["preparing"],
+                        "commit_sha": snapshot["commit_sha"],
+                        "generation": current["generation"],
+                    }
             await db.sources.update_connection(
                 project_id=row["project_id"],
                 connection_id=row["id"],
                 data={
                     "state": "access_lost" if unavailable else "error",
-                    "generation": current["generation"] + int(unavailable),
-                    "observation_revision": current["observation_revision"] + 1,
+                    "credential_revision": current["credential_revision"] + int(
+                        unavailable and current["state"] != "access_lost"
+                    ),
+                        "observation_revision": current["observation_revision"] + 1,
                     "last_error_code": self._error_code(error),
+                    "coverage": coverage,
                     "next_poll_at": retry_at,
                     "lease_id": None,
                     "lease_until": None,
@@ -361,11 +456,15 @@ class GitSourceService:
             delay = max(delay, error.rate_limit_reset - int(now.timestamp()))
         return now + timedelta(seconds=min(delay, 86400))
 
+    def _rate_limited(self, error: GitHubRateLimitError) -> GitSourceRateLimitedError:
+        delay = self._retry_at(error) - datetime.now(UTC)
+        return GitSourceRateLimitedError(math.ceil(delay.total_seconds()))
+
     async def _observe(
         self, row: dict, commit, metadata, *, principal: Principal, lease_id: UUID | None = None
     ) -> dict:
         async with self.scope() as db:
-            current, _, _, _ = await self._load(
+            current, _, project, _ = await self._load(
                 db,
                 project_id=row["project_id"],
                 connection_id=row["id"],
@@ -374,7 +473,8 @@ class GitSourceService:
                 allow_unverified=True,
             )
             if (
-                current["revision"] != row["revision"]
+                project.owner_id != row["credential_owner_id"]
+                or current["revision"] != row["revision"]
                 or current["credential_revision"] != row["credential_revision"]
                 or current["generation"] != row["generation"]
                 or current["observation_revision"] != row["observation_revision"]
@@ -483,10 +583,12 @@ class GitSourceService:
                 for_update=True,
                 allow_unverified=True,
             )
+            if row["last_error_code"] == "rate_limited" and row["next_poll_at"] > datetime.now(UTC):
+                raise GitSourceIncompleteError()
             credential_error = None
             try:
-                credential = self._credential(row, project.owner_id)
-            except (GitCredentialUnavailableError, GitSourceNotAvailableError) as error:
+                credential = await self._credential(db, row, project.owner_id)
+            except (GitCredentialUnavailableError, GitProfileRequiredError) as error:
                 credential_error = error
             if credential_error is not None:
                 await db.sources.update_connection(
@@ -495,8 +597,10 @@ class GitSourceService:
                     expected_revision=row["revision"],
                     data={
                         "state": "access_lost",
-                        "last_error_code": "credential_binding_unavailable",
-                        "generation": row["generation"] + 1,
+                        "last_error_code": (
+                            "github_profile_required" if isinstance(credential_error, GitProfileRequiredError)
+                            else "credential_binding_unavailable"
+                        ),
                         "observation_revision": row["observation_revision"] + 1,
                         "lease_id": None,
                         "lease_until": None,
@@ -505,7 +609,10 @@ class GitSourceService:
                 await db.sources.request_evidence_refresh(
                     connection_id=connection_id, invalidate=True
                 )
+                await db.knowledge_events.reindex_project(project_id)
                 await db.unit_of_work.commit()
+                if current.user_id != project.owner_id:
+                    raise GitSourceNotAvailableError()
                 raise credential_error
         async with self._client(credential) as client:
             client.max_requests = min(
@@ -572,21 +679,12 @@ class GitSourceService:
         """Владелец создаёт проверенную project binding; private требует явного согласия."""
         async with self.scope() as db:
             current, _, _ = await self._authorize(
-                db,
-                project_id=project_id,
-                principal=principal,
-                write=True,
-                owner=True,
-                session=data.credential is not None,
+                db, project_id=project_id, principal=principal, write=True, owner=True,
             )
-        cipher = (
-            self.credential_codec.encrypt(data.credential) if data.credential is not None else None
-        )
-        if not data.name.strip() or (
-            data.credential is not None and not data.credential.get_secret_value()
-        ):
+            credential = await self._profile_credential(db, current.user_id)
+        if not data.name.strip():
             raise GitSourceValidationError()
-        async with self._client(data.credential) as client:
+        async with self._client(credential) as client:
             try:
                 metadata = await client.get_repository(data.owner, data.repo)
                 if metadata.private and not data.share_private_with_project:
@@ -597,6 +695,10 @@ class GitSourceService:
                 if ref is None:
                     raise GitSourceValidationError()
                 commit = await client.resolve_ref(metadata.owner, metadata.name, ref)
+            except GitHubRateLimitError as error:
+                raise self._rate_limited(error) from None
+            except GitHubAuthenticationError:
+                raise GitProfileRequiredError() from None
             except GitHubClientError:
                 raise GitSourceNotAvailableError() from None
         now = datetime.now(UTC)
@@ -612,9 +714,8 @@ class GitSourceService:
             "exclude_patterns": data.exclude_patterns,
             "share_private_with_project": data.share_private_with_project,
             "is_private": metadata.private,
-            "credential_ciphertext": cipher,
-            "credential_owner_id": current.user_id if cipher else None,
-            "credential_revision": 1 if cipher else 0,
+            "credential_owner_id": current.user_id,
+            "credential_revision": 1,
             "observed_sha": commit.sha,
             "observed_at": now,
             "checked_at": now,
@@ -627,8 +728,14 @@ class GitSourceService:
                 principal=principal,
                 write=True,
                 owner=True,
-                session=data.credential is not None,
             )
+            profile = await db.sources.github_profile(current.user_id, lock=True)
+            if (
+                not profile
+                or not profile["github_token_ciphertext"]
+                or self.credential_codec.decrypt(profile["github_token_ciphertext"]) != credential
+            ):
+                raise GitSourceConflictError()
             row = await db.sources.insert_connection(data=values)
             snapshot = await db.sources.insert_snapshot(
                 data={
@@ -671,7 +778,7 @@ class GitSourceService:
                     owner=True,
                     read=False,
                 )
-                credential = self._credential(previous, project.owner_id)
+                credential = await self._credential(db, previous, project.owner_id)
             async with self._client(credential) as client:
                 try:
                     metadata = await client.get_repository(previous["owner"], previous["repo"])
@@ -766,15 +873,15 @@ class GitSourceService:
             await db.knowledge_events.reindex_project(project_id)
             await db.unit_of_work.commit()
 
-    async def set_credential(
+    async def set_webhook_secret(
         self,
         *,
         project_id: int,
         connection_id: int,
         principal: Principal,
-        data: GitCredentialUpdate,
+        data: GitWebhookSecretUpdate,
     ) -> GitConnection:
-        """Сессия владельца ротирует/отзывает encrypted secret; модель его не получает."""
+        """Сессия владельца меняет секрет проверки webhook."""
         if not data.model_fields_set - {"expected_revision"}:
             raise GitSourceValidationError()
         async with self.scope() as db:
@@ -800,18 +907,9 @@ class GitSourceService:
                 "lease_id": None,
                 "lease_until": None,
             }
-            if "credential" in data.model_fields_set:
-                if data.credential is not None and not data.credential.get_secret_value():
-                    raise GitSourceValidationError()
-                changes["credential_owner_id"] = (
-                    current.user_id if data.credential is not None else None
-                )
-            for name in ("credential", "webhook_secret"):
-                if name in data.model_fields_set:
-                    secret = getattr(data, name)
-                    changes[name + "_ciphertext"] = (
-                        self.credential_codec.encrypt(secret) if secret is not None else None
-                    )
+            changes["webhook_secret_ciphertext"] = (
+                self.credential_codec.encrypt(data.webhook_secret) if data.webhook_secret else None
+            )
             updated = await db.sources.update_connection(
                 project_id=project_id,
                 connection_id=connection_id,
@@ -831,7 +929,7 @@ class GitSourceService:
     ) -> GitConnection:
         """Ставит текущую connection на authoritative reconciliation без синхронного обхода."""
         async with self.scope() as db:
-            row, _, _, _ = await self._load(
+            row, _, project, _ = await self._load(
                 db,
                 project_id=project_id,
                 connection_id=connection_id,
@@ -843,10 +941,28 @@ class GitSourceService:
             )
             if not row["enabled"]:
                 raise GitSourceNotAvailableError()
+            changes = {"next_poll_at": datetime.now(UTC)}
+            if row["credential_owner_id"] != project.owner_id or (
+                row["last_error_code"] == "github_profile_required"
+            ):
+                await self._profile_credential(db, project.owner_id)
+                changes.update(
+                    credential_owner_id=project.owner_id,
+                    credential_revision=row["credential_revision"] + 1,
+                    revision=row["revision"] + 1,
+                    state="access_lost",
+                    last_error_code="github_profile_pending",
+                    lease_id=None,
+                    lease_until=None,
+                )
+                await db.sources.request_evidence_refresh(connection_id=connection_id, invalidate=True)
+                await db.knowledge_events.reindex_project(project_id)
+            elif row["last_error_code"] == "rate_limited" and row["next_poll_at"] > datetime.now(UTC):
+                return self._dto(row)
             updated = await db.sources.update_connection(
                 project_id=project_id,
                 connection_id=connection_id,
-                data={"next_poll_at": datetime.now(UTC)},
+                data=changes,
             )
             await db.unit_of_work.commit()
         return self._dto(updated)
@@ -1190,6 +1306,7 @@ class GitSourceService:
                 GitSourceNotAvailableError,
                 GitSourceIncompleteError,
                 GitCredentialUnavailableError,
+                GitProfileRequiredError,
             ):
                 inaccessible.append(row["id"])
         return readable, inaccessible, partial
@@ -1439,11 +1556,11 @@ class GitSourceService:
                     latest[name] != row[name]
                     for name in (
                         "repository_id", "owner", "repo", "ref", "scope_hash", "generation",
-                        "credential_revision", "credential_owner_id", "credential_ciphertext",
+                        "credential_revision", "credential_owner_id",
                     )
                 ):
                     raise GitSourceConflictError()
-                self._credential(latest, latest["project_owner_id"])
+                await self._credential(db, latest, latest["project_owner_id"])
             has_changes = False
             for connection_id, proofs in grouped.items():
                 row = current[connection_id]
@@ -1810,6 +1927,7 @@ class GitSourceService:
                 GitSourceIncompleteError,
                 GitHubClientError,
                 GitCredentialUnavailableError,
+                GitProfileRequiredError,
             ):
                 partial = True
         async with self.scope() as db:
@@ -1907,11 +2025,12 @@ class GitSourceService:
                     else row["ref"]
                 )
             if accepted:
-                await db.sources.update_connection(
-                    project_id=project_id,
-                    connection_id=connection_id,
-                    data={"next_poll_at": datetime.now(UTC)},
-                )
+                if row["last_error_code"] != "rate_limited":
+                    await db.sources.update_connection(
+                        project_id=project_id,
+                        connection_id=connection_id,
+                        data={"next_poll_at": datetime.now(UTC)},
+                    )
                 await db.sources.request_evidence_refresh(connection_id=connection_id)
             await db.unit_of_work.commit()
         return GitEventAccepted()
@@ -2503,6 +2622,7 @@ class GitSourceService:
                 GitSourceConflictError,
                 GitSourceNotAvailableError,
                 GitCredentialUnavailableError,
+                GitProfileRequiredError,
             ):
                 await self._release(row, lease_id=lease_id)
             except (TimeoutError, GitSourceIncompleteError, GitHubBudgetExceededError):

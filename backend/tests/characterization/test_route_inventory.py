@@ -7,6 +7,10 @@ from fastapi.routing import APIRoute
 from main import app
 
 FROZEN_ROUTES: set[tuple[str, str]] = {
+    ('GET', '/api/v1/users/me/github'),
+    ('PUT', '/api/v1/users/me/github'),
+    ('DELETE', '/api/v1/users/me/github'),
+    ('GET', '/api/v1/users/me/github/repositories'),
     ('DELETE', '/api/v1/projects/{project_id}/git/connections/{connection_id}'),
     ('DELETE', '/api/v1/projects/{project_id}/git/tasks/{task_id}/links/{link_id}'),
     ('GET', '/api/v1/projects/{project_id}/git/connections'),
@@ -34,7 +38,7 @@ FROZEN_ROUTES: set[tuple[str, str]] = {
     ('POST', '/api/v1/projects/{project_id}/web-research/read'),
     ('POST', '/api/v1/projects/{project_id}/web-research/search'),
     ('POST', '/api/v1/projects/{project_id}/web-research/topics'),
-    ('PUT', '/api/v1/projects/{project_id}/git/connections/{connection_id}/credential'),
+    ('PUT', '/api/v1/projects/{project_id}/git/connections/{connection_id}/webhook-secret'),
     ('DELETE', '/api/v1/aris/conversations/{conversation_id}/files/{file_id}'),
     ('DELETE', '/api/v1/boards/{board_id}'),
     ('DELETE', '/api/v1/boards/{board_id}/shapes/{shape_id}'),
@@ -248,9 +252,11 @@ PUBLIC_ROUTES: set[tuple[str, str]] = {
 
 # Управление токенами закрыто для самих токенов: только сессия интерфейса.
 SESSION_ONLY_ROUTES: set[tuple[str, str]] = {
+    ('PUT', '/api/v1/users/me/github'),
+    ('DELETE', '/api/v1/users/me/github'),
     ("POST", "/api/v1/projects/{project_id}/web-research/topics"),
     ("POST", "/api/v1/projects/{project_id}/web-research/pages"),
-    ("PUT", "/api/v1/projects/{project_id}/git/connections/{connection_id}/credential"),
+    ("PUT", "/api/v1/projects/{project_id}/git/connections/{connection_id}/webhook-secret"),
     ("POST", "/api/v1/users/me/api-keys"),
     ("PATCH", "/api/v1/users/me/api-keys/{key_id}"),
     ("POST", "/api/v1/users/me/calendar/ics-token"),
@@ -327,7 +333,7 @@ def test_non_get_routes_are_fully_classified() -> None:
     )
 
     mutations = non_get - explicit
-    assert len(non_get) == 138, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
+    assert len(non_get) == 140, f"Изменилось число изменяющих маршрутов: {len(non_get)}"
     assert len(mutations) == 111, f"Изменилось число доменных мутаций: {len(mutations)}"
 
 

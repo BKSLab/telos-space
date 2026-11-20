@@ -43,14 +43,15 @@ from src.exceptions.git_sources import (
     GitSourceOwnerRequiredError,
     GitSourceScopeRequiredError,
     GitSourceSessionRequiredError,
+    GitSourceValidationError,
 )
 from src.repositories.git_sources import GitSourcesRepository
 from src.schemas.git_sources import (
     GitConnectionCreate,
     GitConnectionUpdate,
-    GitCredentialUpdate,
     GitSourceProof,
     GitTaskLinkCreate,
+    GitWebhookSecretUpdate,
 )
 from src.services.auth import ApiKeyGrant, Principal
 from src.services.git_credentials import GitCredentialCodec
@@ -72,6 +73,7 @@ class Remote:
         self.sha = A
         self.private = False
         self.denied = set()
+        self.rate_limited_blobs = set()
         self.requests = []
         self.batches = []
         self.db_active = 0
@@ -110,7 +112,10 @@ class Remote:
             and request.url.scheme == "https"
             and request.url.host == "api.github.com"
         )
+        assert request.headers["Authorization"].startswith("Bearer ")
         path = request.url.path
+        if path == "/user":
+            return httpx.Response(200, json={"id": 42, "login": "example"})
         self.requests.append(path)
         parts = path.split("/")
         repo = parts[3]
@@ -132,6 +137,8 @@ class Remote:
             data = {"sha": tree_sha, "truncated": False, "tree": entries}
         elif tail.startswith("git/blobs/"):
             digest = tail.split("/")[-1]
+            if digest in self.rate_limited_blobs:
+                return httpx.Response(429, headers={"Retry-After": "120"}, json={})
             content = self.contents[digest]
             data = {
                 "sha": digest,
@@ -297,6 +304,7 @@ async def environment(engine, *, limits=None):
         stage=stage_id,
     )
     try:
+        await service.set_github_profile(principal, SecretStr("synthetic-default-credential"))
         yield env
     finally:
         async with sessions() as db:
@@ -502,7 +510,8 @@ async def test_forcepush_rollback_generation_revocation_and_project_membership(e
         denied = await service.get_connection(
             project_id=env.project, principal=env.principal, connection_id=source.id
         )
-        assert denied.state == "access_lost" and denied.generation > rollback.generation
+        assert denied.state == "access_lost" and denied.generation == rollback.generation
+        assert denied.credential_revision > rollback.credential_revision
         remote.denied.clear()
         recovered = await service.read_file(
             project_id=env.project,
@@ -542,7 +551,8 @@ async def test_private_binding_owner_session_current_scopes_and_immediate_revoke
     async with environment(engine) as env:
         env.remote.private = True
         secret = SecretStr("synthetic-test-credential")
-        source = await connect(env, credential=secret, share_private_with_project=True)
+        await env.service.set_github_profile(env.principal, secret)
+        source = await connect(env, share_private_with_project=True)
         assert source.has_credential and "synthetic-test-credential" not in source.model_dump_json()
         with pytest.raises(GitSourceOwnerRequiredError):
             await env.service.create_connection(
@@ -574,12 +584,7 @@ async def test_private_binding_owner_session_current_scopes_and_immediate_revoke
             )
             await db.commit()
         with pytest.raises(GitSourceSessionRequiredError):
-            await env.service.set_credential(
-                project_id=env.project,
-                principal=api_key,
-                connection_id=source.id,
-                data=GitCredentialUpdate(expected_revision=source.revision, credential=secret),
-            )
+            await env.service.set_github_profile(api_key, secret)
         for scopes in ({"projects:read", "agent:ask"}, {"knowledge:read", "agent:ask"}):
             restricted = replace(
                 api_key, api_key=replace(api_key.api_key, scopes=frozenset(scopes))
@@ -596,11 +601,11 @@ async def test_private_binding_owner_session_current_scopes_and_immediate_revoke
         )
         async with env.sessions() as db:
             stored = await db.get(GitConnection, source.id)
-            assert stored.credential_ciphertext != secret.get_secret_value()
-            assert (
-                env.codec.decrypt(stored.credential_ciphertext).get_secret_value()
-                == secret.get_secret_value()
-            )
+            assert stored.credential_ciphertext is None
+            profile = await GitSourcesRepository(db).github_profile(env.principal.user_id)
+            ciphertext = profile["github_token_ciphertext"]
+            assert ciphertext != secret.get_secret_value()
+            assert env.codec.decrypt(ciphertext).get_secret_value() == secret.get_secret_value()
         revoked = await env.service.update_connection(
             project_id=env.project,
             principal=env.principal,
@@ -705,11 +710,11 @@ async def test_task_many_to_many_exact_sha_ci_deployment_rollback_and_hmac_dedup
                 == 1
             )
         webhook_secret = SecretStr("synthetic-webhook-secret")
-        await service.set_credential(
+        await service.set_webhook_secret(
             project_id=env.project,
             principal=env.principal,
             connection_id=source.id,
-            data=GitCredentialUpdate(
+            data=GitWebhookSecretUpdate(
                 expected_revision=source.revision, webhook_secret=webhook_secret
             ),
         )
@@ -791,6 +796,98 @@ async def test_skip_locked_leases_resume_and_reject_stale_generation(engine):
                 )
             )
             assert job.cursor == 0 and job.state == "superseded"
+
+
+async def test_rate_limit_and_profile_reconnect_preserve_index_checkpoint(engine):
+    async with environment(engine) as env:
+        first, second = b"first file", b"second file"
+        env.remote.add_version(A, {"a.md": first, "b.md": second})
+        source = await connect(env)
+        env.remote.rate_limited_blobs.add(blob(second))
+        await env.service.tick()
+        await force_due(env)
+        await env.service.tick()
+        paused = await env.service.get_connection(
+            project_id=env.project, connection_id=source.id, principal=env.principal
+        )
+        assert paused.last_error_code == "rate_limited"
+        assert paused.next_poll_at > datetime.now(UTC) + timedelta(seconds=90)
+        assert (paused.coverage.indexed_files, paused.coverage.total_files) == (1, 2)
+        await env.service.sync_connection(
+            project_id=env.project, connection_id=source.id, principal=env.principal
+        )
+        assert await env.service.tick() == 0
+
+        env.remote.denied.add("app")
+        await force_due(env)
+        await env.service.tick()
+        unavailable = await env.service.get_connection(
+            project_id=env.project, connection_id=source.id, principal=env.principal
+        )
+        assert unavailable.last_error_code == "remote_forbidden"
+        assert unavailable.generation == source.generation
+        env.remote.denied.clear()
+        with pytest.raises(GitSourceValidationError):
+            await env.service.set_github_profile(env.principal, SecretStr("токен"))
+        await env.service.set_github_profile(env.principal, None)
+        assert await env.service.tick() == 0
+        with pytest.raises(GitSourceNotAvailableError):
+            await env.service.read_file(
+                project_id=env.project, connection_id=source.id, principal=env.member, path="a.md"
+            )
+        async with env.sessions() as db:
+            job = await GitSourcesRepository(db).get_job(
+                connection_id=source.id, generation=source.generation
+            )
+            assert job["cursor"] == 1
+        env.remote.rate_limited_blobs.clear()
+        await env.service.set_github_profile(env.principal, SecretStr("synthetic-replacement"))
+        await env.service.tick()
+        finished = await env.service.get_connection(
+            project_id=env.project, connection_id=source.id, principal=env.principal
+        )
+        assert finished.indexed_sha == A
+        assert finished.generation == source.generation
+        assert sum(path.endswith(blob(first)) for path in env.remote.requests) == 1
+
+
+async def test_new_project_owner_can_rebind_using_their_existing_profile(engine):
+    async with environment(engine) as env:
+        source = await connect(env)
+        await env.service.set_github_profile(env.member, SecretStr("synthetic-new-owner"))
+        async with env.sessions() as db:
+            await db.execute(
+                update(Project).where(Project.id == env.project).values(owner_id=env.member.user_id)
+            )
+            await db.execute(
+                update(ProjectMember)
+                .where(ProjectMember.project_id == env.project)
+                .values(role=ProjectRole.MEMBER)
+            )
+            await db.execute(
+                update(ProjectMember)
+                .where(ProjectMember.project_id == env.project, ProjectMember.user_id == env.member.user_id)
+                .values(role=ProjectRole.OWNER)
+            )
+            await db.commit()
+        await env.service.tick()
+        before = await env.service.get_connection(
+            project_id=env.project, connection_id=source.id, principal=env.member
+        )
+        assert before.last_error_code == "github_profile_required"
+        pending = await env.service.sync_connection(
+            project_id=env.project, connection_id=source.id, principal=env.member
+        )
+        assert pending.last_error_code == "github_profile_pending"
+        assert pending.generation == source.generation
+
+        async def indexed():
+            current = await env.service.get_connection(
+                project_id=env.project, connection_id=source.id, principal=env.member
+            )
+            return current.indexed_sha == A
+
+        await converge(env, indexed)
 
 
 async def test_persisted_loss_closes_an_inflight_cached_read_and_recovers_by_new_probe(engine):
@@ -996,7 +1093,6 @@ async def test_final_source_gate_rechecks_earlier_connections_after_last_remote_
             repo: await connect(
                 env,
                 repo,
-                credential=SecretStr("synthetic-read-only-credential"),
                 share_private_with_project=True,
             )
             for repo in ("app", "api", "docs")

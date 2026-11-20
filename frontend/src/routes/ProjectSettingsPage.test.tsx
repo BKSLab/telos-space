@@ -71,7 +71,12 @@ function setup() {
             </Route></Routes>
         </MemoryRouter>
     </QueryClientProvider>);
+    openPassport();
     return { client, get, patch };
+}
+
+function openPassport() {
+    fireEvent.click(screen.getByText("О проекте", { exact: true }).closest("summary")!);
 }
 
 function field(name: string) {
@@ -98,6 +103,7 @@ it("при переходе между настройками проектов �
     const { patch } = setup();
     changeGoal("Черновик Альфы");
     fireEvent.click(screen.getByRole("link", { name: "К Бете" }));
+    openPassport();
     expect(field("Название").value).toBe("Бета");
     expect(field("Цель").value).toBe("Цель Беты");
     expect((screen.getByRole("button", { name: /^Сохранить$/ }) as HTMLButtonElement).disabled).toBe(true);
@@ -119,6 +125,7 @@ it("запоздалый success Альфы не подменяет чернов
     save();
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("link", { name: "К Бете" }));
+    openPassport();
     changeGoal("Черновик Беты");
     await act(async () => pending.resolve({ ...projectA, context_revision: 3,
         description_sections: { ...projectA.description_sections!, goal: "Отправленная цель Альфы" } }));
@@ -141,6 +148,7 @@ it("запоздалый 409 Альфы не запускает чтение к�
     save();
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("link", { name: "К Бете" }));
+    openPassport();
     changeGoal("Независимый черновик Беты");
     await act(async () => pending.reject(new ApiError(409, "Паспорт изменился")));
     await waitFor(() => expect(client.isMutating()).toBe(0));
@@ -160,6 +168,7 @@ it("ответ чтения конфликта Альфы после перек�
     save();
     await waitFor(() => expect(get).toHaveBeenCalledWith(endpoints.project(projectA.id)));
     fireEvent.click(screen.getByRole("link", { name: "К Бете" }));
+    openPassport();
     changeGoal("Моя цель Беты");
     await act(async () => latest.resolve({ ...projectA, name: "Актуальная Альфа", context_revision: 3 }));
     await waitFor(() => expect(client.isMutating()).toBe(0));

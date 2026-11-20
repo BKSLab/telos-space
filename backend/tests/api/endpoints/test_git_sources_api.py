@@ -6,19 +6,22 @@ from unittest.mock import AsyncMock
 import httpx
 from fastapi import FastAPI
 
-from src.api.v1.endpoints.git_sources import router
+from src.api.v1.endpoints.git_sources import profile_router, router
 from src.dependencies.git_sources import get_git_source_principal, get_git_source_service
 from src.exceptions.git_sources import (
     GitCredentialUnavailableError,
     GitSourceConflictError,
     GitSourceNotAvailableError,
     GitSourceOwnerRequiredError,
+    GitSourceRateLimitedError,
 )
 from src.schemas.git_sources import (
     GitConnection,
     GitConnectionPage,
     GitEventAccepted,
+    GitHubProfile,
     GitQueued,
+    GitRepositoryPage,
     GitSearchResult,
     GitTaskLinks,
 )
@@ -28,6 +31,7 @@ from src.services.git_sources import GitSourceService
 def transport(principal):
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
+    app.include_router(profile_router, prefix="/api/v1")
     service = AsyncMock(spec=GitSourceService)
     app.dependency_overrides[get_git_source_service] = lambda: service
     app.dependency_overrides[get_git_source_principal] = lambda: principal
@@ -109,7 +113,11 @@ async def test_git_metadata_read_bounds_config_queue_and_typed_errors(current_pr
 async def test_secret_input_is_never_reflected_in_validation_or_response(current_principal):
     app, service = transport(current_principal)
     marker = "synthetic-secret-input-marker"
-    service.set_credential.return_value = source()
+    service.set_github_profile.return_value = GitHubProfile(account=None)
+    service.github_profile.return_value = GitHubProfile(account=None)
+    service.list_github_repositories.return_value = GitRepositoryPage(
+        repositories=(), next_page=None
+    )
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -122,13 +130,23 @@ async def test_secret_input_is_never_reflected_in_validation_or_response(current
             response = await client.post(base, json=payload)
             assert response.status_code == 422 and marker not in response.text
         service.create_connection.assert_not_awaited()
-        response = await client.put(
-            base + "/1/credential", json={"expected_revision": 1, "credential": marker}
-        )
+        profile = "/api/v1/users/me/github"
+        assert (await client.get(profile)).json() == {"account": None}
+        invalid = await client.put(profile, json={"token": {marker: marker}})
+        assert invalid.status_code == 422 and marker not in invalid.text
+        response = await client.put(profile, json={"token": marker})
         assert response.status_code == 200 and marker not in response.text
-        data = service.set_credential.await_args.kwargs["data"]
-        assert data.credential.get_secret_value() == marker and marker not in repr(data)
-        assert "credential" not in data.model_dump()
+        token = service.set_github_profile.await_args.args[1]
+        assert token.get_secret_value() == marker and marker not in repr(token)
+        assert (await client.get(profile + "/repositories?page=2")).json() == {
+            "repositories": [], "next_page": None,
+        }
+        service.list_github_repositories.assert_awaited_once_with(current_principal, 2)
+        service.list_github_repositories.side_effect = GitSourceRateLimitedError(120)
+        limited = await client.get(profile + "/repositories")
+        assert limited.status_code == 429 and limited.headers["Retry-After"] == "120"
+        assert (await client.delete(profile)).status_code == 204
+        service.set_github_profile.assert_awaited_with(current_principal, None)
 
 
 async def test_search_task_and_evidence_refresh_are_separate_bounded_operations(current_principal):

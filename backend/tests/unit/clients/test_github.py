@@ -101,6 +101,37 @@ def build_client(handler, **limits):
     )
 
 
+async def test_reads_authenticated_account_and_paginates_repository_catalog():
+    def reply(request):
+        assert request.url.host == "api.github.com"
+        assert request.headers["Authorization"] == f"Bearer {MARKER}"
+        if request.url.path == "/user":
+            return httpx.Response(200, json={"id": 42, "login": "octocat", "email": MARKER})
+        assert request.url.path == "/user/repos"
+        assert request.url.params["per_page"] == "100"
+        if request.url.params["page"] == "1":
+            return httpx.Response(
+                200,
+                json=[repository_payload()],
+                headers={"Link": '<https://untrusted.test/?page=2>; rel="next"'},
+            )
+        assert request.url.params["page"] == "2"
+        return httpx.Response(200, json=[])
+
+    client = build_client(reply)
+    async with client.http_client:
+        account = await client.get_authenticated_account()
+        first_page = await client.list_authenticated_repositories()
+        last_page = await client.list_authenticated_repositories(page=first_page.next_page)
+
+    assert account.model_dump() == {"id": 42, "login": "octocat"}
+    assert first_page.repositories[0].owner == OWNER
+    assert MARKER not in first_page.model_dump_json()
+    assert first_page.next_page == 2
+    assert last_page.repositories == ()
+    assert last_page.next_page is None
+
+
 class CountingStream(httpx.AsyncByteStream):
     """Фиксирует реальное прекращение чтения, а не только обрезку готового body."""
 

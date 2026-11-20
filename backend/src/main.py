@@ -32,6 +32,7 @@ from src.api.v1.endpoints.calendar_workload import router as calendar_workload_r
 from src.api.v1.endpoints.dashboard import router as dashboard_router
 from src.api.v1.endpoints.document_catalog import router as document_catalog_router
 from src.api.v1.endpoints.free_boards import router as free_boards_router
+from src.api.v1.endpoints.git_sources import profile_router as github_profile_router
 from src.api.v1.endpoints.git_sources import router as git_sources_router
 from src.api.v1.endpoints.knowledge import router as knowledge_router
 from src.api.v1.endpoints.milestones import router as milestones_router
@@ -229,6 +230,7 @@ app.add_middleware(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.app.cors_origins,
+    expose_headers=["Retry-After"],
     # Сессия живёт в cookie, поэтому браузеру нужно разрешение слать её кросс-origin.
     allow_credentials=True,
     allow_methods=["*"],
@@ -267,6 +269,7 @@ for api_router in (
     project_boards_router,
     free_boards_router,
     git_sources_router,
+    github_profile_router,
     board_shapes_router,
     board_editor_router,
     task_reports_router,

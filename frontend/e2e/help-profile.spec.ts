@@ -58,6 +58,7 @@ async function installAccountApi(page: Page) {
         if (path === "/api/v1/users/me/api-keys/scopes") return reply(scopeCatalog);
         if (path === "/api/v1/users/me/api-keys" && method === "GET") return reply(keys);
         if (path === "/api/v1/users/me/tokens" && method === "GET") return reply(tokens);
+        if (path === "/api/v1/users/me/github" && method === "GET") return reply({ account: { id: 7, login: "octocat" } });
         if (method === "GET") return route.fallback();
         const body = request.postData() ? request.postDataJSON() : {};
         if (path === "/api/v1/users/me/api-keys" && method === "POST") {
@@ -127,6 +128,9 @@ for (const width of [1440, 1024, 768, 390, 320]) {
         expect(await table.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
         expect(await table.evaluate(element => element.parentElement!.scrollWidth <= element.parentElement!.clientWidth + 1)).toBe(true);
         await page.screenshot({ path: info.outputPath(`profile-keys-${width}.png`) });
+        await tabs.getByRole("link", { name: "GitHub", exact: true }).click();
+        await expect(page.getByText("Аккаунт GitHub: octocat", { exact: true })).toBeVisible();
+        await expect(page.getByLabel("Токен GitHub", { exact: true })).toHaveAttribute("type", "password");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         expect(server.state.errors).toEqual([]);
         expect(server.writes).toEqual([]);

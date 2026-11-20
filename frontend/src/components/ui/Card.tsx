@@ -1,4 +1,5 @@
 import type { HTMLAttributes, ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export type CardVariant = "workspace" | "interactive" | "inset" | "plain" | "ai";
@@ -43,6 +44,21 @@ interface SectionProps {
     action?: ReactNode;
     children: ReactNode;
     className?: string;
+}
+
+export function CollapsibleSection({ title, action, children, className }: SectionProps) {
+    return (
+        <details className={cn("group/section surface-card min-w-0 rounded-[var(--radius-card)] border border-line", className)}>
+            <summary className="touch-target flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-card)] px-4 py-3 text-sm font-semibold text-primary hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent sm:px-5 [&::-webkit-details-marker]:hidden">
+                <h2>{title}</h2>
+                <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-muted group-open/section:rotate-90" />
+            </summary>
+            <div className="flex min-w-0 flex-col gap-4 border-t border-line-subtle px-4 py-4 sm:px-5">
+                {action && <div className="self-start">{action}</div>}
+                {children}
+            </div>
+        </details>
+    );
 }
 
 /** Секция рабочего экрана: заголовок, необязательное действие и содержимое. */

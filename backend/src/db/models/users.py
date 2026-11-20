@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import BigInteger, Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
@@ -21,6 +21,10 @@ class User(Base, TimestampMixin):
     """
 
     __tablename__ = "users"
+
+    github_token_ciphertext: Mapped[str | None] = mapped_column(Text, deferred=True)
+    github_account_id: Mapped[int | None] = mapped_column(BigInteger)
+    github_login: Mapped[str | None] = mapped_column(String(255))
 
     id: Mapped[int] = mapped_column(
         primary_key=True,

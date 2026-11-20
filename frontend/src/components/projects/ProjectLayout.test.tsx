@@ -43,7 +43,8 @@ it("оставляет одну активную вкладку чата и со
     expect(navigation.getAllByRole("link", { name: /Чат/ })).toHaveLength(1);
     const tabs = navigation.getAllByRole("link");
     expect(tabs[0]).toBe(navigation.getByRole("link", { name: "Обзор" }));
-    expect(tabs[1]).toBe(chat);
+    expect(tabs[1]).toBe(navigation.getByRole("link", { name: "Задачи" }));
+    expect(tabs[2]).toBe(chat);
     expect(navigation.getByRole("link", { name: "Обзор" }).getAttribute("href")).toBe("/projects/DEMO");
     expect(navigation.queryByRole("link", { name: "Пульс" })).toBeNull();
     expect(navigation.queryByRole("link", { name: "Агент" })).toBeNull();

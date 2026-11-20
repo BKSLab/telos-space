@@ -24513,7 +24513,7 @@
     },
     {
       "access": "authenticated",
-      "description": "Текущий владелец явно выбирает ref/область; private sharing требует согласия, ввод credential — UI session.",
+      "description": "Текущий владелец явно выбирает ref/область; private sharing требует согласия, токен берётся из профиля владельца.",
       "group": "git-sources",
       "id": "api-e74d39d0c105f463",
       "kind": "http",
@@ -25093,121 +25093,6 @@
       ]
     },
     {
-      "access": "session",
-      "description": "Только UI session текущего владельца; SecretStr входы шифруются отдельным ключом и не возвращаются.",
-      "group": "git-sources",
-      "id": "api-8010c94c4c74837a",
-      "kind": "http",
-      "method": "PUT",
-      "name": "PUT /api/v1/projects/{project_id}/git/connections/{connection_id}/credential",
-      "operationId": "setGitCredential",
-      "parameters": [
-        {
-          "description": "ID доступного проекта.",
-          "in": "path",
-          "name": "project_id",
-          "required": true,
-          "schema": {
-            "description": "ID доступного проекта.",
-            "exclusiveMinimum": 0,
-            "title": "Project Id",
-            "type": "integer"
-          }
-        },
-        {
-          "description": "ID подключения внутри этого проекта.",
-          "in": "path",
-          "name": "connection_id",
-          "required": true,
-          "schema": {
-            "description": "ID подключения внутри этого проекта.",
-            "exclusiveMinimum": 0,
-            "title": "Connection Id",
-            "type": "integer"
-          }
-        },
-        {
-          "in": "header",
-          "name": "Authorization",
-          "required": false,
-          "schema": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Authorization"
-          }
-        },
-        {
-          "in": "cookie",
-          "name": "telos_session",
-          "required": false,
-          "schema": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Telos Session"
-          }
-        }
-      ],
-      "path": "/api/v1/projects/{project_id}/git/connections/{connection_id}/credential",
-      "requestBody": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/GitCredentialUpdate"
-            }
-          }
-        },
-        "required": true
-      },
-      "responses": {
-        "200": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GitConnection"
-              }
-            }
-          },
-          "description": "Безопасные metadata с новой credential revision."
-        },
-        "401": {
-          "description": "Требуется действующая локальная аутентификация."
-        },
-        "403": {
-          "description": "Недостаточно текущих scopes/прав владельца."
-        },
-        "404": {
-          "description": "Объект отсутствует или недоступен."
-        },
-        "409": {
-          "description": "Изменились версия, generation или связь."
-        },
-        "422": {
-          "description": "Недопустимые параметры без отражения secret input."
-        },
-        "500": {
-          "description": "Ошибка обработки Git."
-        },
-        "503": {
-          "description": "Источник/credentials не готовы либо исчерпан ограниченный бюджет."
-        }
-      },
-      "scopes": null,
-      "summary": "Заменить Git credentials",
-      "tokens": []
-    },
-    {
       "access": "signature",
       "description": "Отдельная HMAC аутентификация, repository binding и delivery deduplication; SHA события не публикуется без authoritative GET сверки.",
       "group": "git-sources",
@@ -25748,6 +25633,121 @@
         "READ",
         "WRITE"
       ]
+    },
+    {
+      "access": "session",
+      "description": "Только UI session текущего владельца; SecretStr входы шифруются отдельным ключом и не возвращаются.",
+      "group": "git-sources",
+      "id": "api-863094db63e30c9c",
+      "kind": "http",
+      "method": "PUT",
+      "name": "PUT /api/v1/projects/{project_id}/git/connections/{connection_id}/webhook-secret",
+      "operationId": "setGitWebhookSecret",
+      "parameters": [
+        {
+          "description": "ID доступного проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "ID доступного проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "ID подключения внутри этого проекта.",
+          "in": "path",
+          "name": "connection_id",
+          "required": true,
+          "schema": {
+            "description": "ID подключения внутри этого проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Connection Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/git/connections/{connection_id}/webhook-secret",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/GitWebhookSecretUpdate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitConnection"
+              }
+            }
+          },
+          "description": "Безопасные metadata с новой credential revision."
+        },
+        "401": {
+          "description": "Требуется действующая локальная аутентификация."
+        },
+        "403": {
+          "description": "Недостаточно текущих scopes/прав владельца."
+        },
+        "404": {
+          "description": "Объект отсутствует или недоступен."
+        },
+        "409": {
+          "description": "Изменились версия, generation или связь."
+        },
+        "422": {
+          "description": "Недопустимые параметры без отражения secret input."
+        },
+        "500": {
+          "description": "Ошибка обработки Git."
+        },
+        "503": {
+          "description": "Источник/credentials не готовы либо исчерпан ограниченный бюджет."
+        }
+      },
+      "scopes": null,
+      "summary": "Заменить секрет Git webhook",
+      "tokens": []
     },
     {
       "access": "authenticated",
@@ -40341,6 +40341,304 @@
         "READ",
         "WRITE"
       ]
+    },
+    {
+      "access": "session",
+      "description": "",
+      "group": "github-profile",
+      "id": "api-04277bbf38957d2e",
+      "kind": "http",
+      "method": "DELETE",
+      "name": "DELETE /api/v1/users/me/github",
+      "operationId": "deleteGitHubProfile",
+      "parameters": [
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/users/me/github",
+      "requestBody": null,
+      "responses": {
+        "204": {
+          "description": "Successful Response"
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          },
+          "description": "Validation Error"
+        }
+      },
+      "scopes": null,
+      "summary": "Отключить аккаунт GitHub",
+      "tokens": []
+    },
+    {
+      "access": "session",
+      "description": "",
+      "group": "github-profile",
+      "id": "api-1ef5f25224b6c99d",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/users/me/github",
+      "operationId": "getGitHubProfile",
+      "parameters": [
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/users/me/github",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubProfile"
+              }
+            }
+          },
+          "description": "Successful Response"
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          },
+          "description": "Validation Error"
+        }
+      },
+      "scopes": null,
+      "summary": "Получить подключение GitHub",
+      "tokens": []
+    },
+    {
+      "access": "session",
+      "description": "",
+      "group": "github-profile",
+      "id": "api-347796b3ac2c304d",
+      "kind": "http",
+      "method": "PUT",
+      "name": "PUT /api/v1/users/me/github",
+      "operationId": "setGitHubProfile",
+      "parameters": [
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/users/me/github",
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/GitHubProfileUpdate"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubProfile"
+              }
+            }
+          },
+          "description": "Successful Response"
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          },
+          "description": "Validation Error"
+        }
+      },
+      "scopes": null,
+      "summary": "Подключить аккаунт GitHub",
+      "tokens": []
+    },
+    {
+      "access": "session",
+      "description": "",
+      "group": "github-profile",
+      "id": "api-30f680eb68caaf26",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/users/me/github/repositories",
+      "operationId": "listGitHubProfileRepositories",
+      "parameters": [
+        {
+          "in": "query",
+          "name": "page",
+          "required": false,
+          "schema": {
+            "default": 1,
+            "maximum": 10000,
+            "minimum": 1,
+            "title": "Page",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/users/me/github/repositories",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitRepositoryPage"
+              }
+            }
+          },
+          "description": "Successful Response"
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          },
+          "description": "Validation Error"
+        }
+      },
+      "scopes": null,
+      "summary": "Получить репозитории GitHub",
+      "tokens": []
     },
     {
       "access": "authenticated",
@@ -55594,6 +55892,28 @@
       "title": "ExternalSourceReferenceSchema",
       "type": "object"
     },
+    "GitAccountSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "exclusiveMinimum": 0.0,
+          "title": "Id",
+          "type": "integer"
+        },
+        "login": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Login",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "login"
+      ],
+      "title": "GitAccountSnapshot",
+      "type": "object"
+    },
     "GitChangeProof": {
       "additionalProperties": false,
       "description": "Server-only identity прочитанных PR/CI/deploy фактов для публикации.",
@@ -55941,6 +56261,18 @@
           "title": "Name",
           "type": "string"
         },
+        "next_poll_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Poll At"
+        },
         "observed_at": {
           "anyOf": [
             {
@@ -56056,20 +56388,6 @@
       "additionalProperties": false,
       "description": "Разрешённая область подключения; секрет доступен только UI-сценарию владельца.",
       "properties": {
-        "credential": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Ограниченный credential; только ввод из сессии владельца, никогда не ответ.",
-          "title": "Credential"
-        },
         "exclude_patterns": {
           "description": "Дополнительные POSIX glob-исключения поверх обязательной политики.",
           "items": {
@@ -56355,51 +56673,6 @@
         }
       },
       "title": "GitCoverage",
-      "type": "object"
-    },
-    "GitCredentialUpdate": {
-      "additionalProperties": false,
-      "description": "Секретные поля задаёт только сессия текущего владельца проекта.",
-      "properties": {
-        "credential": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Новый credential; явный null отзывает прежний.",
-          "title": "Credential"
-        },
-        "expected_revision": {
-          "description": "Прочитанная версия подключения.",
-          "minimum": 1.0,
-          "title": "Expected Revision",
-          "type": "integer"
-        },
-        "webhook_secret": {
-          "anyOf": [
-            {
-              "format": "password",
-              "type": "string",
-              "writeOnly": true
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Секрет проверки входящих событий; null отключает webhook.",
-          "title": "Webhook Secret"
-        }
-      },
-      "required": [
-        "expected_revision"
-      ],
-      "title": "GitCredentialUpdate",
       "type": "object"
     },
     "GitEventAccepted": {
@@ -56755,6 +57028,43 @@
       "title": "GitFileRead",
       "type": "object"
     },
+    "GitHubProfile": {
+      "properties": {
+        "account": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/GitAccountSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "account"
+      ],
+      "title": "GitHubProfile",
+      "type": "object"
+    },
+    "GitHubProfileUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "token": {
+          "format": "password",
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Token",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "title": "GitHubProfileUpdate",
+      "type": "object"
+    },
     "GitProjectMap": {
       "properties": {
         "components": {
@@ -56830,6 +57140,98 @@
         }
       },
       "title": "GitQueued",
+      "type": "object"
+    },
+    "GitRepositoryPage": {
+      "additionalProperties": false,
+      "properties": {
+        "next_page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Page"
+        },
+        "repositories": {
+          "items": {
+            "$ref": "#/components/schemas/GitRepositorySnapshot"
+          },
+          "title": "Repositories",
+          "type": "array"
+        }
+      },
+      "required": [
+        "repositories",
+        "next_page"
+      ],
+      "title": "GitRepositoryPage",
+      "type": "object"
+    },
+    "GitRepositorySnapshot": {
+      "additionalProperties": false,
+      "description": "Стабильная upstream identity и текущие координаты репозитория.",
+      "properties": {
+        "default_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Имя default branch или null для отсутствующей ветки.",
+          "examples": [
+            "main"
+          ],
+          "title": "Default Branch"
+        },
+        "id": {
+          "description": "Стабильный числовой repository ID GitHub.",
+          "examples": [
+            12345
+          ],
+          "exclusiveMinimum": 0.0,
+          "title": "Id",
+          "type": "integer"
+        },
+        "name": {
+          "description": "Каноническое имя репозитория.",
+          "examples": [
+            "telos-space"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "owner": {
+          "description": "Канонический login владельца.",
+          "examples": [
+            "BKSLab"
+          ],
+          "title": "Owner",
+          "type": "string"
+        },
+        "private": {
+          "description": "Текущая приватность upstream репозитория.",
+          "examples": [
+            true
+          ],
+          "title": "Private",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "owner",
+        "name",
+        "default_branch",
+        "private"
+      ],
+      "title": "GitRepositorySnapshot",
       "type": "object"
     },
     "GitSearchHit": {
@@ -57546,6 +57948,38 @@
         "stale"
       ],
       "title": "GitTreePage",
+      "type": "object"
+    },
+    "GitWebhookSecretUpdate": {
+      "additionalProperties": false,
+      "description": "Секретные поля задаёт только сессия текущего владельца проекта.",
+      "properties": {
+        "expected_revision": {
+          "description": "Прочитанная версия подключения.",
+          "minimum": 1.0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "webhook_secret": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Секрет проверки входящих событий; null отключает webhook.",
+          "title": "Webhook Secret"
+        }
+      },
+      "required": [
+        "expected_revision",
+        "webhook_secret"
+      ],
+      "title": "GitWebhookSecretUpdate",
       "type": "object"
     },
     "HTTPValidationError": {

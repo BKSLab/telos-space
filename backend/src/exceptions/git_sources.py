@@ -77,6 +77,20 @@ class GitCredentialUnavailableError(GitSourceServiceError):
     detail = "Хранилище Git credentials не настроено или недоступно."
 
 
+class GitProfileRequiredError(GitSourceServiceError):
+    status_code = 409
+    detail = "Подключите действующий токен GitHub в профиле."
+
+
+class GitSourceRateLimitedError(GitSourceServiceError):
+    status_code = 429
+    detail = "GitHub ограничил запросы. Повторите после указанного времени."
+
+    def __init__(self, retry_after: int) -> None:
+        self.retry_after = retry_after
+        super().__init__()
+
+
 class GitHubClientError(ClientError):
     """Базовая ошибка чтения GitHub; перевод в доменную ошибку делает сервис."""
 

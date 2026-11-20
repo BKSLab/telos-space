@@ -4,6 +4,7 @@ from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, delete, exists, func, insert, or_, select, update
+from sqlalchemy import case as sa_case
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,6 +60,36 @@ class GitSourcesRepository:
 
     async def _many(self, statement) -> list[dict]:
         return [dict(row) for row in (await self._execute(statement)).mappings().all()]
+
+    async def github_profile(self, user_id: int, *, lock: bool = False) -> dict | None:
+        statement = select(U.c.github_token_ciphertext, U.c.github_account_id, U.c.github_login)
+        statement = statement.where(U.c.id == user_id, U.c.is_active)
+        return await self._one(statement.with_for_update() if lock else statement)
+
+    async def update_github_profile(
+        self, user_id: int, *, ciphertext: str | None, account_id: int | None, login: str | None
+    ) -> None:
+        await self._execute(
+            update(U).where(U.c.id == user_id, U.c.is_active).values(
+                github_token_ciphertext=ciphertext, github_account_id=account_id, github_login=login,
+            )
+        )
+
+    async def invalidate_profile_connections(self, user_id: int, *, connected: bool) -> list[dict]:
+        return await self._many(
+            update(C).where(
+                C.c.project_id.in_(select(P.c.id).where(P.c.owner_id == user_id))
+            ).values(
+                credential_owner_id=user_id if connected else None,
+                credential_revision=C.c.credential_revision + 1,
+                revision=C.c.revision + 1,
+                state=sa_case((C.c.enabled, "access_lost"), else_="disabled"),
+                last_error_code="github_profile_pending" if connected else "github_profile_required",
+                next_poll_at=func.now(),
+                lease_id=None,
+                lease_until=None,
+            ).returning(C.c.id, C.c.project_id)
+        )
 
     @staticmethod
     def _visible(*, project_id: int, is_owner: bool = True):
@@ -146,6 +177,7 @@ class GitSourcesRepository:
             select(C.c.id)
             .where(
                 C.c.enabled,
+                or_(C.c.last_error_code.is_(None), C.c.last_error_code != "github_profile_required"),
                 C.c.next_poll_at <= func.now(),
                 or_(C.c.lease_until.is_(None), C.c.lease_until < func.now()),
             )

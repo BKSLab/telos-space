@@ -34,6 +34,7 @@ export interface GitConnection {
     has_webhook_secret: boolean; revision: number; generation: number; credential_revision: number;
     state: string; observed_sha: string | null; indexed_sha: string | null;
     observed_at: string | null; indexed_at: string | null; checked_at: string | null;
+    next_poll_at?: string | null;
     last_error_code: string | null;
     coverage: { total_files: number; indexed_files: number; excluded_files: number; failed_files: number; truncated: boolean };
 }

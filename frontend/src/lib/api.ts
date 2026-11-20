@@ -6,10 +6,12 @@ export function apiUrl(path: string): string {
 
 export class ApiError extends Error {
     status: number;
+    readonly retryAfter: string | null;
 
-    constructor(status: number, message: string) {
+    constructor(status: number, message: string, retryAfter: string | null = null) {
         super(message);
         this.status = status;
+        this.retryAfter = retryAfter;
     }
 }
 
@@ -47,7 +49,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
                 ? body.detail
                 : JSON.stringify(body.detail)
             : response.statusText;
-        throw new ApiError(response.status, message);
+        throw new ApiError(response.status, message, response.headers.get("Retry-After"));
     }
 
     if (response.status === 204) {

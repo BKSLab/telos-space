@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { ChevronDown, KeyRound, ShieldCheck, Trash2, Upload, UserRound } from "lucide-react";
+import { ChevronDown, GitBranch, KeyRound, ShieldCheck, Trash2, Upload, UserRound } from "lucide-react";
 import { api, authEndpoints, queryKeys } from "@/lib/api";
 import { formatFullDate } from "@/lib/dates";
 import { fullName, type PasswordChangePayload, type User, type UserUpdatePayload } from "@/lib/types";
@@ -18,6 +18,7 @@ import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { UserAvatar } from "@/components/users/UserAvatar";
 import { ApiKeysPanel } from "@/components/profile/ApiKeysPanel";
 import { AccessTokensPanel } from "@/components/profile/AccessTokensPanel";
+import { GitHubAccountPanel } from "@/components/profile/GitHubAccountPanel";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -73,7 +74,7 @@ function ProfileForm({ user }: { user: User }) {
     const location = useLocation();
     const [params] = useSearchParams();
     const requestedTab = params.get("tab");
-    const tab = requestedTab === "security" || requestedTab === "keys" ? requestedTab : "details";
+    const tab = requestedTab === "security" || requestedTab === "keys" || requestedTab === "github" ? requestedTab : "details";
     const [tokensOpen, setTokensOpen] = useState(false);
     useEffect(() => {
         if (location.hash !== "#install" || tab !== "details") return;
@@ -164,13 +165,14 @@ function ProfileForm({ user }: { user: User }) {
                     <div className="min-w-0 space-y-1"><p className="break-words text-[18px] font-semibold text-primary">{fullName(user)}</p><p className="font-mono text-[12px] text-muted">{user.username}</p><p className="text-[12px] text-muted">В TELOS SPACE с {formatFullDate(user.created_at)}</p></div>
                 </div>
             </header>
-            <nav aria-label="Разделы профиля" className="-mt-1 flex border-b border-line">
+            <nav aria-label="Разделы профиля" className="-mt-1 flex overflow-x-auto border-b border-line">
                 {([
                     { id: "details", label: "Личные данные", short: "Данные", icon: UserRound },
                     { id: "security", label: "Безопасность", short: "Безопасность", icon: ShieldCheck },
                     { id: "keys", label: "Ключи доступа", short: "Ключи", icon: KeyRound },
+                    { id: "github", label: "GitHub", short: "GitHub", icon: GitBranch },
                 ] as const).map(({ id, label, short, icon: Icon }) => <Link key={id} to={`/profile?tab=${id}`} aria-label={label} aria-current={tab === id ? "page" : undefined}
-                    className={cn("brand-tab -mb-px flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 border-b px-2 py-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-accent sm:flex-none sm:px-4", tab === id ? "border-accent bg-accent/[0.075] text-primary" : "border-transparent text-muted hover:bg-hover hover:text-primary")}>
+                    className={cn("brand-tab flex min-h-11 flex-auto shrink-0 items-center justify-center gap-2 border-b px-2 py-3 text-[13px] font-medium focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent sm:flex-none sm:px-4", tab === id ? "border-accent bg-accent/[0.075] text-primary" : "border-transparent text-muted hover:bg-hover hover:text-primary")}>
                     <Icon size={16} className="hidden shrink-0 sm:block" aria-hidden="true" /><span className="hidden sm:inline">{label}</span><span className="sm:hidden">{short}</span>
                 </Link>)}
             </nav>
@@ -383,6 +385,7 @@ function ProfileForm({ user }: { user: User }) {
                 </div>
             </Section>
             </div>}
+            {tab === "github" && <div className="surface-card max-w-4xl rounded-[var(--radius-card)] border border-line p-4 sm:p-5"><GitHubAccountPanel /></div>}
             {tab === "keys" && <div className="flex min-w-0 flex-col gap-6">
                 <div className="surface-card min-w-0 rounded-[var(--radius-card)] border border-line p-4 sm:p-5"><ApiKeysPanel /></div>
                 <details className="group rounded-[var(--radius-card)] border border-line-subtle bg-surface/35" open={tokensOpen} onToggle={event => setTokensOpen(event.currentTarget.open)}>
