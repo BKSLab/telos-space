@@ -10,6 +10,7 @@ vi.mock("@/lib/useProjectOutlet", () => ({ useProjectOutlet: () => ({ id: 1, key
 vi.mock("@/components/chat/ProjectChatWorkspace", () => ({ ProjectChatWorkspace: () => <p>Общая переписка команды</p> }));
 vi.mock("@/components/agent/ProjectConversationWorkspace", () => ({ ProjectConversationWorkspace: () => <p>Сохранённые личные диалоги</p> }));
 vi.mock("@/components/knowledge/ProjectKnowledgePanel", () => ({ ProjectKnowledgePanel: ({ projectId }: { projectId: number }) => <p>Диагностика индекса проекта {projectId}</p> }));
+vi.mock("@/components/projects/ProjectKnowledgePanel", () => ({ ProjectKnowledgePanel: () => <p>Карта знаний проекта</p> }));
 
 function Location() {
     const location = useLocation();

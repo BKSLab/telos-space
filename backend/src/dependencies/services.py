@@ -51,6 +51,7 @@ from src.dependencies.repositories import (
     KnowledgeIndexJobsRepositoryDep,
     MilestonesRepositoryDep,
     ProjectDeadlineChangesRepositoryDep,
+    ProjectHistoryRepositoryDep,
     ProjectMembersRepositoryDep,
     ProjectRiskRepositoryDep,
     ProjectsRepositoryDep,
@@ -121,6 +122,7 @@ from src.services.knowledge_events import KnowledgeEvents
 from src.services.milestones import MilestonesService
 from src.services.personal_calendar import PersonalCalendarService
 from src.services.project_agent import ProjectAgentConfig, ProjectAgentService
+from src.services.project_history import ProjectHistoryService
 from src.services.project_icons import ProjectIconsService
 from src.services.project_members import ProjectMembersService
 from src.services.project_query import ProjectQueryService
@@ -1039,6 +1041,13 @@ TaskActivityServiceDep = Annotated[
     TaskActivityService,
     Depends(get_task_activity_service),
 ]
+
+
+def get_project_history_service(repository: ProjectHistoryRepositoryDep) -> ProjectHistoryService:
+    return ProjectHistoryService(repository)
+
+
+ProjectHistoryServiceDep = Annotated[ProjectHistoryService, Depends(get_project_history_service)]
 
 
 def get_task_attachments_service(

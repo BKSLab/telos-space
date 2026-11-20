@@ -294,6 +294,7 @@ class ProjectKnowledgeRepository:
         offset: int,
         category: str | None = None,
         claim_id: UUID | None = None,
+        query: str | None = None,
     ) -> dict:
         result = await self._execute(
             text(
@@ -303,6 +304,8 @@ class ProjectKnowledgeRepository:
           SELECT * FROM current_claims WHERE
             ((CAST(:claim_id AS uuid) IS NULL AND fresh) OR id=CAST(:claim_id AS uuid))
             AND (CAST(:category AS text) IS NULL OR category=:category)
+            AND (CAST(:query AS text) IS NULL OR
+                 (fresh AND strpos(lower(text), lower(CAST(:query AS text))) > 0))
         ), page AS (
           SELECT jsonb_build_object(
             'id',id,'revision',revision,'kind',kind,'category',category,
@@ -325,6 +328,7 @@ class ProjectKnowledgeRepository:
                 "project_id": project_id,
                 "claim_id": claim_id,
                 "category": category,
+                "query": (query or "").strip() or None,
                 "limit": limit,
                 "offset": offset,
             },

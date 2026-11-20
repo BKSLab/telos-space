@@ -21,7 +21,7 @@ import { ProjectSummaryPanel } from "@/components/overview/ProjectSummaryPanel";
 import { ProjectPeopleSummary } from "@/components/projects/ProjectPeopleSummary";
 import { ProjectSchedulePanel } from "@/components/overview/ProjectSchedulePanel";
 import { ProjectContextGaps } from "@/components/projects/ProjectContextGaps";
-import { ProjectKnowledgePanel } from "@/components/projects/ProjectKnowledgePanel";
+import { ProjectKnowledgeSummary } from "@/components/projects/ProjectKnowledgePanel";
 
 const DEADLINES_PREVIEW = 3;
 
@@ -143,7 +143,7 @@ export function ProjectOverviewPage() {
                     </div>
                 </details>
             </Card>
-            <ProjectKnowledgePanel key={project.id} projectId={project.id} projectKey={project.key} ownerId={project.owner_id ?? null} />
+            <ProjectKnowledgeSummary projectId={project.id} projectKey={project.key} />
         </div>
     </div>;
 }

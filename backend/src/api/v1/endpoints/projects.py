@@ -16,8 +16,9 @@ from src.dependencies.access import (
     require_project_ownership,
 )
 from src.dependencies.auth import PrincipalDep, require_write_scope
-from src.dependencies.services import ProjectsServiceDep
+from src.dependencies.services import ProjectHistoryServiceDep, ProjectsServiceDep
 from src.exceptions.projects import ProjectsServiceError
+from src.schemas.project_history import ProjectHistoryPage, ProjectHistoryQuery
 from src.schemas.projects import (
     ProjectContextHistoryPageSchema,
     ProjectCreateSchema,
@@ -30,6 +31,28 @@ from src.schemas.projects import (
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 logger = logging.getLogger(__name__)
+
+
+@router.get(
+    "/{project_id}/history",
+    dependencies=[Depends(require_project_access)],
+    operation_id="getProjectHistory",
+    summary="Получить объединённую историю проекта",
+    description="Читает доступные источники истории проекта от новых к старым. Для API-ключа требуются projects:read, tasks:read и knowledge:read.",
+    response_description="Страница событий и смещение следующей страницы.",
+    responses={
+        401: {"description": "Требуется авторизация."},
+        403: FORBIDDEN_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+        422: VALIDATION_RESPONSE,
+    },
+)
+async def get_project_history(
+    project_id: ProjectIdPath,
+    service: ProjectHistoryServiceDep,
+    filters: Annotated[ProjectHistoryQuery, Query()],
+) -> ProjectHistoryPage:
+    return await service.read(project_id, filters)
 
 
 @router.get(

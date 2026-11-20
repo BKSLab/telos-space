@@ -19,6 +19,7 @@ const TABS = [
     { path: "risks", label: "Риски", end: false },
     { path: "whiteboard", label: "Доска", end: false },
     { path: "docs", label: "Документы", end: false },
+    { path: "knowledge", label: "Знания", end: false },
 ];
 
 /**

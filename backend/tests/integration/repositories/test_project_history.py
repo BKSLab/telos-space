@@ -1,0 +1,202 @@
+from dataclasses import replace
+from datetime import UTC, datetime
+
+from httpx import ASGITransport, AsyncClient
+
+from main import app
+from src.db.models.documents import Document
+from src.db.models.project_deadline_changes import ProjectDeadlineChange
+from src.db.models.project_files import ProjectFile
+from src.db.models.project_members import ProjectMember
+from src.db.models.project_risks import ProjectRisk
+from src.db.models.projects import ProjectContextHistory
+from src.db.models.task_activity import TaskActivity, TaskActivityEventType
+from src.db.models.task_comments import TaskComment
+from src.db.models.task_reports import TaskReport
+from src.dependencies.access import require_project_access
+from src.dependencies.auth import get_principal
+from src.dependencies.db_session import get_db_session
+from src.repositories.tasks import TasksRepository
+from src.repositories.users import UsersRepository
+
+
+async def test_member_reads_combined_project_history(
+    db_session,
+    project,
+    stage,
+    user,
+    current_principal,
+    monkeypatch,
+):
+    timestamp = datetime(2026, 11, 19, 23, 59, 59, 999999, tzinfo=UTC)
+    next_day = datetime(2026, 11, 20, tzinfo=UTC)
+    task, moved_task = [
+        await TasksRepository(db_session).save(
+            data={
+                "project_id": project.id,
+                "stage_id": stage.id,
+                "number": number,
+                "title": title,
+                "priority": "MEDIUM",
+                "position": 0.0,
+            }
+        )
+        for number, title in [(1, "Поставка"), (2, "Перенесённая задача")]
+    ]
+    db_session.add_all(
+        [
+            TaskActivity(
+                task_id=task.id,
+                event_type=TaskActivityEventType.STAGE_CHANGED,
+                actor_name="Анна",
+                created_at=timestamp,
+            ),
+            TaskActivity(
+                task_id=task.id,
+                event_type=TaskActivityEventType.COMMENT_ADDED,
+                created_at=timestamp,
+            ),
+            TaskComment(
+                task_id=task.id, body_md="Готово на 100%", author_name="Анна", created_at=timestamp
+            ),
+            TaskReport(
+                task_id=task.id,
+                revision=1,
+                body_md="Готово на 1000",
+                author_name="Анна",
+                created_at=timestamp,
+            ),
+            TaskActivity(
+                task_id=moved_task.id,
+                event_type=TaskActivityEventType.TASK_MOVED,
+                created_at=next_day,
+            ),
+            TaskComment(
+                task_id=moved_task.id, body_md="Старый личный комментарий", created_at=timestamp
+            ),
+            ProjectDeadlineChange(
+                project_id=project.id, changed_by_name="Анна", created_at=next_day
+            ),
+            ProjectContextHistory(
+                project_id=project.id,
+                revision=0,
+                changed_fields=[],
+                is_initial=True,
+                created_at=timestamp,
+            ),
+            ProjectContextHistory(
+                project_id=project.id,
+                revision=1,
+                changed_fields=["goal"],
+                changed_by_name="Анна",
+                is_initial=False,
+                created_at=timestamp,
+            ),
+            ProjectRisk(
+                project_id=project.id,
+                title="Поставка",
+                description="Задержка",
+                probability="LOW",
+                impact="LOW",
+                risk_level="LOW",
+                response_strategy="ACCEPT",
+                owner_user_id=user.id,
+                created_at=timestamp,
+            ),
+            Document(
+                project_id=project.id,
+                slug="delivery",
+                title="Поставка",
+                content_md="Текст",
+                authored_by_user_id=user.id,
+                created_at=timestamp,
+            ),
+            ProjectFile(
+                project_id=project.id,
+                original_name="deleted.txt",
+                content_type="text/plain",
+                size=3,
+                storage_key="test",
+                content_hash="a" * 64,
+                deleted_at=next_day,
+                created_at=timestamp,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    member = await UsersRepository(db_session).save(
+        data={
+            "username": "member",
+            "password_hash": "hash",
+            "last_name": "Участников",
+            "first_name": "Иван",
+            "is_active": True,
+        }
+    )
+    db_session.add(ProjectMember(project_id=project.id, user_id=member.id))
+    await db_session.flush()
+    principal = replace(current_principal, user_id=member.id)
+    monkeypatch.delitem(app.dependency_overrides, require_project_access)
+    monkeypatch.setitem(app.dependency_overrides, get_db_session, lambda: db_session)
+    monkeypatch.setitem(app.dependency_overrides, get_principal, lambda: principal)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        path = f"/api/v1/projects/{project.id}/history"
+        all_items = []
+        for offset in (0, 3, 6):
+            response = await client.get(path, params={"offset": offset, "limit": 3})
+            assert response.status_code == 200, response.text
+            page = response.json()
+            assert page["next_offset"] == (offset + 3 if offset < 6 else None)
+            all_items.extend(page["items"])
+        assert [item["kind"] for item in all_items] == [
+            "project_deadline",
+            "task_report",
+            "task_comment",
+            "task_activity",
+            "risk_created",
+            "project_context",
+            "document_created",
+        ]
+        assert len({item["id"] for item in all_items}) == 7
+        by_kind = {item["kind"]: item for item in all_items}
+        assert by_kind["risk_created"]["actor_name"] is None
+        assert by_kind["document_created"]["actor_name"] == "Владельцев Виктор"
+        assert by_kind["document_created"]["document_ref"].startswith("d1_")
+        assert by_kind["task_comment"]["task_id"] == task.id
+        assert set(by_kind["task_comment"]) == {
+            "id",
+            "kind",
+            "title",
+            "detail",
+            "created_at",
+            "actor_name",
+            "task_id",
+            "document_ref",
+        }
+        response = await client.get(
+            path,
+            params={
+                "q": "100%",
+                "actor": "анна",
+                "since": "2026-11-19",
+                "until": "2026-11-19",
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json() == {"items": [by_kind["task_comment"]], "next_offset": None}
+        response = await client.get(
+            path, params={"kind": "project_deadline", "until": "2026-11-19"}
+        )
+        assert response.json() == {"items": [], "next_offset": None}
+        for query in (
+            "kind=git",
+            "limit=101",
+            "offset=-1",
+            "since=12345",
+            "since=2026-11-20&until=2026-11-19",
+        ):
+            assert (await client.get(f"{path}?{query}")).status_code == 422
+        principal = replace(principal, user_id=user.id + 1000)
+        assert (await client.get(path)).status_code == 404

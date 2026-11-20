@@ -43,6 +43,10 @@ async def read_map(
     limit: Annotated[int, Query(ge=1, le=50, description="Размер страницы утверждений.")] = 20,
     offset: Annotated[int, Query(ge=0, description="Смещение страницы.")] = 0,
     category: Annotated[KnowledgeCategory | None, Query(description="Раздел карты.")] = None,
+    q: Annotated[
+        str | None,
+        Query(max_length=200, pattern=r"^[^\x00]*$", description="Подстрока актуального утверждения."),
+    ] = None,
 ) -> ProjectKnowledgeMapSchema:
     try:
         return await service.read_map(
@@ -51,6 +55,7 @@ async def read_map(
             limit=limit,
             offset=offset,
             category=category,
+            query=q,
         )
     except ProjectKnowledgeServiceError as error:
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error

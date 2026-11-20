@@ -123,6 +123,11 @@ async def test_map_versions_exact_evidence_conflicts_invalidation_delete_acl_and
         goal = next(item for item in current.items if item.category == "goal")
         assert goal.kind == "requirement" and goal.acceptance == "accepted"
         assert goal.evidence[0].quote == "Показать доказуемый контекст"
+        matching = await env.service.read_map(
+            project_id=env.project_id, principal=env.principal, category="goal",
+            query="ДОКАЗУЕМЫЙ",
+        )
+        assert matching.total == 1 and matching.items[0].id == goal.id
         assert current.coverage.complete
         assert any(
             gap.code == "passport_field_unknown" and gap.category == "audience"
@@ -179,6 +184,10 @@ async def test_map_versions_exact_evidence_conflicts_invalidation_delete_acl_and
             project_id=env.project_id, principal=env.principal, claim_id=claim.id
         )
         assert stale.text is None and not stale.evidence and not stale.source_ids
+        hidden = await env.service.read_map(
+            project_id=env.project_id, principal=env.principal, query="API: private"
+        )
+        assert hidden.total == 0 and not hidden.items
         await env.updates.process_project(env.project_id)
         updated = await env.service.get_claim(
             project_id=env.project_id, principal=env.principal, claim_id=claim.id

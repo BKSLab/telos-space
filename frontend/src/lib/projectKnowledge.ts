@@ -1,5 +1,11 @@
 export const contextApi = {
-    map: (projectId: number, offset = 0) => `/api/v1/projects/${projectId}/knowledge/map?offset=${offset}&limit=20`,
+    map: (projectId: number, offset = 0, category = "", query = "") => {
+        const params = new URLSearchParams({ offset: String(offset), limit: "20" });
+        if (category) params.set("category", category);
+        if (query) params.set("q", query);
+        return `/api/v1/projects/${projectId}/knowledge/map?${params}`;
+    },
+    status: (projectId: number) => `/api/v1/projects/${projectId}/knowledge/map/status`,
     refresh: (projectId: number) => `/api/v1/projects/${projectId}/knowledge/map/refresh`,
     git: (projectId: number) => `/api/v1/projects/${projectId}/git`,
 };
@@ -14,16 +20,19 @@ export interface KnowledgeClaim {
     acceptance: string; verification: string; source_ids: string[]; evidence: KnowledgeEvidence[];
     conflicts_with: string[]; updated_at: string; reason: string | null;
 }
-export interface KnowledgeMap {
+export interface KnowledgeMapStatus {
     project_id: number; generation: number; built_generation: number | null; status: string;
-    updated_at: string | null; items: KnowledgeClaim[];
-    gaps: { code: string; category: string; source_id?: string | null; message: string }[];
+    updated_at: string | null;
     coverage: {
         sources_total: number; sources_current: number; sources_pending: number;
         sources_failed: number; sources_skipped: number; complete: boolean;
         claims_current: number; claims_conflicting: number; claims_stale: number;
         chars_processed: number; chars_total: number; reasons: string[]; method: string;
     };
+}
+export interface KnowledgeMap extends KnowledgeMapStatus {
+    items: KnowledgeClaim[];
+    gaps: { code: string; category: string; source_id?: string | null; message: string }[];
     total: number; offset: number; limit: number; has_more: boolean; next_offset: number | null;
 }
 export interface GitConnection {

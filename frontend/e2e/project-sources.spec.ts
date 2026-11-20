@@ -27,7 +27,22 @@ async function sourcesApi(page: Page) {
         const headers = { "access-control-allow-origin": request.headers()["origin"] ?? "http://127.0.0.1:4191", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET,POST,PATCH,DELETE,PUT,OPTIONS" };
         const reply = (json: unknown, status = 200) => route.fulfill({ status, headers, json });
         if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
-        if (path === "/knowledge/map") return reply(knowledge);
+        if (path === "/knowledge/map/status") return reply(knowledge);
+        if (path === "/knowledge/map") {
+            const q = url.searchParams.get("q");
+            const category = url.searchParams.get("category");
+            const items = knowledge.items.filter(item => (!category || item.category === category) && (!q || item.text?.includes(q)));
+            return reply({ ...knowledge, items, total: items.length });
+        }
+        if (path === "/history") {
+            const items = [
+                { id: "task_report:12", kind: "task_report", title: "Отчёт · Импорт · v2", detail: "Импорт реализован", actor_name: "Тестов Тест", task_id: 100, created_at: "2026-11-20T11:00:00Z" },
+                { id: "project_context:1:3", kind: "project_context", title: "Изменение паспорта проекта", detail: '["goal"]', actor_name: "Тестов Тест", task_id: null, created_at: "2026-11-20T09:35:00Z" },
+                { id: "document:1", kind: "document_created", title: "Создан документ · Решение по импорту", detail: null, actor_name: "Тестов Тест", task_id: null, document_ref: "d1_ZG9jdW1lbnQ6MQ", created_at: "2026-11-19T09:35:00Z" },
+            ];
+            const kind = url.searchParams.get("kind");
+            return reply({ items: kind ? items.filter(item => item.kind === kind) : items, next_offset: null });
+        }
         if (path === "/git/connections" && request.method() === "GET") return reply({ items: connections, total: 3, offset: 0, limit: 20, next_offset: null });
         if (path === "/git/connections/1" && request.method() === "PATCH") {
             const body = request.postDataJSON();
@@ -55,6 +70,7 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
         await installMockApi(page, mockState());
         await sourcesApi(page);
         await page.goto("/projects/DEMO");
+        await page.getByRole("link", { name: "Открыть карту" }).click();
         await expect(page.getByText("Участник сообщил о выполнении импорта", { exact: true })).toBeVisible();
         await expect(page.getByText("Отчёт участника", { exact: true })).toBeVisible();
         await page.getByText("Источники и версии (1)", { exact: true }).click();
@@ -96,3 +112,42 @@ test("конфликт ref сохраняет draft до явной загруз
     await page.getByRole("button", { name: "Сохранить источник", exact: true }).click();
     await expect(page.getByLabel("Ветка или ref", { exact: true })).toHaveCount(0);
 });
+
+for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: "mobile", width: 320, height: 844 }]) {
+    test(`знания проекта: поиск по карте и лента — ${viewport.name}`, async ({ page }, info) => {
+        await page.setViewportSize(viewport);
+        await installMockApi(page, mockState());
+        await sourcesApi(page);
+        await page.goto("/projects/DEMO/knowledge");
+        await expect(page.getByRole("heading", { name: "Результаты задач" })).toBeVisible();
+        await page.getByRole("combobox", { name: "Раздел", exact: true }).selectOption("task_results");
+        const mapSearch = page.getByRole("searchbox", { name: "Поиск по утверждениям" });
+        await mapSearch.fill("неизвестный текст");
+        await page.getByRole("button", { name: "Найти", exact: true }).click();
+        await expect(page.getByText("По заданным условиям утверждений нет.")).toBeVisible();
+        await page.getByRole("button", { name: "Сбросить", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "Результаты задач" })).toBeVisible();
+        await page.getByRole("button", { name: "Код и репозитории" }).click();
+        await expect(page.getByRole("heading", { name: "Frontend" })).toBeVisible();
+        await page.getByRole("button", { name: "Код и репозитории" }).click();
+        await page.screenshot({ path: info.outputPath("knowledge-map.png") });
+
+        await page.getByRole("link", { name: "История", exact: true }).click();
+        await expect(page).toHaveURL(/view=history/);
+        await expect(page.getByRole("heading", { name: /20 ноября/ })).toBeVisible();
+        await expect(page.getByRole("heading", { name: /19 ноября/ })).toBeVisible();
+        await expect(page.getByText("Цель", { exact: true })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Открыть документ" })).toHaveAttribute("href", "/projects/DEMO/docs/d1_ZG9jdW1lbnQ6MQ");
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath("project-history.png"), animations: "disabled" });
+        await page.getByLabel("Тип события").selectOption("task_report");
+        await page.getByRole("button", { name: "Найти", exact: true }).click();
+        await expect(page).toHaveURL(/kind=task_report/);
+        await expect(page.getByText("Отчёт · Импорт · v2")).toBeVisible();
+        await expect(page.getByText("Изменение паспорта проекта", { exact: true })).toHaveCount(0);
+        await page.reload();
+        await expect(page.getByLabel("Тип события")).toHaveValue("task_report");
+        await expect(page.getByText("Отчёт · Импорт · v2")).toBeVisible();
+        await expect(page.getByText("Изменение паспорта проекта", { exact: true })).toHaveCount(0);
+    });
+}

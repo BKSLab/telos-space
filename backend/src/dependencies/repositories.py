@@ -17,6 +17,7 @@ from src.repositories.documents import DocumentsRepository
 from src.repositories.knowledge_index_jobs import KnowledgeIndexJobsRepository
 from src.repositories.milestones import MilestonesRepository
 from src.repositories.project_deadline_changes import ProjectDeadlineChangesRepository
+from src.repositories.project_history import ProjectHistoryRepository
 from src.repositories.project_members import ProjectMembersRepository
 from src.repositories.project_risks import ProjectRiskRepository
 from src.repositories.project_stages import ProjectStagesRepository
@@ -33,6 +34,15 @@ from src.repositories.tasks import TasksRepository
 from src.repositories.unit_of_work import UnitOfWork
 from src.repositories.users import UsersRepository
 from src.repositories.wbs_nodes import WbsNodesRepository
+
+
+def get_project_history_repository(session: DbSessionDep) -> ProjectHistoryRepository:
+    return ProjectHistoryRepository(session)
+
+
+ProjectHistoryRepositoryDep = Annotated[
+    ProjectHistoryRepository, Depends(get_project_history_repository)
+]
 
 
 def get_analytics_reports_repository(session: DbSessionDep) -> AnalyticsReportsRepository:

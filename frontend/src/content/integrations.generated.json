@@ -26579,6 +26579,273 @@
     },
     {
       "access": "authenticated",
+      "description": "Читает доступные источники истории проекта от новых к старым. Для API-ключа требуются projects:read, tasks:read и knowledge:read.",
+      "group": "projects",
+      "id": "api-67efe2309d9f3882",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/history",
+      "operationId": "getProjectHistory",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "default": 20,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "offset",
+          "required": false,
+          "schema": {
+            "default": 0,
+            "maximum": 9223372036854775807,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "kind",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "enum": [
+                  "task_activity",
+                  "task_comment",
+                  "task_report",
+                  "project_deadline",
+                  "project_context",
+                  "risk_created",
+                  "document_created"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          }
+        },
+        {
+          "description": "Подстрока заголовка или деталей.",
+          "in": "query",
+          "name": "q",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Подстрока заголовка или деталей.",
+            "title": "Q"
+          }
+        },
+        {
+          "description": "Подстрока имени автора.",
+          "in": "query",
+          "name": "actor",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Подстрока имени автора.",
+            "title": "Actor"
+          }
+        },
+        {
+          "description": "Первый день периода UTC включительно.",
+          "in": "query",
+          "name": "since",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Первый день периода UTC включительно.",
+            "title": "Since"
+          }
+        },
+        {
+          "description": "Последний день периода UTC включительно.",
+          "in": "query",
+          "name": "until",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Последний день периода UTC включительно.",
+            "title": "Until"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/history",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectHistoryPage"
+              }
+            }
+          },
+          "description": "Страница событий и смещение следующей страницы."
+        },
+        "401": {
+          "description": "Требуется авторизация."
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Недостаточно прав."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Недостаточно прав для этой операции."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "examples": {
+                "domain": {
+                  "summary": "Доменная валидация",
+                  "value": {
+                    "detail": "Ошибка валидации."
+                  }
+                },
+                "request": {
+                  "summary": "Валидация параметров FastAPI",
+                  "value": {
+                    "detail": [
+                      {
+                        "loc": [
+                          "body",
+                          "title"
+                        ],
+                        "msg": "Field required",
+                        "type": "missing"
+                      }
+                    ]
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpValidationErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Параметры или тело запроса не прошли валидацию."
+        }
+      },
+      "scopes": [
+        "projects:read",
+        "tasks:read",
+        "knowledge:read"
+      ],
+      "summary": "Получить объединённую историю проекта",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ]
+    },
+    {
+      "access": "authenticated",
       "description": "Проект снова показывает иконку из набора, эмодзи или цветную точку.",
       "group": "projects",
       "id": "api-4e22c38a88370c28",
@@ -27203,6 +27470,26 @@
             ],
             "description": "Раздел карты.",
             "title": "Category"
+          }
+        },
+        {
+          "description": "Подстрока актуального утверждения.",
+          "in": "query",
+          "name": "q",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "pattern": "^[^\\x00]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Подстрока актуального утверждения.",
+            "title": "Q"
           }
         },
         {
@@ -60744,6 +61031,119 @@
         }
       },
       "title": "ProjectDescriptionSchema",
+      "type": "object"
+    },
+    "ProjectHistoryItem": {
+      "properties": {
+        "actor_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Actor Name"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Detail"
+        },
+        "document_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Document Ref"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "task_activity",
+            "task_comment",
+            "task_report",
+            "project_deadline",
+            "project_context",
+            "risk_created",
+            "document_created"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Task Id"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "detail",
+        "created_at",
+        "actor_name",
+        "task_id"
+      ],
+      "title": "ProjectHistoryItem",
+      "type": "object"
+    },
+    "ProjectHistoryPage": {
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/components/schemas/ProjectHistoryItem"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Offset"
+        }
+      },
+      "required": [
+        "items",
+        "next_offset"
+      ],
+      "title": "ProjectHistoryPage",
       "type": "object"
     },
     "ProjectKnowledgeClaimSchema": {
