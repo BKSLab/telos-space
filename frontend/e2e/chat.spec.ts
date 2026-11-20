@@ -164,6 +164,7 @@ function chatServer() {
             }
             if (/^\/api\/v1\/tasks\/\d+\/attention$/.test(path)) return reply({ revision: 1, deadline_revision: 1, overdue: false });
             if (path === "/api/v1/projects/1/wbs") return reply({ nodes: [], tasks: [], task_edges: [], revision: 0 });
+            if (path === "/api/v1/projects/1/history") return reply({ items: [], next_offset: null });
             if (path === "/api/v1/documents") return reply({ items: [], total: 0, limit: 20, offset: 0, next_offset: null });
             if (path.endsWith("/chat")) return control.blocked ? reply({ detail: "Чат недоступен" }, 404) : reply({ id: 1, project_id: 1, event_cursor: seq, last_read_seq: reads.get(userId) ?? 0, unread_count: rows.filter((row) => row.author?.id !== userId && row.seq > (reads.get(userId) ?? 0) && !row.deleted_at).length, members });
             if (path.endsWith("/chat/events")) {
@@ -279,6 +280,49 @@ async function openChat(page: Page) {
     await expect(page.getByText("Подключено", { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
 }
+
+test.describe("история сегодня в контексте", () => {
+    test.use({ timezoneId: "Europe/Samara" });
+    for (const width of [1440, 390]) {
+        test(`текущие события, страницы и переход к задаче ${width}px`, async ({ page }, info) => {
+            await page.setViewportSize({ width, height: 900 });
+            await page.clock.setFixedTime(new Date("2026-11-19T22:00:00Z"));
+            const server = chatServer();
+            await server.attach(page);
+            const historyRequests: URL[] = [];
+            await page.route("**/api/v1/projects/1/history?*", route => {
+                const headers = { "Access-Control-Allow-Origin": "http://127.0.0.1:4179", "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET, OPTIONS" };
+                if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+                const url = new URL(route.request().url());
+                historyRequests.push(url);
+                const older = url.searchParams.get("offset") === "20";
+                return route.fulfill({ json: { items: [{ id: older ? "task_activity:2" : "task_activity:1", kind: "task_activity", title: older ? "Задача создана" : "Изменён срок задачи", detail: "Согласовано с командой", created_at: older ? "2026-11-19T20:30:00Z" : "2026-11-19T21:30:00Z", actor_name: "Анна Иванова", task_id: 42, event_type: "DUE_DATE_CHANGED", from_value: "2026-11-20", to_value: "2026-11-23" }], next_offset: older ? null : 20 }, headers });
+            });
+            await openChat(page);
+            if (width < 1280) await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
+            const panel = page.getByRole(width < 1280 ? "dialog" : "complementary", { name: "Контекст чата", exact: true });
+            await expect(panel.getByText("Изменён срок задачи", { exact: true })).toBeVisible();
+            expect(historyRequests.length).toBeGreaterThan(0);
+            expect(historyRequests.every(url => url.searchParams.get("offset") === "0")).toBeTruthy();
+            expect(Object.fromEntries(historyRequests[0].searchParams)).toEqual({ since: "2026-11-20", until: "2026-11-20", timezone: "Europe/Samara", limit: "20", offset: "0" });
+            await expect(panel.getByText("01:30", { exact: true })).toBeVisible();
+            await expect(panel.getByText("23.11.2026", { exact: true })).toBeVisible();
+            await expect(panel.getByRole("link", { name: "Вся история за этот день" })).toHaveAttribute("href", "/projects/DEMO/knowledge?view=history&since=2026-11-20&until=2026-11-20&timezone=Europe%2FSamara");
+            expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBeTruthy();
+            await page.screenshot({ path: info.outputPath(`chat-today-${width}.png`), animations: "disabled" });
+            await panel.getByRole("button", { name: "Загрузить более ранние события" }).click();
+            await expect(panel.getByText("Задача создана", { exact: true })).toBeVisible();
+            expect(historyRequests.filter(url => url.searchParams.get("offset") === "20")).toHaveLength(1);
+            await panel.getByRole("button", { name: "Открыть задачу", exact: true }).first().click();
+            await expectTaskDialogThenClose(page, server.tasks.get(42)!);
+            if (width < 1280) {
+                await expect(panel).toHaveCount(0);
+                await page.getByRole("button", { name: "Показать контекст", exact: true }).click();
+            }
+            await expect(panel.getByRole("heading", { name: "Сегодня в проекте" })).toBeVisible();
+        });
+    }
+});
 
 test.describe("проверяемые цитаты общего чата", () => {
     test.use({ timezoneId: "Europe/Samara" });
@@ -570,7 +614,7 @@ test("источники Ариса открываются рядом, авто-
     const panel = page.getByRole("complementary", { name: "Контекст чата", exact: true });
     const history = page.getByLabel("История сообщений проекта", { exact: true });
     const input = page.getByRole("combobox", { name: "Сообщение проекту" });
-    await expect(panel.getByText("Задача или источник рядом с чатом", { exact: true })).toBeVisible();
+    await expect(panel.getByRole("heading", { name: "Сегодня в проекте", exact: true })).toBeVisible();
     await input.fill("Продолжаю обсуждать источники");
     for (const [label, body] of [
         [`Задача: ${server.taskSource(42).title}`, server.tasks.get(42)!.description_md!],

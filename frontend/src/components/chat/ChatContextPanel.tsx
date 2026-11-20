@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { FileText, ListTodo, PanelRight, Pin, PinOff, X } from "lucide-react";
 import { CHAT_CONTEXT_LABELS, chatContextKey, useChatContext } from "@/lib/chatContext";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { ChatContextDetails } from "./ChatContextDetails";
+import { ChatHistoryContext } from "./ChatHistoryContext";
 
 const ICONS = { task: ListTodo, document: FileText };
 
@@ -19,7 +21,10 @@ export function ChatContextToggle({ obscured, onShow }: { obscured: boolean; onS
 
 export function ChatContextPanel({ hidden }: { hidden: boolean }) {
     const context = useChatContext();
+    const [historySelection, setHistorySelection] = useState<string | null>(null);
     if (!context || !context.isOpen || hidden) return null;
+    const selection = `${context.projectId}:${context.selectionKey}`;
+    const showHistory = !context.target || historySelection === selection;
     const header = <div className="flex min-w-0 flex-1 items-center gap-2">
         <PanelRight size={15} className="shrink-0 text-ai-cyan" aria-hidden="true" />
         <h2 className="min-w-0 flex-1 text-sm font-semibold text-primary">Контекст</h2>
@@ -28,13 +33,15 @@ export function ChatContextPanel({ hidden }: { hidden: boolean }) {
         </IconButton>}
     </div>;
     const body = <div id="project-chat-context" className="chat-content min-w-0 space-y-5 p-4 [overflow-wrap:anywhere]">
-        {context.pinned && <p role="status" className="text-[12px] text-muted">Закреплено — новые ответы не меняют выбор.</p>}
-        {context.target ? <ChatContextDetails key={`${chatContextKey(context.target)}:${context.selectionKey}`} target={context.target} projectId={context.projectId} projectKey={context.projectKey}
-            onOpenFull={() => { if (!context.desktop) context.close(); }} /> : <div className="py-3">
-            <p className="text-sm font-medium text-primary">Задача или источник рядом с чатом</p>
-            <p className="mt-2 text-[13px] leading-relaxed text-secondary">Выберите карточку в переписке, чтобы прочитать детали и продолжить обсуждение.</p>
-            <p className="mt-2 text-[12px] leading-relaxed text-muted">Основная задача, документ или единственный источник ответа Ариса появится здесь автоматически. Нужный объект можно закрепить.</p>
+        {context.target && <div className="flex flex-wrap gap-1" role="group" aria-label="Содержимое контекста">
+            <Button size="sm" variant="ghost" aria-pressed={showHistory} onClick={() => setHistorySelection(selection)}>Сегодня</Button>
+            <Button size="sm" variant="ghost" aria-pressed={!showHistory} onClick={() => setHistorySelection(null)}>Выбранный объект</Button>
         </div>}
+        {context.pinned && <p role="status" className="text-[12px] text-muted">Объект закреплён — новые ответы не меняют выбор.</p>}
+        {showHistory ? <ChatHistoryContext key={context.projectId} projectId={context.projectId} projectKey={context.projectKey}
+            onOpenFull={() => { if (!context.desktop) context.close(); }} />
+            : context.target && <ChatContextDetails key={`${chatContextKey(context.target)}:${context.selectionKey}`} target={context.target} projectId={context.projectId} projectKey={context.projectKey}
+                onOpenFull={() => { if (!context.desktop) context.close(); }} />}
         {context.recent.length > 0 && <section aria-label="Объекты из переписки" className="border-t border-line-subtle pt-4">
             <h3 className="mb-2 text-[11px] font-semibold tracking-wide text-muted uppercase">Объекты из переписки</h3>
             <div className="space-y-1">{context.recent.map((item) => {

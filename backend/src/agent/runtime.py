@@ -595,24 +595,32 @@ class ArisRuntime:
                 break
             if compact_chat_context(deps.content):
                 continue
+            if _compact_project_history_returns(messages):
+                continue
             if _compact_oldest_result(messages, keep_from=last_request):
                 continue
             if _shrink_chat_returns(messages):
                 continue
             if _shrink_read_returns(messages):
                 continue
+            before = encode(deps.content)
             try:
                 shrunk = AgentContextBudget(
                     system_prompt=deps.system_prompt,
                     max_tokens=max(MIN_PROMPT_TOKENS, limit - traffic),
                     history_tokens=deps.budget.history_tokens,
                 )
-                before = encode(deps.content)
                 shrunk.fit(deps.content)
             except ValueError:
-                break
-            if encode(deps.content) == before:
-                break
+                pass
+            if encode(deps.content) != before:
+                continue
+            # Preserve complete recent reads until the starting context has
+            # surrendered its expendable text. Paginate only the remaining
+            # overflow, otherwise even six events become six separate calls.
+            if _shrink_read_returns(messages, include_pages=True):
+                continue
+            break
         _replace_prompt(messages, encode(deps.content))
         if deps.budget.tokens(deps.content) + _traffic_tokens(messages) > limit:
             raise _ContextBudgetExceeded(
@@ -837,8 +845,13 @@ def _shrink_chat_returns(messages: list[ModelMessage]) -> bool:
     return False
 
 
-def _shrink_read_returns(messages: list[ModelMessage]) -> bool:
+def _shrink_read_returns(messages: list[ModelMessage], *, include_pages: bool = False) -> bool:
     """Дочитанный readonly результат уступает место обязательному окну и правилам."""
+    last_request = max(
+        (index for index, item in enumerate(messages) if isinstance(item, ModelRequest)),
+        default=-1,
+    )
+    wrapped_history_calls = _wrapped_history_calls(messages)
     for index, message in enumerate(messages):
         if not isinstance(message, ModelRequest):
             continue
@@ -847,6 +860,7 @@ def _shrink_read_returns(messages: list[ModelMessage]) -> bool:
                 continue
             if (
                 part.tool_name == LOAD_CAPABILITY_TOOL
+                or (_is_history_return(part, wrapped_history_calls) and index < last_request)
                 or "action" in part.content
                 or part.content.get("context_compacted")
             ):
@@ -878,13 +892,18 @@ def _shrink_read_returns(messages: list[ModelMessage]) -> bool:
                         visit(child, candidates)
 
             visit(fitted, candidates)
-            if not candidates:
+            if candidates:
+                _, parent, key = max(candidates, key=lambda candidate: candidate[0])
+                parent[key] = parent[key][: max(240, len(parent[key]) // 2)]
+                parent[f"{key}_truncated"] = True
+                if key in {"text", "content_md"} and "offset" in parent:
+                    parent["next_offset"] = parent["offset"] + len(parent[key])
+            elif not (include_pages and AgentContextBudget._shrink_lists(fitted, pages_only=True)):
+                # Even a small page can overflow alongside protected workflow
+                # rules and chat identities. Keep complete rows and move the
+                # continuation to the first unseen item; never trim arbitrary
+                # identity/reference lists or a native loader's instructions.
                 continue
-            _, parent, key = max(candidates, key=lambda candidate: candidate[0])
-            parent[key] = parent[key][: max(240, len(parent[key]) // 2)]
-            parent[f"{key}_truncated"] = True
-            if key in {"text", "content_md"} and "offset" in parent:
-                parent["next_offset"] = parent["offset"] + len(parent[key])
             parts = list(message.parts)
             parts[position] = dataclass_replace(part, content=fitted)
             messages[index] = dataclass_replace(message, parts=parts)
@@ -892,7 +911,67 @@ def _shrink_read_returns(messages: list[ModelMessage]) -> bool:
     return False
 
 
+def _wrapped_history_calls(messages: list[ModelMessage]) -> set[str]:
+    """Resolve personal-wrapper results from their matching canonical action call."""
+    return {
+        part.tool_call_id
+        for message in messages
+        for part in message.parts
+        if isinstance(part, ToolCallPart)
+        and part.tool_name == PROJECT_ACTION_TOOL
+        and part.args_as_dict().get("name") == "telos_list_project_history"
+    }
+
+
+def _is_history_return(part: ToolReturnPart, wrapped_history_calls: set[str]) -> bool:
+    return part.tool_name == "telos_list_project_history" or (
+        part.tool_name == PROJECT_ACTION_TOOL and part.tool_call_id in wrapped_history_calls
+    )
+
+
+def _compact_project_history_returns(messages: list[ModelMessage]) -> bool:
+    """Remove repeated field names, retaining every non-null event value for the answer."""
+    wrapped_history_calls = _wrapped_history_calls(messages)
+    for index, message in enumerate(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        for position, part in enumerate(message.parts):
+            if not isinstance(part, ToolReturnPart) or not _is_history_return(
+                part, wrapped_history_calls
+            ):
+                continue
+            content = part.content
+            if not isinstance(content, dict) or "item_fields" in content:
+                continue
+            rows = content.get("items")
+            if not rows or not all(isinstance(row, dict) for row in rows):
+                continue
+            fields = list(dict.fromkeys(key for row in rows for key in row if row[key] is not None))
+            defaults = {
+                key: rows[0][key]
+                for key in fields
+                if rows[0].get(key) is not None
+                and all(row.get(key) == rows[0][key] for row in rows)
+            }
+            fields = [key for key in fields if key not in defaults]
+            compacted = {
+                **content,
+                "item_fields": fields,
+                "item_defaults": defaults,
+                "items": [[row.get(key) for key in fields] for row in rows],
+                "items_format": "item_fields задаёт поля строки; item_defaults общие для всех строк.",
+            }
+            if len(encode(compacted)) >= len(encode(content)):
+                continue
+            parts = list(message.parts)
+            parts[position] = dataclass_replace(part, content=compacted)
+            messages[index] = dataclass_replace(message, parts=parts)
+            return True
+    return False
+
+
 def _compact_oldest_result(messages: list[ModelMessage], *, keep_from: int) -> bool:
+    wrapped_history_calls = _wrapped_history_calls(messages)
     for index, message in enumerate(messages[:keep_from]):
         if not isinstance(message, ModelRequest):
             continue
@@ -902,6 +981,7 @@ def _compact_oldest_result(messages: list[ModelMessage], *, keep_from: int) -> b
             content = part.content
             if (
                 part.tool_name == LOAD_CAPABILITY_TOOL
+                or _is_history_return(part, wrapped_history_calls)
                 or "action" in content
                 or content.get("context_compacted")
                 or estimate_tokens(encode(content)) <= RECEIPT_THRESHOLD_TOKENS

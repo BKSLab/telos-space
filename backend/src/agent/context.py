@@ -544,7 +544,7 @@ class AgentContextBudget:
         }
 
     @staticmethod
-    def _shrink_lists(content: dict) -> bool:
+    def _shrink_lists(content: dict, *, pages_only: bool = False) -> bool:
         candidates = []
 
         def visit(value, path=()):
@@ -567,6 +567,14 @@ class AgentContextBudget:
                     if (
                         key != "read_results"
                         and len(item) > 1
+                        and (
+                            not pages_only
+                            or (
+                                key == "items"
+                                and "next_offset" in value
+                                and isinstance(value.get("offset"), int)
+                            )
+                        )
                         and not any(
                             is_chat_message(child)
                             or (isinstance(child, dict) and child.get("message_reference_handle"))
