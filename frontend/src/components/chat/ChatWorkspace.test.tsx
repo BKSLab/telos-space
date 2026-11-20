@@ -30,7 +30,9 @@ afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear(
 it.each([
     ["/projects/DEMO/chat", true, true],
     ["/projects/DEMO/conversations", false, true],
-    ["/projects/DEMO/knowledge", false, true],
+    ["/projects/DEMO/knowledge", false, false],
+    ["/projects/DEMO/knowledge?view=history", false, false],
+    ["/projects/DEMO/knowledge?view=code", false, false],
     ["/projects/DEMO/team", false, false],
     ["/chat", false, true],
 ] as const)("передаёт полноэкранный режим и видимость общего чата: %s", (path, visible, fullPage) => {
@@ -64,6 +66,16 @@ it("не переключает открытый личный диалог на 
     expect(screen.getByTestId("dock").dataset.panel).toBe("personal");
     expect(screen.getByTestId("provider").textContent).toBe("false");
     expect(useChatDockStore.getState().modes[1]).toBe("personal");
+});
+
+it("сохраняет открытый чат выбранного проекта на странице знаний другого проекта", () => {
+    useChatDockStore.setState({ panel: "team", projects: { 1: 2 }, modes: { 1: "team" } });
+    setup("/projects/DEMO/knowledge?view=history");
+    expect(screen.getByTestId("dock").dataset.routeProject).toBe("1");
+    expect(screen.getByTestId("dock").dataset.project).toBe("2");
+    expect(screen.getByTestId("dock").dataset.panel).toBe("team");
+    expect(screen.getByTestId("provider").textContent).toBe("true");
+    expect(useChatDockStore.getState().panel).toBe("team");
 });
 
 it("показывает единый вход в чаты и пользователю без проектов", () => {

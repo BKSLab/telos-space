@@ -81,6 +81,26 @@ async function expectFullPage(page: Page, personal: boolean) {
     }
 }
 
+for (const width of [1440, 390]) {
+    test(`кнопка чата доступна во всех режимах знаний при ширине ${width}`, async ({ page }, info) => {
+        await setup(page);
+        await page.setViewportSize({ width, height: 900 });
+        await page.route(/\/api\/v1\/projects\/1\/history(?:\?|$)/, route => route.fulfill({ json: { items: [], next_offset: null } }));
+        await page.route("**/projects/1/knowledge/status", route => route.fulfill({ json: { enabled: true, ready: true, points_count: 0, pending_jobs: 0, processing_jobs: 0, failed_jobs: 0, last_error: null, obsolete_points: 0, coverage: [], file_issues: [] } }));
+        await page.goto("/projects/DEMO/knowledge");
+        for (const name of ["Карта", "История", "Код и репозитории"]) {
+            await page.getByRole("navigation", { name: "Виды знаний" }).getByRole("link", { name, exact: true }).click();
+            const panel = await openChats(page);
+            await expect(panel.getByRole("combobox", { name: "Выбор чата", exact: true })).toHaveValue("project:1");
+            await expect(panel.getByRole("combobox", { name: "Сообщение проекту" })).toBeVisible();
+            await panel.getByRole("button", { name: "Свернуть чат", exact: true }).click();
+            await expect(page.getByRole("button", { name: "Открыть чаты", exact: true })).toBeVisible();
+            await expect(page.getByRole("region", { name: "Знания проекта", exact: true })).toBeVisible();
+        }
+        await info.attach("knowledge-chat-launcher", { body: await page.screenshot(), contentType: "image/png" });
+    });
+}
+
 test("одна компактная кнопка открывает личный чат и помнит выбор после перезагрузки", async ({ page }, info) => {
     const server = await setup(page);
     await page.goto("/");

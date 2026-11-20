@@ -24,7 +24,7 @@ export function ChatWorkspace({ children }: { children: ReactNode }) {
     const selectedProject = projects?.find(item => item.id === selectedId);
     const section = match?.params["*"]?.replace(/\/$/, "");
     const globalChatPage = location.pathname.replace(/\/$/, "") === "/chat";
-    const fullPage = section === "chat" || section === "conversations" || section === "knowledge" || globalChatPage;
+    const fullPage = section === "chat" || section === "conversations" || globalChatPage;
     const teamPageVisible = Boolean(routeProject && section === "chat");
     // Открытое окно закреплено за выбранной перепиской, а не за текущим маршрутом.
     const project = fullPage ? routeProject : panel === "team" ? selectedProject : routeProject ?? selectedProject;
