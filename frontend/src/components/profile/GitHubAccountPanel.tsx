@@ -7,6 +7,7 @@ import { ErrorMessage } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { githubAccountKey, githubPath, githubRepositoriesKey, githubRetryAt, type GitHubAccountResponse } from "@/lib/github";
 import { useGitHubPause } from "@/lib/useGitHubPause";
+import { GitHubTokenGuide } from "./GitHubTokenGuide";
 
 export function GitHubAccountPanel() {
     const client = useQueryClient();
@@ -51,6 +52,7 @@ export function GitHubAccountPanel() {
         {account.isPending && <p role="status" className="text-sm text-muted">Проверяем подключение к GitHub…</p>}
         {account.isError && <ErrorMessage message="Не удалось проверить подключение к GitHub." action={<Button onClick={() => void account.refetch()}>Повторить</Button>} />}
         {account.data && <p className="break-words text-sm text-secondary">{account.data.account ? `Аккаунт GitHub: ${account.data.account.login}` : "Аккаунт GitHub не подключён."}</p>}
+        {account.data && !confirmDelete && <GitHubTokenGuide initiallyOpen={!account.data.account} />}
         {busy && <p role="status" className="text-sm text-muted">{confirmDelete ? "Удаляем токен…" : "Проверяем токен…"}</p>}
         {notice && <p role="status" className="text-sm text-secondary">{notice}</p>}
         {error && <ErrorMessage message={error} />}
