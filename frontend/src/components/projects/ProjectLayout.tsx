@@ -13,13 +13,13 @@ const TABS = [
     { path: "", label: "Обзор", end: true },
     { path: "tasks", label: "Задачи", end: false },
     { path: "chat", label: "Чат", end: false },
+    { path: "knowledge", label: "Знания", end: false },
     { path: "team", label: "Команда", end: false },
     { path: "calendar", label: "Календарь", end: false },
     { path: "structure", label: "Структура", end: false },
     { path: "risks", label: "Риски", end: false },
     { path: "whiteboard", label: "Доска", end: false },
     { path: "docs", label: "Документы", end: false },
-    { path: "knowledge", label: "Знания", end: false },
 ];
 
 /**

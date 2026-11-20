@@ -36,18 +36,23 @@ it("открывает во вкладке проекта только общи�
     expect(screen.queryByRole("dialog")).toBeNull();
 });
 
-it.each([
-    ["conversations", "Сохранённые личные диалоги", "Диагностика индекса проекта 1"],
-    ["knowledge", "Диагностика индекса проекта 1", "Сохранённые личные диалоги"],
-])("открывает самостоятельную страницу %s и сохраняет контекст при возвращении в общий чат", async (section, text, absent) => {
+it("открывает личные диалоги проекта и сохраняет контекст при возвращении в общий чат", async () => {
     const context = "?conversation=17&task=42&confirm=action-id&tag=a&tag=b#context";
-    setup(`/projects/DEMO/${section}${context}`);
-    await screen.findByText(text);
-    expect(screen.queryByText(absent)).toBeNull();
+    setup(`/projects/DEMO/conversations${context}`);
+    await screen.findByText("Сохранённые личные диалоги");
+    expect(screen.queryByText("Диагностика индекса проекта 1")).toBeNull();
     expect(screen.queryByText("Общая переписка команды")).toBeNull();
-    expect(screen.getByTestId("location").textContent).toBe(`/projects/DEMO/${section}${context}`);
+    expect(screen.getByTestId("location").textContent).toBe(`/projects/DEMO/conversations${context}`);
     fireEvent.click(screen.getByRole("link", { name: "Общий чат" }));
     await waitFor(() => expect(screen.getByText("Общая переписка команды")).toBeTruthy());
-    expect(screen.queryByText(text)).toBeNull();
+    expect(screen.queryByText("Сохранённые личные диалоги")).toBeNull();
     expect(screen.getByTestId("location").textContent).toBe(`/projects/DEMO/chat${context}`);
+});
+
+it("показывает в знаниях карту и историю без дополнительной ссылки в чат", () => {
+    setup("/projects/DEMO/knowledge");
+    expect(screen.getByText("Карта знаний проекта")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Карта" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "История" }).getAttribute("href")).toBe("/projects/DEMO/knowledge?view=history");
+    expect(screen.queryByRole("link", { name: "Общий чат" })).toBeNull();
 });
