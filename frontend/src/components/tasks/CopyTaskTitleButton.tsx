@@ -25,6 +25,7 @@ export function CopyTaskTitleButton({ taskKey, title }: { taskKey: string; title
 
     return <>
         <IconButton label="Скопировать ключ и название" size="sm" aria-disabled={state === "copying"}
+            className="text-accent/75 hover:text-accent focus-visible:text-accent"
             aria-busy={state === "copying"} onClick={() => void copy()}>
             {state === "copied"
                 ? <Check size={13} aria-hidden="true" className="text-success" />
