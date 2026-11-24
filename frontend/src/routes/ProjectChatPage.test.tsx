@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProjectChatPage } from "./ProjectChatPage";
 import { ProjectConversationsPage } from "./ProjectConversationsPage";
 import { ProjectKnowledgePage } from "./ProjectKnowledgePage";
@@ -11,6 +11,8 @@ vi.mock("@/components/chat/ProjectChatWorkspace", () => ({ ProjectChatWorkspace:
 vi.mock("@/components/agent/ProjectConversationWorkspace", () => ({ ProjectConversationWorkspace: () => <p>Сохранённые личные диалоги</p> }));
 vi.mock("@/components/knowledge/ProjectKnowledgePanel", () => ({ ProjectKnowledgePanel: ({ projectId }: { projectId: number }) => <p>Диагностика индекса проекта {projectId}</p> }));
 vi.mock("@/components/projects/ProjectKnowledgePanel", () => ({ ProjectKnowledgePanel: () => <p>Карта знаний проекта</p> }));
+vi.mock("@/components/projects/ProjectHistoryTimeline", () => ({ ProjectHistoryTimeline: () => <p>История проекта</p> }));
+vi.mock("@/components/projects/ProjectGitSources", () => ({ ProjectGitSources: () => <p>Репозитории проекта</p> }));
 
 function Location() {
     const location = useLocation();
@@ -24,7 +26,8 @@ function setup(path = "/projects/DEMO/chat?conversation=17&task=42&confirm=actio
     </Routes><Location /></MemoryRouter>);
 }
 
-afterEach(cleanup);
+beforeEach(() => vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }));
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 it("открывает во вкладке проекта только общий чат без дополнительных меню", () => {
     setup();

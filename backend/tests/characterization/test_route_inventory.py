@@ -7,6 +7,7 @@ from fastapi.routing import APIRoute
 from main import app
 
 FROZEN_ROUTES: set[tuple[str, str]] = {
+    ('GET', '/api/v1/projects/{project_id}/history/version'),
     ('GET', '/api/v1/users/me/github'),
     ('POST', '/api/v1/users/me/github/check'),
     ('PUT', '/api/v1/users/me/github'),

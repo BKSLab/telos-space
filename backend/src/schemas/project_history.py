@@ -13,6 +13,13 @@ ProjectHistoryKind = Literal[
     "project_context",
     "risk_created",
     "document_created",
+    "project_activity",
+    "project_member",
+    "project_stage",
+    "risk_activity",
+    "document_activity",
+    "project_plan",
+    "project_board",
 ]
 
 
@@ -98,9 +105,15 @@ class ProjectHistoryItem(BaseModel):
     comment_id: int | None = None
     report_id: int | None = None
     report_revision: int | None = None
+    source_available: bool = True
 
 
 class ProjectHistoryPage(BaseModel):
     items: list[ProjectHistoryItem]
     next_offset: int | None
     previous_day: date | None = None
+    revision: str = "0"
+
+
+class ProjectHistoryVersion(BaseModel):
+    revision: str

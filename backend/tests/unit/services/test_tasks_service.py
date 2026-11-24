@@ -204,7 +204,6 @@ async def test_create_task_assigns_team_roles_and_defaults_reporter() -> None:
     )
 
     assert tasks_repository.save.await_args.kwargs["data"]["assignee"] == "Фамилия2 Имя2"
-    participants_repository.delete_for_task.assert_awaited_once()
     assignments = participants_repository.save_many.await_args.args[1]
     assert {(item["project_member_id"], item["role"]) for item in assignments} == {
         (12, TaskParticipantRole.EXECUTOR),

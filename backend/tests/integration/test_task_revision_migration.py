@@ -15,6 +15,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from src.db.models import Base
 from src.db.task_attention_ddl import REVISION_SQL
 
+# Freeze this legacy roundtrip before the independently guarded history journal.
+PRE_HISTORY_REVISION = "c32a202611200001"
+
 
 async def test_task_revision_migration_preserves_existing_task_and_positive_default(postgres_container):
     database = f"task_revision_migration_{uuid4().hex}"
@@ -47,7 +50,7 @@ async def test_task_revision_migration_preserves_existing_task_and_positive_defa
             assert connection.execute(text("SELECT attention_revision FROM tasks WHERE id=1")).scalar_one() == attention_before + 1
             transaction.rollback()
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         assert connection.execute(text("SELECT title,description_md,revision,checklist_revision FROM tasks WHERE id=1")).one() == ("Старая задача", "Прежнее описание", 1, 0)
 
@@ -80,7 +83,7 @@ async def test_task_revision_migration_preserves_existing_task_and_positive_defa
         connection.execute(text("UPDATE tasks SET position=3000 WHERE id=1"))
         assert connection.execute(text("SELECT attention_revision FROM tasks WHERE id=1")).scalar_one() == attention_before
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         assert connection.execute(text("SELECT revision FROM tasks WHERE id=1")).scalar_one() == 1
         connection.execute(text("UPDATE tasks SET position=4000,revision=revision+1 WHERE id=1"))

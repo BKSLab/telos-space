@@ -5,10 +5,11 @@ import { readHistoryWeek, shiftHistoryDay } from "./useProjectHistory";
 afterEach(() => vi.restoreAllMocks());
 const signal = () => new AbortController().signal;
 it("loads a complete local week across API pages and finds the next nonempty window", async () => {
-    const get = vi.spyOn(api, "get").mockResolvedValueOnce({ items: [{ id: "a" }], next_offset: 100, previous_day: "2026-10-31" })
-        .mockResolvedValueOnce({ items: [{ id: "a" }, { id: "b" }], next_offset: null, previous_day: null });
+    const get = vi.spyOn(api, "get").mockResolvedValueOnce({ items: [{ id: "a" }], next_offset: 100, previous_day: "2026-10-31", revision: "4" })
+        .mockResolvedValueOnce({ items: [{ id: "a" }, { id: "b" }], next_offset: null, previous_day: null, revision: "5" });
     const week = await readHistoryWeek(1, { kind: "task_report" }, "Europe/Samara", "2026-11-20", null, signal());
     expect(week).toMatchObject({ since: "2026-11-14", until: "2026-11-20", nextUntil: "2026-10-31", items: [{ id: "a" }, { id: "b" }] });
+    expect(week.revision).toBe("4");
     const queries = get.mock.calls.map(([path]) => new URL(path, "http://local").searchParams);
     expect(queries[0].get("since")).toBe("2026-11-14");
     expect(queries[1].get("offset")).toBe("100");

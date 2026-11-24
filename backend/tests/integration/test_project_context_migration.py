@@ -10,15 +10,29 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import load_only
 
 from src.db.models import Base
+from src.db.models.users import User
 from src.repositories.projects import ProjectsRepository
+from src.repositories.users import UsersRepository
 from tests.integration.repositories.test_project_passport import project_service
 
 PARENT = "f23d8b410ce2"
 REVISION = "f23a8c91d046"
+
+
+class LegacyAuthorRepository(UsersRepository):
+    """Читает автора из PostgreSQL на схеме до добавления GitHub-профиля."""
+
+    async def get_by_id(self, user_id: int) -> User | None:
+        return await self.db_session.scalar(
+            select(User)
+            .options(load_only(User.id, User.username, User.first_name, User.last_name, User.middle_name))
+            .where(User.id == user_id)
+        )
 
 
 async def test_context_migration_is_schema_only_and_downgrade_preserves_saved_snapshots(
@@ -243,8 +257,10 @@ async def test_context_downgrade_waits_for_project_writer_and_preserves_committe
                         )
                     await asyncio.sleep(0)
 
+            service = project_service(writer)
+            service.users_repository = LegacyAuthorRepository(writer)
             changed = await asyncio.wait_for(
-                project_service(writer).update_project(
+                service.update_project(
                     1,
                     {"description_md": "Новая авторская версия", "expected_context_revision": 0},
                     1,

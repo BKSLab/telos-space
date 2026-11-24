@@ -3429,7 +3429,14 @@
                   "project_deadline",
                   "project_context",
                   "risk_created",
-                  "document_created"
+                  "document_created",
+                  "project_activity",
+                  "project_member",
+                  "project_stage",
+                  "risk_activity",
+                  "document_activity",
+                  "project_plan",
+                  "project_board"
                 ],
                 "type": "string"
               },
@@ -26798,7 +26805,14 @@
                   "project_deadline",
                   "project_context",
                   "risk_created",
-                  "document_created"
+                  "document_created",
+                  "project_activity",
+                  "project_member",
+                  "project_stage",
+                  "risk_activity",
+                  "document_activity",
+                  "project_plan",
+                  "project_board"
                 ],
                 "type": "string"
               },
@@ -27085,6 +27099,125 @@
         "knowledge:read"
       ],
       "summary": "Получить объединённую историю проекта",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ]
+    },
+    {
+      "access": "authenticated",
+      "description": "Возвращает версию проектного журнала без чтения событий. Для ключа нужны projects:read, tasks:read и knowledge:read.",
+      "group": "projects",
+      "id": "api-bc86d96f59d9f136",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/history/version",
+      "operationId": "getProjectHistoryVersion",
+      "parameters": [
+        {
+          "description": "Идентификатор проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "Идентификатор проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/history/version",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectHistoryVersion"
+              }
+            }
+          },
+          "description": "Монотонная версия истории для адресного обновления кэша."
+        },
+        "401": {
+          "description": "Требуется авторизация."
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Недостаточно прав."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Недостаточно прав для этой операции."
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "example": {
+                "detail": "Объект не найден."
+              },
+              "schema": {
+                "$ref": "#/components/schemas/HttpErrorResponseSchema"
+              }
+            }
+          },
+          "description": "Запрашиваемый объект не найден."
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          },
+          "description": "Validation Error"
+        }
+      },
+      "scopes": [
+        "projects:read",
+        "tasks:read",
+        "knowledge:read"
+      ],
+      "summary": "Проверить версию истории проекта",
       "tokens": [
         "READ",
         "WRITE"
@@ -45001,7 +45134,14 @@
                       "project_deadline",
                       "project_context",
                       "risk_created",
-                      "document_created"
+                      "document_created",
+                      "project_activity",
+                      "project_member",
+                      "project_stage",
+                      "risk_activity",
+                      "document_activity",
+                      "project_plan",
+                      "project_board"
                     ],
                     "type": "string"
                   },
@@ -61820,7 +61960,14 @@
             "project_deadline",
             "project_context",
             "risk_created",
-            "document_created"
+            "document_created",
+            "project_activity",
+            "project_member",
+            "project_stage",
+            "risk_activity",
+            "document_activity",
+            "project_plan",
+            "project_board"
           ],
           "title": "Kind",
           "type": "string"
@@ -61846,6 +61993,11 @@
             }
           ],
           "title": "Report Revision"
+        },
+        "source_available": {
+          "default": true,
+          "title": "Source Available",
+          "type": "boolean"
         },
         "task_id": {
           "anyOf": [
@@ -61917,6 +62069,11 @@
             }
           ],
           "title": "Previous Day"
+        },
+        "revision": {
+          "default": "0",
+          "title": "Revision",
+          "type": "string"
         }
       },
       "required": [
@@ -61924,6 +62081,19 @@
         "next_offset"
       ],
       "title": "ProjectHistoryPage",
+      "type": "object"
+    },
+    "ProjectHistoryVersion": {
+      "properties": {
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "title": "ProjectHistoryVersion",
       "type": "object"
     },
     "ProjectKnowledgeClaimSchema": {

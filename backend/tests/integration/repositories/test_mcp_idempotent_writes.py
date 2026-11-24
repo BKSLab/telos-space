@@ -407,7 +407,7 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
             }))["result"]["tools"]
             names = {tool["name"] for tool in listing}
-            assert len(names) == 58 and all(name.startswith("telos_") for name in names)
+            assert len(names) == 59 and all(name.startswith("telos_") for name in names)
             removed_names = {"tt_" + name.removeprefix("telos_") for name in names}
             removed_names -= {"tt_ask_aris", "tt_get_aris_result"}
             removed_names |= {"tt_projects_ask", "tt_projects_result"}
@@ -420,7 +420,7 @@ async def test_streamable_http_uuid_retries_scopes_and_revoked_synthetic_key(mcp
                 "move_task", "delete_task", "add_comment", "set_task_dates", "create_milestone",
             }
             untouched = await snapshot(env)
-            assert len(removed_names) == 83 and not names & removed_names
+            assert len(removed_names) == 84 and not names & removed_names
             for removed in sorted(removed_names):
                 refused = await invoke(removed, {})
                 assert refused["result"]["isError"] is True

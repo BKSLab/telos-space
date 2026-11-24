@@ -2,11 +2,13 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete
 
 from main import app
 from src.db.models.documents import Document
 from src.db.models.project_deadline_changes import ProjectDeadlineChange
 from src.db.models.project_files import ProjectFile
+from src.db.models.project_history_events import ProjectHistoryEvent
 from src.db.models.project_members import ProjectMember
 from src.db.models.project_risks import ProjectRisk
 from src.db.models.projects import ProjectContextHistory
@@ -144,6 +146,8 @@ async def test_member_reads_combined_project_history(
     )
     db_session.add(ProjectMember(project_id=project.id, user_id=member.id))
     await db_session.flush()
+    # An installation's existing sources have no journal until the explicit backfill.
+    await db_session.execute(delete(ProjectHistoryEvent))
     principal = replace(current_principal, user_id=member.id)
     monkeypatch.delitem(app.dependency_overrides, require_project_access)
     monkeypatch.setitem(app.dependency_overrides, get_db_session, lambda: db_session)
@@ -197,6 +201,7 @@ async def test_member_reads_combined_project_history(
             "comment_id",
             "report_id",
             "report_revision",
+            "source_available",
         }
         activity = by_kind["task_activity"]
         assert activity["actor_user_id"] == user.id
@@ -214,7 +219,9 @@ async def test_member_reads_combined_project_history(
             "task_activity",
         }
         response = await client.get(path, params={"event_id": activity["id"]})
-        assert response.json() == {"items": [activity], "next_offset": None, "previous_day": None}
+        assert response.json() == {
+            "items": [activity], "next_offset": None, "previous_day": None, "revision": "0",
+        }
         assert (await client.get(path, params={"task_id": moved_task.id})).json()["items"] == []
         response = await client.get(
             path,
@@ -230,11 +237,14 @@ async def test_member_reads_combined_project_history(
             "items": [by_kind["task_comment"]],
             "next_offset": None,
             "previous_day": None,
+            "revision": "0",
         }
         response = await client.get(
             path, params={"kind": "project_deadline", "until": "2026-11-19"}
         )
-        assert response.json() == {"items": [], "next_offset": None, "previous_day": None}
+        assert response.json() == {
+            "items": [], "next_offset": None, "previous_day": None, "revision": "0",
+        }
         for query in (
             "kind=git",
             "timezone=Unknown/Zone",
@@ -344,6 +354,8 @@ async def test_creation_and_previous_day_share_project_filters_and_local_dates(
         ]
     )
     await db_session.flush()
+    # Exercise the legacy-source fallback, separately from the durable-journal tests.
+    await db_session.execute(delete(ProjectHistoryEvent))
     monkeypatch.delitem(app.dependency_overrides, require_project_access)
     monkeypatch.setitem(app.dependency_overrides, get_db_session, lambda: db_session)
     monkeypatch.setitem(
@@ -387,7 +399,7 @@ async def test_creation_and_previous_day_share_project_filters_and_local_dates(
 
         exact = await client.get(path, params={**params, "event_id": creation["id"]})
         assert exact.json() == {
-            "items": [creation], "next_offset": None, "previous_day": None,
+            "items": [creation], "next_offset": None, "previous_day": None, "revision": "0",
         }
         # Year 1 has no previous calendar day; there must be no date underflow.
         edge = await client.get(

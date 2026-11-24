@@ -123,16 +123,18 @@ async def test_project_history_reads_real_comments_and_task_changes(actions_env)
 async def test_summaries_stay_inside_accessible_project(actions_env):
     """Участник чужого проекта не получает его сводки."""
     env = actions_env
+    empty = replace(env.context, project_id=2)
+    initial_history = (await invoke(env, HISTORY_TOOL, context=empty))["items"]
     await seed(env)
     outsider = replace(env.context, project_id=2, user_id=2)
     for name in SUMMARY_TOOLS:
         with pytest.raises(AgentToolAccessError):
             await invoke(env, name, context=outsider)
-    # В своём проекте без задач — пустые сводки, а не данные проекта 1.
-    empty = replace(env.context, project_id=2)
+    # В своём проекте без задач — нулевая статистика и только его исходные
+    # события проекта/команды: действия проекта 1 не добавляются в историю.
     assert (await invoke(env, "telos_get_task_statistics", context=empty))["total"] == 0
     assert (await invoke(env, "telos_list_overdue_tasks", context=empty))["items"] == []
-    assert (await invoke(env, HISTORY_TOOL, context=empty))["items"] == []
+    assert (await invoke(env, HISTORY_TOOL, context=empty))["items"] == initial_history
 
 
 async def test_history_combines_project_sources_and_preserves_page_filters(actions_env):
@@ -173,6 +175,7 @@ async def test_history_combines_project_sources_and_preserves_page_filters(actio
     assert {item["kind"] for item in items} == {
         "task_activity", "task_comment", "task_report", "project_deadline",
         "project_context", "risk_created", "document_created",
+        "project_activity", "project_member", "project_stage",
     }
     assert len({item["id"] for item in items}) == len(items)
     # Тот же общий сервис, что у HTTP: форма событий и порядок полностью совпадают.
@@ -197,6 +200,8 @@ async def test_history_refreshes_key_scopes_and_project_membership(actions_env):
 
     env = actions_env
     scopes = {SCOPE_PROJECTS_READ, SCOPE_TASKS_READ, SCOPE_KNOWLEDGE_READ}
+    initial_history = (await invoke(env, HISTORY_TOOL))["items"]
+    assert initial_history, "создание проекта и команды должно сохраняться в журнале"
     raw, prefix = generate_api_key()
     async with env.factory() as session:
         key = ApiKey(label="Synthetic history key", key_hash=hash_api_key(raw),
@@ -208,7 +213,7 @@ async def test_history_refreshes_key_scopes_and_project_membership(actions_env):
     async with env.actions.scope() as db:
         principal = await db.auth.resolve_principal(session_token=None, bearer_secret=raw)
     context = replace(env.context, user_id=2, principal=principal, can_write=False)
-    assert (await invoke(env, HISTORY_TOOL, context=context))["items"] == []
+    assert (await invoke(env, HISTORY_TOOL, context=context))["items"] == initial_history
     for missing in scopes:
         async with env.factory() as session:
             await session.execute(update(ApiKey).where(ApiKey.id == key_id).values(scopes=list(scopes - {missing})))
@@ -218,7 +223,7 @@ async def test_history_refreshes_key_scopes_and_project_membership(actions_env):
     async with env.factory() as session:
         await session.execute(update(ApiKey).where(ApiKey.id == key_id).values(scopes=list(scopes)))
         await session.commit()
-    assert (await invoke(env, HISTORY_TOOL, context=context))["items"] == []
+    assert (await invoke(env, HISTORY_TOOL, context=context))["items"] == initial_history
     async with env.factory() as session:
         await session.execute(delete(ProjectMember).where(ProjectMember.project_id == 1, ProjectMember.user_id == 2))
         await session.commit()

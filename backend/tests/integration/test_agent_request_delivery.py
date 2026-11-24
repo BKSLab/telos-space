@@ -5,7 +5,6 @@ from dataclasses import replace
 from uuid import uuid4
 
 import pytest
-from pydantic import SecretStr
 from sqlalchemy import delete, select, update
 
 from src.db.models.agent_messages import AgentMessage
@@ -39,7 +38,6 @@ async def test_external_poll_and_initial_wait_hide_all_source_data_after_current
         env.remote.private = True
         connection = await connect(
             env,
-            credential=SecretStr("synthetic-provider-credential"),
             share_private_with_project=True,
         )
         read = await env.service.read_file(

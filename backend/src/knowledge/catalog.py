@@ -273,6 +273,7 @@ POLICIES = (
 POLICY_BY_TABLE = {item.table: item for item in POLICIES}
 POLICY_BY_TYPE = {item.kind: item for item in POLICIES if item.kind}
 EXCLUDED_TABLES = {
+    "project_history_events": "Неизменяемые снимки действий читает общий ProjectHistoryService с проектными правами; не дублируются в семантическом индексе.",
     "git_connections": "Credential binding и private repo: только GitSourceService с текущим Contents proof, не generic SQL reader.",
     "git_snapshots": "Git версии и coverage выдаются через proof-gated GitSourceService.",
     "git_files": "GitFile authoritative cache доступен только после live remote proof; raw POLICIES обошла бы upstream revoke.",
@@ -358,6 +359,9 @@ EXCLUDED_FIELDS = {
             "created_at",
             "email",
             "password_hash",
+            "github_login",
+            "github_account_id",
+            "github_token_ciphertext",
             "phone",
             "telegram",
             "updated_at",

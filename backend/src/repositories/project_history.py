@@ -3,12 +3,14 @@
 from datetime import UTC, datetime, time
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Integer, Text, case, cast, func, literal, or_, select, union_all
+from sqlalchemy import Boolean, Integer, Text, case, cast, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.db.models.base import Base
 from src.db.models.documents import Document
 from src.db.models.project_deadline_changes import ProjectDeadlineChange
 from src.db.models.project_files import ProjectFile
+from src.db.models.project_history_events import ProjectHistoryEvent
 from src.db.models.project_risks import ProjectRisk
 from src.db.models.projects import ProjectContextHistory
 from src.db.models.task_activity import TaskActivity, TaskActivityEventType
@@ -65,6 +67,9 @@ def _event(
         cast(comment_id, Integer).label("comment_id"),
         cast(report_id, Integer).label("report_id"),
         cast(report_revision, Integer).label("report_revision"),
+        cast(literal(None), Text).label("document_ref"),
+        literal(True, type_=Boolean).label("_source_available"),
+        literal(True, type_=Boolean).label("_task_available"),
     ).select_from(source)
 
 
@@ -81,16 +86,107 @@ class ProjectHistoryRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def version(self, project_id: int) -> int:
+        """Число зафиксированных событий не теряет поздний commit меньшего ID."""
+        return await self.session.scalar(
+            select(func.count(ProjectHistoryEvent.id)).where(
+                ProjectHistoryEvent.project_id == project_id
+            )
+        )
+
+    def _journal(self, project_id: int):
+        event = ProjectHistoryEvent
+        task_available = (
+            select(Task.id)
+            .where(Task.id == event.task_id, Task.project_id == project_id)
+            .correlate(event)
+            .exists()
+        )
+        available = [(
+            event.entity_type == "project_context_history",
+            select(ProjectContextHistory.project_id).where(
+                ProjectContextHistory.project_id == project_id,
+                func.concat(
+                    "project_context:", project_id, ":", ProjectContextHistory.revision
+                ) == event.public_id,
+            ).correlate(event).exists(),
+        )]
+        # Historical IDs never grant access to the object's current project.
+        for name in (
+            "projects", "tasks", "task_activity", "task_comments", "task_reports",
+            "project_deadline_changes", "project_context_history", "project_risks",
+            "documents", "project_files", "task_attachments", "document_links",
+            "task_comment_documents", "task_comment_attachments", "project_members",
+            "project_stages", "project_milestones", "task_dependencies", "wbs_nodes",
+            "project_boards", "project_stickers", "board_shapes", "project_sticker_task_links",
+        ):
+            table = Base.metadata.tables.get(name)
+            if table is None or "id" not in table.c:
+                continue
+            conditions = [table.c.id == event.entity_id]
+            if name == "projects":
+                conditions.append(table.c.id == project_id)
+            elif name == "documents":
+                conditions.append(or_(
+                    table.c.project_id == project_id,
+                    select(Task.id).where(
+                        Task.id == table.c.owner_task_id, Task.project_id == project_id
+                    ).correlate(table).exists(),
+                ))
+            elif "project_id" in table.c:
+                conditions.append(table.c.project_id == project_id)
+            elif "task_id" in table.c:
+                conditions.append(select(Task.id).where(
+                    Task.id == table.c.task_id, Task.project_id == project_id
+                ).correlate(table).exists())
+            elif "board_id" in table.c:
+                board = Base.metadata.tables["project_boards"]
+                conditions.append(select(board.c.id).where(
+                    board.c.id == table.c.board_id, board.c.project_id == project_id
+                ).correlate(table).exists())
+            elif "comment_id" in table.c:
+                conditions.append(select(TaskComment.id).join(
+                    Task, Task.id == TaskComment.task_id
+                ).where(TaskComment.id == table.c.comment_id, Task.project_id == project_id)
+                    .correlate(table).exists())
+            else:
+                continue
+            if name == "project_files":
+                conditions.append(table.c.deleted_at.is_(None))
+            available.append((event.entity_type == name,
+                              select(table.c.id).where(*conditions).correlate(event).exists()))
+        source_available = case(*available, else_=False)
+        document_ref = case(
+            (event.entity_type == "documents", func.concat("document:", event.entity_id)),
+            (event.entity_type == "project_files", func.concat("project_file:", event.entity_id)),
+            (event.entity_type == "task_attachments", func.concat("attachment:", event.entity_id)),
+            else_=event.document_ref,
+        )
+        return select(
+            event.public_id.label("id"), event.kind, event.title, event.detail, event.created_at,
+            event.actor_name, event.task_id, event.actor_user_id, event.event_type,
+            event.from_value, event.to_value, event.comment_id, event.report_id,
+            event.report_revision, document_ref.label("document_ref"),
+            source_available.label("_source_available"), task_available.label("_task_available"),
+        ).where(event.project_id == project_id)
+
     async def read(self, project_id: int, filters: ProjectHistoryQuery) -> list[ProjectHistoryItem]:
         # Источники задачи не хранят project_id в момент записи. После переноса
         # принадлежность старого содержимого нельзя выводить из текущего Task.
-        moved = (
+        legacy_transfer = (
             select(TaskActivity.id)
             .where(
                 TaskActivity.task_id == Task.id,
                 TaskActivity.event_type == TaskActivityEventType.TASK_MOVED,
             )
             .exists()
+        )
+        moved = or_(
+            legacy_transfer,
+            select(ProjectHistoryEvent.id).where(
+                ProjectHistoryEvent.task_id == Task.id,
+                ProjectHistoryEvent.event_type.in_(("TASK_TRANSFERRED_IN", "TASK_TRANSFERRED_OUT")),
+            ).exists(),
         )
         tasks = select(Task.id, Task.title).where(Task.project_id == project_id, ~moved).cte()
         activity = TaskActivity
@@ -246,9 +342,21 @@ class ProjectHistoryRepository:
                 .where(ProjectFile.project_id == project_id, ProjectFile.deleted_at.is_(None)),
             ],
         }
-        selected = branches.values() if filters.kind is None else [branches[filters.kind]]
-        events = union_all(*(query for group in selected for query in group)).subquery("events")
+        selected = branches.values() if filters.kind is None else [branches.get(filters.kind, [])]
+        legacy_queries = [query for group in selected for query in group]
+        journal = self._journal(project_id)
+        if legacy_queries:
+            legacy = union_all(*legacy_queries).subquery("legacy_history")
+            remaining = select(legacy).where(~select(ProjectHistoryEvent.id).where(
+                ProjectHistoryEvent.project_id == project_id,
+                ProjectHistoryEvent.public_id == legacy.c.id,
+            ).exists())
+            events = union_all(remaining, journal).subquery("events")
+        else:
+            events = journal.subquery("events")
         query = select(events)
+        if filters.kind:
+            query = query.where(events.c.kind == filters.kind)
         if filters.q:
             query = query.where(
                 or_(
@@ -280,4 +388,13 @@ class ProjectHistoryRepository:
             .offset(filters.offset)
             .limit(filters.limit + 1)
         )
-        return [ProjectHistoryItem.model_validate(row) for row in rows.mappings()]
+        items = []
+        for row in rows.mappings():
+            item = dict(row)
+            item["source_available"] = item.pop("_source_available")
+            if not item.pop("_task_available"):
+                item["task_id"] = item["comment_id"] = item["report_id"] = None
+            if not item["source_available"]:
+                item["comment_id"] = item["report_id"] = item["document_ref"] = None
+            items.append(ProjectHistoryItem.model_validate(item))
+        return items

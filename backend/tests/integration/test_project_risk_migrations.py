@@ -8,6 +8,9 @@ from alembic.config import Config
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+# Freeze this legacy roundtrip before the independently guarded history journal.
+PRE_HISTORY_REVISION = "c32a202611200001"
+
 
 async def test_risk_migrations_preserve_existing_data_and_constraints(postgres_container):
     name = f"risk_migration_{uuid4().hex}"
@@ -36,7 +39,7 @@ async def test_risk_migrations_preserve_existing_data_and_constraints(postgres_c
             )
         )
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         schema = inspect(connection)
         assert {column["name"] for column in schema.get_columns("tasks")} >= {"checklist", "checklist_revision"}
@@ -88,7 +91,7 @@ async def test_risk_migrations_preserve_existing_data_and_constraints(postgres_c
             connection.execute(text("SELECT 'RISK'::knowledge_entity_type")).scalar_one() == "RISK"
         )
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         assert "project_risks" in inspect(connection).get_table_names()
         assert connection.execute(text("SELECT checklist, checklist_revision FROM tasks WHERE id=1")).one() == (None, 0)

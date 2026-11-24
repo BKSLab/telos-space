@@ -38,6 +38,7 @@ function useToday() {
 
 function detailText(event: TimelineEvent) {
     if (event.kind !== "project_context" || !event.detail) return event.detail;
+    if (!event.detail.trimStart().startsWith("[")) return event.detail;
     try {
         const fields: unknown = JSON.parse(event.detail);
         return Array.isArray(fields) && fields.every(field => typeof field === "string") ? fields.map(projectContextLabel).join(", ") : null;
@@ -89,6 +90,7 @@ export function ChatHistoryContext({ projectId, projectKey, onOpenFull }: { proj
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
                     <time dateTime={event.created_at} className="font-mono">{formatTime.format(new Date(event.created_at))}</time>
                     {event.actor_name ? <UserIdentity userId={event.actor_user_id} name={event.actor_name} size="xs" /> : <span>Автор не указан</span>}
+                    {event.source_available === false && <span>Историческая запись</span>}
                 </div>
                 <p className="text-[13px] font-medium text-primary">{event.title}</p>
                 {structured && <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-[12px]">
@@ -97,14 +99,14 @@ export function ChatHistoryContext({ projectId, projectKey, onOpenFull }: { proj
                 </dl>}
                 {detail && <details className="text-[12px] text-secondary"><summary className="touch-target cursor-pointer py-2">Подробности</summary><p className="whitespace-pre-wrap">{detail}</p></details>}
                 <div className="flex flex-wrap gap-1">
-                    {event.task_id !== null && <Button size="sm" variant="ghost" onClick={() => {
+                    {event.source_available !== false && event.task_id != null && <Button size="sm" variant="ghost" onClick={() => {
                         onOpenFull?.();
                         const ui = useUiStore.getState();
                         if (event.report_id) ui.openTaskTarget(event.task_id!, { section: "reports", reportId: event.report_id, reportRevision: event.report_revision ?? undefined });
                         else if (event.comment_id) ui.openTaskTarget(event.task_id!, { section: "comments", commentId: event.comment_id });
                         else ui.setSelectedTaskId(event.task_id);
                     }}>{event.report_id ? "Открыть версию отчёта" : event.comment_id ? "Открыть комментарий" : "Открыть задачу"}</Button>}
-                    {event.document_ref && <Link onClick={onOpenFull} className="touch-target inline-flex items-center px-2 text-[13px] text-accent hover:underline" to={`/projects/${projectKey}/docs/${encodeURIComponent(event.document_ref)}`}>Открыть документ</Link>}
+                    {event.source_available !== false && event.document_ref && <Link onClick={onOpenFull} className="touch-target inline-flex items-center px-2 text-[13px] text-accent hover:underline" to={`/projects/${projectKey}/docs/${encodeURIComponent(event.document_ref)}`}>Открыть документ</Link>}
                 </div>
             </li>;
         })}</ol>}

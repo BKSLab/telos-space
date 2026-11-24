@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.db.models import Base
 
+# Freeze this legacy roundtrip before the independently guarded history journal.
+PRE_HISTORY_REVISION = "c32a202611200001"
+
 
 async def test_file_migrations_preserve_originals_and_match_metadata(postgres_container):
     database = f"files_migration_{uuid4().hex}"
@@ -58,7 +61,7 @@ async def test_file_migrations_preserve_originals_and_match_metadata(postgres_co
             "VALUES(1,'Сохранённый оригинал','ready',20,'existing-hash')"
         ))
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         assert connection.execute(text(
             "SELECT original_name,storage_key,caption,uploaded_by_user_id "
@@ -99,7 +102,7 @@ async def test_file_migrations_preserve_originals_and_match_metadata(postgres_co
         assert connection.execute(text(
             "SELECT body_md FROM task_comments WHERE id=1"
         )).scalar_one() == "Прежний комментарий"
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
 
     try:

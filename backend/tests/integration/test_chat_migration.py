@@ -12,6 +12,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.db.models import Base
 
+# Includes the final chat columns compared below. Later project-history
+# migrations have their own roundtrip and data-preserving downgrade checks.
+CHAT_SCHEMA_REVISION = "f12c7a309bd1"
+
 
 async def test_chat_upgrade_downgrade_and_transactional_lifecycle(postgres_container):
     database = f"chat_migration_{uuid4().hex}"
@@ -39,7 +43,7 @@ async def test_chat_upgrade_downgrade_and_transactional_lifecycle(postgres_conta
         )
         connection.execute(insert_project, {"id": 1, "key": "OLD"})
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, CHAT_SCHEMA_REVISION)
         connection.commit()
         names = {
             name
@@ -87,7 +91,7 @@ async def test_chat_upgrade_downgrade_and_transactional_lifecycle(postgres_conta
         assert not names & set(inspect(connection).get_table_names())
         assert connection.scalar(text("SELECT count(*) FROM projects")) == 2
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, CHAT_SCHEMA_REVISION)
         connection.commit()
         assert connection.scalar(text("SELECT count(*) FROM project_chats")) == 0
 

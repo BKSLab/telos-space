@@ -18,7 +18,11 @@ from src.dependencies.access import (
 from src.dependencies.auth import PrincipalDep, require_write_scope
 from src.dependencies.services import ProjectHistoryServiceDep, ProjectsServiceDep
 from src.exceptions.projects import ProjectsServiceError
-from src.schemas.project_history import ProjectHistoryPage, ProjectHistoryQuery
+from src.schemas.project_history import (
+    ProjectHistoryPage,
+    ProjectHistoryQuery,
+    ProjectHistoryVersion,
+)
 from src.schemas.projects import (
     ProjectContextHistoryPageSchema,
     ProjectCreateSchema,
@@ -53,6 +57,22 @@ async def get_project_history(
     filters: Annotated[ProjectHistoryQuery, Query()],
 ) -> ProjectHistoryPage:
     return await service.read(project_id, filters)
+
+
+@router.get(
+    "/{project_id}/history/version",
+    dependencies=[Depends(require_project_access)],
+    operation_id="getProjectHistoryVersion",
+    summary="Проверить версию истории проекта",
+    description="Возвращает версию проектного журнала без чтения событий. Для ключа нужны projects:read, tasks:read и knowledge:read.",
+    response_description="Монотонная версия истории для адресного обновления кэша.",
+    responses={401: {"description": "Требуется авторизация."}, 403: FORBIDDEN_RESPONSE, 404: NOT_FOUND_RESPONSE},
+)
+async def get_project_history_version(
+    project_id: ProjectIdPath,
+    service: ProjectHistoryServiceDep,
+) -> ProjectHistoryVersion:
+    return await service.version(project_id)
 
 
 @router.get(

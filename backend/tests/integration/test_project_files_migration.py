@@ -13,6 +13,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.db.models import Base
 
+# Freeze this legacy roundtrip before the independently guarded history journal.
+PRE_HISTORY_REVISION = "c32a202611200001"
+
 
 async def test_project_files_migration_preserves_data_and_matches_metadata(postgres_container):
     database = f"project_files_migration_{uuid4().hex}"
@@ -46,7 +49,7 @@ async def test_project_files_migration_preserves_data_and_matches_metadata(postg
             )
         )
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         included = {"project_files", "knowledge_project_file_texts", "knowledge_source_summaries"}
 
@@ -82,7 +85,7 @@ async def test_project_files_migration_preserves_data_and_matches_metadata(postg
         command.downgrade(config, "c07e4f82a1b6")
         connection.commit()
         assert "project_files" not in inspect(connection).get_table_names()
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         assert (
             connection.execute(text("SELECT content_md FROM documents")).scalar_one()

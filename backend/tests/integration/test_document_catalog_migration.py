@@ -15,6 +15,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from src.db.models import Base
 from src.utils.document_refs import encode_document_ref
 
+# Covers the catalog plus message references present in the compared ORM.
+# The durable journal's independent downgrade guard is tested separately.
+CATALOG_SCHEMA_REVISION = "f12c7a309bd1"
+
 
 def legacy_queue_cases(connection):
     """Готовит старые API, cookie и завершённые ответы с разной авторизацией."""
@@ -174,7 +178,7 @@ async def test_catalog_upgrade_roundtrip_and_data_preserving_downgrade_guard(pos
         queue_cases = legacy_queue_cases(connection)
         action_cases = legacy_action_cases(connection)
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, CATALOG_SCHEMA_REVISION)
         connection.commit()
         assert (
             connection.execute(text("SELECT content_md FROM documents WHERE id=1")).scalar_one()
@@ -312,7 +316,7 @@ async def test_catalog_upgrade_roundtrip_and_data_preserving_downgrade_guard(pos
             connection.execute(text("SELECT content_md FROM documents WHERE id=1")).scalar_one()
             == "Прежний текст 😀"
         )
-        command.upgrade(config, "head")
+        command.upgrade(config, CATALOG_SCHEMA_REVISION)
         connection.commit()
         connection.execute(
             text("UPDATE project_files SET display_title='Сохранить название' WHERE id=1")

@@ -21,7 +21,7 @@ function historyPage<T extends { id: string; kind: string; created_at: string; t
         ? matching.map(item => localDay(item.created_at)).find(day => day < query.get("since")!) ?? null : null;
     const offset = Number(query.get("offset") ?? 0);
     const limit = Number(query.get("limit") ?? 20);
-    return { items: selected.slice(offset, offset + limit), next_offset: offset + limit < selected.length ? offset + limit : null, previous_day };
+    return { items: selected.slice(offset, offset + limit), next_offset: offset + limit < selected.length ? offset + limit : null, previous_day, revision: "0" };
 }
 
 function connection(id: number, name: string, ref: string): GitConnection {
@@ -122,6 +122,7 @@ async function sourcesApi(page: Page) {
             const items = claims.filter(item => item.category !== exclude && (!category || item.category === category) && (!q || item.text?.includes(q)));
             return reply({ ...knowledge, items, total: items.length });
         }
+        if (path === "/history/version") return reply({ revision: "0" });
         if (path === "/history") {
             const items = [
                 { id: "task_report:12", kind: "task_report", title: "Отчёт · Импорт · v2", detail: "Импорт реализован", actor_name: "Тестов Тест", task_id: 100, created_at: "2026-11-20T11:00:00Z" },
@@ -152,6 +153,33 @@ async function sourcesApi(page: Page) {
 }
 
 for (const width of [320, 1440]) {
+    test(`история показывает сохранённые удаления и новые категории — ${width}`, async ({ page }, info) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await installMockApi(page, mockState());
+        await sourcesApi(page);
+        const kinds = ["project_activity", "project_member", "project_stage", "risk_activity", "document_activity", "project_plan", "project_board"];
+        const requests: URL[] = [];
+        const items = kinds.map((kind, index) => ({ id: `history:${index}`, kind, title: `Сохранённое событие ${index}`, detail: "Название и пояснение сохранены после удаления исходного объекта", created_at: "2026-11-20T10:00:00Z", actor_name: "Иван Петров", task_id: null, comment_id: null, report_id: null, document_ref: null, source_available: false, event_type: "TITLE_CHANGED", from_value: "Прежнее название", to_value: "Новое название" }));
+        await page.route("**/api/v1/projects/1/history?**", route => {
+            const url = new URL(route.request().url()); requests.push(url);
+            return route.fulfill({ json: historyPage(items, url) });
+        });
+        await page.goto("/projects/DEMO/knowledge?view=history&timezone=Europe%2FSamara");
+        const timeline = page.getByLabel("События проекта", { exact: true });
+        await expect(timeline.locator(".history-event:visible")).toHaveCount(4);
+        await page.getByRole("button", { name: "Ещё 3 события за этот день" }).click();
+        await expect(timeline.locator(".history-event:visible")).toHaveCount(7);
+        await expect(timeline.getByText("Историческая запись", { exact: true })).toHaveCount(7);
+        await expect(timeline.getByRole("button", { name: /^Открыть/ })).toHaveCount(0);
+        await expect(timeline.getByRole("link", { name: /^Открыть/ })).toHaveCount(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath(`history-journal-snapshots-${width}.png`), animations: "disabled" });
+        await page.getByLabel("Тип события", { exact: true }).selectOption("risk_activity");
+        await expect(timeline.locator(".history-event:visible")).toHaveCount(1);
+        await expect(timeline.getByText("Изменения рисков", { exact: true })).toBeVisible();
+        expect(requests.some(url => url.searchParams.get("kind") === "risk_activity")).toBe(true);
+    });
+
     test(`история с вехами и плотными днями — ${width}`, async ({ page }, info) => {
         await page.setViewportSize({ width, height: 1000 });
         await installMockApi(page, mockState());

@@ -331,6 +331,7 @@ class TasksService:
                 await self._replace_participants(
                     task_id=task.id,
                     assignments=assignments,
+                    current=[],
                 )
             await self.knowledge_events.upsert(
                 project_id=project_id,
@@ -465,6 +466,7 @@ class TasksService:
                 await self._replace_participants(
                     task_id=task.id,
                     assignments=assignments,
+                    current=current,
                 )
             if TASK_SEMANTIC_FIELDS.intersection(payload):
                 await self.knowledge_events.upsert(
@@ -1096,15 +1098,26 @@ class TasksService:
         if start_date is not None and due_date is not None and start_date > due_date:
             raise TaskDateRangeError()
 
-    async def _replace_participants(self, task_id: int, assignments: list[dict]) -> None:
-        """Заменяет ролевые назначения задачи: удаление и вставка.
+    async def _replace_participants(
+        self, task_id: int, assignments: list[dict], current: list[TaskParticipant] | None = None
+    ) -> None:
+        """Меняет только разницу ролей, сохраняя ID и историю неизменных назначений."""
+        if current is None:
+            current = (await self.participants_repository.get_by_task_ids([task_id])).get(task_id, [])
 
-        Обе операции однозапросные и выполняются внутри уже открытой
-        транзакции сценария: их последовательность — оркестрация, а
-        значит принадлежит сервису.
-        """
-        await self.participants_repository.delete_for_task(task_id)
-        await self.participants_repository.save_many(task_id, assignments)
+        def key(item):
+            if isinstance(item, dict):
+                return item.get("project_member_id"), item.get("user_id"), item["role"]
+            return item.project_member_id, item.user_id, item.role
+
+        existing = {key(item): item for item in current}
+        desired = {key(item): item for item in assignments}
+        removed = [item.id for identity, item in existing.items() if identity not in desired]
+        added = [item for identity, item in desired.items() if identity not in existing]
+        if removed:
+            await self.participants_repository.delete_assignments(task_id, removed)
+        if added:
+            await self.participants_repository.save_many(task_id, added)
 
     async def _ensure_wbs_node_in_project(self, node_id: int, project_id: int) -> None:
         """Проверяет, что раздел ИСР существует и принадлежит тому же проекту."""

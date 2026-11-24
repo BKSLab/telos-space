@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowRight, CalendarDays, ChevronDown, CircleDot, ClipboardList, FileText, Flag, Link2, MessageSquare, Search, ShieldAlert, X } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronDown, CircleDot, ClipboardList, FileText, Flag, LayoutDashboard, Layers, Link2, ListTree, MessageSquare, Search, ShieldAlert, Users, X } from "lucide-react";
 import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
@@ -23,12 +23,23 @@ const LABELS = {
     project_context: { label: "Паспорт проекта", icon: Flag },
     risk_created: { label: "Добавление рисков", icon: ShieldAlert },
     document_created: { label: "Добавление документов", icon: FileText },
+    project_activity: { label: "Изменения проекта", icon: Flag },
+    project_member: { label: "Участники проекта", icon: Users },
+    project_stage: { label: "Стадии проекта", icon: Layers },
+    risk_activity: { label: "Изменения рисков", icon: ShieldAlert },
+    document_activity: { label: "Изменения документов", icon: FileText },
+    project_plan: { label: "План и ИСР", icon: ListTree },
+    project_board: { label: "Доски проекта", icon: LayoutDashboard },
 };
 const TONES: Record<string, string> = {
     task_activity: "var(--color-accent)", task_comment: "var(--brand-cyan)",
     task_report: "var(--color-purple)", project_deadline: "var(--color-warning)",
     project_context: "var(--brand-violet)", risk_created: "var(--color-danger)",
     document_created: "var(--color-success)",
+    project_activity: "var(--color-accent)", project_member: "var(--brand-cyan)",
+    project_stage: "var(--brand-violet)", risk_activity: "var(--color-danger)",
+    document_activity: "var(--color-success)", project_plan: "var(--color-warning)",
+    project_board: "var(--color-purple)",
 };
 const emptyFilters = { q: "", kind: "", actor: "", actor_user_id: "", task_id: "", since: "", until: "" };
 const FILTER_FIELDS = Object.keys(emptyFilters) as (keyof typeof emptyFilters)[];
@@ -47,6 +58,7 @@ function validTimezone(value: string) {
 }
 function eventDetail(event: TimelineEvent) {
     if (event.kind !== "project_context" || !event.detail) return event.detail;
+    if (!event.detail.trimStart().startsWith("[")) return event.detail;
     try {
         const fields: unknown = JSON.parse(event.detail);
         if (Array.isArray(fields) && fields.every(field => typeof field === "string")) return fields.map(projectContextLabel).join(", ");
@@ -89,7 +101,8 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
     };
     const invalidDates = !!(draft.since && draft.until && draft.since > draft.until);
     const filtered = Object.values(filters).some(Boolean);
-    const results = useProjectHistory(projectId, filters, timezone, today, selectedEvent);
+    const [visibleDays, setVisibleDays] = useState<string[]>([]);
+    const results = useProjectHistory(projectId, filters, timezone, today, selectedEvent, visibleDays);
     const accessError = results.error instanceof ApiError && [401, 403, 404].includes(results.error.status);
     const weeks = accessError || !results.data?.pages.length ? undefined : results.data.pages;
     const page = weeks ? { items: [...new Map(weeks.flatMap(week => week.items).map(item => [item.id, item])).values()] } : undefined;
@@ -171,6 +184,22 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
         const day = historyDayKey(new Date(event.created_at), timezone);
         days.set(day, [...(days.get(day) ?? []), event]);
     }
+    const dayKeys = [...days.keys()].join(",");
+    useEffect(() => {
+        const list = listRef.current;
+        if (!list || !dayKeys || selectedEvent || typeof IntersectionObserver === "undefined") return;
+        const visible = new Set<string>();
+        const observer = new IntersectionObserver(entries => {
+            for (const entry of entries) {
+                const day = (entry.target as HTMLElement).dataset.historyDay!;
+                if (entry.isIntersecting) visible.add(day); else visible.delete(day);
+            }
+            const next = [...visible].sort();
+            setVisibleDays(previous => previous.join(",") === next.join(",") ? previous : next);
+        }, { root: list.closest<HTMLElement>('[aria-label="Знания проекта"]') });
+        list.querySelectorAll("[data-history-day]").forEach(element => observer.observe(element));
+        return () => observer.disconnect();
+    }, [dayKeys, selectedEvent, groupKey]);
 
     return <div className="flex min-w-0 flex-col gap-4">
         <form onSubmit={applyFilters} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 border-b border-line-subtle pb-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:gap-3">
@@ -204,7 +233,7 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
         {!selectedEvent && chips.length > 0 && <div className="flex flex-wrap gap-1" aria-label="Применённые фильтры">{chips.map(chip => <Button key={chip.field} size="sm" variant="ghost" className="max-w-full bg-accent-soft text-accent" aria-label={`Убрать фильтр: ${chip.label}`} onClick={() => navigate({ ...filters, [chip.field]: "" })}><span className="truncate">{chip.label}</span><X size={13} aria-hidden="true" /></Button>)}</div>}
         {selectedEvent && <div className="flex flex-wrap items-center gap-2 text-[13px]"><span>Событие по ссылке</span><Button size="sm" onClick={() => navigate(filters)}>Вернуться к ленте</Button></div>}
         <div className="flex flex-wrap items-baseline justify-between gap-2 text-[12px] text-muted">
-            <details><summary className="cursor-pointer py-2">Какие события здесь видны</summary><p className="mt-2 max-w-3xl">Сохранённые изменения задач и паспорта, комментарии, версии отчётов, сроки проекта, добавление рисков и документов. После переноса или удаления задачи история может быть неполной. Код доступен в разделе «Код и репозитории».</p></details>
+            <details><summary className="cursor-pointer py-2">Какие события здесь видны</summary><p className="mt-2 max-w-3xl">Изменения проекта и задач, комментарии, отчёты, участники, стадии, риски, документы, план, ИСР и доски. Сохранённые события остаются после удаления или переноса объекта. Переход к исходной записи доступен, пока она существует и доступна в проекте. Код доступен в разделе «Код и репозитории».</p></details>
             <div className="flex flex-wrap items-center gap-2"><span>Время: {timezone}</span><Button size="sm" variant="ghost" disabled={results.isFetching} onClick={() => void results.refetch()}>{results.isRefetching ? "Обновляем…" : "Обновить историю"}</Button></div>
         </div>
         {copyStatus && <p role="status" className="text-[12px] text-muted">{copyStatus}</p>}
@@ -222,11 +251,14 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
                 const allVisible = display.expanded.includes(day) || !!selectedEvent;
                 const visibleEvents = allVisible ? events : events.slice(0, 4);
                 const kinds = [...new Set(events.map(event => event.kind))];
-                return <section key={day} className="history-day min-w-0 pb-6">
+                return <section key={day} data-history-day={day} className="history-day min-w-0 pb-6">
                     <h3 className="relative mb-3">
                         <button type="button" aria-expanded={!isCollapsed} aria-controls={`events-${day}`} aria-label={`${isCollapsed ? "Развернуть" : "Свернуть"} ${fullDay}`}
                             className="history-day-toggle flex w-full min-w-0 items-center gap-3 rounded-lg py-3 pr-3 text-left focus-visible:outline-2 focus-visible:outline-accent"
-                            onClick={() => setDisplay({ overrides: { ...display.overrides, [day]: !isCollapsed } })}>
+                            onClick={() => {
+                                setDisplay({ overrides: { ...display.overrides, [day]: !isCollapsed } });
+                                if (isCollapsed) setVisibleDays(previous => previous.includes(day) ? previous : [...previous, day]);
+                            }}>
                             <span className="history-milestone grid size-9 shrink-0 place-items-center rounded-full border border-accent bg-surface text-accent"><CalendarDays size={17} aria-hidden="true" /></span>
                             <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-primary">{day === today ? "Сегодня" : day === yesterday ? "Вчера" : fullDay}</span>
                                 {(day === today || day === yesterday) && <span className="text-[12px] text-muted">{fullDay}</span>}
@@ -257,14 +289,15 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
                                 {detail && structured && <details className="mt-1 text-[13px] text-muted"><summary className="cursor-pointer py-1">Подробности изменения</summary><EventDetail text={detail} /></details>}
                                 <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">
                                     {event.actor_name ? <UserIdentity userId={event.actor_user_id} name={event.actor_name} size="xs" /> : <span>Автор не указан</span>}
+                                    {event.source_available === false && <span>Историческая запись</span>}
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-1">
-                                    {event.task_id !== null && <Button size="sm" variant="ghost" onClick={() => {
+                                    {event.source_available !== false && event.task_id != null && <Button size="sm" variant="ghost" onClick={() => {
                                         if (event.report_id) openTaskTarget(event.task_id!, { section: "reports", reportId: event.report_id, reportRevision: event.report_revision ?? undefined });
                                         else if (event.comment_id) openTaskTarget(event.task_id!, { section: "comments", commentId: event.comment_id });
                                         else openTask(event.task_id);
                                     }}>{event.report_id ? "Открыть версию отчёта" : event.comment_id ? "Открыть комментарий" : "Открыть задачу"}</Button>}
-                                    {event.document_ref && <Link className="touch-target inline-flex items-center px-2 text-[13px] text-accent hover:underline" to={`/projects/${projectKey}/docs/${encodeURIComponent(event.document_ref)}`}>Открыть документ</Link>}
+                                    {event.source_available !== false && event.document_ref && <Link className="touch-target inline-flex items-center px-2 text-[13px] text-accent hover:underline" to={`/projects/${projectKey}/docs/${encodeURIComponent(event.document_ref)}`}>Открыть документ</Link>}
                                     <Button size="sm" variant="ghost" aria-label={`Скопировать ссылку: ${event.title}`} onClick={() => void copyEvent(event)} icon={<Link2 size={13} aria-hidden="true" />}>Ссылка</Button>
                                 </div>
                             </div>

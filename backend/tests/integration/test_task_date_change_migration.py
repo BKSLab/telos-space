@@ -16,6 +16,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from src.db.models import Base
 
+# Freeze these legacy checks before the independently guarded history journal.
+PRE_HISTORY_REVISION = "c32a202611200001"
+
 
 @pytest_asyncio.fixture
 async def date_change_migration(postgres_container):
@@ -45,7 +48,7 @@ async def test_date_reason_migration_upgrades_clean_database(date_change_migrati
 
     def verify(connection):
         config.attributes["connection"] = connection
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         columns = {
             column["name"]: column for column in inspect(connection).get_columns("task_activity")
@@ -110,7 +113,7 @@ async def test_date_reason_migration_preserves_legacy_rows_and_guards_new_histor
             )
         )
         connection.commit()
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         assert connection.execute(
             text(
@@ -145,7 +148,7 @@ async def test_date_reason_migration_preserves_legacy_rows_and_guards_new_histor
             connection.execute(text("SELECT to_value FROM task_activity WHERE id=1")).scalar_one()
             == "2026-11-20"
         )
-        command.upgrade(config, "head")
+        command.upgrade(config, PRE_HISTORY_REVISION)
         connection.commit()
         assert (
             connection.execute(text("SELECT reason FROM task_activity WHERE id=1")).scalar_one()

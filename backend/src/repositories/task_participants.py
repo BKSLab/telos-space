@@ -162,6 +162,19 @@ class TaskParticipantsRepository:
             )
             raise TasksRepositoryError("Ошибка удаления участников задачи.") from error
 
+    async def delete_assignments(self, task_id: int, assignment_ids: list[int]) -> None:
+        """Удаляет только снятые роли проверенной задачи, сохраняя остальные строки."""
+        try:
+            await self.db_session.execute(
+                delete(TaskParticipant).where(
+                    TaskParticipant.task_id == task_id, TaskParticipant.id.in_(assignment_ids)
+                )
+            )
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            logger.error("❌ Не удалось снять роли задачи id=%s.", task_id, exc_info=True)
+            raise TasksRepositoryError("Ошибка снятия ролей задачи.") from error
+
     async def save_many(self, task_id: int, assignments: list[dict]) -> None:
         """Добавляет набор ролевых назначений одной вставкой.
 

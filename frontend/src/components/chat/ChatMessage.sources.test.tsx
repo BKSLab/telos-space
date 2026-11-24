@@ -100,7 +100,8 @@ it("упоминание ключа в Markdown без подтверждённ�
     expect(await screen.findByText("Проверил задачу DEMO-42.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Задача:/ })).toBeNull();
     expect(screen.queryByRole("heading", { name: task.title })).toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
+    // The independent Today panel can read history; an unverified task mention must not fetch an entity.
+    expect(fetch.mock.calls.every(([url]) => new URL(String(url), "http://local").pathname === "/api/v1/projects/1/history")).toBe(true);
 });
 
 it("общий чат выводит отдельную подтверждённую цитату из ChatAgentState", () => {

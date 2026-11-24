@@ -1,25 +1,27 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { api, ApiError } from "@/lib/api";
 import { useUiStore } from "@/stores/ui";
 import { ProjectHistoryTimeline } from "./ProjectHistoryTimeline";
 import { historyDayKey, historyPeriod, historyValue } from "@/lib/projectHistory";
+import type { TimelineEvent } from "@/lib/useProjectHistory";
 
 const clients: QueryClient[] = [];
 let nextProjectId = 100;
-const event = { id: "task_report:91", kind: "task_report", title: "Отчёт · Импорт · v2", detail: "Импорт реализован", created_at: "2026-11-20T09:30:00Z", actor_name: "Иван Петров", actor_user_id: 3, task_id: 12, report_id: 91, report_revision: 2 };
+const event: TimelineEvent = { id: "task_report:91", kind: "task_report", title: "Отчёт · Импорт · v2", detail: "Импорт реализован", created_at: "2026-11-20T09:30:00Z", actor_name: "Иван Петров", actor_user_id: 3, task_id: 12, report_id: 91, report_revision: 2 };
 function Location() { return <output data-testid="url">{useLocation().search}</output>; }
 function setup(search = "?view=history", items = [event], projectId = nextProjectId++, previous_day: string | null = null) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     clients.push(client);
-    const get = vi.spyOn(api, "get").mockImplementation(async path => {
+    const get = vi.fn<(path: string, options?: Pick<RequestInit, "signal">) => Promise<unknown>>().mockImplementation(async path => {
         if (path.includes("/members")) return [{ user: { id: 3, username: "ivan", first_name: "Иван", last_name: "Петров", middle_name: null, has_avatar: false } }];
         if (path.endsWith("/tasks")) return [{ id: 12, title: "Импорт" }];
-        return { items, next_offset: null, previous_day };
+        return { items, next_offset: null, previous_day, revision: "0" };
     });
+    vi.spyOn(api, "get").mockImplementation(async (path, options) => path.endsWith("/history/version") ? { revision: "0" } : get(path, options));
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[`/projects/DEMO/knowledge${search}`]}><ProjectHistoryTimeline projectId={projectId} projectKey="DEMO" /><Location /></MemoryRouter></QueryClientProvider>);
     return get;
 }
@@ -29,6 +31,33 @@ afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear())
 it("uses the same timezone for local day grouping and inclusive calendar shortcuts", () => {
     expect(historyDayKey(new Date("2026-11-20T21:30:00Z"), "Europe/Samara")).toBe("2026-11-21");
     expect(historyPeriod(7, "America/New_York", new Date("2026-03-10T15:00:00Z"))).toEqual({ since: "2026-03-04", until: "2026-03-10" });
+});
+
+it.each([
+    ["project_activity", "Изменения проекта"], ["project_member", "Участники проекта"], ["project_stage", "Стадии проекта"],
+    ["risk_activity", "Изменения рисков"], ["document_activity", "Изменения документов"], ["project_plan", "План и ИСР"], ["project_board", "Доски проекта"],
+])("applies the %s journal filter with a readable label", async (kind, label) => {
+    const get = setup();
+    await screen.findByText(event.title);
+    fireEvent.change(screen.getByLabelText("Тип события"), { target: { value: kind } });
+    await waitFor(() => expect(get.mock.calls.some(([path]) => new URL(path, "http://local").searchParams.get("kind") === kind)).toBe(true));
+    expect(screen.getByRole("button", { name: `Убрать фильтр: ${label}` })).toBeTruthy();
+});
+
+it.each(["TASK_DELETED", "TASK_TRANSFERRED_OUT", "TITLE_CHANGED"])("renders a retained %s snapshot without source navigation", async event_type => {
+    setup("?view=history&event=history%3A91", [{ ...event, id: "history:91", title: "Удалена задача · Старое название", detail: "Название сохранено на момент изменения", event_type, source_available: false, task_id: null, comment_id: null, report_id: null, document_ref: null, from_value: "Прежнее значение", to_value: "Новое значение" }]);
+    await screen.findByText("Удалена задача · Старое название");
+    expect(screen.getByText("Историческая запись")).toBeTruthy();
+    expect(screen.getByText("Прежнее значение")).toBeTruthy();
+    expect(screen.getByText("Новое значение")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Открыть/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^Открыть/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Скопировать ссылку:/ })).toBeTruthy();
+});
+
+it("shows human-readable snapshot detail for project context", async () => {
+    setup("?view=history", [{ ...event, kind: "project_context", detail: "Уточнены цель и границы проекта" }]);
+    await screen.findByText("Уточнены цель и границы проекта");
 });
 
 it("сворачивает даты и раскрывает большой день порциями без потери событий", async () => {
@@ -123,7 +152,7 @@ it.each([401, 403, 404])("hides cached events when refreshed access is rejected 
     const get = setup();
     await screen.findByText(event.title);
     get.mockRejectedValue(new ApiError(status, "Доступ недоступен"));
-    await act(async () => { await clients.at(-1)!.invalidateQueries({ queryKey: ["projects"] }); });
+    fireEvent.click(screen.getByRole("button", { name: "Обновить историю" }));
     await screen.findByText("Доступ недоступен");
     expect(screen.queryByText(event.title)).toBeNull();
 });

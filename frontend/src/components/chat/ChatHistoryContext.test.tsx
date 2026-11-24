@@ -50,6 +50,16 @@ it("reads one bounded page for the exact local day, renders changes and links th
     expect(within(screen.getByRole("list", { name: "События за сегодня" })).getAllByRole("listitem").map(item => item.textContent)).toEqual([expect.stringContaining(event.title), expect.stringContaining("Более раннее событие")]);
 });
 
+it("renders a deleted source snapshot without task or document navigation", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ items: [{ ...event, kind: "project_context", title: "Изменён паспорт проекта", detail: "Сохранённая цель проекта", source_available: false, task_id: null, comment_id: null, report_id: null, document_ref: null }], next_offset: null });
+    setup();
+    await screen.findByText("Изменён паспорт проекта");
+    expect(screen.getByText("Историческая запись")).toBeTruthy();
+    expect(screen.getByText("Сохранённая цель проекта")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Открыть/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Открыть документ" })).toBeNull();
+});
+
 it.each([401, 403, 404])("hides all previously loaded contents after a %s continuation failure and retries", async status => {
     const get = vi.spyOn(api, "get").mockResolvedValue({ items: [event], next_offset: 20 });
     setup(); await screen.findByText(event.title);

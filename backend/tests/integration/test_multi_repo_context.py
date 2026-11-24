@@ -146,6 +146,8 @@ class MultiRemote(Remote):
 
     def response(self, request):
         assert self.db_active == 0, "Git HTTP must not hold a DB scope"
+        if request.url.path == "/user":
+            return super().response(request)
         self.requests.append(request.url.path)
         return self.repos[request.url.path.split("/")[3]].response(request)
 
@@ -175,6 +177,7 @@ async def test_three_repositories_two_prs_and_revocation_guard_preserve_exact_co
             client_factory=remote.factory,
             credential_codec=GitCredentialCodec(SecretStr(Fernet.generate_key().decode())),
         )
+        await git.set_github_profile(env.principal, SecretStr("synthetic-provider-credential"))
         assert git.limits.max_foreground_requests == 32
         control = SimpleNamespace(
             service=git, sessions=env.factory, project=env.project_id, principal=env.principal
@@ -300,9 +303,11 @@ async def test_three_repositories_two_prs_and_revocation_guard_preserve_exact_co
             )
 
         # Phase 3: FunctionModel goes through native tools, common services and
-        # the real final publication guard. It deliberately returns no handles.
+        # the real final publication guard. The positive turn selects exact file
+        # handles; the revoked turn deliberately selects none, while the guard
+        # still validates every source that contributed to the answer.
         async def ask(*, revoke):
-            step, read_files = 0, {}
+            step, read_files, file_handles = 0, {}, {}
             start = len(remote.requests)
 
             async def respond(messages, info):
@@ -328,6 +333,7 @@ async def test_three_repositories_two_prs_and_revocation_guard_preserve_exact_co
                         value["path"],
                         value["text"],
                     )
+                    file_handles[value["repository_id"]] = value["source_handle"]
                 if step == 1:
                     return ModelResponse(
                         parts=[
@@ -372,7 +378,7 @@ async def test_three_repositories_two_prs_and_revocation_guard_preserve_exact_co
                             "telos_submit_answer",
                             {
                                 "answer": "Три самостоятельных источника: APP_IMPLEMENTATION, API_IMPLEMENTATION, DOCS_UNCHANGED. Изменения задачи связаны только с app и api; API PR ещё открыт. Успех CI другого SHA не подтверждает merge, staging не production, production откатан на прежний SHA.",
-                                "source_ids": [],
+                                "source_ids": [] if revoke else list(file_handles.values()),
                             },
                         )
                     ]
