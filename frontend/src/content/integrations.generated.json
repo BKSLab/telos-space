@@ -3413,6 +3413,12 @@
             "description": "Точный ID события для прямой ссылки.",
             "title": "Event Id"
           },
+          "include_previous": {
+            "default": false,
+            "description": "На первой странице вернуть ближайший день с событиями до since с теми же фильтрами.",
+            "title": "Include Previous",
+            "type": "boolean"
+          },
           "kind": {
             "anyOf": [
               {
@@ -26953,6 +26959,18 @@
           }
         },
         {
+          "description": "На первой странице вернуть ближайший день с событиями до since с теми же фильтрами.",
+          "in": "query",
+          "name": "include_previous",
+          "required": false,
+          "schema": {
+            "default": false,
+            "description": "На первой странице вернуть ближайший день с событиями до since с теми же фильтрами.",
+            "title": "Include Previous",
+            "type": "boolean"
+          }
+        },
+        {
           "in": "header",
           "name": "Authorization",
           "required": false,
@@ -26996,7 +27014,7 @@
               }
             }
           },
-          "description": "Страница событий и смещение следующей страницы."
+          "description": "Страница событий, смещение следующей страницы и запрошенный день более ранних событий."
         },
         "401": {
           "description": "Требуется авторизация."
@@ -44967,6 +44985,12 @@
                 "description": "Точный ID события для прямой ссылки.",
                 "title": "Event Id"
               },
+              "include_previous": {
+                "default": false,
+                "description": "На первой странице вернуть ближайший день с событиями до since с теми же фильтрами.",
+                "title": "Include Previous",
+                "type": "boolean"
+              },
               "kind": {
                 "anyOf": [
                   {
@@ -61881,6 +61905,18 @@
             }
           ],
           "title": "Next Offset"
+        },
+        "previous_day": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Previous Day"
         }
       },
       "required": [

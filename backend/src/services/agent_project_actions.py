@@ -30,7 +30,7 @@ async def list_project_history(
         payload["until"] = until
     filters = ProjectHistoryQuery.model_validate(payload)
     page = await db.project_history.read(ctx.project_id, filters)
-    arguments = filters.model_dump(mode="json", exclude_none=True)
+    arguments = filters.model_dump(mode="json", exclude_none=True, exclude={"include_previous"})
     next_arguments = None
     if page.next_offset is not None:
         next_arguments = {**arguments, "offset": page.next_offset}

@@ -39,6 +39,7 @@ async def test_member_reads_combined_project_history(
                 "title": title,
                 "priority": "MEDIUM",
                 "position": 0.0,
+                "created_at": timestamp - timedelta(days=2),
             }
         )
         for number, title in [(1, "Поставка"), (2, "Перенесённая задача")]
@@ -152,7 +153,15 @@ async def test_member_reads_combined_project_history(
         path = f"/api/v1/projects/{project.id}/history"
         all_items = []
         for offset in (0, 3, 6):
-            response = await client.get(path, params={"offset": offset, "limit": 3})
+            response = await client.get(
+                path,
+                params={
+                    "offset": offset,
+                    "limit": 3,
+                    "since": "2026-11-19",
+                    "until": "2026-11-20",
+                },
+            )
             assert response.status_code == 200, response.text
             page = response.json()
             assert page["next_offset"] == (offset + 3 if offset < 6 else None)
@@ -205,7 +214,7 @@ async def test_member_reads_combined_project_history(
             "task_activity",
         }
         response = await client.get(path, params={"event_id": activity["id"]})
-        assert response.json() == {"items": [activity], "next_offset": None}
+        assert response.json() == {"items": [activity], "next_offset": None, "previous_day": None}
         assert (await client.get(path, params={"task_id": moved_task.id})).json()["items"] == []
         response = await client.get(
             path,
@@ -217,11 +226,15 @@ async def test_member_reads_combined_project_history(
             },
         )
         assert response.status_code == 200, response.text
-        assert response.json() == {"items": [by_kind["task_comment"]], "next_offset": None}
+        assert response.json() == {
+            "items": [by_kind["task_comment"]],
+            "next_offset": None,
+            "previous_day": None,
+        }
         response = await client.get(
             path, params={"kind": "project_deadline", "until": "2026-11-19"}
         )
-        assert response.json() == {"items": [], "next_offset": None}
+        assert response.json() == {"items": [], "next_offset": None, "previous_day": None}
         for query in (
             "kind=git",
             "timezone=Unknown/Zone",
@@ -279,3 +292,106 @@ async def test_local_day_bounds_follow_dst(db_session, project):
             f"project_deadline:{records[1].id}",
             f"project_deadline:{records[2].id}",
         }
+
+
+async def test_creation_and_previous_day_share_project_filters_and_local_dates(
+    db_session, project, stage, user, current_principal, monkeypatch
+):
+    from src.db.models.task_participants import TaskParticipant, TaskParticipantRole
+
+    repository = TasksRepository(db_session)
+    created, older, moved = [
+        await repository.save(
+            data={
+                "project_id": project.id,
+                "stage_id": stage.id,
+                "number": number,
+                "title": title,
+                "priority": "MEDIUM",
+                "position": 0.0,
+                "created_at": timestamp,
+            }
+        )
+        for number, title, timestamp in [
+            (1, "Новая задача", datetime(2026, 11, 23, 21, 30, tzinfo=UTC)),
+            (2, "Ранняя задача", datetime(2026, 11, 22, 21, 30, tzinfo=UTC)),
+            (3, "Перенесённая задача", datetime(2026, 11, 23, 22, tzinfo=UTC)),
+        ]
+    ]
+    member = ProjectMember(project_id=project.id, user_id=user.id)
+    db_session.add(member)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            # A current reporter is not proof of the original creator's identity.
+            TaskParticipant(
+                task_id=created.id,
+                project_member_id=member.id,
+                role=TaskParticipantRole.REPORTER,
+            ),
+            TaskActivity(
+                task_id=moved.id,
+                event_type=TaskActivityEventType.TASK_MOVED,
+                created_at=datetime(2026, 11, 23, 22, 10, tzinfo=UTC),
+            ),
+            TaskActivity(
+                task_id=older.id,
+                event_type=TaskActivityEventType.STAGE_CHANGED,
+                actor_user_id=user.id,
+                actor_name="Автор изменения",
+                created_at=datetime(2026, 11, 23, 22, 15, tzinfo=UTC),
+            ),
+        ]
+    )
+    await db_session.flush()
+    monkeypatch.delitem(app.dependency_overrides, require_project_access)
+    monkeypatch.setitem(app.dependency_overrides, get_db_session, lambda: db_session)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_principal,
+        lambda: replace(current_principal, user_id=user.id),
+    )
+    params = {
+        "since": "2026-11-24",
+        "until": "2026-11-24",
+        "timezone": "Europe/Samara",
+        "include_previous": "true",
+    }
+    path = f"/api/v1/projects/{project.id}/history"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(path, params=params)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        assert len(page["items"]) == 2
+        creation = next(item for item in page["items"] if item["event_type"] == "TASK_CREATED")
+        assert creation["id"] == f"task_created:{created.id}"
+        assert creation["kind"] == "task_activity"
+        assert creation["task_id"] == created.id
+        assert creation["actor_name"] is None and creation["actor_user_id"] is None
+        assert page["previous_day"] == "2026-11-23"
+        assert page["next_offset"] is None
+
+        # The previous-day lookup retains kind/text/task/actor filters and timezone.
+        for additional, count, previous in [
+            ({"q": "Создана задача"}, 1, "2026-11-23"),
+            ({"task_id": created.id}, 1, None),
+            ({"actor_user_id": user.id}, 1, None),
+            ({"kind": "task_comment"}, 0, None),
+            ({"task_id": moved.id}, 0, None),
+            ({"include_previous": "false"}, 2, None),
+            ({"offset": 1}, 1, None),
+        ]:
+            filtered = (await client.get(path, params={**params, **additional})).json()
+            assert len(filtered["items"]) == count, additional
+            assert filtered["previous_day"] == previous, additional
+
+        exact = await client.get(path, params={**params, "event_id": creation["id"]})
+        assert exact.json() == {
+            "items": [creation], "next_offset": None, "previous_day": None,
+        }
+        # Year 1 has no previous calendar day; there must be no date underflow.
+        edge = await client.get(
+            path,
+            params={"since": "0001-01-01", "until": "0001-01-01", "include_previous": True},
+        )
+        assert edge.status_code == 200 and edge.json()["previous_day"] is None

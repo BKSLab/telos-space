@@ -39,6 +39,10 @@ class ProjectHistoryQuery(BaseModel):
     )
     since: date | None = Field(None, description="Первый местный день периода включительно.")
     until: date | None = Field(None, description="Последний местный день периода включительно.")
+    include_previous: bool = Field(
+        False,
+        description="На первой странице вернуть ближайший день с событиями до since с теми же фильтрами.",
+    )
 
     @field_validator("timezone")
     @classmethod
@@ -99,3 +103,4 @@ class ProjectHistoryItem(BaseModel):
 class ProjectHistoryPage(BaseModel):
     items: list[ProjectHistoryItem]
     next_offset: int | None
+    previous_day: date | None = None

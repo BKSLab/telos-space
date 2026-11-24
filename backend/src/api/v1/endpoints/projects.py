@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
     operation_id="getProjectHistory",
     summary="Получить объединённую историю проекта",
     description="Читает доступные источники истории проекта от новых к старым. Для API-ключа требуются projects:read, tasks:read и knowledge:read.",
-    response_description="Страница событий и смещение следующей страницы.",
+    response_description="Страница событий, смещение следующей страницы и запрошенный день более ранних событий.",
     responses={
         401: {"description": "Требуется авторизация."},
         403: FORBIDDEN_RESPONSE,

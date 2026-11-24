@@ -101,6 +101,16 @@ class ProjectHistoryRepository:
         risk = ProjectRisk
         branches = {
             "task_activity": [
+                # created_at proves creation, but today's reporter does not prove its author.
+                # Keep the same conservative project boundary as other legacy task sources.
+                _event(
+                    Task,
+                    "task_activity",
+                    func.concat("Создана задача · ", Task.title),
+                    prefix="task_created",
+                    event_type=literal("TASK_CREATED"),
+                    task_id=Task.id,
+                ).join(tasks, tasks.c.id == Task.id),
                 _event(
                     activity,
                     "task_activity",

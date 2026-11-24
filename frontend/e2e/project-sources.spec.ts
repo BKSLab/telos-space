@@ -11,15 +11,17 @@ function historyPage<T extends { id: string; kind: string; created_at: string; t
         const parts = new Intl.DateTimeFormat("en", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(stamp));
         return ["year", "month", "day"].map(type => parts.find(part => part.type === type)!.value).join("-");
     };
-    const selected = items.filter(item => (!query.get("kind") || item.kind === query.get("kind"))
+    const matching = items.filter(item => (!query.get("kind") || item.kind === query.get("kind"))
         && (!query.get("event_id") || item.id === query.get("event_id"))
-        && (!query.get("since") || localDay(item.created_at) >= query.get("since")!)
         && (!query.get("until") || localDay(item.created_at) <= query.get("until")!)
         && (!query.get("q") || `${item.title} ${item.detail ?? ""}`.includes(query.get("q")!)))
         .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const selected = matching.filter(item => !query.get("since") || localDay(item.created_at) >= query.get("since")!);
+    const previous_day = query.get("include_previous") === "true" && query.get("since")
+        ? matching.map(item => localDay(item.created_at)).find(day => day < query.get("since")!) ?? null : null;
     const offset = Number(query.get("offset") ?? 0);
     const limit = Number(query.get("limit") ?? 20);
-    return { items: selected.slice(offset, offset + limit), next_offset: offset + limit < selected.length ? offset + limit : null };
+    return { items: selected.slice(offset, offset + limit), next_offset: offset + limit < selected.length ? offset + limit : null, previous_day };
 }
 
 function connection(id: number, name: string, ref: string): GitConnection {
@@ -220,7 +222,8 @@ test("история загружает неделю целиком и доба�
     await expect(page.getByRole("button", { name: /Развернуть 13 ноября/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Развернуть 20 ноября/ })).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("button", { name: /Развернуть 13 ноября/ })).toHaveAttribute("aria-expanded", "false");
-    await page.getByRole("button", { name: "Загрузить более ранние события" }).click();
+    // Activate directly: Playwright's action scroll would independently trigger auto-loading.
+    await page.getByRole("button", { name: "Загрузить более ранние события" }).dispatchEvent("click");
     await expect(page.getByRole("button", { name: /Развернуть 30 октября/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "Загрузить более ранние события" })).toHaveCount(0);
     const ids = await page.locator(".history-event").evaluateAll(elements => elements.map(element => element.id));

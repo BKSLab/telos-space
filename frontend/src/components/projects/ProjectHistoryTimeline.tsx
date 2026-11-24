@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, CalendarDays, ChevronDown, CircleDot, ClipboardList, FileText, Flag, Link2, MessageSquare, Search, ShieldAlert, X } from "lucide-react";
-import { api, endpoints, queryKeys } from "@/lib/api";
+import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { EmptyState, ErrorMessage, Skeleton } from "@/components/ui/States";
@@ -90,7 +90,8 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
     const invalidDates = !!(draft.since && draft.until && draft.since > draft.until);
     const filtered = Object.values(filters).some(Boolean);
     const results = useProjectHistory(projectId, filters, timezone, today, selectedEvent);
-    const weeks = results.error && !results.isFetchNextPageError ? undefined : results.data?.pages;
+    const accessError = results.error instanceof ApiError && [401, 403, 404].includes(results.error.status);
+    const weeks = accessError || !results.data?.pages.length ? undefined : results.data.pages;
     const page = weeks ? { items: [...new Map(weeks.flatMap(week => week.items).map(item => [item.id, item])).values()] } : undefined;
     const sentinel = useRef<HTMLDivElement>(null);
     const { hasNextPage, isFetching, isFetchNextPageError, fetchNextPage } = results;
@@ -204,11 +205,11 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
         {selectedEvent && <div className="flex flex-wrap items-center gap-2 text-[13px]"><span>Событие по ссылке</span><Button size="sm" onClick={() => navigate(filters)}>Вернуться к ленте</Button></div>}
         <div className="flex flex-wrap items-baseline justify-between gap-2 text-[12px] text-muted">
             <details><summary className="cursor-pointer py-2">Какие события здесь видны</summary><p className="mt-2 max-w-3xl">Сохранённые изменения задач и паспорта, комментарии, версии отчётов, сроки проекта, добавление рисков и документов. После переноса или удаления задачи история может быть неполной. Код доступен в разделе «Код и репозитории».</p></details>
-            <span>Время: {timezone}</span>
+            <div className="flex flex-wrap items-center gap-2"><span>Время: {timezone}</span><Button size="sm" variant="ghost" disabled={results.isFetching} onClick={() => void results.refetch()}>{results.isRefetching ? "Обновляем…" : "Обновить историю"}</Button></div>
         </div>
         {copyStatus && <p role="status" className="text-[12px] text-muted">{copyStatus}</p>}
         {results.isPending && <div role="status" aria-label="Загрузка истории" className="space-y-3"><Skeleton className="h-20" /><Skeleton className="h-20" /></div>}
-        {results.error && !results.isFetchNextPageError && <ErrorMessage message={results.error.message} action={<Button size="sm" onClick={() => void results.refetch()}>Повторить</Button>} />}
+        {results.error && (!results.isFetchNextPageError || accessError) && <ErrorMessage message={weeks ? "Не удалось обновить историю. Показаны ранее загруженные события." : results.error.message} action={<Button size="sm" disabled={results.isFetching} onClick={() => void results.refetch()}>Повторить</Button>} />}
         {page?.items.length === 0 && <EmptyState title={selectedEvent ? "Событие недоступно или удалено" : results.hasNextPage ? "За загруженную неделю событий нет" : filtered ? "События по фильтрам не найдены" : "История пока пуста"} description={results.hasNextPage ? "Прокрутите вниз или загрузите более ранние события." : undefined} />}
         {days.size > 0 && <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-subtle pb-2">
             <span className="text-[12px] text-muted">Загружено: {eventCount(page!.items.length)} · дат: {days.size}</span>

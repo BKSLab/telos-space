@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useUiStore } from "@/stores/ui";
 import { ProjectHistoryTimeline } from "./ProjectHistoryTimeline";
 import { historyDayKey, historyPeriod, historyValue } from "@/lib/projectHistory";
@@ -12,13 +12,13 @@ const clients: QueryClient[] = [];
 let nextProjectId = 100;
 const event = { id: "task_report:91", kind: "task_report", title: "Отчёт · Импорт · v2", detail: "Импорт реализован", created_at: "2026-11-20T09:30:00Z", actor_name: "Иван Петров", actor_user_id: 3, task_id: 12, report_id: 91, report_revision: 2 };
 function Location() { return <output data-testid="url">{useLocation().search}</output>; }
-function setup(search = "?view=history", items = [event], projectId = nextProjectId++) {
+function setup(search = "?view=history", items = [event], projectId = nextProjectId++, previous_day: string | null = null) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     clients.push(client);
     const get = vi.spyOn(api, "get").mockImplementation(async path => {
         if (path.includes("/members")) return [{ user: { id: 3, username: "ivan", first_name: "Иван", last_name: "Петров", middle_name: null, has_avatar: false } }];
         if (path.endsWith("/tasks")) return [{ id: 12, title: "Импорт" }];
-        return { items, next_offset: null };
+        return { items, next_offset: null, previous_day };
     });
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[`/projects/DEMO/knowledge${search}`]}><ProjectHistoryTimeline projectId={projectId} projectKey="DEMO" /><Location /></MemoryRouter></QueryClientProvider>);
     return get;
@@ -68,7 +68,7 @@ it("сохраняет раскрытую прошлую дату после у�
 it("keeps map parameters when removing a history filter and resets pagination", async () => {
     const get = setup("?view=history&mq=решение&category=decisions&q=Импорт&kind=task_report&offset=20&timezone=Europe%2FSamara");
     await screen.findByText(event.title);
-    expect(get).toHaveBeenCalledWith(expect.stringContaining("timezone=Europe%2FSamara"));
+    expect(get).toHaveBeenCalledWith(expect.stringContaining("timezone=Europe%2FSamara"), { signal: expect.any(AbortSignal) });
     expect(screen.getByRole("heading", { name: /20 ноября/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Убрать фильтр: Поиск: Импорт" }));
     const url = new URLSearchParams(screen.getByTestId("url").textContent!);
@@ -82,7 +82,7 @@ it("opens a linked event independently of list filters and restores the list", a
     const query = new URL(get.mock.calls.find(([path]) => path.includes("/history"))![0], "https://example.org").searchParams;
     expect(query.get("event_id")).toBe("task_report:91"); expect(query.has("q")).toBe(false); expect(query.get("offset")).toBe("0");
     fireEvent.click(screen.getByRole("button", { name: "Вернуться к ленте" }));
-    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringContaining("q=%D0%B4%D1%80%D1%83%D0%B3%D0%BE%D0%B5")));
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringContaining("q=%D0%B4%D1%80%D1%83%D0%B3%D0%BE%D0%B5"), { signal: expect.any(AbortSignal) }));
     expect(new URLSearchParams(screen.getByTestId("url").textContent!).get("offset")).toBeNull();
 });
 
@@ -101,5 +101,69 @@ it("selects an exact author and task and sends their IDs", async () => {
     fireEvent.click(await screen.findByRole("option", { name: "Петров Иван" }));
     fireEvent.change(screen.getByLabelText("Задача", { exact: true }), { target: { value: "12" } });
     fireEvent.click(screen.getByRole("button", { name: "Найти" }));
-    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/actor_user_id=3&task_id=12/)));
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/actor_user_id=3&task_id=12/), { signal: expect.any(AbortSignal) }));
+});
+
+it("keeps cached events and date expansion after a failed refresh and retries manually", async () => {
+    const get = setup("?view=history&timezone=UTC", [{ ...event, created_at: "2026-11-19T10:00:00Z" }]);
+    fireEvent.click(await screen.findByRole("button", { name: /Развернуть 19 ноября/ }));
+    get.mockRejectedValue(new Error("offline"));
+    fireEvent.click(screen.getByRole("button", { name: "Обновить историю" }));
+    await screen.findByText("Не удалось обновить историю. Показаны ранее загруженные события.");
+    expect(screen.getByText(event.title).closest("[hidden]")).toBeNull();
+    expect(screen.getByRole("button", { name: /Свернуть 19 ноября/ }).getAttribute("aria-expanded")).toBe("true");
+    get.mockResolvedValue({ items: [{ ...event, title: "Обновлённый отчёт", created_at: "2026-11-19T10:00:00Z" }], next_offset: null });
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
+    await screen.findByText("Обновлённый отчёт");
+    expect(screen.queryByText(event.title)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it.each([401, 403, 404])("hides cached events when refreshed access is rejected with %i", async status => {
+    const get = setup();
+    await screen.findByText(event.title);
+    get.mockRejectedValue(new ApiError(status, "Доступ недоступен"));
+    await act(async () => { await clients.at(-1)!.invalidateQueries({ queryKey: ["projects"] }); });
+    await screen.findByText("Доступ недоступен");
+    expect(screen.queryByText(event.title)).toBeNull();
+});
+
+it.each(["refresh", "older window"] as const)("does not restore denied events after offline retry of %s and restores them after success", async operation => {
+    const get = setup("?view=history", [event], nextProjectId++, "2026-11-10");
+    await screen.findByText(event.title);
+    get.mockRejectedValue(new ApiError(403, "Доступ к проекту отозван"));
+    fireEvent.click(screen.getByRole("button", { name: operation === "refresh" ? "Обновить историю" : "Загрузить более ранние события" }));
+    await screen.findByText("Доступ к проекту отозван");
+    expect(screen.queryByText(event.title)).toBeNull();
+    get.mockRejectedValue(new Error("offline"));
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
+    await screen.findByText("offline");
+    expect(screen.queryByText(event.title)).toBeNull();
+    expect(screen.queryByText("История пока пуста")).toBeNull();
+    get.mockResolvedValue({ items: [event], next_offset: null, previous_day: null });
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
+    await screen.findByText(event.title);
+    expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("keeps visible history when loading an older window fails", async () => {
+    const get = setup("?view=history", [event], nextProjectId++, "2026-11-10");
+    await screen.findByText(event.title);
+    // Earlier windows only load after an explicit request or user scrolling.
+    expect(get).toHaveBeenCalledTimes(1);
+    get.mockRejectedValue(new Error("offline"));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить более ранние события" }));
+    await screen.findByText("Не удалось загрузить более раннюю историю. Уже загруженные события сохранены.");
+    expect(screen.getByText(event.title)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Повторить загрузку истории" })).toBeTruthy();
+});
+
+it("hides cached events and explains lost access during loading an older window", async () => {
+    const get = setup("?view=history", [event], nextProjectId++, "2026-11-10");
+    await screen.findByText(event.title);
+    get.mockRejectedValue(new ApiError(403, "Доступ к проекту отозван"));
+    fireEvent.click(screen.getByRole("button", { name: "Загрузить более ранние события" }));
+    await screen.findByText("Доступ к проекту отозван");
+    expect(screen.queryByText(event.title)).toBeNull();
+    expect(screen.getByRole("button", { name: "Повторить" })).toBeTruthy();
 });
