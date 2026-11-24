@@ -19,7 +19,7 @@ import {
     STICKER_SIZE_PRESETS,
     type BoardStickerSize,
 } from "@/lib/board/stickers";
-import type { Task } from "@/lib/types";
+import type { TaskListItem } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/States";
@@ -32,7 +32,7 @@ interface BoardStickerDialogProps {
     /** null — свободная доска: проекта нет, связь с задачами недоступна. */
     projectId: number | null;
     sticker: BoardSticker | null;
-    tasks: Task[];
+    tasks: TaskListItem[];
     tasksLoading: boolean;
     isSaving: boolean;
     error: string | null;
@@ -68,11 +68,12 @@ export function BoardStickerDialog({
         return () => window.clearTimeout(timeoutId);
     }, [requestedTaskSearch]);
 
-    const serverSearchEnabled = debouncedTaskSearch.length >= 3;
+    const serverSearchEnabled = debouncedTaskSearch.length > 0;
     const taskSearchQuery = useQuery({
-        queryKey: queryKeys.tasks(projectId ?? 0, debouncedTaskSearch),
-        queryFn: () => api.get<Task[]>(
+        queryKey: queryKeys.tasks(projectId ?? 0, debouncedTaskSearch), staleTime: 30_000,
+        queryFn: ({ signal }) => api.get<TaskListItem[]>(
             `${endpoints.projectTasks(projectId!)}?search=${encodeURIComponent(debouncedTaskSearch)}`,
+            { signal },
         ),
         enabled: serverSearchEnabled && projectId !== null,
         retry: 1,
@@ -95,7 +96,7 @@ export function BoardStickerDialog({
         )
         : tasks;
     const visibleTasks = limitStickerTaskResults(resultTasks);
-    const waitingForServer = requestedTaskSearch.length >= 3
+    const waitingForServer = requestedTaskSearch.length > 0
         && (!serverResultsReady || taskSearchQuery.isPending);
     const resultsLoading = searchIsActive
         ? localResults.length === 0 && (tasksLoading || waitingForServer)

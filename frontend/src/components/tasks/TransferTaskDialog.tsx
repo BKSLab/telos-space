@@ -35,8 +35,7 @@ export function TransferTaskDialog({ task, kind, onClose, onMoved }: TransferTas
     const queryClient = useQueryClient();
     const toast = useToast();
     const projectsQuery = useQuery({
-        queryKey: queryKeys.projects,
-        queryFn: () => api.get<Project[]>(endpoints.projects()),
+        queryKey: queryKeys.projects, staleTime: 30_000, queryFn: () => api.get<Project[]>(endpoints.projects()),
     });
     const options = useMemo(
         () => transferOptions(task, kind, projectsQuery.data ?? []),

@@ -4,22 +4,24 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import type { ProjectStage, Task } from "@/lib/types";
+import type { ProjectStage, TaskListItem } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
 import { TasksPage } from "./TasksPage";
+import { copyText } from "@/lib/clipboard";
 
 vi.mock("@/lib/useProjectOutlet", () => ({ useProjectOutlet: () => ({ id: 1, key: "DEMO" }) }));
 vi.mock("@/lib/useRisks", () => ({ useRiskTaskCounts: () => ({ data: {} }) }));
 vi.mock("@/lib/toast", () => ({ useToast: () => ({ error: vi.fn() }) }));
 vi.mock("@/components/tasks/CreateTaskDialog", () => ({ CreateTaskDialog: () => null }));
+vi.mock("@/lib/clipboard", () => ({ copyText: vi.fn().mockResolvedValue(undefined) }));
 
 const stages: ProjectStage[] = [
     { id: 1, project_id: 1, name: "План", color: "#58a6ff", order_index: 0, is_done_stage: false },
     { id: 2, project_id: 1, name: "Готово", color: "#3fb950", order_index: 1, is_done_stage: true },
 ];
-function task(id: number, stageId: number, priority: Task["priority"], position = 1000): Task {
+function task(id: number, stageId: number, priority: TaskListItem["priority"], position = 1000): TaskListItem {
     return { id, revision: 1, project_id: 1, stage_id: stageId, position, key: `DEMO-${id}`, number: id, title: `Подготовка ${id}`,
-        description_md: null, priority, role: null, assignee: null, participants: [], start_date: null, due_date: null,
+        description_preview: null, priority, role: null, assignee: null, participants: [], start_date: null, due_date: null,
         baseline_start_date: null, baseline_due_date: null, completed_at: null, created_at: "2026-11-16", updated_at: "2026-11-16",
         comments_count: 0, last_comment: null, search_match_source: null, search_title: null, search_excerpt: null, wbs_node_id: null };
 }
@@ -116,4 +118,15 @@ it("неизвестный вид использует канбан", () => {
     setup("/projects/DEMO/tasks?view=unknown");
     expect(screen.getByRole("link", { name: "Канбан" }).getAttribute("aria-current")).toBe("page");
     expect(screen.queryByRole("table")).toBeNull();
+});
+
+it("копирует ключ и полное название в канбане без открытия задачи", async () => {
+    setup();
+    const card = screen.getByRole("heading", { name: "Подготовка 10" }).closest(".surface-card")!;
+    const button = within(card as HTMLElement).getByRole("button", { name: "Скопировать ключ и название" });
+    expect(button.closest("button button")).toBeNull();
+    fireEvent.click(button);
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith("DEMO-10 Подготовка 10"));
+    expect(useUiStore.getState().selectedTaskId).toBeNull();
+    expect(within(card as HTMLElement).getByRole("status").textContent).toBe("Ключ и название скопированы");
 });

@@ -11,21 +11,23 @@ import { PortfolioPage } from "@/routes/PortfolioPage";
 import { NewProjectPage } from "@/routes/NewProjectPage";
 import { ProjectTeamPage } from "@/routes/ProjectTeamPage";
 import { TasksPage } from "@/routes/TasksPage";
-import { ProjectDocumentsPage } from "@/routes/ProjectDocumentsPage";
-import { DocumentDetailPage } from "@/routes/DocumentDetailPage";
-import { ProjectSettingsPage } from "@/routes/ProjectSettingsPage";
 import { ProjectConversationsPage } from "@/routes/ProjectConversationsPage";
-import { ProjectKnowledgePage } from "@/routes/ProjectKnowledgePage";
 import { ProjectChatPage } from "@/routes/ProjectChatPage";
-import { ProjectOverviewPage } from "@/routes/ProjectOverviewPage";
-import { ProjectRisksPage } from "@/routes/ProjectRisksPage";
 import { ProfilePage } from "@/routes/ProfilePage";
 import { LoginPage } from "@/routes/LoginPage";
 import { RegisterPage } from "@/routes/RegisterPage";
 import { NotFoundPage } from "@/routes/NotFoundPage";
 import { Skeleton } from "@/components/ui/States";
+
+const ProjectDocumentsPage = lazy(() => import("@/routes/ProjectDocumentsPage").then(module => ({ default: module.ProjectDocumentsPage })));
+const DocumentDetailPage = lazy(() => import("@/routes/DocumentDetailPage").then(module => ({ default: module.DocumentDetailPage })));
+const ProjectSettingsPage = lazy(() => import("@/routes/ProjectSettingsPage").then(module => ({ default: module.ProjectSettingsPage })));
+const ProjectKnowledgePage = lazy(() => import("@/routes/ProjectKnowledgePage").then(module => ({ default: module.ProjectKnowledgePage })));
+const ProjectOverviewPage = lazy(() => import("@/routes/ProjectOverviewPage").then(module => ({ default: module.ProjectOverviewPage })));
+const ProjectRisksPage = lazy(() => import("@/routes/ProjectRisksPage").then(module => ({ default: module.ProjectRisksPage })));
 const GlobalChatPage = lazy(() => import("@/routes/GlobalChatPage"));
 const HelpPage = lazy(() => import("@/routes/HelpPage").then(module => ({ default: module.HelpPage })));
+const MyCalendarPage = lazy(() => import("@/routes/MyCalendarPage"));
 
 /**
  * Конструктор ИСР тянет React Flow и elkjs — самые тяжёлые зависимости
@@ -47,7 +49,6 @@ const ProjectBoardPage = lazy(() =>
 const FreeBoardsPage = lazy(() =>
     import("@/routes/FreeBoardsPage").then((module) => ({ default: module.FreeBoardsPage })),
 );
-const MyCalendarPage = lazy(() => import("@/routes/MyCalendarPage"));
 
 function StructureFallback() {
     return (
@@ -97,10 +98,10 @@ function ProtectedApp() {
                             <Route path="/profile" element={<ProfilePage />} />
                             <Route path="/help/:sectionId?" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><HelpPage /></Suspense>} />
                             <Route path="/projects/:projectKey" element={<ProjectLayout />}>
-                                <Route index element={<ProjectOverviewPage />} />
+                                <Route index element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><ProjectOverviewPage /></Suspense>} />
                                 <Route path="team" element={<ProjectTeamPage />} />
                                 <Route path="tasks" element={<TasksPage />} />
-                                <Route path="risks" element={<ProjectRisksPage />} />
+                                <Route path="risks" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><ProjectRisksPage /></Suspense>} />
                                 <Route
                                     path="calendar"
                                     element={
@@ -125,12 +126,12 @@ function ProtectedApp() {
                                         </Suspense>
                                     }
                                 />
-                                <Route path="docs" element={<ProjectDocumentsPage />} />
-                                <Route path="docs/:documentRef" element={<DocumentDetailPage />} />
+                                <Route path="docs" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><ProjectDocumentsPage /></Suspense>} />
+                                <Route path="docs/:documentRef" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><DocumentDetailPage /></Suspense>} />
                                 <Route path="chat" element={<ProjectChatPage />} />
                                 <Route path="conversations" element={<ProjectConversationsPage />} />
-                                <Route path="knowledge" element={<ProjectKnowledgePage />} />
-                                <Route path="settings" element={<ProjectSettingsPage />} />
+                                <Route path="knowledge" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><ProjectKnowledgePage /></Suspense>} />
+                                <Route path="settings" element={<Suspense fallback={<div className="p-5"><Skeleton className="h-48 w-full" /></div>}><ProjectSettingsPage /></Suspense>} />
                             </Route>
                             <Route path="*" element={<NotFoundPage />} />
                         </Routes>

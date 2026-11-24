@@ -11,7 +11,7 @@ import { Popover } from "@/components/ui/Popover";
 
 export default function GlobalChatPage() {
     const userId = useCurrentUser().data?.id ?? 0;
-    const projects = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()) }).data ?? [];
+    const projects = useQuery({ queryKey: queryKeys.projects, staleTime: 30_000, queryFn: () => api.get<Project[]>(endpoints.projects()) }).data ?? [];
     const navigate = useNavigate();
     const choose = (value: string) => {
         const project = projects.find(item => `project:${item.id}` === value);

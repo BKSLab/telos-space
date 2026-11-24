@@ -1,4 +1,4 @@
-import type { ProjectStage, Task } from "@/lib/types";
+import type { ProjectStage, TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { UserIdentity } from "@/components/users/UserIdentity";
 import { PriorityBadge, StatusDot } from "@/components/ui/Badge";
@@ -6,7 +6,7 @@ import { DueDate } from "@/components/ui/DueDate";
 import { SearchHighlight } from "@/components/ui/SearchHighlight";
 
 interface TasksTableProps {
-    tasks: Task[];
+    tasks: TaskListItem[];
     stages: ProjectStage[];
     selectedTaskId: number | null;
     onTaskOpen: (taskId: number) => void;

@@ -119,7 +119,7 @@ def build_service(
     if projects_repository is None:
         projects.get_by_id.return_value = PROJECT
     comments_repository = AsyncMock(spec=TaskCommentsRepository)
-    comments_repository.get_all.return_value = []
+    comments_repository.get_task_context.return_value = {}
     participants = participants_repository or AsyncMock(spec=TaskParticipantsRepository)
     if participants_repository is None:
         participants.get_by_task_ids.return_value = {}
@@ -374,12 +374,8 @@ async def test_update_task_records_history_and_reindexes_only_semantic_fields() 
     по которому ищет агент: переиндексация на них — лишняя работа.
     """
     tasks_repository = AsyncMock(spec=TasksRepository)
-    tasks_repository.get_by_id.return_value = make_task(
-        priority=TaskPriority.LOW, assignee="Иван"
-    )
-    tasks_repository.update.return_value = make_task(
-        priority=TaskPriority.URGENT, assignee="Мария"
-    )
+    tasks_repository.get_by_id.return_value = make_task(priority=TaskPriority.LOW, assignee="Иван")
+    tasks_repository.update.return_value = make_task(priority=TaskPriority.URGENT, assignee="Мария")
     activity_repository = AsyncMock(spec=TaskActivityRepository)
     knowledge_events = AsyncMock(spec=KnowledgeEvents)
     await build_service(
@@ -488,9 +484,7 @@ async def test_move_task_rejects_foreign_stage_and_ignores_empty_move() -> None:
     )
 
     with pytest.raises(ProjectStageForeignProjectError) as exc_info:
-        await build_service(tasks_repository, stages_repository).move_task(
-            task_id=10, stage_id=9
-        )
+        await build_service(tasks_repository, stages_repository).move_task(task_id=10, stage_id=9)
     assert exc_info.value.status_code == 409
     tasks_repository.update.assert_not_awaited()
 
@@ -617,7 +611,28 @@ async def test_missing_task_is_404_and_repository_failure_is_500() -> None:
     assert not_found.value.status_code == 404
 
     tasks_repository = AsyncMock(spec=TasksRepository)
-    tasks_repository.get_by_project.side_effect = TasksRepositoryError("БД недоступна")
+    tasks_repository.get_list_by_project.side_effect = TasksRepositoryError("БД недоступна")
     with pytest.raises(TasksServiceError) as failure:
         await build_service(tasks_repository).get_task_list(project_id=1)
     assert failure.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_task_list_uses_bounded_projection_and_preserves_full_detail() -> None:
+    """Список не отдаёт длинные поля, detail сохраняет полное описание."""
+    task = make_task(description_md="Полное описание " * 1000)
+    task.description_preview = task.description_md[:320]
+    tasks = AsyncMock(spec=TasksRepository)
+    tasks.get_list_by_project.return_value = [task]
+    tasks.get_by_id.return_value = task
+    service = build_service(tasks)
+    service.comments_repository.get_task_context.return_value = {task.id: (5, "Превью")}
+    rows = await service.get_task_list(project_id=1)
+    payload = rows[0].model_dump()
+    assert payload["description_preview"] == task.description_md[:320]
+    assert payload["comments_count"] == 5
+    assert payload["last_comment"] == "Превью"
+    assert not {"description_md", "checklist", "checklist_revision"} & payload.keys()
+    assert payload["key"] == "PROJ-42"
+    detail = await service.get_task(task_id=task.id)
+    assert detail.description_md == task.description_md

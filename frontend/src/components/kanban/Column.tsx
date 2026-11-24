@@ -1,7 +1,7 @@
 import { useDroppable } from "@dnd-kit/core";
 import { useDraggable } from "@dnd-kit/core";
 import type { CSSProperties } from "react";
-import type { ProjectStage, Task } from "@/lib/types";
+import type { ProjectStage, TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { StatusDot } from "@/components/ui/Badge";
 import { TaskCard } from "@/components/kanban/TaskCard";
@@ -16,7 +16,7 @@ function DraggableTask({
     moving,
     onMoveTask,
 }: {
-    task: Task;
+    task: TaskListItem;
     riskCount: number;
     isDone: boolean;
     isSelected: boolean;
@@ -47,7 +47,7 @@ function DraggableTask({
 interface ColumnProps {
     riskCounts: Record<string, number>;
     stage: ProjectStage;
-    tasks: Task[];
+    tasks: TaskListItem[];
     activeStageId: number | null;
     selectedTaskId: number | null;
     onTaskOpen: (taskId: number) => void;

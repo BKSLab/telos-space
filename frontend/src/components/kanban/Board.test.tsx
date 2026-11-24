@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ProjectStage, Task } from "@/lib/types";
+import type { ProjectStage, TaskListItem } from "@/lib/types";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import { Board } from "./Board";
 
@@ -15,9 +15,9 @@ const stages: ProjectStage[] = [
     { id: 1, project_id: 1, name: "План", color: "#fff", order_index: 0, is_done_stage: false },
     { id: 2, project_id: 1, name: "В работе", color: "#fff", order_index: 1, is_done_stage: false },
 ];
-function task(id: number, stageId: number, position: number): Task {
+function task(id: number, stageId: number, position: number): TaskListItem {
     return { revision: 1, id, project_id: 1, stage_id: stageId, position, key: `DEMO-${id}`, number: id, title: `Задача ${id}`,
-        description_md: null, priority: "MEDIUM", role: null, assignee: null, participants: [], start_date: null, due_date: null,
+        description_preview: null, priority: "MEDIUM", role: null, assignee: null, participants: [], start_date: null, due_date: null,
         baseline_start_date: null, baseline_due_date: null, completed_at: null, created_at: "2026-01-01", updated_at: "2026-01-01",
         comments_count: 0, last_comment: null, search_match_source: null, search_title: null, search_excerpt: null, wbs_node_id: null };
 }
@@ -36,7 +36,7 @@ describe("kanban stage picker", () => {
         const { client, onOpen } = setup();
         fireEvent.change(screen.getByLabelText("Стадия задачи DEMO-10"), { target: { value: "2" } });
         await waitFor(() => expect(patch).toHaveBeenCalledWith(endpoints.taskStagePlacement(10), { stage_id: 2, position: 6000 }));
-        expect(client.getQueryData<Task[]>(queryKeys.tasks(1, ""))?.find(item => item.id === 10)).toMatchObject({ stage_id: 2, position: 6000 });
+        expect(client.getQueryData<TaskListItem[]>(queryKeys.tasks(1, ""))?.find(item => item.id === 10)).toMatchObject({ stage_id: 2, position: 6000 });
         expect(onOpen).not.toHaveBeenCalled();
     });
 

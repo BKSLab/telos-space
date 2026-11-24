@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import type { ProjectStage, Task } from "@/lib/types";
+import type { ProjectStage, Task, TaskListItem } from "@/lib/types";
 import { useToast } from "@/lib/toast";
 import { useRiskTaskCounts } from "@/lib/useRisks";
 import { Column } from "@/components/kanban/Column";
@@ -25,8 +25,8 @@ const POSITION_STEP = 1000;
 interface BoardProps {
     projectId: number;
     stages: ProjectStage[];
-    tasks: Task[];
-    allTasks?: Task[];
+    tasks: TaskListItem[];
+    allTasks?: TaskListItem[];
     search: string;
     selectedTaskId: number | null;
     onTaskOpen: (taskId: number) => void;
@@ -55,7 +55,7 @@ export function Board({
         useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 8 } }),
         useSensor(KeyboardSensor),
     );
-    const [activeTask, setActiveTask] = useState<Task | null>(null);
+    const [activeTask, setActiveTask] = useState<TaskListItem | null>(null);
     const [visibleStageId, setVisibleStageId] = useState(stages[0]?.id ?? 0);
     const scrollRef = useRef<HTMLDivElement>(null);
     const visibleStageIndex = Math.max(0, stages.findIndex(stage => stage.id === visibleStageId));
@@ -69,7 +69,7 @@ export function Board({
     }
 
     const tasksByStage = useMemo(() => {
-        const map = new Map<number, Task[]>();
+        const map = new Map<number, TaskListItem[]>();
         for (const stage of stages) {
             map.set(stage.id, []);
         }
@@ -89,8 +89,8 @@ export function Board({
             api.patch<Task>(endpoints.taskStagePlacement(taskId), { stage_id: stageId, position }),
         onMutate: async (variables) => {
             await queryClient.cancelQueries({ queryKey: tasksKey });
-            const previous = queryClient.getQueryData<Task[]>(tasksKey);
-            queryClient.setQueryData<Task[]>(tasksKey, (old) =>
+            const previous = queryClient.getQueryData<TaskListItem[]>(tasksKey);
+            queryClient.setQueryData<TaskListItem[]>(tasksKey, (old) =>
                 (old ?? []).map((task) =>
                     task.id === variables.taskId
                         ? { ...task, stage_id: variables.stageId, position: variables.position }

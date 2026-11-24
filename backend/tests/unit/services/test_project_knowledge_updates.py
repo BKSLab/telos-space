@@ -1,6 +1,7 @@
 """Границы DB/CPU, общий deadline и server-side scopes карты."""
 
 import asyncio
+import threading
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from types import SimpleNamespace
@@ -19,6 +20,7 @@ from tests.unit.knowledge.test_project_map import rows
 
 async def test_cpu_map_work_has_no_open_db_scope():
     active = False
+    loop_thread = threading.get_ident()
     knowledge = AsyncMock(spec=ProjectKnowledgeRepository)
     knowledge.ensure_state.return_value = {"generation": 0, "gaps": []}
     knowledge.get_state.return_value = {"generation": 0}
@@ -43,6 +45,7 @@ async def test_cpu_map_work_has_no_open_db_scope():
 
     def plan(snapshot, *, started_at):
         assert not active
+        assert threading.get_ident() != loop_thread
         return original(snapshot, started_at=started_at)
 
     with patch.object(service, "_plan", side_effect=plan):
@@ -76,6 +79,35 @@ async def test_deadline_cancels_blocked_snapshot_without_wallclock_assertions(mo
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(task, timeout=1)
     assert cancelled.is_set() and not blocker.is_set()
+
+
+async def test_cancelled_cpu_plan_never_enters_publish_scope():
+    entered = threading.Event()
+    release = threading.Event()
+
+    @asynccontextmanager
+    async def unused_scope():
+        raise AssertionError("Cancelled plan must not open a DB scope")
+        yield
+
+    service = ProjectKnowledgeUpdatesService(scope=unused_scope)
+
+    def plan(*_args, **_kwargs):
+        entered.set()
+        assert release.wait(timeout=2)
+
+    with patch.object(service, "_snapshot", return_value=object()), patch.object(
+        service, "_plan", side_effect=plan
+    ), patch.object(service, "_publish", new_callable=AsyncMock) as publish:
+        task = asyncio.create_task(service.process_project(1))
+        try:
+            assert await asyncio.to_thread(entered.wait, 1)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            publish.assert_not_awaited()
+        finally:
+            release.set()
 
 
 async def test_read_requires_both_server_scopes_even_when_agent_ask_is_granted(current_principal):

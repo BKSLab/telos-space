@@ -251,6 +251,10 @@ export interface Task {
     wbs_node_id: number | null;
 }
 
+export type TaskListItem = Omit<Task, "description_md" | "checklist" | "checklist_revision"> & {
+    description_preview: string | null;
+};
+
 export interface TaskCompact {
     executor?: UserSummary | null;
     checklist?: TaskChecklist | null;

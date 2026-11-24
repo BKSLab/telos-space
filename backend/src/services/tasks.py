@@ -65,6 +65,7 @@ from src.schemas.tasks import (
     ProjectBaselineResultSchema,
     TaskContextSchema,
     TaskDetailSchema,
+    TaskListSchema,
     TaskParticipantSchema,
     TaskSchema,
 )
@@ -151,7 +152,7 @@ class TasksService:
         stage_id: int | None = None,
         search: str | None = None,
         filters: TaskFilters | None = None,
-    ) -> list[TaskSchema]:
+    ) -> list[TaskListSchema]:
         """Возвращает задачи проекта с контекстом комментариев и поиска.
 
         Args:
@@ -176,7 +177,7 @@ class TasksService:
                 if search_text
                 else None
             )
-            tasks = await self.tasks_repository.get_by_project(
+            tasks = await self.tasks_repository.get_list_by_project(
                 project_id=project_id,
                 stage_id=stage_id,
                 task_ids=matching_ids,
@@ -186,7 +187,9 @@ class TasksService:
                 done = {item.id for item in stages if item.is_done_stage}
                 tasks = [task for task in tasks if task_matches(task, filters, done_stage_ids=done)]
             task_ids = [task.id for task in tasks]
-            comment_context = await self._build_comment_context(task_ids=task_ids)
+            comment_context = await self._build_comment_context(
+                task_ids=task_ids, preview_length=320
+            )
             participant_context = await self.participants_repository.get_by_task_ids(task_ids)
             task_highlights = (
                 await self.tasks_repository.get_search_highlights(
@@ -205,9 +208,9 @@ class TasksService:
                 else {}
             )
 
-            result: list[TaskSchema] = []
+            result: list[TaskListSchema] = []
             for task in tasks:
-                schema = to_task_schema(
+                schema = to_task_list_schema(
                     task=task,
                     project_key=project.key,
                     participants=participant_context.get(task.id, []),
@@ -904,7 +907,6 @@ class TasksService:
             return
         raise TaskManagerRequiredError()
 
-
     async def _get_task(self, task_id: int) -> Task:
         """Возвращает задачу или поднимает доменную ошибку."""
         task = await self.tasks_repository.get_by_id(task_id=task_id)
@@ -1013,28 +1015,19 @@ class TasksService:
             project_id=project_id,
             search=search,
         )
-        comment_task_ids = await self.comments_repository.search_task_ids(search=search)
-        if comment_task_ids:
-            project_task_ids = {
-                task.id
-                for task in await self.tasks_repository.get_by_project(project_id=project_id)
-            }
-            task_ids.update(comment_task_ids & project_task_ids)
+        comment_task_ids = await self.comments_repository.search_task_ids(
+            search=search, project_id=project_id
+        )
+        task_ids.update(comment_task_ids)
         return task_ids
 
-    async def _build_comment_context(self, task_ids: list[int]) -> dict[int, tuple[int, str]]:
-        """Строит карту количества и текста последнего комментария по задачам."""
-        if not task_ids:
-            return {}
-        comments = await self.comments_repository.get_all()
-        wanted = set(task_ids)
-        context: dict[int, tuple[int, str]] = {}
-        for comment in comments:
-            if comment.task_id not in wanted:
-                continue
-            count, _ = context.get(comment.task_id, (0, ""))
-            context[comment.task_id] = (count + 1, comment.body_md)
-        return context
+    async def _build_comment_context(
+        self, task_ids: list[int], *, preview_length: int | None = None
+    ) -> dict[int, tuple[int, str]]:
+        """Читает агрегаты только выбранных задач, без загрузки истории комментариев."""
+        return await self.comments_repository.get_task_context(
+            task_ids=task_ids, preview_length=preview_length
+        )
 
     async def _record_field_changes(
         self, task: Task, data: dict, *, date_change_reason: str | None = None
@@ -1103,7 +1096,9 @@ class TasksService:
     ) -> None:
         """Меняет только разницу ролей, сохраняя ID и историю неизменных назначений."""
         if current is None:
-            current = (await self.participants_repository.get_by_task_ids([task_id])).get(task_id, [])
+            current = (await self.participants_repository.get_by_task_ids([task_id])).get(
+                task_id, []
+            )
 
         def key(item):
             if isinstance(item, dict):
@@ -1153,6 +1148,24 @@ def to_task_schema(
         Схема задачи без агрегатов комментариев и поиска.
     """
     return TaskSchema(
+        **_task_metadata(task, project_key, participants),
+        description_md=task.description_md,
+        checklist=getattr(task, "checklist", None),
+        checklist_revision=getattr(task, "checklist_revision", None) or 0,
+    )
+
+
+def to_task_list_schema(task, project_key: str, participants=None) -> TaskListSchema:
+    """Собирает ограниченную карточку без чтения чек-листа и полного описания."""
+    return TaskListSchema(
+        **_task_metadata(task, project_key, participants),
+        description_preview=task.description_preview,
+    )
+
+
+def _task_metadata(task, project_key: str, participants=None) -> dict:
+    """Общие метаданные краткой и полной карточки."""
+    return dict(
         id=task.id,
         revision=getattr(task, "revision", 1),
         kind=task_kind(task),
@@ -1163,9 +1176,6 @@ def to_task_schema(
         number=task.number,
         key=build_task_key(project_key=project_key, number=task.number),
         title=task.title,
-        description_md=task.description_md,
-        checklist=getattr(task, "checklist", None),
-        checklist_revision=getattr(task, "checklist_revision", None) or 0,
         priority=task.priority,
         role=task.role,
         assignee=task.assignee,
@@ -1273,9 +1283,7 @@ def _member_display_name(member: ProjectMember) -> str:
     return " ".join(part for part in (user.last_name, user.first_name) if part) or user.username
 
 
-def _task_context(
-    task: Task, *, projects: dict
-) -> tuple[TaskContextSchema | None, str]:
+def _task_context(task: Task, *, projects: dict) -> tuple[TaskContextSchema | None, str]:
     """Контекст задачи для общего списка и префикс её номера."""
     if task.project_id is not None and task.project_id in projects:
         project = projects[task.project_id]
@@ -1316,4 +1324,7 @@ def task_state(task: Task, stages: list) -> tuple[TaskStatus, str]:
 
 def user_display_name(user) -> str:
     """Full local user name for immutable authorship snapshots."""
-    return " ".join(part for part in (user.last_name, user.first_name, user.middle_name) if part) or user.username
+    return (
+        " ".join(part for part in (user.last_name, user.first_name, user.middle_name) if part)
+        or user.username
+    )

@@ -6,7 +6,7 @@ import { ApiError, api, endpoints, queryKeys } from "@/lib/api";
 import { pendingBoardSaves } from "@/lib/board/saveQueue";
 import type { BoardContent, Board } from "@/lib/board/types";
 import { useToast } from "@/lib/toast";
-import type { ProjectMember, Task } from "@/lib/types";
+import type { ProjectMember, TaskListItem } from "@/lib/types";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
 import { BoardEditor } from "@/components/board/BoardEditor";
 import { BoardTabs } from "@/components/board/BoardTabs";
@@ -82,8 +82,8 @@ export function ProjectBoardPage() {
         retry: 1,
     });
     const tasksQuery = useQuery({
-        queryKey: queryKeys.tasks(project.id),
-        queryFn: () => api.get<Task[]>(endpoints.projectTasks(project.id)),
+        queryKey: queryKeys.tasks(project.id), staleTime: 30_000,
+        queryFn: ({ signal }) => api.get<TaskListItem[]>(endpoints.projectTasks(project.id), { signal }),
         retry: 1,
     });
 

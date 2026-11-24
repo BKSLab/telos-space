@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, ShieldAlert } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import type { ProjectMember, Task } from "@/lib/types";
+import type { ProjectMember, TaskListItem } from "@/lib/types";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
 import { useRiskSummary } from "@/lib/useRisks";
 import { RISK_LEVEL_LABELS, RISK_STATUS_LABELS, riskQuery, type RiskPage, type RiskRating } from "@/lib/risks";
@@ -58,8 +58,8 @@ function ProjectRisksContent({ projectId, initialParams }: { projectId: number; 
         queryFn: () => api.get<ProjectMember[]>(endpoints.projectMembers(projectId)),
     });
     const tasks = useQuery({
-        queryKey: queryKeys.tasks(projectId),
-        queryFn: () => api.get<Task[]>(endpoints.projectTasks(projectId)),
+        queryKey: queryKeys.tasks(projectId), staleTime: 30_000,
+        queryFn: ({ signal }) => api.get<TaskListItem[]>(endpoints.projectTasks(projectId), { signal }),
     });
     const reset = () => {
         setSearch(""); setStatus("active"); setLevel(""); setOwner("");

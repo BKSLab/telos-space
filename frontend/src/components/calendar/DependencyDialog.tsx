@@ -3,10 +3,10 @@ import { GitBranchPlus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import type { Task, TaskDependencyInput } from "@/lib/types";
+import type { TaskListItem, TaskDependencyInput } from "@/lib/types";
 
 interface DependencyDialogProps {
-    tasks: Task[];
+    tasks: TaskListItem[];
     isLoading: boolean;
     isSaving: boolean;
     onClose: () => void;

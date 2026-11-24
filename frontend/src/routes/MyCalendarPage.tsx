@@ -213,7 +213,7 @@ function MyTasksCalendar() {
         },
         getNextPageParam: (page) => page.next_cursor ?? undefined,
     });
-    const projectsQuery = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()) });
+    const projectsQuery = useQuery({ queryKey: queryKeys.projects, staleTime: 30_000, queryFn: () => api.get<Project[]>(endpoints.projects()) });
 
     const datesMutation = useMutation({
         mutationFn: ({ taskId, dueDate, startDate, dateChangeReason, expectedRevision }: { taskId: number; dueDate: string | null; startDate: string | null; dateChangeReason?: string; expectedRevision: number }) =>

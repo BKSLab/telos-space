@@ -14,7 +14,7 @@ export function ChatWorkspace({ children }: { children: ReactNode }) {
     const location = useLocation();
     const match = useMatch("/projects/:projectKey/*");
     const projectKey = match?.params.projectKey === "new" ? undefined : match?.params.projectKey;
-    const projects = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()), enabled: userId > 0 }).data;
+    const projects = useQuery({ queryKey: queryKeys.projects, staleTime: 30_000, queryFn: () => api.get<Project[]>(endpoints.projects()), enabled: userId > 0 }).data;
     const selectedId = useChatDockStore((state) => state.projects[userId]);
     const selectProject = useChatDockStore((state) => state.selectProject);
     const selectPersonal = useChatDockStore(state => state.selectPersonal);

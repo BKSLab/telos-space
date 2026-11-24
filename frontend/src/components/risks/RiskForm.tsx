@@ -1,7 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import type { ProjectMember, Task } from "@/lib/types";
+import type { ProjectMember, TaskListItem } from "@/lib/types";
 import {
     IMPACT_LABELS, PROBABILITY_LABELS, RISK_RATINGS, RISK_STATUS_LABELS, RISK_STRATEGY_LABELS,
     previewRiskLevel, riskFormError, riskInput, type RiskInput, type RiskRating, type RiskStatus, type RiskStrategy,
@@ -32,8 +32,8 @@ export function RiskForm({ projectId, initial, formId, isSaving, error, onSave }
         queryFn: () => api.get<ProjectMember[]>(endpoints.projectMembers(projectId)),
     });
     const tasks = useQuery({
-        queryKey: queryKeys.tasks(projectId),
-        queryFn: () => api.get<Task[]>(endpoints.projectTasks(projectId)),
+        queryKey: queryKeys.tasks(projectId), staleTime: 30_000,
+        queryFn: ({ signal }) => api.get<TaskListItem[]>(endpoints.projectTasks(projectId), { signal }),
     });
     function change<K extends keyof RiskInput>(key: K, value: RiskInput[K]) {
         setDraft((current) => ({ ...current, [key]: value }));

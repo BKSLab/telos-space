@@ -38,7 +38,7 @@ export function MyTasksPage() {
         setSearchParams(current => { const next = new URLSearchParams(current); next.delete("task"); return next; }, { replace: true });
     }, [linkedTaskId, setSearchParams, setSelectedTaskId]);
     const tasks = useQuery({ queryKey: queryKeys.myTaskList(role, includeClosed, signal === "all" ? undefined : signal, projectId), queryFn: () => api.get<MyTask[]>(endpoints.myTasks(role, includeClosed, signal === "all" ? undefined : signal, projectId)) });
-    const projects = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()) });
+    const projects = useQuery({ queryKey: queryKeys.projects, staleTime: 30_000, queryFn: () => api.get<Project[]>(endpoints.projects()) });
     const { data: attention, error: attentionError } = useTaskAttention();
     const signals = useMemo(() => new Map(attention?.items.map(item => [item.task_id, item])), [attention]);
     const rows = useMemo(() => filterMyTasks(tasks.data ?? [], search).filter(task => {

@@ -28,11 +28,10 @@ export function useLogin() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (payload: LoginPayload) => api.post<User>(authEndpoints.login(), payload),
-        onSuccess: (user) => {
+        onSuccess: async (user) => {
+            await queryClient.cancelQueries();
+            queryClient.clear();
             queryClient.setQueryData(queryKeys.currentUser, user);
-            // Данные прошлой сессии не должны показаться новому пользователю.
-            queryClient.removeQueries({ queryKey: ["projects"] });
-            queryClient.removeQueries({ queryKey: queryKeys.dashboard });
         },
     });
 }
@@ -42,7 +41,9 @@ export function useRegister() {
     return useMutation({
         mutationFn: (payload: RegisterPayload) =>
             api.post<User>(authEndpoints.register(), payload),
-        onSuccess: (user) => {
+        onSuccess: async (user) => {
+            await queryClient.cancelQueries();
+            queryClient.clear();
             queryClient.setQueryData(queryKeys.currentUser, user);
         },
     });

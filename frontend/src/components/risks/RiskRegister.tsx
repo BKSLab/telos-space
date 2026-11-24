@@ -1,6 +1,6 @@
 import { CalendarClock, Link2, UserRound } from "lucide-react";
 import { formatDayMonth } from "@/lib/dates";
-import type { ProjectMember, Task } from "@/lib/types";
+import type { ProjectMember, TaskListItem } from "@/lib/types";
 import { PROBABILITY_LABELS, IMPACT_LABELS, RISK_STATUS_LABELS, isRiskReviewDue, type ProjectRisk } from "@/lib/risks";
 import { cn } from "@/lib/cn";
 import { RiskBadge } from "@/components/risks/RiskBadge";
@@ -9,7 +9,7 @@ import { UserIdentity } from "@/components/users/UserIdentity";
 interface Props {
     risks: ProjectRisk[];
     members: ProjectMember[];
-    tasks: Task[];
+    tasks: TaskListItem[];
     onOpen: (riskId: number) => void;
 }
 

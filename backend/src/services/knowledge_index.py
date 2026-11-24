@@ -216,11 +216,9 @@ class KnowledgeIndexService:
         if not action.catalog.sources:
             await self.qdrant_client.delete_collection(action.project_id)
             return 0
-        documents = [
-            chunk
-            for source in action.catalog.sources.values()
-            for chunk in source.chunks(self.chunk_target_chars, self.chunk_overlap_chars)
-        ]
+        # Чанкинг и хеширование всего проекта — CPU-фаза без сессии и сети.
+        # Большие документы не должны блокировать обработку HTTP-запросов.
+        documents = await asyncio.to_thread(self._documents, action.catalog)
         existing = await self.qdrant_client.manifest(action.project_id)
         signature = self._embedding_signature()
         for document in documents:
@@ -254,6 +252,13 @@ class KnowledgeIndexService:
         if action.extraction_errors:
             raise AiProviderError("; ".join(action.extraction_errors))
         return len(documents)
+
+    def _documents(self, catalog: ProjectCatalog) -> list[KnowledgeDocument]:
+        return [
+            chunk
+            for source in catalog.sources.values()
+            for chunk in source.chunks(self.chunk_target_chars, self.chunk_overlap_chars)
+        ]
 
     async def persist_project_file_states(self, action: PreparedIndexAction) -> None:
         """Сохраняет прогресс файлов отдельно от результата задания проекта.

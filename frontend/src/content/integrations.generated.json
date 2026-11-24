@@ -32850,14 +32850,14 @@
             "application/json": {
               "schema": {
                 "items": {
-                  "$ref": "#/components/schemas/TaskSchema"
+                  "$ref": "#/components/schemas/TaskListSchema"
                 },
                 "title": "Response Getprojecttasks",
                 "type": "array"
               }
             }
           },
-          "description": "Список задач с контекстом комментариев и поиска."
+          "description": "Список задач с превью описаний и комментариев до 320 символов; полные данные — в карточке."
         },
         "404": {
           "content": {
@@ -66564,6 +66564,349 @@
       "title": "TaskKind",
       "type": "string"
     },
+    "TaskListSchema": {
+      "description": "Список без полных описаний и чек-листов; подробности — в карточке.",
+      "properties": {
+        "assignee": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Подпись исполнителя.",
+          "examples": [
+            "Иван"
+          ],
+          "title": "Assignee"
+        },
+        "baseline_due_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Зафиксированное завершение baseline.",
+          "title": "Baseline Due Date"
+        },
+        "baseline_start_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Зафиксированное начало baseline.",
+          "title": "Baseline Start Date"
+        },
+        "comments_count": {
+          "default": 0,
+          "description": "Количество комментариев задачи.",
+          "examples": [
+            4
+          ],
+          "minimum": 0.0,
+          "title": "Comments Count",
+          "type": "integer"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Фактическое время завершения.",
+          "title": "Completed At"
+        },
+        "created_at": {
+          "description": "Дата создания задачи.",
+          "examples": [
+            "2026-09-01T10:00:00Z"
+          ],
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description_preview": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Начало описания (до 320 символов); полный текст — в карточке.",
+          "title": "Description Preview"
+        },
+        "due_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Плановая дата завершения.",
+          "examples": [
+            "2026-09-08"
+          ],
+          "title": "Due Date"
+        },
+        "id": {
+          "description": "Уникальный идентификатор задачи.",
+          "examples": [
+            142
+          ],
+          "title": "Id",
+          "type": "integer"
+        },
+        "key": {
+          "description": "Отображаемый идентификатор задачи.",
+          "examples": [
+            "PROJ-142"
+          ],
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/components/schemas/TaskKind",
+          "default": "PROJECT",
+          "description": "Вид задачи."
+        },
+        "last_comment": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Начало последнего комментария (до 320 символов).",
+          "title": "Last Comment"
+        },
+        "number": {
+          "description": "Номер задачи внутри проекта.",
+          "examples": [
+            142
+          ],
+          "title": "Number",
+          "type": "integer"
+        },
+        "participants": {
+          "description": "Ролевые назначения участников команды.",
+          "items": {
+            "$ref": "#/components/schemas/TaskParticipantSchema"
+          },
+          "title": "Participants",
+          "type": "array"
+        },
+        "position": {
+          "description": "Позиция задачи внутри стадии.",
+          "examples": [
+            1000.0
+          ],
+          "title": "Position",
+          "type": "number"
+        },
+        "priority": {
+          "$ref": "#/components/schemas/TaskPriority",
+          "examples": [
+            "HIGH"
+          ]
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Идентификатор проекта.",
+          "examples": [
+            1
+          ],
+          "title": "Project Id"
+        },
+        "revision": {
+          "default": 1,
+          "description": "Текущая версия общих полей и назначений задачи.",
+          "examples": [
+            3
+          ],
+          "minimum": 1.0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/TaskRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Ответственная роль.",
+          "examples": [
+            "BE"
+          ]
+        },
+        "search_excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Фрагмент совпадения с маркерами подсветки.",
+          "examples": [
+            "Добавить __FTS_START__фильтрацию__FTS_END__ по статусу."
+          ],
+          "title": "Search Excerpt"
+        },
+        "search_match_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Источник поискового совпадения.",
+          "examples": [
+            "title"
+          ],
+          "title": "Search Match Source"
+        },
+        "search_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Заголовок с маркерами подсветки.",
+          "examples": [
+            "__FTS_START__Фильтрация__FTS_END__ проектов"
+          ],
+          "title": "Search Title"
+        },
+        "stage_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Идентификатор текущей стадии.",
+          "examples": [
+            2
+          ],
+          "title": "Stage Id"
+        },
+        "start_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Плановая дата начала.",
+          "examples": [
+            "2026-09-01"
+          ],
+          "title": "Start Date"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/TaskStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Статус разовой задачи."
+        },
+        "title": {
+          "description": "Заголовок задачи.",
+          "examples": [
+            "Реализовать фильтрацию проектов"
+          ],
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "description": "Дата последнего обновления задачи.",
+          "examples": [
+            "2026-09-02T12:00:00Z"
+          ],
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "wbs_node_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Раздел ИСР или null, если задача не распределена.",
+          "examples": [
+            32
+          ],
+          "title": "Wbs Node Id"
+        }
+      },
+      "required": [
+        "id",
+        "project_id",
+        "stage_id",
+        "number",
+        "key",
+        "title",
+        "priority",
+        "position",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "TaskListSchema",
+      "type": "object"
+    },
     "TaskParticipantRole": {
       "description": "Роль участника команды в конкретной задаче.",
       "enum": [
@@ -66859,7 +67202,7 @@
       "type": "string"
     },
     "TaskSchema": {
-      "description": "Задача проекта с агрегированным контекстом.",
+      "description": "Полные данные задачи для адресного чтения и результатов записи.",
       "properties": {
         "assignee": {
           "anyOf": [

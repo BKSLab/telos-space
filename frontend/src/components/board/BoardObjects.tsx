@@ -3,7 +3,7 @@ import { shapePath } from "@/lib/board/geometry";
 import type { ShapeObject, StickerObject } from "@/lib/board/scene";
 import type { BoardSticker } from "@/lib/board/stickers";
 import { FONT_SIZE_PX, fillVar, strokeVar } from "@/lib/board/types";
-import type { ProjectMember, Task } from "@/lib/types";
+import type { ProjectMember, TaskListItem } from "@/lib/types";
 import { BoardStickerCard } from "@/components/board/BoardStickerCard";
 import { connectorLayout, shapeInset } from "@/components/board/boardDom";
 
@@ -124,7 +124,7 @@ interface StickerViewProps {
     readOnly: boolean;
     readOnlyHint?: string;
     members: ProjectMember[];
-    tasksById: Map<number, Task>;
+    tasksById: Map<number, TaskListItem>;
     register: RegisterElement;
     onOpenTask: (taskId: number) => void;
     onEdit: (sticker: BoardSticker, key: string) => void;

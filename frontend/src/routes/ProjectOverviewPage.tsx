@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowUpRight, CalendarClock, ChartNoAxesCombined, CheckCircle2, ChevronDown, ListTodo, Plus } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import type { ProjectMilestone, ProjectStats, Task } from "@/lib/types";
+import type { ProjectMilestone, ProjectStats, TaskListItem } from "@/lib/types";
 import { formatDayMonth } from "@/lib/dates";
 import { projectTaskFocus } from "@/lib/dashboard";
 import { latestUpdate } from "@/lib/overview";
@@ -35,7 +35,7 @@ export function ProjectOverviewPage() {
     const risks = useRiskSummary(project.id);
     const setSelectedTaskId = useUiStore(state => state.setSelectedTaskId);
     const statsQuery = useQuery({ queryKey: queryKeys.projectStats(project.id), queryFn: () => api.get<ProjectStats>(endpoints.projectStats(project.id)) });
-    const tasksQuery = useQuery({ queryKey: queryKeys.tasks(project.id), queryFn: () => api.get<Task[]>(endpoints.projectTasks(project.id)) });
+    const tasksQuery = useQuery({ queryKey: queryKeys.tasks(project.id), staleTime: 30_000, queryFn: ({ signal }) => api.get<TaskListItem[]>(endpoints.projectTasks(project.id), { signal }) });
     const milestonesQuery = useQuery({ queryKey: queryKeys.milestones(project.id), queryFn: () => api.get<ProjectMilestone[]>(endpoints.projectMilestones(project.id)) });
     const stats = statsQuery.data;
     const stageNames = new Map((stats?.stage_breakdown ?? []).map(item => [item.stage_id, item.stage_name]));

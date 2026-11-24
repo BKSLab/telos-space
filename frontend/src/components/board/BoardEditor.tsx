@@ -81,7 +81,7 @@ import { useToast } from "@/lib/toast";
 import { sceneSignature } from "@/lib/board/sceneSignature";
 import { reconcileRemoteScene } from "@/lib/board/remoteScene";
 import { changeConnectorEndpoint, editConnectorBend, type ConnectorAction } from "@/lib/board/connectorEditing";
-import type { Project, ProjectMember, Task, ProjectCreate } from "@/lib/types";
+import type { Project, ProjectMember, TaskListItem, ProjectCreate } from "@/lib/types";
 import { useUiStore } from "@/stores/ui";
 import { applyConnectorDom, applyNodeDom } from "@/components/board/boardDom";
 import { ConnectorView, ShapeView, StickerView } from "@/components/board/BoardObjects";
@@ -153,7 +153,7 @@ export interface BoardEditorProps {
     board: Board;
     content: BoardContent;
     members: ProjectMember[];
-    tasks: Task[];
+    tasks: TaskListItem[];
     tasksLoading: boolean;
     tasksError: Error | null;
     readOnly: boolean;

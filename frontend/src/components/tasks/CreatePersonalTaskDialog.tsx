@@ -28,7 +28,7 @@ export function CreatePersonalTaskDialog({ onClose, onCreated, initialDueDate, s
     const [observers, setObservers] = useState<UserSummary[]>([]);
     const [memberExecutorId, setMemberExecutorId] = useState<number | null>(null);
     const [memberObserverIds, setMemberObserverIds] = useState<number[]>([]);
-    const projects = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()), enabled: kind === "PROJECT" });
+    const projects = useQuery({ queryKey: queryKeys.projects, staleTime: 30_000, queryFn: () => api.get<Project[]>(endpoints.projects()), enabled: kind === "PROJECT" });
     const members = useQuery({ queryKey: queryKeys.projectMembers(projectId ?? 0), queryFn: () => api.get<ProjectMember[]>(endpoints.projectMembers(projectId!)), enabled: kind === "PROJECT" && projectId !== null });
     const invalidDates = Boolean(startDate && dueDate && startDate > dueDate);
     const create = useMutation({

@@ -1,8 +1,9 @@
 """Общие настройки и построение запросов полнотекстового поиска."""
 
 import re
+from unicodedata import normalize
 
-from sqlalchemy import func
+from sqlalchemy import func, literal_column
 
 HIGHLIGHT_START = "__FTS_START__"
 HIGHLIGHT_END = "__FTS_END__"
@@ -56,3 +57,10 @@ def mark_literal_match(value: str, search: str) -> str | None:
         return None
     end = start + len(search)
     return f"{value[:start]}{HIGHLIGHT_START}{value[start:end]}{HIGHLIGHT_END}{value[end:]}"
+
+
+def literal_contains(column, term: str):
+    """NFKC/регистр/ё как в UI; LIKE метасимволы считаются обычным текстом."""
+    normalized = normalize("NFKC", term).lower().replace("ё", "е")
+    value = func.replace(func.lower(func.normalize(column, literal_column("NFKC"))), "ё", "е")
+    return value.contains(normalized, autoescape=True)

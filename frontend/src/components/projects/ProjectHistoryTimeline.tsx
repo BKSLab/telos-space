@@ -10,7 +10,7 @@ import { UserSelect } from "@/components/users/UserSelect";
 import { UserIdentity } from "@/components/users/UserIdentity";
 import { useUiStore } from "@/stores/ui";
 import { projectContextLabel } from "@/lib/projectContext";
-import { fullName, type ProjectMember, type Task } from "@/lib/types";
+import { fullName, type ProjectMember, type TaskListItem } from "@/lib/types";
 import { historyDayKey, historyPeriod, historyValue } from "@/lib/projectHistory";
 import { copyText } from "@/lib/clipboard";
 import { useProjectHistory, type TimelineEvent } from "@/lib/useProjectHistory";
@@ -139,7 +139,7 @@ export function ProjectHistoryTimeline({ projectId, projectKey }: { projectId: n
         };
     }, [hasNextPage, isFetching, isFetchNextPageError, fetchNextPage, selectedEvent, groupKey]);
     const members = useQuery({ queryKey: queryKeys.projectMembers(projectId), queryFn: () => api.get<ProjectMember[]>(endpoints.projectMembers(projectId)), enabled: advanced || !!filters.actor_user_id });
-    const tasks = useQuery({ queryKey: queryKeys.tasks(projectId), queryFn: () => api.get<Task[]>(endpoints.projectTasks(projectId)), enabled: advanced || !!filters.task_id });
+    const tasks = useQuery({ queryKey: queryKeys.tasks(projectId), staleTime: 30_000, queryFn: ({ signal }) => api.get<TaskListItem[]>(endpoints.projectTasks(projectId), { signal }), enabled: advanced || !!filters.task_id });
     const users = (members.data ?? []).map(member => member.user);
     const selectedUser = users.find(user => String(user.id) === draft.actor_user_id);
     const selectedTask = (tasks.data ?? []).find(task => String(task.id) === filters.task_id);

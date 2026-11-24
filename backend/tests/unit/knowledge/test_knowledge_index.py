@@ -1,5 +1,6 @@
 """Синхронизация всего проекта с настоящим локальным Qdrant и подменой embeddings."""
 
+import threading
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -10,6 +11,7 @@ from qdrant_client import AsyncQdrantClient
 from src.clients.qdrant import ProjectQdrantClient
 from src.clients.vision import DisabledVisionCapability
 from src.exceptions.ai import AiProviderError
+from src.knowledge.catalog import ProjectSource
 from src.knowledge.context import coverage, file_issues
 from src.repositories.knowledge_source_summaries import KnowledgeSourceSummariesRepository
 from src.repositories.knowledge_sources import KnowledgeSourcesRepository
@@ -131,6 +133,26 @@ async def test_repeated_sync_is_idempotent_and_metadata_needs_no_embeddings(tmp_
     assert payloads["task:7"]["properties"]["due_date"] == "2026-10-01"
     assert "task:7" not in payloads["document:9"]["related_source_ids"]
     await service.qdrant_client.close()
+
+
+async def test_project_chunking_does_not_run_on_http_event_loop(tmp_path, monkeypatch):
+    loop_thread = threading.get_ident()
+    original = ProjectSource.chunks
+    called = []
+
+    def chunks(source, target_chars, overlap_chars):
+        assert threading.get_ident() != loop_thread
+        called.append(source.source_id)
+        return original(source, target_chars, overlap_chars)
+
+    monkeypatch.setattr(ProjectSource, "chunks", chunks)
+    service = build_service(tmp_path)
+    try:
+        action = await sync(service)
+        assert set(called) == set(action.catalog.sources)
+        assert await service.qdrant_client.manifest(1)
+    finally:
+        await service.qdrant_client.close()
 
 
 async def test_production_cache_only_indexer_never_reads_or_recognizes_pending_original(tmp_path):

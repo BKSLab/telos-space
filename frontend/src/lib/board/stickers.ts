@@ -1,4 +1,4 @@
-import type { ProjectMember, Task, UserSummary } from "@/lib/types";
+import type { ProjectMember, TaskListItem, UserSummary } from "@/lib/types";
 import { fullName, initials } from "@/lib/types";
 
 /** Цвет стикера — свободный hex `#rrggbb` (сервер хранит в нижнем регистре). */
@@ -165,7 +165,7 @@ export function stickerAuthorLabel(author: ResolvedStickerAuthor): string {
 }
 
 /** Диалог остаётся компактным независимо от общего числа задач проекта. */
-export function limitStickerTaskResults(tasks: Task[]): Task[] {
+export function limitStickerTaskResults(tasks: TaskListItem[]): TaskListItem[] {
     return tasks.slice(0, STICKER_TASK_RESULTS_LIMIT);
 }
 
@@ -174,10 +174,10 @@ function normalizeTaskSearchValue(value: string): string {
 }
 
 /**
- * Короткий запрос ищем локально: PostgreSQL FTS не даёт префиксных
- * совпадений для одного-двух символов, а в task picker отклик нужен сразу.
+ * Мгновенный поиск по загруженным превью. Полные исходники независимо
+ * проверяет сервер, в том числе для коротких запросов.
  */
-export function searchStickerTasks(tasks: Task[], query: string): Task[] {
+export function searchStickerTasks(tasks: TaskListItem[], query: string): TaskListItem[] {
     const terms = normalizeTaskSearchValue(query).trim().split(/\s+/).filter(Boolean);
     if (terms.length === 0) return tasks;
 
@@ -185,7 +185,7 @@ export function searchStickerTasks(tasks: Task[], query: string): Task[] {
         const searchable = normalizeTaskSearchValue([
             task.key,
             task.title,
-            task.description_md,
+            task.description_preview,
             task.last_comment,
             task.assignee,
         ].filter((value): value is string => Boolean(value)).join(" "));
@@ -194,9 +194,9 @@ export function searchStickerTasks(tasks: Task[], query: string): Task[] {
 }
 
 /** Объединяет мгновенные локальные и более полные серверные результаты. */
-export function mergeStickerTaskResults(...groups: Task[][]): Task[] {
+export function mergeStickerTaskResults(...groups: TaskListItem[][]): TaskListItem[] {
     const seen = new Set<number>();
-    const merged: Task[] = [];
+    const merged: TaskListItem[] = [];
     groups.forEach((tasks) => {
         tasks.forEach((task) => {
             if (seen.has(task.id)) return;

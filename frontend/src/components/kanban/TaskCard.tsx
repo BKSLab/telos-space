@@ -1,11 +1,12 @@
 import { forwardRef } from "react";
 import { UserIdentity } from "@/components/users/UserIdentity";
 import { AlertTriangle, MessageSquare } from "lucide-react";
-import type { ProjectStage, Task } from "@/lib/types";
+import type { ProjectStage, TaskListItem } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { PriorityBadge } from "@/components/ui/Badge";
 import { DueDate } from "@/components/ui/DueDate";
 import { BrandIcon } from "@/components/ui/BrandIcon";
+import { CopyTaskTitleButton } from "@/components/tasks/CopyTaskTitleButton";
 import { SearchHighlight } from "@/components/ui/SearchHighlight";
 
 /** Убирает разметку Markdown: в карточке показываем текст, а не сырой синтаксис. */
@@ -20,7 +21,7 @@ function toPlainText(markdown: string): string {
 }
 
 interface TaskCardProps {
-    task: Task;
+    task: TaskListItem;
     riskCount?: number;
     breadcrumb?: string | null;
     isDone?: boolean;
@@ -57,7 +58,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
     },
     ref,
 ) {
-    const description = task.description_md ? toPlainText(task.description_md) : "";
+    const description = task.description_preview ? toPlainText(task.description_preview) : "";
     const executor = task.participants?.find(person => person.role === "EXECUTOR")?.user;
 
     return (
@@ -79,18 +80,21 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                 className,
             )}
         >
+            <div className="flex items-center justify-between gap-2 px-3.5 pt-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[11px] text-muted">
+                    <button type="button" onClick={() => onOpen(task.id)} className="touch-target shrink-0 hover:text-primary">{task.key}</button>
+                    <span className="contents" onPointerDown={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()} onTouchStart={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+                        <CopyTaskTitleButton taskKey={task.key} title={task.title} />
+                    </span>
+                    {riskCount > 0 && <span aria-label={`Активных рисков: ${riskCount}`} title={`Активных рисков: ${riskCount}`} className="inline-flex items-center gap-1 text-warning"><AlertTriangle size={11} aria-hidden="true" />{riskCount}</span>}
+                </div>
+                <PriorityBadge priority={task.priority} />
+            </div>
             <button
                 type="button"
                 onClick={() => onOpen(task.id)}
-                className="flex w-full min-w-0 flex-col gap-2 px-3.5 py-3 text-left outline-none"
+                className="flex w-full min-w-0 flex-col gap-2 px-3.5 pt-1 pb-3 text-left outline-none"
             >
-                <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-2 font-mono text-[11px] text-muted">{task.key}
-                        {riskCount > 0 && <span aria-label={`Активных рисков: ${riskCount}`} title={`Активных рисков: ${riskCount}`} className="inline-flex items-center gap-1 text-warning"><AlertTriangle size={11} aria-hidden="true" />{riskCount}</span>}
-                    </span>
-                    <PriorityBadge priority={task.priority} />
-                </div>
-
                 <h3
                     className={cn(
                         "line-clamp-2 text-[14px] leading-snug font-semibold break-words",

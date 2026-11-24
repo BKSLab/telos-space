@@ -23,17 +23,12 @@ class TaskParticipantSchema(BaseModel):
     user: UserSummarySchema = Field(..., description="Участник проектной команды.")
 
 
-class TaskSchema(BaseModel):
+class TaskMetadataSchema(BaseModel):
     """Задача проекта с агрегированным контекстом."""
 
     revision: int = Field(
         1, ge=1, description="Текущая версия общих полей и назначений задачи.", examples=[3]
     )
-    checklist: TaskChecklistSchema | None = Field(None, description="Чек-лист задачи или null.")
-    checklist_revision: int = Field(
-        0, ge=0, description="Текущая версия чек-листа для записи.", examples=[2]
-    )
-
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(..., description="Уникальный идентификатор задачи.", examples=[142])
@@ -56,11 +51,6 @@ class TaskSchema(BaseModel):
         ...,
         description="Заголовок задачи.",
         examples=["Реализовать фильтрацию проектов"],
-    )
-    description_md: str | None = Field(
-        None,
-        description="Описание задачи в Markdown.",
-        examples=["Добавить фильтрацию по статусу и исполнителю."],
     )
     priority: TaskPriority = Field(..., description="Приоритет задачи.", examples=["HIGH"])
     role: TaskRole | None = Field(None, description="Ответственная роль.", examples=["BE"])
@@ -122,6 +112,34 @@ class TaskSchema(BaseModel):
         None,
         description="Фрагмент совпадения с маркерами подсветки.",
         examples=["Добавить __FTS_START__фильтрацию__FTS_END__ по статусу."],
+    )
+
+
+class TaskSchema(TaskMetadataSchema):
+    """Полные данные задачи для адресного чтения и результатов записи."""
+
+    checklist: TaskChecklistSchema | None = Field(None, description="Чек-лист задачи или null.")
+    checklist_revision: int = Field(
+        0, ge=0, description="Текущая версия чек-листа для записи.", examples=[2]
+    )
+
+    description_md: str | None = Field(
+        None,
+        description="Описание задачи в Markdown.",
+        examples=["Добавить фильтрацию по статусу и исполнителю."],
+    )
+
+
+class TaskListSchema(TaskMetadataSchema):
+    """Список без полных описаний и чек-листов; подробности — в карточке."""
+
+    description_preview: str | None = Field(
+        None,
+        max_length=320,
+        description="Начало описания (до 320 символов); полный текст — в карточке.",
+    )
+    last_comment: str | None = Field(
+        None, max_length=320, description="Начало последнего комментария (до 320 символов)."
     )
 
 

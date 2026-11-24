@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import Result, case, func, literal, or_, select, union_all, update
+from sqlalchemy import Result, and_, case, func, literal, or_, select, union_all, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -10,6 +10,7 @@ from src.db.models.task_attachments import TaskAttachment
 from src.db.models.task_comment_attachments import TaskCommentAttachment
 from src.db.models.task_comment_documents import TaskCommentDocument
 from src.db.models.task_comments import TaskComment
+from src.db.models.tasks import Task
 from src.exceptions.task_comments import TaskCommentsRepositoryError
 from src.repositories.file_processing_state import attachment_processing_query
 from src.utils.document_refs import encode_document_ref
@@ -18,6 +19,7 @@ from src.utils.fts import (
     HIGHLIGHT_START,
     TITLE_HEADLINE_OPTIONS,
     build_ts_query,
+    literal_contains,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,6 +150,38 @@ class TaskCommentsRepository:
                 f"Ошибка получения комментариев задачи id={task_id}."
             ) from error
 
+    async def get_task_context(
+        self, *, task_ids: list[int], preview_length: int | None = None
+    ) -> dict[int, tuple[int, str]]:
+        """Считает комментарии и читает последний текст только для выбранных задач.
+
+        Порядок created_at/id детерминирован при одинаковых датах. Для списка
+        PostgreSQL ограничивает текст до передачи приложению.
+        """
+        if not task_ids:
+            return {}
+        try:
+            counts = (
+                select(TaskComment.task_id, func.count().label("count"))
+                .where(TaskComment.task_id.in_(task_ids))
+                .group_by(TaskComment.task_id)
+                .subquery()
+            )
+            latest = (
+                select(TaskComment.body_md)
+                .where(TaskComment.task_id == counts.c.task_id)
+                .order_by(TaskComment.created_at.desc(), TaskComment.id.desc())
+                .limit(1)
+                .correlate(counts)
+                .scalar_subquery()
+            )
+            body = func.left(latest, preview_length) if preview_length is not None else latest
+            rows = await self.db_session.execute(select(counts.c.task_id, counts.c.count, body))
+            return {task_id: (count, text) for task_id, count, text in rows}
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise TaskCommentsRepositoryError("Ошибка получения контекста комментариев.") from error
+
     async def get_all(self) -> list[TaskComment]:
         """Возвращает все комментарии для построения агрегатов карточек.
 
@@ -227,7 +261,7 @@ class TaskCommentsRepository:
                 f"Ошибка получения комментария id={comment_id}."
             ) from error
 
-    async def search_task_ids(self, search: str) -> set[int]:
+    async def search_task_ids(self, search: str, *, project_id: int | None = None) -> set[int]:
         """Возвращает id задач с совпадениями в комментариях.
 
         Args:
@@ -240,10 +274,22 @@ class TaskCommentsRepository:
             TaskCommentsRepositoryError: Если поиск завершился ошибкой.
         """
         try:
-            ts_query = build_ts_query(search)
-            result: Result = await self.db_session.execute(
-                select(TaskComment.task_id).where(TaskComment.search_vector.op("@@")(ts_query))
+            search = search.strip()
+            if not search:
+                return set()
+            condition = and_(
+                *(literal_contains(TaskComment.body_md, term) for term in search.split())
             )
+            if len(search) >= 3:
+                condition = or_(
+                    condition, TaskComment.search_vector.op("@@")(build_ts_query(search))
+                )
+            stmt = select(TaskComment.task_id).where(condition)
+            if project_id is not None:
+                stmt = stmt.join(Task, Task.id == TaskComment.task_id).where(
+                    Task.project_id == project_id
+                )
+            result: Result = await self.db_session.execute(stmt)
             return set(result.scalars().all())
         except (SQLAlchemyError, Exception) as error:
             await self.db_session.rollback()

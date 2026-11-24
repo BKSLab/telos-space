@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ProjectMember, Task } from "@/lib/types";
+import type { ProjectMember, TaskListItem } from "@/lib/types";
 import {
     findAvailableStickerPosition,
     limitStickerTaskResults,
@@ -91,7 +91,7 @@ describe("project board stickers", () => {
             id: index + 1,
             key: `CRM-${index + 1}`,
             title: `Задача ${index + 1}`,
-        })) as Task[];
+        })) as TaskListItem[];
 
         expect(limitStickerTaskResults(tasks).map((task) => task.id)).toEqual([1, 2, 3, 4, 5]);
     });
@@ -102,7 +102,7 @@ describe("project board stickers", () => {
                 id: 1,
                 key: "CRM-1",
                 title: "Помощь в формулировке задачи",
-                description_md: null,
+                description_preview: null,
                 last_comment: null,
                 assignee: null,
             },
@@ -110,19 +110,19 @@ describe("project board stickers", () => {
                 id: 2,
                 key: "CRM-2",
                 title: "Пересмотреть календарь",
-                description_md: "Проверить поля формы",
+                description_preview: "Проверить поля формы",
                 last_comment: null,
                 assignee: null,
             },
-        ] as Task[];
+        ] as TaskListItem[];
 
         expect(searchStickerTasks(tasks, "по").map((task) => task.id)).toEqual([1, 2]);
         expect(searchStickerTasks(tasks, "поля формы").map((task) => task.id)).toEqual([2]);
     });
 
     it("merges local and server task results without duplicates", () => {
-        const first = { id: 1, key: "CRM-1", title: "Первая" } as Task;
-        const second = { id: 2, key: "CRM-2", title: "Вторая" } as Task;
+        const first = { id: 1, key: "CRM-1", title: "Первая" } as TaskListItem;
+        const second = { id: 2, key: "CRM-2", title: "Вторая" } as TaskListItem;
 
         expect(mergeStickerTaskResults([first], [first, second])).toEqual([first, second]);
     });

@@ -1,13 +1,15 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
+import { useUiStore } from "@/stores/ui";
 import { NavLink } from "react-router-dom";
 import { LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ToastViewport } from "@/components/ui/Toast";
-import { TaskDialog } from "@/components/tasks/TaskDialog";
-import { RiskDialog } from "@/components/risks/RiskDialog";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { MobileMenu } from "@/components/layout/MobileMenu";
+
+const TaskDialog = lazy(() => import("@/components/tasks/TaskDialog").then(module => ({ default: module.TaskDialog })));
+const RiskDialog = lazy(() => import("@/components/risks/RiskDialog").then(module => ({ default: module.RiskDialog })));
 
 const MOBILE_ITEMS = [
     { to: "/", label: "Портфель", icon: LayoutDashboard, end: true },
@@ -18,6 +20,8 @@ const MOBILE_ITEMS = [
  * навигация на узких экранах (раздел 19 дизайн-гайда).
  */
 export function AppShell({ children }: { children: ReactNode }) {
+    const taskId = useUiStore(state => state.selectedTaskId);
+    const risk = useUiStore(state => state.selectedRisk);
     return (
         <div className="app-shell flex h-full min-w-0 overflow-hidden bg-app lg:gap-2 lg:p-2">
             <a
@@ -68,8 +72,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
 
             <ToastViewport />
-            <TaskDialog />
-            <RiskDialog />
+            {taskId !== null && <Suspense fallback={null}><TaskDialog /></Suspense>}
+            {risk !== null && <Suspense fallback={null}><RiskDialog /></Suspense>}
         </div>
     );
 }

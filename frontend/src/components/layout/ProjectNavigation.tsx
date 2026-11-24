@@ -21,7 +21,7 @@ export function ProjectNavigation({ compact = false, mobile = false, onNavigate 
     const collapsed = useUiStore(state => state.projectListCollapsed);
     const toggle = useUiStore(state => state.toggleProjectList);
     const [search, setSearch] = useState("");
-    const query = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()) });
+    const query = useQuery({ queryKey: queryKeys.projects, staleTime: 30_000, queryFn: () => api.get<Project[]>(endpoints.projects()) });
     const needle = compact ? "" : search.trim().toLocaleLowerCase();
     const projects = (query.data ?? []).filter(project => `${project.name} ${project.key}`.toLocaleLowerCase().includes(needle));
     const itemClass = (active: boolean) => cn(

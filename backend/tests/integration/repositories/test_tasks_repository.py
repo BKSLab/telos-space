@@ -338,7 +338,9 @@ async def test_clear_wbs_node_releases_tasks_without_deleting(
 
 
 @pytest.mark.asyncio
-async def test_search_finds_tasks_by_number_and_text_within_limit(db_session: AsyncSession, stage: ProjectStage) -> None:
+async def test_search_finds_tasks_by_number_and_text_within_limit(
+    db_session: AsyncSession, stage: ProjectStage
+) -> None:
     """Поиск находит задачу по номеру и тексту и отдаёт не больше тридцати результатов."""
 
     repository = TasksRepository(db_session)
@@ -371,3 +373,93 @@ async def test_search_finds_tasks_by_number_and_text_within_limit(db_session: As
 
     assert len(tasks) == 30
     assert all("Поисковая" in task.title for task in tasks)
+
+
+@pytest.mark.asyncio
+async def test_list_projection_is_bounded_and_does_not_truncate_detail(
+    db_session: AsyncSession,
+    stage: ProjectStage,
+) -> None:
+    repository = TasksRepository(db_session)
+    description = "Описание 🔎 " * 2000
+    saved = await repository.save(data=task_data(stage, 71, description_md=description))
+    rows = await repository.get_list_by_project(project_id=stage.project_id)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.description_preview == description[:320]
+    assert not {"description_md", "checklist", "search_vector"} & set(row._mapping)
+    # The projection must not replace the full ORM value in the same session.
+    detail = await repository.get_by_id(saved.id)
+    assert detail.description_md == description
+    assert await repository.get_list_by_project(stage.project_id, task_ids=set()) == []
+    assert await repository.get_list_by_project(stage.project_id, stage_id=stage.id + 1000) == []
+    assert [
+        item.id
+        for item in await repository.get_list_by_project(
+            stage.project_id, stage_id=stage.id, task_ids={saved.id}
+        )
+    ] == [saved.id]
+
+
+@pytest.mark.asyncio
+async def test_search_matches_literal_substrings_in_full_text_and_is_project_scoped(
+    db_session: AsyncSession,
+    stage: ProjectStage,
+    project,
+) -> None:
+    from src.db.models.projects import Project
+    from src.repositories.task_comments import TaskCommentsRepository
+
+    other = Project(
+        owner_id=project.owner_id, key="OTHER", name="Другой", color="#58a6ff", order_index=1
+    )
+    db_session.add(other)
+    await db_session.flush()
+    other_stage = ProjectStage(project_id=other.id, name="Работа", color="#58a6ff", order_index=0)
+    db_session.add(other_stage)
+    await db_session.flush()
+    tasks = TasksRepository(db_session)
+    comments = TaskCommentsRepository(db_session)
+    description = "Начало " * 100 + " abcQxdef abcXYZdef Ёж ＡＢ 100%_literal"
+    selected = await tasks.save(
+        data=task_data(stage, 91, title="abcJydef", assignee="abcVzdef", description_md=description)
+    )
+    foreign = await tasks.save(
+        data=task_data(
+            other_stage, 91, title="abcJydef", assignee="abcVzdef", description_md=description
+        )
+    )
+    comment_body = "Начало " * 100 + " abcKzdef abcRSTdef Ёж ＡＢ 100%_literal"
+    for task in (selected, foreign):
+        await comments.save(task_id=task.id, author_name="Тест", body_md=comment_body)
+    unrelated = await tasks.save(
+        data=task_data(stage, 92, title="Nothing", description_md="No symbols")
+    )
+    await comments.save(task_id=unrelated.id, author_name="Тест", body_md="No symbols")
+    for query in (
+        "qx",
+        "jY",
+        "vZ",
+        "%",
+        "_",
+        "%_",
+        "xyz",
+        "jY xyz",
+        "xyz kZ",
+        "PROJ-91 xyz",
+        "еЖ",
+        "ёЖ",
+        "ab",
+    ):
+        assert await tasks.search_ids(project_id=project.id, search=query) == {selected.id}
+        if "PROJ" not in query:
+            assert await tasks.search_ids(project_id=other.id, search=query) == {foreign.id}
+    for query in ("kZ", "%", "_", "%_", "rst", "kZ rst", "еЖ", "ёЖ", "ab"):
+        assert await comments.search_task_ids(search=query, project_id=project.id) == {selected.id}
+        assert await comments.search_task_ids(search=query, project_id=other.id) == {foreign.id}
+    assert await tasks.search_ids(project_id=project.id, search="  ") == set()
+    assert await comments.search_task_ids(search="  ", project_id=project.id) == set()
+    # Matching text does not force its full value into the list response.
+    preview = (await tasks.get_list_by_project(project.id, task_ids={selected.id}))[0]
+    assert "Qx" not in preview.description_preview
+    assert len(preview.description_preview) == 320

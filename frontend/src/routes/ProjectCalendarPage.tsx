@@ -103,6 +103,7 @@ import type {
     ScenarioChangeInput,
     ScenarioPreview,
     Task,
+    TaskListItem,
     TaskDependency,
     TaskDependencyInput,
     TaskPriority,
@@ -219,8 +220,8 @@ export function ProjectCalendarPage() {
         queryFn: () => api.get<ProjectMilestone[]>(endpoints.projectMilestones(project.id)),
     });
     const tasksQuery = useQuery({
-        queryKey: queryKeys.tasks(project.id),
-        queryFn: () => api.get<Task[]>(endpoints.projectTasks(project.id)),
+        queryKey: queryKeys.tasks(project.id), staleTime: 30_000,
+        queryFn: () => api.get<TaskListItem[]>(endpoints.projectTasks(project.id)),
         enabled: showPanel || isDependencyDialogOpen || needSpan,
     });
     const span = useMemo(
@@ -609,9 +610,9 @@ export function ProjectCalendarPage() {
     async function loadProjectSpan(): Promise<TimelineRange | null> {
         const tasks =
             tasksQuery.data ??
-            (await queryClient.fetchQuery<Task[]>({
-                queryKey: queryKeys.tasks(project.id),
-                queryFn: () => api.get<Task[]>(endpoints.projectTasks(project.id)),
+            (await queryClient.fetchQuery<TaskListItem[]>({
+                queryKey: queryKeys.tasks(project.id), staleTime: 30_000,
+                queryFn: () => api.get<TaskListItem[]>(endpoints.projectTasks(project.id)),
             }));
         return projectSpan({ project, tasks, milestones: milestonesQuery.data ?? [] });
     }

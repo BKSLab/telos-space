@@ -41,7 +41,7 @@ export function ArisPanel({ userId, onClose, embedded = false }: { userId: numbe
     const mounted = useRef(true);
     useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
     const context = useArisPageContext();
-    const projects = useQuery({ queryKey: queryKeys.projects, queryFn: () => api.get<Project[]>(endpoints.projects()) }).data ?? [];
+    const projects = useQuery({ queryKey: queryKeys.projects, staleTime: 30_000, queryFn: () => api.get<Project[]>(endpoints.projects()) }).data ?? [];
     const task = useQuery({ queryKey: queryKeys.task(context.task_id ?? 0), queryFn: () => api.get<Task>(endpoints.task(context.task_id!)), enabled: context.task_id != null }).data;
     const pageProject = context.project_key ? projects.find((item) => item.key.toUpperCase() === context.project_key!.toUpperCase()) : undefined;
     const seen = describePageContext(context, { project: pageProject?.key, taskKey: task?.id === context.task_id ? task?.key : null });

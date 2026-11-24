@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { useQuery } from "@tanstack/react-query";
 import { Columns3, List, ListTodo, Plus, Search } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
-import type { ProjectStage, Task } from "@/lib/types";
+import type { ProjectStage, TaskListItem } from "@/lib/types";
 import { PRIORITY_LABELS, PRIORITY_ORDER } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
@@ -48,14 +48,14 @@ export function TasksPage() {
     }
 
     const stagesQuery = useQuery({
-        queryKey: queryKeys.stages(project.id),
+        queryKey: queryKeys.stages(project.id), staleTime: 30_000,
         queryFn: () => api.get<ProjectStage[]>(endpoints.projectStages(project.id)),
     });
     const tasksQuery = useQuery({
-        queryKey: queryKeys.tasks(project.id, deferredSearch),
-        queryFn: () => api.get<Task[]>(deferredSearch
+        queryKey: queryKeys.tasks(project.id, deferredSearch), staleTime: 30_000,
+        queryFn: ({ signal }) => api.get<TaskListItem[]>(deferredSearch
             ? `${endpoints.projectTasks(project.id)}?search=${encodeURIComponent(deferredSearch)}`
-            : endpoints.projectTasks(project.id)),
+            : endpoints.projectTasks(project.id), { signal }),
     });
 
     const visibleTasks = useMemo(() => {

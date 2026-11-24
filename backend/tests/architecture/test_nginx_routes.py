@@ -50,3 +50,25 @@ def test_nginx_preserves_websocket_upgrade_and_unbuffered_document_uploads():
     assert not any(
         re.search(pattern, "/api/v1/tasks/42/attachments/8/content") for pattern, _ in locations
     )
+
+
+def test_nginx_compresses_data_but_preserves_streaming_and_cache_freshness():
+    root = Path(__file__).resolve().parents[3]
+    gateway = (root / "nginx/nginx.conf").read_text()
+    frontend = (root / "frontend/nginx.conf").read_text()
+    for config in (gateway, frontend):
+        for directive in ("gzip on;", "gzip_vary on;", "gzip_proxied any;"):
+            assert directive in config
+        types = re.search(r"gzip_types\s+([^;]+);", config).group(1).split()
+        assert {"application/javascript", "text/javascript", "text/css"} <= set(types)
+        assert "text/event-stream" not in types
+        assert "gzip_types *" not in config
+    assert "application/json" in gateway
+    for selector in ("= /mcp", "/mcp"):
+        body = re.search(r"location " + re.escape(selector) + r"\s*\{([^{}]*)\}", gateway).group(1)
+        assert "gzip off;" in body
+        assert "proxy_buffering off;" in body
+    assert 'Cache-Control "public, max-age=31536000, immutable"' in frontend
+    assert "location = /index.html" in frontend
+    assert 'Cache-Control "no-cache"' in frontend
+    assert "try_files $uri =404;" in frontend

@@ -1454,36 +1454,7 @@ class GitSourceService:
             )
             for file in files
         ]
-        relations = []
-        for component in components:
-            for imported in component.imports:
-                name = imported["name"]
-                suffix = name.replace(".", "/").lstrip("/")
-                candidates = [
-                    other
-                    for other in components
-                    if other.file_id != component.file_id
-                    and suffix
-                    and (
-                        other.path.rsplit(".", 1)[0].endswith("/" + suffix)
-                        or other.path.rsplit(".", 1)[0] == suffix
-                    )
-                ]
-                target = candidates[0] if len(candidates) == 1 else None
-                relations.append(
-                    {
-                        "kind": "declared_import",
-                        "source_file_id": component.file_id,
-                        "target_file_id": target.file_id if target else None,
-                        "source_connection_id": component.connection_id,
-                        "target_connection_id": target.connection_id if target else None,
-                        "import_name": name,
-                        "line": imported["line"],
-                        "confidence": "candidate"
-                        if target or imported.get("confidence") == "candidate"
-                        else "declared",
-                    }
-                )
+        relations = self._map_relations(components)
         partial = (
             capped
             or bool(inaccessible)
@@ -1511,6 +1482,44 @@ class GitSourceService:
             partial=partial,
             incomplete_reasons=self._budget_reasons(),
         )
+
+    @staticmethod
+    def _map_relations(components: list[GitComponent]) -> list[dict]:
+        # Каждый import прежде сканировал все файлы с повторным разбором path.
+        # Индекс сохраняет те же suffix-match, порядок и неоднозначные цели.
+        by_suffix: dict[str, list[GitComponent]] = {}
+        for component in components:
+            parts = component.path.rsplit(".", 1)[0].split("/")
+            for index in range(len(parts)):
+                suffix = "/".join(parts[index:])
+                if suffix:
+                    by_suffix.setdefault(suffix, []).append(component)
+        relations = []
+        for component in components:
+            for imported in component.imports:
+                name = imported["name"]
+                suffix = name.replace(".", "/").lstrip("/")
+                candidates = [
+                    other
+                    for other in by_suffix.get(suffix, [])
+                    if other.file_id != component.file_id
+                ]
+                target = candidates[0] if len(candidates) == 1 else None
+                relations.append(
+                    {
+                        "kind": "declared_import",
+                        "source_file_id": component.file_id,
+                        "target_file_id": target.file_id if target else None,
+                        "source_connection_id": component.connection_id,
+                        "target_connection_id": target.connection_id if target else None,
+                        "import_name": name,
+                        "line": imported["line"],
+                        "confidence": "candidate"
+                        if target or imported.get("confidence") == "candidate"
+                        else "declared",
+                    }
+                )
+        return relations
 
     @_bounded_read
     async def compare(

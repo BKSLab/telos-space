@@ -1,10 +1,10 @@
 import { ArrowRight, GitBranch, Plus, Trash2 } from "lucide-react";
 import { IconButton } from "@/components/ui/Button";
-import type { Task, TaskDependency } from "@/lib/types";
+import type { TaskListItem, TaskDependency } from "@/lib/types";
 
 interface DependencyPanelProps {
     dependencies: TaskDependency[];
-    tasks: Task[];
+    tasks: TaskListItem[];
     isSaving: boolean;
     /** Нет — только просмотр, кнопки добавления нет. */
     onCreate?: () => void;

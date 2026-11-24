@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.models.project_members import ProjectMember
 from src.db.models.project_stages import ProjectStage
 from src.db.models.projects import Project
+from src.db.models.task_comments import TaskComment
 from src.db.models.task_participants import TaskParticipant, TaskParticipantRole
 from src.db.models.tasks import Task, TaskPriority
 from src.exceptions.tasks import (
@@ -23,6 +24,7 @@ from src.utils.fts import (
     HIGHLIGHT_START,
     TITLE_HEADLINE_OPTIONS,
     build_ts_query,
+    literal_contains,
 )
 
 logger = logging.getLogger(__name__)
@@ -239,6 +241,38 @@ class TasksRepository:
                 exc_info=True,
             )
             raise TasksRepositoryError("Ошибка получения исполнителей календаря.") from error
+
+    async def get_list_by_project(
+        self,
+        project_id: int,
+        stage_id: int | None = None,
+        task_ids: set[int] | None = None,
+    ) -> list[Row]:
+        """Читает метаданные и ограниченное превью без JSON чек-листа и длинного текста.
+
+        Проекция не создаёт усечённый ORM Task в identity map сессии.
+        """
+        if task_ids is not None and not task_ids:
+            return []
+        try:
+            columns = [
+                column
+                for column in Task.__table__.columns
+                if column.name not in {"description_md", "checklist", "search_vector"}
+            ]
+            stmt = select(
+                *columns, func.left(Task.description_md, 320).label("description_preview")
+            ).where(Task.project_id == project_id)
+            if stage_id is not None:
+                stmt = stmt.where(Task.stage_id == stage_id)
+            if task_ids is not None:
+                stmt = stmt.where(Task.id.in_(task_ids))
+            return list(
+                (await self.db_session.execute(stmt.order_by(Task.position, Task.id))).all()
+            )
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise TasksRepositoryError("Ошибка получения списка задач.") from error
 
     async def get_by_project(
         self,
@@ -641,13 +675,37 @@ class TasksRepository:
             TasksRepositoryError: Если поиск завершился ошибкой.
         """
         try:
-            ts_query = build_ts_query(search)
-            condition = Task.search_vector.op("@@")(ts_query)
+            search = search.strip()
+            if not search:
+                return set()
+            # Preserve the picker substring semantics without returning full text.
+            # Terms may match different fields or comments of the same task.
+            condition = and_(
+                *(
+                    or_(
+                        literal_contains(Task.title, term),
+                        literal_contains(Task.description_md, term),
+                        literal_contains(Task.assignee, term),
+                        literal_contains(func.concat(Project.key, "-", Task.number), term),
+                        select(TaskComment.id)
+                        .where(
+                            TaskComment.task_id == Task.id,
+                            literal_contains(TaskComment.body_md, term),
+                        )
+                        .exists(),
+                    )
+                    for term in search.split()
+                )
+            )
+            if len(search) >= 3:
+                condition = or_(condition, Task.search_vector.op("@@")(build_ts_query(search)))
             number = _extract_task_number(search)
             if number is not None:
                 condition = or_(condition, Task.number == number)
             result: Result = await self.db_session.execute(
-                select(Task.id).where(and_(Task.project_id == project_id, condition))
+                select(Task.id)
+                .join(Project, Project.id == Task.project_id)
+                .where(and_(Task.project_id == project_id, condition))
             )
             return set(result.scalars().all())
         except (SQLAlchemyError, Exception) as error:

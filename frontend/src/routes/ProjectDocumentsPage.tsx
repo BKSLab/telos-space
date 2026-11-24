@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FileText, Search, X } from "lucide-react";
 import { api, endpoints, queryKeys } from "@/lib/api";
 import { createMarkdownDocument, DOCUMENT_PAGE_SIZE, uploadDocument } from "@/lib/documents";
-import type { Task } from "@/lib/types";
+import type { TaskListItem } from "@/lib/types";
 import { useDocuments, useRefreshDocuments } from "@/lib/useDocuments";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
 import { DocumentAddButton, DocumentComposeDialog } from "@/components/documents/DocumentComposeDialog";
@@ -30,7 +30,7 @@ export function ProjectDocumentsPage() {
     const q = useDeferredValue(search.trim());
     const selectedRef = params.get("document");
     const documents = useDocuments({ project_id: project.id, q, scope, task_id: taskId ? Number(taskId) : undefined, source_kind: kind || undefined, format, processing, limit: DOCUMENT_PAGE_SIZE, offset });
-    const tasks = useQuery({ queryKey: queryKeys.tasks(project.id), queryFn: () => api.get<Task[]>(endpoints.projectTasks(project.id)) });
+    const tasks = useQuery({ queryKey: queryKeys.tasks(project.id), staleTime: 30_000, queryFn: ({ signal }) => api.get<TaskListItem[]>(endpoints.projectTasks(project.id), { signal }) });
     const filtered = !!(search.trim() || scope !== "all" || taskId || kind || format || processing);
     function selectDocument(ref: string | null) {
         setParams(previous => { const next = new URLSearchParams(previous); if (ref) next.set("document", ref); else next.delete("document"); return next; }, { replace: ref === null });

@@ -3,14 +3,14 @@ import { Link2, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/dates";
 import { stickerSurface, type BoardSticker } from "@/lib/board/stickers";
-import type { ProjectMember, Task } from "@/lib/types";
+import type { ProjectMember, TaskListItem } from "@/lib/types";
 import { IconButton } from "@/components/ui/Button";
 import { BoardStickerAuthor } from "@/components/board/BoardStickerAuthor";
 
 export interface BoardStickerCardProps {
     sticker: BoardSticker;
     members: ProjectMember[];
-    tasksById: Map<number, Task>;
+    tasksById: Map<number, TaskListItem>;
     readOnly: boolean;
     readOnlyHint?: string;
     onEdit: (sticker: BoardSticker) => void;

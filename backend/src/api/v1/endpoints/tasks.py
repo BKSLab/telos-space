@@ -40,6 +40,7 @@ from src.schemas.tasks import (
     ProjectBaselineResultSchema,
     TaskCreateSchema,
     TaskDetailSchema,
+    TaskListSchema,
     TaskRephraseFile,
     TaskRephraseRequestSchema,
     TaskRephraseResultSchema,
@@ -73,9 +74,9 @@ TaskErrors = (
         "задачи без срока — те же правила, что у MCP-инструмента telos_list_tasks."
     ),
     operation_id="getProjectTasks",
-    response_description="Список задач с контекстом комментариев и поиска.",
+    response_description="Список задач с превью описаний и комментариев до 320 символов; полные данные — в карточке.",
     responses={404: NOT_FOUND_RESPONSE, 422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
-    response_model=list[TaskSchema],
+    response_model=list[TaskListSchema],
 )
 async def get_tasks(
     project_id: Annotated[int, Path(gt=0, description="Идентификатор проекта.")],
@@ -98,7 +99,7 @@ async def get_tasks(
     due_from: Annotated[date | None, Query(description="Срок не раньше даты.")] = None,
     due_to: Annotated[date | None, Query(description="Срок не позже даты.")] = None,
     without_due_date: Annotated[bool, Query(description="Только задачи без срока.")] = False,
-) -> list[TaskSchema]:
+) -> list[TaskListSchema]:
     """Получает задачи проекта.
 
     Args:
@@ -233,9 +234,7 @@ async def rephrase_task_description(
             project_id=project_id,
             user_id=principal.user_id,
             data=data,
-            files=[
-                TaskRephraseFile(name=item.name, content=item.content) for item in read_files
-            ],
+            files=[TaskRephraseFile(name=item.name, content=item.content) for item in read_files],
         )
     except (TasksServiceError, AiProviderError) as error:
         logger.exception(
@@ -336,7 +335,12 @@ async def get_task(
     description="Частично обновляет поля задачи и фиксирует значимые изменения в истории. Передайте expected_revision из карточки задачи для защиты общих полей и назначений: устаревшая версия возвращает 409 без изменений. Без expected_revision сохраняется прежняя запись без проверки общей версии. Для изменения checklist передайте весь чек-лист и текущую checklist_revision; эта версия проверяется отдельно. null удаляет чек-лист, отсутствие поля сохраняет его.",
     operation_id="updateTask",
     response_description="Обновлённая задача с актуальной revision и новой checklist_revision, если чек-лист изменён.",
-    responses={404: NOT_FOUND_RESPONSE, 409: CONFLICT_RESPONSE, 422: VALIDATION_RESPONSE, 500: SERVER_ERROR_RESPONSE},
+    responses={
+        404: NOT_FOUND_RESPONSE,
+        409: CONFLICT_RESPONSE,
+        422: VALIDATION_RESPONSE,
+        500: SERVER_ERROR_RESPONSE,
+    },
     response_model=TaskSchema,
 )
 async def update_task(
@@ -610,8 +614,7 @@ async def get_my_tasks(
     status_code=status.HTTP_200_OK,
     summary="Сменить статус задачи вне проекта",
     description=(
-        "Меняет статус разовой задачи. У проектной задачи "
-        "состояние задаёт стадия — для неё 409."
+        "Меняет статус разовой задачи. У проектной задачи состояние задаёт стадия — для неё 409."
     ),
     operation_id="changeTaskStatus",
     responses={

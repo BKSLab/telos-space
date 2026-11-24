@@ -11,6 +11,7 @@ export function useProjectFromRoute() {
     const { projectKey } = useParams<{ projectKey: string }>();
     const projectsQuery = useQuery({
         queryKey: queryKeys.projects,
+        staleTime: 30_000,
         queryFn: () => api.get<Project[]>(endpoints.projects()),
     });
 

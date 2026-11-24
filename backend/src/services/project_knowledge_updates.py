@@ -470,7 +470,10 @@ class ProjectKnowledgeUpdatesService:
                 snapshot = await self._snapshot(project_id)
                 if snapshot is None:
                     return
-                plan = self._plan(snapshot, started_at=started_at)
+                # Снимок не содержит сессии. Парсинг не должен задерживать HTTP
+                # в общем event loop; поток только вычисляет план, CAS остаётся
+                # в корутине и не выполняется после отмены/deadline.
+                plan = await asyncio.to_thread(self._plan, snapshot, started_at=started_at)
                 # Даём cancellation/deadline пройти до короткой публикации.
                 await asyncio.sleep(0)
                 await self._publish(plan, started_at=started_at)

@@ -19,10 +19,46 @@ from src.exceptions.git_sources import (
     GitSourceConflictError,
     GitSourceNotAvailableError,
 )
-from src.schemas.git_sources import GitDeploymentStatusPage, GitDeploymentStatusSnapshot
+from src.schemas.git_sources import (
+    GitComponent,
+    GitDeploymentStatusPage,
+    GitDeploymentStatusSnapshot,
+)
 from src.services.access import AccessGrant
 from src.services.git_credentials import GitCredentialCodec
 from src.services.git_sources import GitSourceService
+
+
+def test_map_suffix_index_preserves_import_targets_and_ambiguity():
+    paths = ["src/api.py", "other/api.py", "src/unique.py", "api.py", "src/deep/module.test.ts"]
+    imports = ["api", "src.api", "src.unique", "unique", "missing", "...", "deep.module.test"]
+    components = [
+        GitComponent(
+            connection_id=1 + index % 2,
+            repository_id=101 + index % 2,
+            commit_sha="a" * 40,
+            file_id=index + 1,
+            path=path,
+            kind="text",
+            symbols=[],
+            imports=[{"name": name, "line": line + 1} for line, name in enumerate(imports)],
+        )
+        for index, path in enumerate(paths)
+    ]
+    relations = GitSourceService._map_relations(components)
+    assert len(relations) == len(components) * len(imports)
+    for relation in relations:
+        suffix = relation["import_name"].replace(".", "/").lstrip("/")
+        candidates = [
+            other for other in components
+            if other.file_id != relation["source_file_id"] and suffix
+            and (other.path.rsplit(".", 1)[0].endswith("/" + suffix)
+                 or other.path.rsplit(".", 1)[0] == suffix)
+        ]
+        target = candidates[0] if len(candidates) == 1 else None
+        assert relation["target_file_id"] == (target.file_id if target else None)
+        assert relation["target_connection_id"] == (target.connection_id if target else None)
+        assert relation["confidence"] == ("candidate" if target else "declared")
 
 
 def connection():
