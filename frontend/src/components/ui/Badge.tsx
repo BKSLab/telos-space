@@ -47,12 +47,12 @@ const PRIORITY_VARIANTS: Record<TaskPriority, string> = {
 
 interface PriorityBadgeProps {
     priority: TaskPriority;
-    /** Низкий приоритет — шум на карточке, поэтому по умолчанию он скрыт. */
+    /** По умолчанию низкий приоритет отображается наравне с остальными. */
     showLow?: boolean;
     className?: string;
 }
 
-export function PriorityBadge({ priority, showLow = false, className }: PriorityBadgeProps) {
+export function PriorityBadge({ priority, showLow = true, className }: PriorityBadgeProps) {
     if (priority === "LOW" && !showLow) {
         return null;
     }

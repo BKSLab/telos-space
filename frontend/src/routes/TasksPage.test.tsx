@@ -56,6 +56,8 @@ it("по умолчанию открывает канбан, а явный сп�
     const views = within(screen.getByRole("navigation", { name: "Представление задач" }));
     expect(views.getByRole("link", { name: "Канбан" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("region", { name: "Колонка План" })).toBeTruthy();
+    const lowCard = screen.getByRole("heading", { name: "Подготовка 30" }).closest(".surface-card") as HTMLElement;
+    expect(within(lowCard).getByText("Низкий")).toBeTruthy();
     fireEvent.click(views.getByRole("link", { name: "Список" }));
     expect(screen.getByRole("table")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Колонка План" })).toBeNull();
