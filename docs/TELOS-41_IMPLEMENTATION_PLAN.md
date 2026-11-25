@@ -140,8 +140,8 @@ TELOS SPACE — личное пространство проектов, знан
 | 6 | Разделение settings/workspace и выбор repo | 0; стабильный контракт 1 | passed locally: URL/multi-repo/settings + controlled API E2E |
 | 7 | Дерево, исходник и поиск в workspace | 4, 6 | passed locally: tree/source/Monaco/ranges/Back; full frontend 1269 passed / 2 skipped |
 | 8 | Три карты, inspector и overlays | 5, 7 | passed locally: 7 E2E, 320/390/1280/1440, 3 layouts/table/evidence |
-| 9 | Инструменты Ариса/MCP и источники | 4, 5 | passed locally: adapters, saved guards/revoke, runtime/MCP tests; live not_run |
-| 10 | Сквозная приёмка, документация и сдача | 1–9 | passed locally: backend1885 + 2 исправленных recheck, coverage86,94%; frontend1269/2skip, 27E2E; live/manual limits ниже |
+| 9 | Инструменты Ариса/MCP и источники | 4, 5 | passed: adapters/guards/runtime tests и живой read-only Арис с источником SHA2201a3a |
+| 10 | Сквозная приёмка, документация и сдача | 1–9 | deployed2201a3a: local checks + live index/MCP/Арис; ручная UI/NVDA/zoom приёмка ниже |
 
 Допустимая параллельность: backend 1–5 и UI-каркас 6 после фиксации DTO; затем UI 7–8 и agent/MCP 9. UI на управляемом API — промежуточная проверка, не завершение интеграции. Общие DTO, миграции, action catalog, generated catalog и `package-lock.json` меняет один назначенный владелец.
 
@@ -430,15 +430,37 @@ evidence, forced colors, 23 подключения с пагинацией/Back,
   приложения, uploads, volumes и рабочие checkout не обновлялись/не удалялись.
   Commit/push/выкладка/изменения трекера не выполнялись.
 
+**Выкладка 25.11.2026:** отдельным поручением разрешены commit/push и обновление
+сервера стандартными Git/Docker без deploy-скриптов. Код `2201a3a` отправлен
+в origin/main, server `/projects/telos-space` обновлён `git pull --ff-only`;
+backend/frontend собраны и пересозданы Docker Compose, nginx test/reload passed.
+Backend healthy, c34 head, pip check passed. Основные количества БД и хэши
+27 uploads сохранены, остальные 9 контейнеров не пересозданы. Предыдущие образы
+оставлены с тегом `before-telos41-20261125`. Согласованная копия при остановленном
+backend: `/root/backups/telos-space/20261125T081136Z-before-telos41`
+(custom pg_dump, pg_restore list, uploads tar/list, SHA256, конфигурация).
+
+Production MCP подтвердил новые snapshots/symbols/graph чтения и доступность
+исторических снимков; точный `git_structure.py` SHA2201a3a имеет тот же SHA256,
+что Git. Assets и локальные workers отвечают HTTP200; auth/me без сессии401.
+Первичная индексация repo1 выполнена штатным worker переносом только его
+next_poll_at на ближайшую сверку: каталог 1584/1584, текст 1559, metadata-only25,
+failed0; структура `telos-structure-1` опубликована на SHA2201a3a. Реальные
+счётчики: 10926 symbols, 127901 relations, 109532 unresolved; 85 text fallback.
+Поиск `_Source.to_byte` дал symbol4470, строки43–47; граф подтвердил declared
+containment, вызовы len/encode остались candidate без вымышленного target.
+Настройки refs/прав не менялись.
+
+Живой Арис выполнил чтение символов/графа/исходника и объяснил Unicode→UTF-8
+смещения с проверенной ссылкой SHA2201a3a, L43–47. Request
+`ba45cf9d-05f3-4176-8962-ba4c255c4ea2`: completed, write_allowed=false,
+done/pending=[], без публикации в общий чат. Это одна проверка, не широкий eval.
+
 **Оставшаяся приёмка:** пользователь оставил ручную визуальную проверку себе.
-NVDA и ручной zoom 200% не проверены. На production уже доступен подключённый
-`BKSLab/telos-space` (baseline MCP: ready, 1553 файла, 1529 текстовых и 24
-metadata-only), но новая реализация не выложена: live UI → новый API → Git,
-полная новая индексация / incremental на живом provider и вопрос настоящему
-Арису с новыми инструментами не выполнялись. Для них нужны отдельное
-поручение на выкладку/подготовленный тестовый стенд и пользовательская сессия.
-Это не заменяется mock E2E или измерениями SQL. Полная production-приёмка
-TELOS-41 не объявляется завершённой; TELOS-40 остаётся вне объёма.
+NVDA, ручной zoom 200% и авторизованный UI → новый API не проверены. Они не
+заменяются mock E2E, MCP или SQL-измерениями. Полная ручная production-приёмка
+TELOS-41 не объявляется завершённой; TELOS-40 остаётся вне объёма. Задачи,
+статусы и комментарии трекера не изменялись.
 
 **Эксплуатационные границы:** Rust/Vue/Svelte — text fallback; TS aliases/
 Compiler API и runtime call graph отсутствуют. Карта/поиск ограничены и

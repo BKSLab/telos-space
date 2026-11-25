@@ -4,10 +4,10 @@
 подробные результаты прежних работ — в Git и отчётах задач.
 Перед продолжением проверь рабочее дерево и согласованный объём.
 
-TELOS-41 реализована локально по `docs/TELOS-41_IMPLEMENTATION_PLAN.md`;
+TELOS-41 выложена 25.11.2026 по `docs/TELOS-41_IMPLEMENTATION_PLAN.md`;
+код и образы — `2201a3a`, server checkout `/projects/telos-space`.
 25.11 пользователь разрешил commit/push в origin/main и обновление сервера
 через стандартные Git/Docker без deploy-скриптов; изменения трекера не разрешены.
-Выкладка готовится из чистого server checkout `/projects/telos-space`.
 Рабочая область —
 «Знания → Код», settings сохраняет управление подключениями и диагностику.
 Структура Python AST / Tree-sitter JS/TS, independent analysis generations
@@ -19,10 +19,21 @@ Backend: 1885 passed в полном наборе, два старых ожид�
 проверил populated upgrade, поколения, ACL/owner/revoke, checkpoint, impact и
 исторические SHA; независимое ревью DDL/ACL/конкурентности завершено.
 Статусы и границы — в единственном плане. Ручную визуальную приёмку пользователь
-оставил себе; NVDA/zoom и live нового кода не приняты. Production-репозиторий
-BKSLab/telos-space доступен, новая реализация не выложена. Существующая БД
-приложения не обновлялась. Старые published snapshots остаются читаемыми;
-переиндексация структуры — через текущий worker после отдельного upgrade.
+оставил себе; NVDA/zoom и авторизованный UI ещё не приняты. Production:
+backend healthy, Alembic c34, pip check и nginx test/reload passed; новые
+assets/workers HTTP200, auth/me без сессии401. Основные количества БД и хэши
+27 uploads сохранены, остальные 9 контейнеров не пересоздавались.
+Проверенная копия БД/uploads/config перед миграцией:
+`/root/backups/telos-space/20261125T081136Z-before-telos41` (pg_restore list,
+tar list, SHA256); прежние образы сохранены как before-telos41-20261125.
+Новые snapshot/symbol/graph MCP проверены; точный git_structure.py на SHA2201a3a
+прочитан, SHA256 совпал с Git. Индекс repo1 на этом SHA опубликован штатным
+worker: 1584 файла, 1559 с текстом / 25 metadata-only, ошибок 0; 10926 символов,
+127901 связей, 109532 неразрешённых, 85 файлов с text fallback. Для запуска
+перенесён только next_poll_at repo1. Живой Арис нашёл `_Source.to_byte` через
+структуру/граф, прочитал код и ответил с точной ссылкой L43–47 на SHA2201a3a;
+request `ba45cf9d-05f3-4176-8962-ba4c255c4ea2`, write_allowed=false, done/pending=[]
+(не публикация в общий чат). Наличие индекса не означает полный runtime graph.
 
 TELOS-43 реализована, отправлена в origin/main и выложена 24.11.2026:
 код/образы — `e90d522`. Gzip/кэш двух nginx, канонический список с превью
