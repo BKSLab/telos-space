@@ -47,7 +47,7 @@ it("offers numbered plain text, shift ranges, Unicode paging and an exact copy o
     await screen.findByLabelText("Подсвеченный код src/example.py");
     fireEvent.click(screen.getByRole("button", { name: "Обычный текст" }));
     const code = screen.getByLabelText("Код src/example.py");
-    expect(code.textContent).not.toContain("\r");
+    expect(code.querySelector("code")?.textContent).toBe("😀Привет\r\nprint('hello')\r\n");
     expect(screen.queryByRole("button", { name: "Выбрать строку 57" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Выбрать строку 56" }), { shiftKey: true });
     expect(onRange).toHaveBeenLastCalledWith({ line: 55, end: 56 });
@@ -157,10 +157,12 @@ it("keeps the reading anchor when selecting visible lines but fetches an externa
     expect(get).toHaveBeenLastCalledWith(expect.stringContaining("line_start=200"), expect.anything());
     fireEvent.click(screen.getByRole("button", { name: "Читать дальше" }));
     await screen.findByRole("button", { name: "Выбрать строку 151" });
+    expect(document.activeElement).toBe(screen.getByRole("region", { name: "Код src/example.py" }));
     fireEvent.click(screen.getByRole("button", { name: "Выбрать строку 151" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply permalink" }));
     expect(get).toHaveBeenCalledTimes(3);
     fireEvent.click(screen.getByRole("button", { name: "К выбранным строкам" }));
     await waitFor(() => expect(get).toHaveBeenCalledTimes(4));
     expect(get).toHaveBeenLastCalledWith(expect.stringContaining("line_start=151"), expect.anything());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("region", { name: "Код src/example.py" })));
 });

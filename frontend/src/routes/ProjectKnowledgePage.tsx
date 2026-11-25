@@ -1,4 +1,4 @@
-import { lazy, Suspense, useLayoutEffect, useRef } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BookOpen, GitBranch, History } from "lucide-react";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
@@ -21,6 +21,7 @@ export function ProjectKnowledgePage() {
     for (const field of fields) if (params.has(field)) scrollParams.set(field, params.get(field)!);
     const positionKey = `${project.id}:${view}:${scrollParams}`;
     const scroll = useRef<HTMLElement>(null);
+    const [codeToolbar, setCodeToolbar] = useState<HTMLDivElement | null>(null);
     useLayoutEffect(() => {
         const element = scroll.current;
         if (!element) return;
@@ -53,7 +54,7 @@ export function ProjectKnowledgePage() {
         <div className={`mx-auto flex w-full flex-col gap-4 px-3 py-3 sm:px-5 sm:py-4 ${view === "code" ? "min-h-0 flex-1" : "max-w-[1440px]"}`}>
             <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line-subtle">
                 <h2 className="text-lg font-semibold tracking-tight text-primary">Знания</h2>
-                <nav aria-label="Виды знаний" className="flex w-full gap-1 sm:w-auto">
+                <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto"><nav aria-label="Виды знаний" className="flex min-w-0 flex-1 gap-1">
                     {[
                         { label: "Карта", icon: BookOpen, value: "map" },
                         { label: "История", icon: History, value: "history" },
@@ -64,17 +65,17 @@ export function ProjectKnowledgePage() {
                         return <Link key={value} aria-label={value === "code" ? "Код и репозитории" : label}
                             aria-current={view === value ? "page" : undefined} to={{ search: next.toString() }}
                             className="brand-tab touch-target flex flex-1 items-center justify-center gap-2 px-3 py-2 text-[13px] font-medium text-secondary aria-[current=page]:text-primary">
-                            <Icon size={15} aria-hidden="true" />{label}
+                            <Icon size={15} aria-hidden="true" className={view === "code" ? "hidden sm:block" : undefined} />{label}
                         </Link>;
                     })}
-                </nav>
+                </nav>{view === "code" && <div ref={setCodeToolbar} />}</div>
             </header>
             {view === "history" ? <ProjectHistoryTimeline key={project.id} projectId={project.id} projectKey={project.key} />
                 : view === "map" ? <>
                         <ProjectKnowledgePanel key={project.id} projectId={project.id} projectKey={project.key} ownerId={project.owner_id ?? null} />
                         <CollapsibleSection title="Диагностика индекса"><IndexDiagnostics projectId={project.id} /></CollapsibleSection>
                     </> : null}
-            {view === "code" && <Suspense fallback={<p role="status">Загружаем код проекта…</p>}><RepositoryWorkspace key={project.id} projectId={project.id} /></Suspense>}
+            {view === "code" && <Suspense fallback={<p role="status">Загружаем код проекта…</p>}><RepositoryWorkspace key={project.id} projectId={project.id} toolbarTarget={codeToolbar} /></Suspense>}
         </div>
     </section>;
 }

@@ -65,6 +65,12 @@ it("does not label a historical but complete directory as incomplete", async () 
     expect(screen.queryByText(/неполн/)).toBeNull();
 });
 
+it("exposes each file's reading state as an accessible description", async () => {
+    mount();
+    const entry = await screen.findByRole("treeitem", { name: "README.md" });
+    expect(document.getElementById(entry.getAttribute("aria-describedby")!)?.textContent).toBe("Текст готов");
+});
+
 it("reports a genuinely incomplete catalogue only once at its root", async () => {
     mount({ truncated: true });
     fireEvent.click(await screen.findByRole("treeitem", { name: "src" }));

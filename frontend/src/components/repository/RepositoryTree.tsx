@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { ErrorMessage } from "@/components/ui/States";
-import { type GitTreeEntry, type GitTreePage } from "@/lib/projectKnowledge";
+import { GIT_METADATA_REASONS, type GitTreeEntry, type GitTreePage } from "@/lib/projectKnowledge";
 import { useRepositoryQuery } from "./repositoryApi";
 
 interface TreeProps {
@@ -64,6 +64,7 @@ function TreeBranch({ prefix, level, expanded, activeDirectory, onToggle, ...pro
     prefix: string; level: number; expanded: Record<string, boolean>; activeDirectory: string; onToggle: (path: string, open: boolean) => void;
 }) {
     const [offset, setOffset] = useState(0);
+    const branchId = useId();
     const query = useRepositoryQuery<GitTreePage>({ project: props.project, connection: props.connection, sha: props.sha, kind: "tree", params: { children: "true", prefix, offset: String(offset), limit: "40" } });
     return <>
         {query.isFetching && <p role="status" className="px-2 text-[12px] text-muted">Читаем каталог…</p>}
@@ -71,18 +72,20 @@ function TreeBranch({ prefix, level, expanded, activeDirectory, onToggle, ...pro
         {query.data && !query.error && <>
             {level === 1 && query.data.truncated && <p className="px-2 text-[12px] text-warning">Каталог этой версии загружен не полностью. Некоторые пути могут отсутствовать.</p>}
             {query.data.items.length === 0 && <p className="px-2 text-[12px] text-muted">В каталоге нет элементов.</p>}
-            {query.data.items.map(entry => {
+            {query.data.items.map((entry, index) => {
                 const folder = entry.type === "tree";
                 const open = activeDirectory === entry.path || activeDirectory.startsWith(`${entry.path}/`) || expanded[entry.path] === true;
                 const Icon = folder ? open ? FolderOpen : Folder : FileText;
                 return <div key={entry.path}>
                     <button type="button" role="treeitem" aria-label={entry.path.slice(prefix ? prefix.length + 1 : 0)} aria-selected={folder ? entry.path === props.directory : entry.path === props.selectedPath}
+                        aria-describedby={folder ? undefined : `${branchId}-${index}-status`}
                         aria-expanded={folder ? open : undefined} aria-level={level} data-path={entry.path} data-parent={prefix}
                         className="repository-tree-entry" style={{ paddingLeft: `${8 + (level - 1) * 16}px` }} title={entry.path}
                         onClick={() => folder ? onToggle(entry.path, !open) : props.onSelect(entry)}>
                         {folder ? open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" /> : <span className="w-[13px] shrink-0" />}
                         <Icon size={16} className={folder ? "text-accent" : "text-muted"} aria-hidden="true" />
                         <span className="min-w-0 truncate">{entry.path.slice(prefix ? prefix.length + 1 : 0)}</span>
+                        {!folder && <span id={`${branchId}-${index}-status`} className="sr-only">{entry.index_state === "metadata" ? GIT_METADATA_REASONS[entry.index_reason ?? ""] ?? "Только метаданные" : entry.index_state === "error" ? "Ошибка чтения" : entry.index_state === "pending" ? "Ожидает обработки" : "Текст готов"}</span>}
                         {entry.index_state === "error" && <span className="ml-auto text-warning" title="Ошибка чтения">!</span>}
                     </button>
                     {folder && open && <div role="group"><TreeBranch {...props} prefix={entry.path} level={level + 1} expanded={expanded} activeDirectory={activeDirectory} onToggle={onToggle} /></div>}

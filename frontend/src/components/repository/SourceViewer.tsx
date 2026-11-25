@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useState, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Code2, Copy, ExternalLink, LockKeyhole } from "lucide-react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/States";
@@ -6,6 +6,7 @@ import { copyText } from "@/lib/clipboard";
 import type { GitFilePage } from "@/lib/projectKnowledge";
 import { useRepositoryQuery } from "./repositoryApi";
 import { sourcePageWindow } from "./sourcePage";
+import { StaticSource } from "./StaticSource";
 import "./sourceViewer.css";
 
 const MonacoSource = lazy(() => import("./MonacoSource"));
@@ -18,23 +19,13 @@ class HighlightBoundary extends Component<{ children: ReactNode; fallback: React
     render() { return this.state.failed ? <><p role="status" className="repository-source-notice">Подсветка недоступна. Показан обычный текст.</p>{this.props.fallback}</> : this.props.children; }
 }
 
-function PlainSource({ text, path, firstLine, line, end, onRange }: {
-    text: string; path: string; firstLine: number; line: number; end: number; onRange?: (range: SourceRange) => void;
-}) {
-    return <pre tabIndex={0} aria-label={`Код ${path}`} className="repository-source-plain scrollbar-thin"><code>{text.replace(/\r?\n$/, "").split(/\r?\n/).map((content, index) => {
-        const number = firstLine + index;
-        return <span key={index} className={`repository-source-line${number >= line && number <= end ? " repository-source-range" : ""}`}>
-            {onRange ? <button type="button" className="repository-source-line-number" aria-label={`Выбрать строку ${number}`} aria-pressed={number >= line && number <= end} onClick={event => onRange(event.shiftKey ? { line: Math.min(line, number), end: Math.max(line, number) } : { line: number, end: number })}>{number}</button> : <span aria-hidden="true" className="repository-source-line-number">{number}</span>}
-            <span>{content || " "}</span>{"\n"}
-        </span>;
-    })}</code></pre>;
-}
-
 export function SourceViewer({ project, selection, onPage, onRange, showVersionNotice = true, showCoverageNotice = true }: {
     project: number; selection: SourceSelection; onPage: (offset: number) => void; onRange?: (range: SourceRange) => void; showVersionNotice?: boolean; showCoverageNotice?: boolean;
 }) {
     const [plain, setPlain] = useState(false);
     const [copied, setCopied] = useState("");
+    const root = useRef<HTMLElement>(null);
+    const focusPage = useRef(false);
     const { connection, sha, path, line, end, offset } = selection;
     // Selecting a visible gutter range updates the permalink, not the loaded fragment.
     // External symbol/history navigation still moves the source reading anchor.
@@ -50,12 +41,19 @@ export function SourceViewer({ project, selection, onPage, onRange, showVersionN
     const file = useRepositoryQuery<GitFilePage>({ project, connection, sha, kind: "file", params: {
         path, max_chars: "8000", ...(offset ? { offset: String(offset) } : { line_start: String(requestLine) }),
     } });
+    useEffect(() => {
+        if (focusPage.current && file.data && !file.isFetching) {
+            root.current?.querySelector<HTMLElement>(".repository-source-static")?.focus();
+            focusPage.current = false;
+        }
+    }, [file.data, file.isFetching]);
+    const readPage = (pageOffset: number) => { focusPage.current = true; onPage(pageOffset); };
     const window = file.data ? sourcePageWindow(file.data) : null;
     const lastLine = file.data && window ? file.data.line_start + Math.max(0, window.text.replace(/\r?\n$/, "").split(/\r?\n/).length - 1) : null;
     const extension = path.split(".").pop()?.toLowerCase() ?? "";
     const language = ({ py: "Python", ts: "TypeScript", tsx: "TSX", js: "JavaScript", jsx: "JSX", md: "Markdown", json: "JSON", css: "CSS", html: "HTML", yml: "YAML", yaml: "YAML", sh: "Shell", sql: "SQL" } as Record<string, string>)[extension] ?? "Текст";
-    const plainSource = file.data && window ? <PlainSource text={window.text} path={path} firstLine={file.data.line_start} line={line} end={end} onRange={selectRange} /> : null;
-    return <section className="repository-source-viewer" aria-label="Исходный файл">
+    const plainSource = file.data && window ? <StaticSource text={window.text} path={path} firstLine={file.data.line_start} line={line} end={end} onRange={selectRange} /> : null;
+    return <section ref={root} className="repository-source-viewer" aria-label="Исходный файл">
         <header className="repository-source-toolbar">
             <Code2 size={16} aria-hidden="true" className="text-accent shrink-0" />
             <h3 className="repository-source-filename" title={path}>{path.split("/").pop()}</h3>
@@ -81,8 +79,8 @@ export function SourceViewer({ project, selection, onPage, onRange, showVersionN
             {showVersionNotice && file.data.stale && <p className="repository-source-notice">Открыта сохранённая версия файла {sha.slice(0, 7)}; ветка уже обновилась.</p>}
             {plain ? plainSource : <HighlightBoundary key={`${connection}:${sha}:${path}`} fallback={plainSource}><Suspense fallback={<><p role="status" className="repository-source-notice">Загружаем подсветку…</p>{plainSource}</>}><MonacoSource text={window!.text} path={path} firstLine={file.data.line_start} line={line} end={end} onRange={selectRange} /></Suspense></HighlightBoundary>}
             <footer className="repository-source-footer">
-                {window?.next != null && <><span className="text-[12px] text-muted">Файл загружается частями</span><Button size="sm" onClick={() => onPage(window.next!)}>Читать дальше</Button></>}
-                {offset > 0 && <Button size="sm" variant="ghost" onClick={() => { setAnchor(current => ({ ...current, line })); onPage(0); }}>К выбранным строкам</Button>}
+                {window?.next != null && <><span className="text-[12px] text-muted">Файл загружается частями</span><Button size="sm" onClick={() => readPage(window.next!)}>Читать дальше</Button></>}
+                {offset > 0 && <Button size="sm" variant="ghost" onClick={() => { setAnchor(current => ({ ...current, line })); readPage(0); }}>К выбранным строкам</Button>}
                 <span role="status" className="text-[12px] text-muted">{copied}</span>
             </footer>
         </>}

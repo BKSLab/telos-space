@@ -68,8 +68,8 @@ for (const width of [320, 1440]) {
         if (width < 900) await page.getByRole("button", { name: "Дерево", exact: true }).click();
         await expect(page.getByRole("treeitem", { name: /\.env\.example/ })).toBeVisible();
         await expect(page.getByRole("treeitem", { name: /package-lock.json/ })).toBeVisible();
-        await expect(page.getByRole("treeitem", { name: /cover.png.*Двоичные файлы/ })).toBeVisible();
-        await expect(page.getByRole("treeitem", { name: /large-file.log.*Ошибка чтения/ })).toBeVisible();
+        await expect(page.getByRole("treeitem", { name: /cover.png/ })).toHaveAccessibleDescription("Двоичные файлы");
+        await expect(page.getByRole("treeitem", { name: /large-file.log/ })).toHaveAccessibleDescription("Ошибка чтения");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: info.outputPath(`git-file-catalog-${width}.png`), animations: "disabled" });
         await page.getByRole("treeitem", { name: /\.env\.example/ }).click();
@@ -394,9 +394,11 @@ for (const width of [320, 1440]) {
         ];
         await page.route("**/api/v1/projects/1/git/connections?**", route => route.fulfill({ json: { items, total: 5, offset: 0, limit: 20, next_offset: null } }));
         await page.goto("/projects/DEMO/knowledge?view=code");
+        await page.getByRole("button", { name: "Панель кода", exact: true }).click();
         await expect(page.getByText("Актуальны: 1", { exact: true })).toBeVisible();
         await expect(page.getByText("В работе: 2", { exact: true })).toBeVisible();
         await expect(page.getByText("Требуют внимания: 2", { exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "Закрыть панель кода" }).click();
         await expect(page.getByText("Индекс актуален", { exact: true })).toBeVisible();
         for (const item of items) await page.getByText(`Диагностика ${item.name}`, { exact: true }).click();
         await expect(page.getByRole("list", { name: "Этапы индексации" })).toHaveCount(5);

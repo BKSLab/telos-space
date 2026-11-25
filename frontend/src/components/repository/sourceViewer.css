@@ -9,12 +9,23 @@
 .repository-source-path { flex: 1; min-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
 .repository-source-readonly { display: inline-flex; align-items: center; gap: 4px; }
 .repository-source-notice { padding: 6px 12px; font-size: 12px; }
-.repository-source-editor { flex: 0 1 auto; min-width: 0; min-height: 104px; overflow: hidden; }
-.repository-source-plain { flex: 0 1 auto; min-height: 104px; max-height: 560px; overflow: auto; margin: 0; padding: 10px 0; background: var(--color-surface); color: var(--color-text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 21px; tab-size: 4; }
-.repository-source-line { display: block; width: max-content; min-width: 100%; }
-.repository-source-line-number { display: inline-block; min-width: 54px; margin-right: 14px; padding: 0 10px 0 6px; border: 0; background: transparent; color: var(--color-text-muted); text-align: right; user-select: none; }
+.repository-source-static { flex: 0 1 auto; min-width: 0; min-height: 104px; max-height: 560px; overflow: auto; background: var(--color-surface); color: var(--color-text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 21px; tab-size: 4; }
+.repository-source-static:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.repository-source-content { display: grid; grid-template-columns: max-content minmax(0, 1fr); width: max-content; min-width: 100%; padding: 10px 0; }
+.repository-source-pre { grid-column: 2; grid-row: 1; margin: 0; padding-right: 16px; font: inherit; white-space: pre; }
+.repository-source-code { font: inherit; }
+.repository-source-line { white-space: pre; }
+.repository-source-gutter { grid-column: 1; grid-row: 1; position: sticky; left: 0; align-self: start; background: var(--color-surface); user-select: none; }
+.repository-source-line-number { display: block; width: 100%; min-width: 54px; height: 21px; padding: 0 14px 0 6px; border: 0; background: transparent; color: var(--color-text-muted); font: inherit; text-align: right; user-select: none; }
 button.repository-source-line-number { cursor: pointer; }
 button.repository-source-line-number:hover { color: var(--color-accent); }
+button.repository-source-line-number:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.repository-source-token-comment { color: var(--color-text-muted); font-style: italic; }
+.repository-source-token-keyword, .repository-source-token-tag { color: var(--color-accent); }
+.repository-source-token-string, .repository-source-token-regexp { color: var(--color-warning); }
+.repository-source-token-number { color: var(--color-success); }
+.repository-source-token-type { color: var(--color-ai-cyan); }
+.repository-source-token-attribute { color: var(--color-ai-violet); }
 .repository-source-range { background: color-mix(in srgb, var(--color-accent) 16%, transparent); }
 .repository-source-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 10px; border-top: 1px solid var(--color-line-subtle); }
 .repository-source-footer:has(> span:only-child:empty) { display: none; }
@@ -25,4 +36,5 @@ button.repository-source-line-number:hover { color: var(--color-accent); }
 }
 @media (forced-colors: active) {
     .repository-source-range { outline: 1px solid Highlight; }
+    .repository-source-code span { color: CanvasText; }
 }

@@ -17,6 +17,7 @@ const clients: QueryClient[] = [];
 const connection = (id: number): GitConnection => ({ id, project_id: 7, provider: "github", repository_id: id + 100, owner: "owner", repo: `repo${id}`, name: `Repo ${id}`, purpose: "", ref: "heads/main", enabled: true, is_private: true, share_private_with_project: true, has_credential: true, has_webhook_secret: false, revision: 1, generation: 1, credential_revision: 1, state: "ready", observed_sha: sha, indexed_sha: sha, observed_at: null, indexed_at: null, checked_at: null, last_error_code: null, coverage: { total_files: 1200, cataloged_files: 1200, indexed_files: 1199, metadata_files: 1, failed_files: 0, metadata_counts: { binary_file: 1 }, truncated: false } });
 function Navigation() { const location = useLocation(); const navigate = useNavigate(); return <><output data-testid="location">{location.search}</output><button onClick={() => navigate(-1)}>History back</button><button onClick={() => navigate("?view=code&code_view=search&code_q=restored")}>Restore search</button></>; }
 function mount(search = "?view=code") {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } }); clients.push(client);
     client.setQueryData(queryKeys.currentUser, { id: 1 });
     render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[`/projects/DEMO/knowledge${search}`]}><RepositoryWorkspace projectId={7} /><Navigation /></MemoryRouter></QueryClientProvider>);
@@ -34,14 +35,28 @@ function respond(path: string) {
     if (url.pathname.endsWith("/aris/conversations")) return { items: [{ id: 15 }], next_offset: null };
     throw new Error(`Unexpected path: ${path}`);
 }
-afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.restoreAllMocks(); useArisWidgetStore.setState({ drafts: {}, conversations: {} }); useChatDockStore.setState({ panel: null }); });
+afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.restoreAllMocks(); vi.unstubAllGlobals(); useArisWidgetStore.setState({ drafts: {}, conversations: {} }); useChatDockStore.setState({ panel: null }); });
+
+async function openPanel(source = false) {
+    fireEvent.click(screen.getByRole("button", { name: "Панель кода" }));
+    await screen.findByRole("dialog", { name: "Панель кода" });
+    if (source) fireEvent.click(await screen.findByRole("button", { name: "Источник" }));
+}
+async function closePanel() {
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть панель кода" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Панель кода" })).toBeNull());
+}
 
 it("pages beyond twenty repositories and opens a pinned source from the second page", async () => {
     const get = vi.spyOn(api, "get").mockImplementation(async path => respond(path)); mount();
     expect(await screen.findByRole("button", { name: "Открыть Repo 10" })).toBeTruthy();
+    await openPanel();
     fireEvent.click(screen.getByRole("button", { name: "Дальше" }));
+    await closePanel();
     await screen.findByRole("button", { name: "Открыть Repo 20" });
+    await openPanel();
     fireEvent.click(screen.getByRole("button", { name: "Дальше" }));
+    await closePanel();
     fireEvent.click(await screen.findByRole("button", { name: "Открыть Repo 23" }));
     fireEvent.click(await screen.findByRole("treeitem", { name: /src\/auth.py/ }));
     await screen.findByLabelText("Код src/auth.py");
@@ -56,8 +71,10 @@ it("restores range and repository on Back, without leaking the previous source",
     mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py&line=55&end=56&kind=task_report`);
     await screen.findByText(/repo1: Привет/);
     expect(api.get).toHaveBeenCalledWith(expect.stringContaining("line_start=55"), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    await openPanel();
     fireEvent.change(screen.getByLabelText("Репозиторий", { exact: true }), { target: { value: "2" } });
     await waitFor(() => expect(screen.queryByText(/repo1: Привет/)).toBeNull());
+    await closePanel();
     fireEvent.click(screen.getByRole("button", { name: "History back" }));
     await screen.findByText(/repo1: Привет/);
     expect(screen.getByTestId("location").textContent).toContain("kind=task_report");
@@ -80,7 +97,7 @@ it("adds component identifiers to the existing private draft without sending a m
     vi.spyOn(api, "get").mockImplementation(async path => respond(path)); const post = vi.spyOn(api, "post");
     mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py&line=55&end=56`);
     await screen.findByLabelText("Код src/auth.py");
-    fireEvent.click(document.querySelector(".repository-inspector-toggle")!);
+    await openPanel(true);
     fireEvent.click(await screen.findByRole("button", { name: "Спросить о компоненте" }));
     await waitFor(() => expect(useArisWidgetStore.getState().drafts["1:15"]?.content).toContain(`SHA=${sha}`));
     expect(useArisWidgetStore.getState().drafts["1:15"]?.content).toContain("строки 55–56");
@@ -94,6 +111,7 @@ it("aborts the old repository's in-flight file when switching sources", async ()
         return respond(path);
     }); mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py`);
     await waitFor(() => expect(signal).toBeTruthy());
+    await openPanel();
     fireEvent.change(screen.getByLabelText("Репозиторий", { exact: true }), { target: { value: "2" } });
     await waitFor(() => expect(signal?.aborted).toBe(true));
 });
@@ -104,6 +122,7 @@ it("treats repository cursors as opaque and returns to the visited cursor", asyn
         if (/\/connections$/.test(url.pathname)) { const cursor = Number(url.searchParams.get("offset")); return { items: [connection(1)], total: null, next_offset: cursor === 0 ? 205 : cursor === 205 ? 900 : null }; }
         return respond(path);
     }); mount();
+    await openPanel();
     fireEvent.click(await screen.findByRole("button", { name: "Дальше" }));
     await waitFor(() => expect(screen.getByTestId("location").textContent).toContain("repo_offset=205"));
     fireEvent.click(await screen.findByRole("button", { name: "Дальше" }));
@@ -126,7 +145,10 @@ it("purges connection metadata and every source when the project list returns fo
     let denied = false;
     vi.spyOn(api, "get").mockImplementation(async path => { if (denied && /\/connections\?/.test(path)) throw new ApiError(403, "Проект недоступен"); return respond(path); });
     const client = mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py`);
-    await screen.findByText(/repo1: Привет/); denied = true;
+    await screen.findByText(/repo1: Привет/);
+    await openPanel();
+    expect(screen.getByRole("option", { name: "Repo 1" })).toBeTruthy();
+    denied = true;
     await client.invalidateQueries({ queryKey: repositoryKey(7, "connections") });
     await screen.findByText(/Доступ к исходникам изменился/);
     expect(screen.queryByRole("option", { name: "Repo 1" })).toBeNull();
@@ -141,7 +163,7 @@ it("keeps the file area for source and opens symbol details only on request", as
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.queryByRole("complementary", { name: "Сведения об источнике" })).toBeNull();
     expect(document.querySelector(".repository-show-inspector")).toBeNull();
-    fireEvent.click(document.querySelector(".repository-inspector-toggle")!);
+    await openPanel(true);
     expect(await screen.findByRole("complementary", { name: "Сведения об источнике" })).toBeTruthy();
 });
 
@@ -157,6 +179,8 @@ it("explains a historical SHA once and changes version only after an explicit ac
     });
     mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py`);
     await screen.findByLabelText("Код src/auth.py");
+    expect(screen.queryByText(/Открыта сохранённая версия/)).toBeNull();
+    await openPanel();
     expect(screen.getAllByText(/Открыта сохранённая версия/)).toHaveLength(1);
     expect(screen.queryByText(/неполно|неполны|ещё не завершена/)).toBeNull();
     expect(screen.getByTestId("location").textContent).toContain(`sha=${sha}`);
@@ -168,6 +192,7 @@ it("explains a historical SHA once and changes version only after an explicit ac
 it("reports actual failed files with a concrete explanation", async () => {
     vi.spyOn(api, "get").mockImplementation(async path => path.includes("/snapshots?") ? { items: [{ commit_sha: sha, complete: false, analysis_state: "published", coverage: { ...snapshotCoverage, failed_files: 2, reasons: ["file_errors"] } }], next_offset: null } : respond(path));
     mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py`);
+    await openPanel();
     await screen.findByText("Не удалось прочитать файлов: 2. Поиск по этой версии может находить не всё.");
 });
 
