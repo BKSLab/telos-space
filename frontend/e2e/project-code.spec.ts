@@ -8,18 +8,19 @@ function connection(id: number): GitConnection { return { id, project_id: 1, pro
 function symbol(id: number): GitSymbol { return { id, file_id: 1, path: "src/auth.py", name: `check_${id}`, qualified_name: `auth.check_${id}`, kind: "function", parent_id: null, signature: `def check_${id}(user):`, line_start: id + 10, line_end: id + 12, offset: id * 10, end_offset: id * 10 + 40 }; }
 const graph: GitGraph = { connection_id: 1, commit_sha: sha, analyzer_version: "test-v1", nodes: Array.from({ length: 100 }, (_, index) => symbol(index + 1)), edges: Array.from({ length: 500 }, (_, index) => ({ id: index + 1, source_id: index % 90 + 1, target_id: (index + 1) % 90 + 1, kind: "calls", confidence: index % 2 ? "resolved" : "candidate", label: "check", path: "src/auth.py", line_start: index + 10, line_end: index + 10 })), truncated: true, coverage };
 
-async function workspaceApi(page: Page, count = 3, graphData = graph, extraPaths: string[] = []) {
+async function workspaceApi(page: Page, count = 3, graphData = graph, extraPaths: string[] = [], status: { historical?: boolean; truncated?: boolean; failedFiles?: number } = {}) {
     await installMockApi(page, mockState());
     const reads: string[] = [];
+    const verifiedConnection = (id: number) => status.historical ? { ...connection(id), observed_sha: older, indexed_sha: older } : connection(id);
     await page.route("**/api/v1/projects/1/git/**", async route => {
         const url = new URL(route.request().url()); const path = url.pathname; reads.push(url.pathname + url.search);
         const headers = { "access-control-allow-origin": route.request().headers()["origin"] ?? "http://127.0.0.1:4179", "access-control-allow-credentials": "true", "access-control-allow-headers": "content-type" };
         if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
         const reply = (json: unknown, status = 200) => route.fulfill({ json, headers, status });
         const id = Number(path.match(/connections\/(\d+)/)?.[1] ?? 1);
-        if (path.endsWith("/connections")) { const offset = Number(url.searchParams.get("offset")); const size = url.searchParams.has("verified") ? 10 : 20; return reply({ items: Array.from({ length: Math.min(size, Math.max(0, count - offset)) }, (_, index) => connection(offset + index + 1)), offset, limit: size, total: offset + size >= count ? count : null, next_offset: offset + size < count ? offset + size : null }); }
-        if (/connections\/\d+$/.test(path)) return reply(connection(id));
-        if (path.endsWith("/snapshots")) return reply({ items: [sha, older].map(commit_sha => ({ connection_id: id, commit_sha, complete: false, analysis_state: "published", analyzer_version: "test-v1", coverage } satisfies GitSnapshotInfo)), next_offset: null });
+        if (path.endsWith("/connections")) { const offset = Number(url.searchParams.get("offset")); const size = url.searchParams.has("verified") ? 10 : 20; return reply({ items: Array.from({ length: Math.min(size, Math.max(0, count - offset)) }, (_, index) => verifiedConnection(offset + index + 1)), offset, limit: size, total: offset + size >= count ? count : null, next_offset: offset + size < count ? offset + size : null }); }
+        if (/connections\/\d+$/.test(path)) return reply(verifiedConnection(id));
+        if (path.endsWith("/snapshots")) return reply({ items: [sha, older].map(commit_sha => ({ connection_id: id, commit_sha, complete: !status.truncated && !status.failedFiles, analysis_state: "published", analyzer_version: "test-v1", coverage: { ...coverage, failed_files: status.failedFiles ?? 0, reasons: status.truncated ? ["tree_limit"] : status.failedFiles ? ["file_errors"] : [] } } satisfies GitSnapshotInfo)), next_offset: null });
         if (path.endsWith("/tree")) {
             const directory = url.searchParams.get("prefix") ?? "";
             const paths = [...new Set([...graphData.nodes.map(node => node.path), ...extraPaths, "cover.png"])].filter(file => !directory || file.startsWith(`${directory}/`));
@@ -30,9 +31,10 @@ async function workspaceApi(page: Page, count = 3, graphData = graph, extraPaths
                 const folder = relative.includes("/");
                 entries.set(child, { path: child, sha: folder ? null : sha, type: folder ? "tree" : "blob", mode: folder ? "040000" : "100644", size: folder ? null : 150000, index_state: folder || file === "cover.png" ? "metadata" : "ready", index_reason: file === "cover.png" ? "binary_file" : null });
             }
-            return reply({ connection_id: id, repository_id: 100 + id, commit_sha: sha, items: [...entries.values()], offset: 0, limit: 40, next_offset: null, total_files: 1553, truncated: false, stale: false });
+            const offset = Number(url.searchParams.get("offset") ?? 0), items = [...entries.values()];
+            return reply({ connection_id: id, repository_id: 100 + id, commit_sha: sha, items: items.slice(offset, offset + 40), offset, limit: 40, next_offset: offset + 40 < items.length ? offset + 40 : null, total_files: items.length, truncated: Boolean(status.truncated), stale: Boolean(status.historical) });
         }
-        if (path.endsWith("/file")) { const start = Number(url.searchParams.get("line_start") ?? 40); return reply({ connection_id: id, repository_id: 100 + id, file_id: 1, path: url.searchParams.get("path"), commit_sha: url.searchParams.get("sha"), text: `# repo${id}: Привет\r\ndef check_1(user):\n    return user is not None\n# <script>window.sourceExecuted=true</script>`, source_url: `https://github.com/example/repo${id}/blob/${sha}/src/auth.py`, line_start: start, line_end: start + 3, offset: Number(url.searchParams.get("offset") ?? 0), next_offset: url.searchParams.has("offset") ? null : 8000, total_chars: 16000, stale: false, partial: false }); }
+        if (path.endsWith("/file")) { const start = Number(url.searchParams.get("line_start") ?? 40); return reply({ connection_id: id, repository_id: 100 + id, file_id: 1, path: url.searchParams.get("path"), commit_sha: url.searchParams.get("sha"), text: `# repo${id}: Привет\r\ndef check_1(user):\n    return user is not None\n# <script>window.sourceExecuted=true</script>`, source_url: `https://github.com/example/repo${id}/blob/${sha}/src/auth.py`, line_start: start, line_end: start + 3, offset: Number(url.searchParams.get("offset") ?? 0), next_offset: url.searchParams.has("offset") ? null : 8000, total_chars: 16000, stale: Boolean(status.historical && url.searchParams.get("sha") === sha), partial: Boolean(status.truncated || status.failedFiles) }); }
         if (path.endsWith("/symbols")) return reply({ ...graph, items: [symbol(1), symbol(2)], next_offset: null });
         if (path.endsWith("/graph")) return reply(graphData);
         if (path.endsWith("/impact")) return reply({ ...graph, nodes: graph.nodes.slice(0, 3), edges: graph.edges.slice(0, 3), task_links: [{ task_id: 100, change_id: 1, kind: "commit", provider_id: older, path: "src/auth.py" }] });
@@ -50,7 +52,8 @@ for (const width of [320, 390, 1280, 1440]) {
         const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
         await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&path=src%2Fauth.py&line=11&end=13`);
         await expect(page.locator(".monaco-editor .view-lines").first()).toContainText("repo1: Привет");
-        await expect(page.getByRole("region", { name: "Каталог файлов" })).toBeVisible();
+        await expect(page.getByRole("region", { name: "Каталог файлов" })).toHaveCount(0);
+        await expect(page.getByRole("complementary", { name: "Сведения об источнике" })).toHaveCount(0);
         await expect(page.locator(".repository-source-language")).toHaveText("Python");
         expect(reads.some(path => path.includes("children=true"))).toBe(true);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -209,18 +212,26 @@ test("selecting Monaco line numbers updates the permalink without jumping to a n
 
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 720 }]) {
-    test(`source and paging remain reachable below a long catalogue at ${viewport.width}px`, async ({ page }, info) => {
+    test(`source fills its pane without a duplicate catalogue at ${viewport.width}px`, async ({ page }, info) => {
         await page.setViewportSize(viewport);
         await workspaceApi(page, 3, graph, Array.from({ length: 26 }, (_, index) => `src/file_${index}.py`));
         await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&directory=src&path=src%2Fauth.py&line=11&end=13`);
         const editor = page.locator(".repository-source-editor");
         await expect(page.locator(".monaco-editor").first()).toBeVisible();
+        await expect(page.getByRole("table")).toHaveCount(0);
+        await expect(page.locator(".repository-show-inspector")).toHaveCount(0);
         await editor.scrollIntoViewIfNeeded();
         await expect.poll(async () => (await page.locator(".repository-source-viewer").boundingBox())?.height ?? 0).toBeGreaterThan(150);
         await expect(editor).toBeInViewport();
         const more = page.getByRole("button", { name: "Читать дальше", exact: true });
         await more.scrollIntoViewIfNeeded();
         await expect(more).toBeInViewport();
+        if (viewport.width >= 900) {
+            const geometry = await page.getByRole("region", { name: "Область кода" }).evaluate(element => ({ height: element.clientHeight, scroll: element.scrollHeight, padding: parseFloat(getComputedStyle(element).paddingTop) + parseFloat(getComputedStyle(element).paddingBottom) }));
+            if (geometry.height - geometry.padding >= 320) expect(geometry.scroll).toBeLessThanOrEqual(geometry.height + 1);
+            const pane = await page.getByRole("region", { name: "Область кода" }).boundingBox(), code = await editor.boundingBox();
+            expect(code!.height).toBeGreaterThan(pane!.height / 2);
+        }
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: info.outputPath(`long-catalogue-${viewport.width}.png`), animations: "disabled" });
         await page.getByRole("button", { name: "Иерархия", exact: true }).click();
@@ -232,5 +243,65 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 720 
         expect(await graphElement.evaluate(element => element.scrollTop)).toBe(0);
         const bounds = await graphElement.boundingBox(), note = await warning.boundingBox();
         expect(note!.y + note!.height).toBeLessThanOrEqual(bounds!.y + bounds!.height + 1);
+    });
+}
+
+
+test("historical complete source is labelled once and opens the latest SHA only on request", async ({ page }, info) => {
+    const reads = await workspaceApi(page, 3, graph, [], { historical: true });
+    await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&path=src%2Fauth.py&directory=src`);
+    await expect(page.locator(".monaco-editor").first()).toBeVisible();
+    await expect(page.getByText(/Открыта сохранённая версия/)).toHaveCount(1);
+    await expect(page.getByText(/Каталог или версия неполны|Версия или охват неполны|Индекс этой версии охватывает не весь/)).toHaveCount(0);
+    await expect(page.getByRole("table")).toHaveCount(0);
+    await expect(page.getByRole("complementary", { name: "Сведения об источнике" })).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`sha=${sha}`));
+    await page.screenshot({ path: info.outputPath("historical-two-pane.png"), animations: "disabled" });
+    await page.getByRole("button", { name: "К актуальной версии" }).click();
+    await expect(page).toHaveURL(new RegExp(`sha=${older}`));
+    await expect(page.getByText(/Открыта сохранённая версия/)).toHaveCount(0);
+    await expect.poll(() => reads.some(read => read.includes("/file?") && read.includes(`sha=${older}`))).toBe(true);
+    await page.getByRole("button", { name: "Сведения", exact: true }).click();
+    await expect(page.getByRole("complementary", { name: "Сведения об источнике" })).toBeVisible();
+});
+
+test("an incomplete snapshot explains missing catalogue paths instead of blaming a version", async ({ page }) => {
+    await workspaceApi(page, 3, graph, [], { truncated: true });
+    await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&path=src%2Fauth.py&directory=src`);
+    await expect(page.getByText("GitHub вернул неполный каталог этой версии. Некоторые пути могут отсутствовать.")).toBeVisible();
+    await expect(page.getByText(/Каталог этой версии загружен не полностью/)).toHaveCount(1);
+    await expect(page.getByText(/Версия или охват неполны|Каталог или версия неполны/)).toHaveCount(0);
+});
+
+
+test("path navigation and a direct link open a folder beyond the root's first page", async ({ page }) => {
+    await workspaceApi(page, 3, graph, Array.from({ length: 41 }, (_, index) => `folder${index}/main.py`));
+    await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}`);
+    await expect(page.getByRole("treeitem", { name: "folder40", exact: true })).toHaveCount(0);
+    await page.getByRole("textbox", { name: "Файл или папка", exact: true }).fill("folder40");
+    await page.getByRole("button", { name: "Перейти", exact: true }).click();
+    await page.getByRole("treeitem", { name: "main.py", exact: true }).click();
+    await expect(page).toHaveURL(/path=folder40%2Fmain.py/);
+    await expect(page.locator(".monaco-editor").first()).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("treeitem", { name: "main.py", exact: true })).toBeVisible();
+    await expect(page.locator(".repository-source-filename")).toHaveText("main.py");
+});
+
+for (const viewport of [{ width: 900, height: 720 }, { width: 1280, height: 640 }]) {
+    test(`source paging survives historical and failed-index notices at ${viewport.width}x${viewport.height}`, async ({ page }, info) => {
+        await page.setViewportSize(viewport);
+        await workspaceApi(page, 3, graph, [], { historical: true, failedFiles: 2 });
+        await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&path=src%2Fauth.py&directory=src`);
+        await expect(page.locator(".monaco-editor").first()).toBeVisible();
+        await expect(page.getByText(/Не удалось прочитать файлов: 2/)).toBeVisible();
+        const pane = page.getByRole("region", { name: "Область кода" });
+        await pane.evaluate(element => { element.scrollTop = element.scrollHeight; });
+        const more = page.getByRole("button", { name: "Читать дальше", exact: true });
+        await expect(more).toBeInViewport();
+        expect(await page.locator(".repository-source-viewer").evaluate(element => element.scrollTop)).toBe(0);
+        const viewer = await page.locator(".repository-source-viewer").boundingBox(), button = await more.boundingBox();
+        expect(button!.y + button!.height).toBeLessThanOrEqual(viewer!.y + viewer!.height + 1);
+        await page.screenshot({ path: info.outputPath(`short-window-${viewport.width}.png`), animations: "disabled" });
     });
 }

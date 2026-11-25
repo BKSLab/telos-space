@@ -30,8 +30,8 @@ function PlainSource({ text, path, firstLine, line, end, onRange }: {
     })}</code></pre>;
 }
 
-export function SourceViewer({ project, selection, onPage, onRange }: {
-    project: number; selection: SourceSelection; onPage: (offset: number) => void; onRange?: (range: SourceRange) => void;
+export function SourceViewer({ project, selection, onPage, onRange, showVersionNotice = true, showCoverageNotice = true }: {
+    project: number; selection: SourceSelection; onPage: (offset: number) => void; onRange?: (range: SourceRange) => void; showVersionNotice?: boolean; showCoverageNotice?: boolean;
 }) {
     const [plain, setPlain] = useState(false);
     const [copied, setCopied] = useState("");
@@ -77,10 +77,11 @@ export function SourceViewer({ project, selection, onPage, onRange }: {
         {file.isFetching && <p role="status" className="repository-source-notice">Читаем выбранную версию…</p>}
         {file.error && <ErrorMessage message={file.error.message} action={<Button onClick={() => void file.refetch()}>Повторить чтение</Button>} />}
         {file.data && !file.error && <>
-            {(file.data.partial || file.data.stale) && <p className="repository-source-notice text-warning">Версия или охват неполны. Показан только прочитанный фрагмент.</p>}
+            {showCoverageNotice && file.data.partial && <p className="repository-source-notice text-warning">Индекс этой версии охватывает не весь репозиторий. Доступный текст файла показан ниже.</p>}
+            {showVersionNotice && file.data.stale && <p className="repository-source-notice">Открыта сохранённая версия файла {sha.slice(0, 7)}; ветка уже обновилась.</p>}
             {plain ? plainSource : <HighlightBoundary key={`${connection}:${sha}:${path}`} fallback={plainSource}><Suspense fallback={<><p role="status" className="repository-source-notice">Загружаем подсветку…</p>{plainSource}</>}><MonacoSource text={window!.text} path={path} firstLine={file.data.line_start} line={line} end={end} onRange={selectRange} /></Suspense></HighlightBoundary>}
             <footer className="repository-source-footer">
-                {window?.next != null && <Button size="sm" onClick={() => onPage(window.next!)}>Читать дальше</Button>}
+                {window?.next != null && <><span className="text-[12px] text-muted">Файл загружается частями</span><Button size="sm" onClick={() => onPage(window.next!)}>Читать дальше</Button></>}
                 {offset > 0 && <Button size="sm" variant="ghost" onClick={() => { setAnchor(current => ({ ...current, line })); onPage(0); }}>К выбранным строкам</Button>}
                 <span role="status" className="text-[12px] text-muted">{copied}</span>
             </footer>

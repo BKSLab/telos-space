@@ -9,7 +9,6 @@ import { contextApi, GIT_METADATA_REASONS, type GitConnection, type GitConnectio
 import { GitIndexBadge, GitIndexDetails, GitIndexSummary } from "@/components/projects/GitIndexStatus";
 import { RepositoryAccess, repositoryPrefix, repositoryKey, repositoryPath, useRepositoryQuery } from "./repositoryApi";
 import { RepositoryTree } from "./RepositoryTree";
-import { RepositoryCatalog } from "./RepositoryCatalog";
 import { SourceViewer, type SourceSelection } from "./SourceViewer";
 import { RepositorySearch } from "./RepositorySearch";
 import { RepositoryInspector } from "./RepositoryInspector";
@@ -63,6 +62,7 @@ export function RepositoryWorkspace({ projectId }: { projectId: number }) {
     const [leftWidth, setLeftWidth] = useState(220);
     const [rightWidth, setRightWidth] = useState(280);
     const [inspector, setInspector] = useState(() => window.innerWidth >= 1200);
+    const [fileInspector, setFileInspector] = useState(false);
     const root = useRef<HTMLDivElement>(null);
     const onQuery = useCallback((query: string) => update({ code_q: query }, true), [update]);
     const selectSymbol = (symbol: GitSymbol) => { setMetadata(null); update({ path: symbol.path, symbol: symbol.id, line: symbol.line_start, end: symbol.line_end, source_offset: null, directory: symbol.path.split("/").slice(0, -1).join("/") }); setInspector(true); };
@@ -106,10 +106,10 @@ export function RepositoryWorkspace({ projectId }: { projectId: number }) {
         </>}
         {!connections.error && connectionId > 0 && (denied ? <p role="status" className="text-[13px] text-warning">{revoked.includes(connectionId) || connection?.state === "access_lost" ? "Доступ к репозиторию потерян. Прочитанные данные удалены из кэша." : selectedConnection.isPending && !connection ? "Проверяем подключение…" : selectedConnection.error?.message ?? "Источник отключён или недоступен."}</p>
             : <RepositoryContent key={`${projectId}:${connectionId}:${sha}`} project={projectId} connection={connection!} selection={selection} symbolId={symbolId} mode={mode} directory={params.get("directory") ?? ""} rootId={positive(params.get("root"))}
-                pane={pane} setPane={setPane} metadata={metadata?.entry.path === selection.path && metadata.connection === connectionId && metadata.sha === sha ? metadata.entry : null} overlay={overlay} setOverlay={setOverlay} depth={depth} setDepth={setDepth} inspector={inspector} setInspector={setInspector}
+                pane={pane} setPane={setPane} metadata={metadata?.entry.path === selection.path && metadata.connection === connectionId && metadata.sha === sha ? metadata.entry : null} overlay={overlay} setOverlay={setOverlay} depth={depth} setDepth={setDepth} inspector={mode === "files" ? fileInspector : inspector} setInspector={mode === "files" ? setFileInspector : setInspector}
                 style={{ "--repository-tree-width": `${leftWidth}px`, "--repository-inspector-width": `${rightWidth}px` } as CSSProperties} leftSeparator={separator("left")} rightSeparator={separator("right")}
                 query={params.get("code_q") ?? ""} onQuery={onQuery} onOpen={openHit} onSymbol={selectSymbol} update={update}
-                onEntry={entry => { setMetadata(entry.index_state === "metadata" || entry.index_state === "error" ? { entry, connection: connectionId, sha } : null); update({ code_view: "files", path: entry.path, directory: entry.path.split("/").slice(0, -1).join("/"), symbol: null, line: null, end: null, source_offset: null }); setPane("source"); }} />)}
+                onEntry={entry => { setFileInspector(false); setMetadata(entry.index_state === "metadata" || entry.index_state === "error" ? { entry, connection: connectionId, sha } : null); update({ code_view: "files", path: entry.path, directory: entry.path.split("/").slice(0, -1).join("/"), symbol: null, line: null, end: null, source_offset: null }); setPane("source"); }} />)}
         {connections.data && !connections.error && (offset > 0 || connections.data.next_offset !== null) && <nav aria-label="Страницы репозиториев" className="flex shrink-0 flex-wrap items-center gap-2 text-[12px] text-muted"><span>На странице: {connections.data.items.length}{connections.data.total !== null ? ` из ${connections.data.total}` : ""}</span><Button size="sm" disabled={!offset} onClick={() => update({ repo_offset: previousOffsets.current.get(offset) ?? 0 })}>Назад</Button><Button size="sm" disabled={connections.data.next_offset === null} onClick={() => { const next = connections.data?.next_offset; if (next != null) { previousOffsets.current.set(next, offset); update({ repo_offset: next }); } }}>Дальше</Button></nav>}
     </section></RepositoryAccess>;
 }
@@ -132,6 +132,8 @@ function RepositoryContent(p: ContentProps) {
     const graph = useRepositoryQuery<GitGraph>({ project, connection: connection.id, sha: selection.sha, kind: "graph", params: { depth: String(p.depth), limit: "100", direction: "both", relation: "all", ...(p.rootId ? { root_id: String(p.rootId) } : {}) }, enabled: isGraph });
     const impact = useRepositoryQuery<GitGraph>({ project, connection: connection.id, sha: selection.sha, kind: "impact", params: { symbol_id: String(p.symbolId), depth: "1", limit: "100" }, enabled: isGraph && p.symbolId > 0 });
     const coverage = snapshots.data?.items.find(item => item.commit_sha === selection.sha);
+    const historical = Boolean(selection.sha && connection.observed_sha && selection.sha !== connection.observed_sha);
+    const incompleteCatalog = coverage?.coverage.reasons.some(reason => ["tree_limit", "upstream_directory_truncated"].includes(reason));
     return <>
         <div className="flex shrink-0 flex-wrap items-center gap-2 text-[12px] text-muted"><GitIndexBadge connection={connection} /><span className="break-all">{connection.ref}</span>
             <label className="flex min-w-0 max-w-full items-center gap-2">Версия<select aria-label="Версия репозитория" title={selection.sha} className="control-surface min-w-0 max-w-64 rounded p-1 font-mono" value={selection.sha} onChange={event => update({ sha: event.target.value, symbol: null, root: null, source_offset: null })}>
@@ -145,12 +147,14 @@ function RepositoryContent(p: ContentProps) {
             ["Файлы", coverage.coverage.total_files], ["Текст", coverage.coverage.indexed_files], ["Структура", coverage.coverage.analyzed_files], ["Символы", coverage.coverage.symbols],
         ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{Number(value).toLocaleString("ru")}</dd></div>)}</dl>}
         {snapshots.error && <ErrorMessage message={snapshots.error.message} />}
-        {coverage && (!coverage.complete || coverage.analysis_state !== "published") && <p className="text-[12px] text-warning">Неполный охват версии или структуры. {coverage.coverage.reasons.map(reason => reason === "unsupported_syntax" ? "Часть синтаксиса не поддерживается." : reason).join(" ")}</p>}
+        {historical && <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 text-[12px] text-muted"><span>Открыта сохранённая версия <span className="font-mono">{selection.sha.slice(0, 8)}</span>. Ветка уже обновилась.</span><Button size="sm" onClick={() => update({ sha: connection.observed_sha!, symbol: null, root: null, line: null, end: null, source_offset: null })}>К актуальной версии</Button></div>}
+        {coverage && !coverage.complete && <p role="status" className="shrink-0 text-[12px] text-warning">{incompleteCatalog ? "GitHub вернул неполный каталог этой версии. Некоторые пути могут отсутствовать." : coverage.coverage.failed_files > 0 ? `Не удалось прочитать файлов: ${coverage.coverage.failed_files}. Поиск по этой версии может находить не всё.` : "Индексация этой версии ещё не завершена. Часть файлов пока недоступна для поиска."}</p>}
+        {isGraph && coverage && coverage.analysis_state !== "published" && <p role="status" className="shrink-0 text-[12px] text-muted">Структура этой версии ещё не готова. Доступные файлы можно открыть в каталоге.</p>}
         <nav aria-label="Панели кода" className="repository-pane-tabs flex shrink-0 gap-2">{[{ id: "tree", label: "Дерево" }, { id: "source", label: isGraph ? "Карта" : "Содержимое" }, { id: "inspector", label: "Сведения" }].map(pane => <Button size="sm" key={pane.id} aria-pressed={p.pane === pane.id} onClick={() => p.setPane(pane.id)}>{pane.label}</Button>)}</nav>
         <div className={`repository-panes ${p.inspector ? "repository-show-inspector" : ""}`} data-pane={p.pane} style={p.style}>
             <div className="repository-tree scrollbar-thin min-h-0 min-w-0 overflow-y-auto rounded-md border border-line-subtle p-3"><RepositoryTree project={project} connection={connection.id} sha={selection.sha} directory={p.directory} selectedPath={selection.path} onDirectory={directory => update({ directory })} onSelect={p.onEntry} /></div>
             {p.leftSeparator}
-            <div role="region" aria-label="Область кода" className="repository-source scrollbar-thin flex min-h-0 min-w-0 flex-col gap-3 overflow-auto rounded-md border border-line-subtle p-3">
+            <div role="region" aria-label="Область кода" className={`repository-source ${mode === "files" ? "repository-file-content" : ""} scrollbar-thin flex min-h-0 min-w-0 flex-col gap-3 overflow-auto rounded-md border border-line-subtle p-3`}>
                 {mode === "search" ? <RepositorySearch key={`${connection.id}:${selection.sha}`} project={project} connection={connection.id} sha={selection.sha} value={p.query} onQuery={p.onQuery} onOpen={p.onOpen} />
                     : mode === "changes" ? <RepositoryChanges project={project} connection={connection.id} sha={selection.sha} snapshots={snapshots.data?.items ?? []} onOpen={(path, sha) => update({ path, sha, code_view: "files", line: null, end: null, source_offset: null })} />
                     : isGraph ? <>
@@ -163,13 +167,12 @@ function RepositoryContent(p: ContentProps) {
                         {graph.isFetching && <p role="status" className="text-muted">Читаем структурную область…</p>}{graph.error && <ErrorMessage message={graph.error.message} />}
                         {graph.data && !graph.error && <Suspense fallback={<p role="status">Загружаем карту…</p>}><RepositoryGraph graph={{ ...graph.data, task_links: !impact.error ? impact.data?.task_links : undefined }} name={connection.name} catalogEntries={!catalog.error ? catalog.data?.items : undefined} catalogIncomplete={Boolean(catalog.data?.truncated || catalogOffset > 0 || catalog.data?.next_offset != null)} focusPath={p.directory} layout={mode as RepositoryLayout} overlay={p.overlay} selected={p.symbolId} onSelect={p.onSymbol} onPath={path => { const entry = catalog.data?.items.find(item => item.path === path); if (entry && entry.type !== "tree") p.onEntry(entry); else if (!entry && graph.data.nodes.some(node => node.path === path)) { update({ path, code_view: "files", symbol: null, line: null, end: null, source_offset: null, directory: path.split("/").slice(0, -1).join("/") }); p.setPane("source"); } else update({ directory: path }); }} /></Suspense>}
                     </> : <>
-                        <RepositoryCatalog key={p.directory} project={project} connection={connection.id} sha={selection.sha} directory={p.directory} selectedPath={selection.path} onDirectory={directory => update({ directory })} onSelect={p.onEntry} />
                         {p.metadata ? <div className="space-y-2 p-3 text-[13px] text-secondary"><h3 className="break-all font-mono">{p.metadata.path}</h3><p>{p.metadata.index_state === "error" ? "Ошибка чтения" : "Только метаданные"}: {GIT_METADATA_REASONS[p.metadata.index_reason ?? ""] ?? p.metadata.index_reason ?? "Содержимое не представлено текстом"}</p><p className="break-all font-mono text-[12px] text-muted">{selection.sha}</p></div>
-                            : selection.path ? <SourceViewer key={`${selection.sha}:${selection.path}`} project={project} selection={selection} onPage={source_offset => update({ source_offset })} onRange={({ line, end }) => update({ line, end, symbol: null }, true)} /> : <div className="m-auto flex max-w-md flex-col items-center gap-3 py-8 text-center text-[13px] text-muted"><Search size={28} aria-hidden="true" /><p>Выберите файл в каталоге или дереве. Код откроется с подсветкой и номерами строк.</p></div>}
+                            : selection.path ? <SourceViewer key={`${selection.sha}:${selection.path}`} project={project} selection={selection} showVersionNotice={!connection.observed_sha} showCoverageNotice={!coverage} onPage={source_offset => update({ source_offset })} onRange={({ line, end }) => update({ line, end, symbol: null }, true)} /> : <div className="m-auto flex max-w-md flex-col items-center gap-3 py-8 text-center text-[13px] text-muted"><Search size={28} aria-hidden="true" /><p>Выберите файл в каталоге или дереве. Код откроется с подсветкой и номерами строк.</p></div>}
                     </>}
             </div>
             {p.rightSeparator}
-            <div className="repository-inspector scrollbar-thin min-h-0 min-w-0 overflow-auto rounded-md border border-line-subtle p-3"><RepositoryInspector key={`${selection.path}:${selection.sha}`} project={project} selection={selection} symbolId={p.symbolId} onSelect={p.onSymbol} onExpand={() => { update({ code_view: "hierarchy", root: p.symbolId }); p.setPane("source"); }} /></div>
+            <div className="repository-inspector scrollbar-thin min-h-0 min-w-0 overflow-auto rounded-md border border-line-subtle p-3">{(p.inspector || p.pane === "inspector") && <RepositoryInspector key={`${selection.path}:${selection.sha}`} project={project} selection={selection} symbolId={p.symbolId} onSelect={p.onSymbol} onExpand={() => { update({ code_view: "hierarchy", root: p.symbolId }); p.setPane("source"); }} />}</div>
         </div>
     </>;
 }

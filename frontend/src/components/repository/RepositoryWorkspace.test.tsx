@@ -79,6 +79,8 @@ it("purges every cached range of a revoked repository and unmounts its panes", a
 it("adds component identifiers to the existing private draft without sending a message", async () => {
     vi.spyOn(api, "get").mockImplementation(async path => respond(path)); const post = vi.spyOn(api, "post");
     mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py&line=55&end=56`);
+    await screen.findByLabelText("Код src/auth.py");
+    fireEvent.click(document.querySelector(".repository-inspector-toggle")!);
     fireEvent.click(await screen.findByRole("button", { name: "Спросить о компоненте" }));
     await waitFor(() => expect(useArisWidgetStore.getState().drafts["1:15"]?.content).toContain(`SHA=${sha}`));
     expect(useArisWidgetStore.getState().drafts["1:15"]?.content).toContain("строки 55–56");
@@ -129,4 +131,49 @@ it("purges connection metadata and every source when the project list returns fo
     await screen.findByText(/Доступ к исходникам изменился/);
     expect(screen.queryByRole("option", { name: "Repo 1" })).toBeNull();
     expect(screen.queryByText(/repo1: Привет/)).toBeNull();
+});
+
+
+it("keeps the file area for source and opens symbol details only on request", async () => {
+    vi.spyOn(api, "get").mockImplementation(async path => respond(path));
+    mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py`);
+    await screen.findByLabelText("Код src/auth.py");
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "Сведения об источнике" })).toBeNull();
+    expect(document.querySelector(".repository-show-inspector")).toBeNull();
+    fireEvent.click(document.querySelector(".repository-inspector-toggle")!);
+    expect(await screen.findByRole("complementary", { name: "Сведения об источнике" })).toBeTruthy();
+});
+
+const snapshotCoverage = { total_files: 1200, cataloged_files: 1200, indexed_files: 1199, metadata_files: 1, failed_files: 0, symbols: 10, relations: 12, unsupported_files: 0, analyzed_files: 1199, reasons: ["metadata_only", "source_stale"] };
+it("explains a historical SHA once and changes version only after an explicit action", async () => {
+    const latest = "b".repeat(40);
+    const get = vi.spyOn(api, "get").mockImplementation(async path => {
+        const url = new URL(path, "http://local");
+        if (/\/connections\/1$/.test(url.pathname)) return { ...connection(1), observed_sha: latest, indexed_sha: latest };
+        if (url.pathname.endsWith("/snapshots")) return { items: [sha, latest].map(commit_sha => ({ commit_sha, complete: true, analysis_state: "published", coverage: snapshotCoverage })), next_offset: null };
+        if (url.pathname.endsWith("/tree") || url.pathname.endsWith("/file")) return { ...respond(path), stale: true, partial: false };
+        return respond(path);
+    });
+    mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py`);
+    await screen.findByLabelText("Код src/auth.py");
+    expect(screen.getAllByText(/Открыта сохранённая версия/)).toHaveLength(1);
+    expect(screen.queryByText(/неполно|неполны|ещё не завершена/)).toBeNull();
+    expect(screen.getByTestId("location").textContent).toContain(`sha=${sha}`);
+    fireEvent.click(screen.getByRole("button", { name: "К актуальной версии" }));
+    await waitFor(() => expect(screen.getByTestId("location").textContent).toContain(`sha=${latest}`));
+    await waitFor(() => expect(get.mock.calls.some(([path]) => path.includes("/file?") && path.includes(`sha=${latest}`))).toBe(true));
+});
+
+it("reports actual failed files with a concrete explanation", async () => {
+    vi.spyOn(api, "get").mockImplementation(async path => path.includes("/snapshots?") ? { items: [{ commit_sha: sha, complete: false, analysis_state: "published", coverage: { ...snapshotCoverage, failed_files: 2, reasons: ["file_errors"] } }], next_offset: null } : respond(path));
+    mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py`);
+    await screen.findByText("Не удалось прочитать файлов: 2. Поиск по этой версии может находить не всё.");
+});
+
+
+it("keeps an actual incomplete-index notice when the selected SHA is outside the snapshot page", async () => {
+    vi.spyOn(api, "get").mockImplementation(async path => path.includes("/file?") ? { ...respond(path), partial: true } : respond(path));
+    mount(`?view=code&connection=1&sha=${sha}&path=src%2Fauth.py`);
+    await screen.findByText("Индекс этой версии охватывает не весь репозиторий. Доступный текст файла показан ниже.");
 });

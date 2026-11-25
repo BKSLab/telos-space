@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
@@ -13,6 +13,14 @@ interface TreeProps {
 
 export function RepositoryTree(props: TreeProps) {
     const [draft, setDraft] = useState("");
+    const [scope, setScope] = useState(props.directory || props.selectedPath.split("/").slice(0, -1).join("/"));
+    const previousDirectory = useRef(props.directory);
+    useEffect(() => {
+        if (previousDirectory.current === props.directory) return;
+        previousDirectory.current = props.directory;
+        setScope(current => current && props.directory !== current && !props.directory.startsWith(`${current}/`) ? props.directory : current);
+    }, [props.directory]);
+    function navigate(path: string) { setScope(path); setExpanded({}); props.onDirectory(path); }
     const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
         const ancestors = props.selectedPath.split("/").slice(0, -1);
         return Object.fromEntries(ancestors.map((_, index) => [ancestors.slice(0, index + 1).join("/"), true]));
@@ -40,13 +48,14 @@ export function RepositoryTree(props: TreeProps) {
         }
     }
     return <div className="flex min-h-0 min-w-0 flex-col gap-3">
-        <div className="flex items-center justify-between gap-2"><h3 className="text-[13px] font-semibold text-primary">Файлы</h3><Button size="sm" onClick={() => { setExpanded({}); props.onDirectory(""); }}>Корень</Button></div>
-        <form className="flex gap-1" onSubmit={event => { event.preventDefault(); const path = draft.trim().replace(/^\/+|\/+$/g, ""); setExpanded({}); props.onDirectory(path); }}>
+        <div className="flex items-center justify-between gap-2"><h3 className="text-[13px] font-semibold text-primary">Файлы</h3><Button size="sm" onClick={() => navigate("")}>Корень</Button></div>
+        <form className="flex gap-1" onSubmit={event => { event.preventDefault(); const path = draft.trim().replace(/^\/+|\/+$/g, ""); navigate(path); }}>
             <Input aria-label="Файл или папка" className="min-w-0" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Перейти к папке…" />
             <Button type="submit" size="sm">Перейти</Button>
         </form>
+        {scope && <nav aria-label="Папка каталога" className="flex min-w-0 flex-wrap items-center gap-2 text-[12px] text-muted"><span className="min-w-0 flex-1 break-all font-mono">{scope}</span><Button size="sm" onClick={() => navigate(scope.split("/").slice(0, -1).join("/"))}>На уровень выше</Button></nav>}
         <div role="tree" aria-label="Файлы репозитория" onKeyDown={keyboard} className="repository-file-tree">
-            <TreeBranch {...props} prefix="" level={1} expanded={expanded} activeDirectory={activeDirectory} onToggle={toggle} />
+            <TreeBranch key={scope} {...props} prefix={scope} level={1} expanded={expanded} activeDirectory={activeDirectory} onToggle={toggle} />
         </div>
     </div>;
 }
@@ -60,7 +69,7 @@ function TreeBranch({ prefix, level, expanded, activeDirectory, onToggle, ...pro
         {query.isFetching && <p role="status" className="px-2 text-[12px] text-muted">Читаем каталог…</p>}
         {query.error && <ErrorMessage message={query.error.message} action={<Button onClick={() => void query.refetch()}>Повторить каталог</Button>} />}
         {query.data && !query.error && <>
-            {(query.data.truncated || query.data.stale) && <p className="px-2 text-[12px] text-warning">Каталог или версия неполны.</p>}
+            {level === 1 && query.data.truncated && <p className="px-2 text-[12px] text-warning">Каталог этой версии загружен не полностью. Некоторые пути могут отсутствовать.</p>}
             {query.data.items.length === 0 && <p className="px-2 text-[12px] text-muted">В каталоге нет элементов.</p>}
             {query.data.items.map(entry => {
                 const folder = entry.type === "tree";

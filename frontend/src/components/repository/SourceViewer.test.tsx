@@ -18,11 +18,11 @@ const sha = "a".repeat(40);
 const source: SourceSelection = { connection: 2, sha, path: "src/example.py", line: 55, end: 56, offset: 0 };
 const page: GitFilePage = { path: source.path, commit_sha: sha, line_start: 55, line_end: 57, offset: 100, next_offset: 120, total_chars: 9000, text: "😀Привет\r\nprint('hello')\r\nчасть", source_url: "https://github.com/owner/repo/blob/sha/src/example.py", stale: false, partial: false };
 const clients: QueryClient[] = [];
-function mount(selection = source, onRange = vi.fn(), revoke = vi.fn()) {
+function mount(selection = source, onRange = vi.fn(), revoke = vi.fn(), showVersionNotice = true, showCoverageNotice = true) {
     const onPage = vi.fn();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     clients.push(client);
-    render(<QueryClientProvider client={client}><RepositoryAccess.Provider value={revoke}><SourceViewer project={7} selection={selection} onPage={onPage} onRange={onRange} /></RepositoryAccess.Provider></QueryClientProvider>);
+    render(<QueryClientProvider client={client}><RepositoryAccess.Provider value={revoke}><SourceViewer project={7} selection={selection} onPage={onPage} onRange={onRange} showVersionNotice={showVersionNotice} showCoverageNotice={showCoverageNotice} /></RepositoryAccess.Provider></QueryClientProvider>);
     return { client, onPage, onRange, revoke };
 }
 afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear()); vi.restoreAllMocks(); highlight.fail = false; });
@@ -59,6 +59,51 @@ it("offers numbered plain text, shift ranges, Unicode paging and an exact copy o
     const { copyText } = await import("@/lib/clipboard");
     expect(copyText).toHaveBeenCalledWith("😀Привет\r\nprint('hello')\r\n");
     await screen.findByText("Скопировано");
+});
+
+it("describes a historic version without claiming its index is incomplete", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ ...page, stale: true, next_offset: null });
+    mount();
+    const notice = await screen.findByText(`Открыта сохранённая версия файла ${sha.slice(0, 7)}; ветка уже обновилась.`);
+    expect(notice.classList.contains("text-warning")).toBe(false);
+    expect(screen.queryByText(/не весь репозиторий|неполны/)).toBeNull();
+    expect(screen.queryByText("Файл загружается частями")).toBeNull();
+});
+
+it("warns about incomplete repository coverage independently of the file version", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ ...page, partial: true, next_offset: null });
+    mount();
+    const notice = await screen.findByText("Индекс этой версии охватывает не весь репозиторий. Доступный текст файла показан ниже.");
+    expect(notice.classList.contains("text-warning")).toBe(true);
+    expect(screen.queryByText(/Открыта сохранённая версия файла/)).toBeNull();
+    expect(await screen.findByLabelText("Подсвеченный код src/example.py")).toBeTruthy();
+});
+
+it("labels ordinary file pagination without warning about repository coverage", async () => {
+    vi.spyOn(api, "get").mockResolvedValue(page);
+    mount();
+    const notice = await screen.findByText("Файл загружается частями");
+    expect(notice.closest("footer")).toBe(screen.getByRole("button", { name: "Читать дальше" }).closest("footer"));
+    expect(notice.classList.contains("text-warning")).toBe(false);
+    expect(screen.queryByText(/не весь репозиторий|неполны|Открыта сохранённая версия файла/)).toBeNull();
+});
+
+it("can hide the duplicate historical version notice while retaining the coverage warning", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ ...page, stale: true, partial: true });
+    mount(source, vi.fn(), vi.fn(), false);
+    await screen.findByLabelText("Подсвеченный код src/example.py");
+    expect(screen.queryByText(/Открыта сохранённая версия файла/)).toBeNull();
+    expect(screen.getByText("Индекс этой версии охватывает не весь репозиторий. Доступный текст файла показан ниже.")).toBeTruthy();
+    expect(screen.getByText(sha.slice(0, 7))).toBeTruthy();
+});
+
+it("can hide shared version and coverage notices without hiding file pagination", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ ...page, stale: true, partial: true });
+    mount(source, vi.fn(), vi.fn(), false, false);
+    await screen.findByLabelText("Подсвеченный код src/example.py");
+    expect(screen.queryByText(/не весь репозиторий|Открыта сохранённая версия файла/)).toBeNull();
+    expect(screen.getByText("Файл загружается частями")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Читать дальше" })).toBeTruthy();
 });
 
 it("keeps readable source and range actions when highlighting cannot load", async () => {
