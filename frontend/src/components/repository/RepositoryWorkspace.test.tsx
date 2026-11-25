@@ -11,7 +11,7 @@ import { useArisWidgetStore } from "@/stores/arisWidget";
 import { useChatDockStore } from "@/stores/chatDock";
 
 vi.mock("./RepositoryGraph", () => ({ default: () => <p>Карта графа</p> }));
-vi.mock("./MonacoSource", () => ({ default: () => <p>Monaco</p> }));
+vi.mock("./MonacoSource", () => ({ default: ({ text, path }: { text: string; path: string }) => <pre aria-label={`Код ${path}`}>{text}</pre> }));
 const sha = "a".repeat(40);
 const clients: QueryClient[] = [];
 const connection = (id: number): GitConnection => ({ id, project_id: 7, provider: "github", repository_id: id + 100, owner: "owner", repo: `repo${id}`, name: `Repo ${id}`, purpose: "", ref: "heads/main", enabled: true, is_private: true, share_private_with_project: true, has_credential: true, has_webhook_secret: false, revision: 1, generation: 1, credential_revision: 1, state: "ready", observed_sha: sha, indexed_sha: sha, observed_at: null, indexed_at: null, checked_at: null, last_error_code: null, coverage: { total_files: 1200, cataloged_files: 1200, indexed_files: 1199, metadata_files: 1, failed_files: 0, metadata_counts: { binary_file: 1 }, truncated: false } });

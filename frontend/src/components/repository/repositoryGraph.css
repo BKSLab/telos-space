@@ -1,0 +1,36 @@
+.repository-graph { flex: 1 0 auto; min-height: 460px; background: var(--surface-workspace); overflow: hidden; border: 1px solid var(--color-line-subtle); border-radius: 12px; }
+.repository-graph:fullscreen { overflow: auto; }
+.repository-graph-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--color-line-subtle); }
+.repository-graph-scope { flex: 1; min-width: 130px; font-size: 12px; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.repository-graph-canvas { flex: 1; min-height: 420px; }
+.repository-graph .react-flow__node-repositoryCard { width: 240px; height: 82px; border-radius: 11px; }
+.repository-graph-card { width: 100%; height: 100%; position: relative; display: flex; align-items: center; gap: 11px; padding: 12px 13px; border: 1px solid var(--color-line-strong); border-radius: 11px; background: linear-gradient(130deg, var(--surface-elevated), var(--surface-interactive)); color: var(--color-text-primary); box-shadow: 0 3px 10px rgb(0 0 0 / 12%); text-align: left; }
+.repository-graph-card-repository { border-color: var(--color-accent); background: linear-gradient(125deg, var(--color-accent-soft), var(--surface-interactive) 65%); }
+.repository-graph-card-directory { border-color: var(--color-accent-border); }
+.repository-graph-card-icon { flex: 0 0 31px; width: 31px; height: 35px; display: grid; place-items: center; color: var(--color-accent); }
+.repository-graph-card-symbol .repository-graph-card-icon { color: var(--color-ai-violet); }
+.repository-graph-card-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
+.repository-graph-card-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; line-height: 18px; font-weight: 600; }
+.repository-graph-card-path { color: var(--color-text-secondary); font-family: var(--font-mono, monospace); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.repository-graph-card-detail { color: var(--color-text-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.repository-graph-card.is-selected { border-color: var(--color-ai-violet); box-shadow: 0 0 0 2px var(--color-accent-soft), 0 0 18px var(--color-ai-soft); }
+.repository-graph .repository-changed-node .repository-graph-card { outline: 2px dashed var(--color-success); outline-offset: 3px; }
+.repository-graph .react-flow__node:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
+.repository-graph-disclosure { display: grid; place-items: center; position: absolute; right: -10px; top: 27px; width: 26px; height: 26px; border: 1px solid var(--color-line-strong); border-radius: 50%; background: var(--surface-elevated); color: var(--color-text-secondary); cursor: pointer; }
+.repository-graph-disclosure:hover, .repository-graph-disclosure:focus-visible { border-color: var(--color-accent); color: var(--color-text-primary); outline: 2px solid var(--color-accent-soft); }
+.repository-graph .react-flow__handle { width: 6px; height: 6px; background: var(--surface-interactive); border: 1px solid var(--color-text-muted); }
+.repository-graph .react-flow__node-repositoryGroup { z-index: -1; border: 1px solid var(--color-line-subtle); border-radius: 13px; background: color-mix(in srgb, var(--surface-elevated) 60%, transparent); }
+.repository-graph-group { width: 100%; height: 100%; }
+.repository-graph-group-heading { height: 42px; display: flex; align-items: center; gap: 9px; padding: 0 15px; color: var(--color-accent); font-size: 13px; border-bottom: 1px solid var(--color-line-subtle); }
+.repository-graph-group-heading strong { color: var(--color-text-primary); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.repository-graph-group-heading span { margin-left: auto; color: var(--color-text-muted); font-size: 11px; }
+.repository-graph-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 9px 12px; font-size: 11px; color: var(--color-text-muted); border-top: 1px solid var(--color-line-subtle); }
+.repository-graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.repository-graph-legend i { width: 15px; border-top: 1px solid var(--color-line-strong); }
+.repository-graph-legend i.dependency { border-color: var(--color-accent); }
+.repository-graph-legend i.candidate { border-color: var(--color-accent); border-top-style: dashed; }
+.repository-graph .react-flow__controls-button { background: var(--surface-interactive); fill: var(--color-text-primary); border-color: var(--color-line-subtle); }
+.repository-graph .react-flow__edge-textbg { fill: var(--surface-workspace); }
+.repository-graph .react-flow__edge-text { fill: var(--color-text-secondary); font-size: 10px; }
+.repository-graph .react-flow__attribution { background: var(--surface-workspace); color: var(--color-text-muted); }
+@media (forced-colors: active) { .repository-graph-card, .repository-graph .react-flow__node-repositoryGroup { background: Canvas; border-color: CanvasText; } .repository-graph-card.is-selected { outline: 2px solid Highlight; } }

@@ -8,7 +8,7 @@ function connection(id: number): GitConnection { return { id, project_id: 1, pro
 function symbol(id: number): GitSymbol { return { id, file_id: 1, path: "src/auth.py", name: `check_${id}`, qualified_name: `auth.check_${id}`, kind: "function", parent_id: null, signature: `def check_${id}(user):`, line_start: id + 10, line_end: id + 12, offset: id * 10, end_offset: id * 10 + 40 }; }
 const graph: GitGraph = { connection_id: 1, commit_sha: sha, analyzer_version: "test-v1", nodes: Array.from({ length: 100 }, (_, index) => symbol(index + 1)), edges: Array.from({ length: 500 }, (_, index) => ({ id: index + 1, source_id: index % 90 + 1, target_id: (index + 1) % 90 + 1, kind: "calls", confidence: index % 2 ? "resolved" : "candidate", label: "check", path: "src/auth.py", line_start: index + 10, line_end: index + 10 })), truncated: true, coverage };
 
-async function workspaceApi(page: Page, count = 3) {
+async function workspaceApi(page: Page, count = 3, graphData = graph, extraPaths: string[] = []) {
     await installMockApi(page, mockState());
     const reads: string[] = [];
     await page.route("**/api/v1/projects/1/git/**", async route => {
@@ -20,10 +20,21 @@ async function workspaceApi(page: Page, count = 3) {
         if (path.endsWith("/connections")) { const offset = Number(url.searchParams.get("offset")); const size = url.searchParams.has("verified") ? 10 : 20; return reply({ items: Array.from({ length: Math.min(size, Math.max(0, count - offset)) }, (_, index) => connection(offset + index + 1)), offset, limit: size, total: offset + size >= count ? count : null, next_offset: offset + size < count ? offset + size : null }); }
         if (/connections\/\d+$/.test(path)) return reply(connection(id));
         if (path.endsWith("/snapshots")) return reply({ items: [sha, older].map(commit_sha => ({ connection_id: id, commit_sha, complete: false, analysis_state: "published", analyzer_version: "test-v1", coverage } satisfies GitSnapshotInfo)), next_offset: null });
-        if (path.endsWith("/tree")) { const directory = url.searchParams.get("prefix"); return reply({ connection_id: id, repository_id: 100 + id, commit_sha: sha, items: directory ? [{ path: "src/auth.py", sha, type: "blob", mode: "100644", size: 150000, index_state: "ready", index_reason: null }] : [{ path: "src", sha: null, type: "tree", mode: "040000", size: null, index_state: "metadata", index_reason: null }, { path: "cover.png", sha, type: "blob", mode: "100644", size: 2000, index_state: "metadata", index_reason: "binary_file" }], offset: 0, limit: 40, next_offset: null, total_files: 1553, truncated: false, stale: false }); }
-        if (path.endsWith("/file")) { const start = Number(url.searchParams.get("line_start") ?? 40); return reply({ connection_id: id, repository_id: 100 + id, file_id: 1, path: "src/auth.py", commit_sha: url.searchParams.get("sha"), text: `# repo${id}: Привет\r\ndef check_1(user):\n    return user is not None\n# <script>window.sourceExecuted=true</script>`, source_url: `https://github.com/example/repo${id}/blob/${sha}/src/auth.py`, line_start: start, line_end: start + 3, offset: Number(url.searchParams.get("offset") ?? 0), next_offset: url.searchParams.has("offset") ? null : 8000, total_chars: 16000, stale: false, partial: false }); }
+        if (path.endsWith("/tree")) {
+            const directory = url.searchParams.get("prefix") ?? "";
+            const paths = [...new Set([...graphData.nodes.map(node => node.path), ...extraPaths, "cover.png"])].filter(file => !directory || file.startsWith(`${directory}/`));
+            const entries = new Map();
+            for (const file of paths) {
+                const relative = file.slice(directory ? directory.length + 1 : 0), first = relative.split("/")[0];
+                const child = directory ? `${directory}/${first}` : first;
+                const folder = relative.includes("/");
+                entries.set(child, { path: child, sha: folder ? null : sha, type: folder ? "tree" : "blob", mode: folder ? "040000" : "100644", size: folder ? null : 150000, index_state: folder || file === "cover.png" ? "metadata" : "ready", index_reason: file === "cover.png" ? "binary_file" : null });
+            }
+            return reply({ connection_id: id, repository_id: 100 + id, commit_sha: sha, items: [...entries.values()], offset: 0, limit: 40, next_offset: null, total_files: 1553, truncated: false, stale: false });
+        }
+        if (path.endsWith("/file")) { const start = Number(url.searchParams.get("line_start") ?? 40); return reply({ connection_id: id, repository_id: 100 + id, file_id: 1, path: url.searchParams.get("path"), commit_sha: url.searchParams.get("sha"), text: `# repo${id}: Привет\r\ndef check_1(user):\n    return user is not None\n# <script>window.sourceExecuted=true</script>`, source_url: `https://github.com/example/repo${id}/blob/${sha}/src/auth.py`, line_start: start, line_end: start + 3, offset: Number(url.searchParams.get("offset") ?? 0), next_offset: url.searchParams.has("offset") ? null : 8000, total_chars: 16000, stale: false, partial: false }); }
         if (path.endsWith("/symbols")) return reply({ ...graph, items: [symbol(1), symbol(2)], next_offset: null });
-        if (path.endsWith("/graph")) return reply(graph);
+        if (path.endsWith("/graph")) return reply(graphData);
         if (path.endsWith("/impact")) return reply({ ...graph, nodes: graph.nodes.slice(0, 3), edges: graph.edges.slice(0, 3), task_links: [{ task_id: 100, change_id: 1, kind: "commit", provider_id: older, path: "src/auth.py" }] });
         if (path.endsWith("/search")) return reply({ items: [1, 2, 3].map(connection_id => ({ connection_id, repository_id: 100 + connection_id, commit_sha: sha, file_id: 1, path: "src/auth.py", title: "check_1", excerpt: "def check_1(user):", source_url: "", line_start: 11, line_end: 13, symbol_id: 1, qualified_name: "auth.check_1", kind: "function", offset: 10, stale: false, partial: false })), partial: true });
         if (path.endsWith("/compare")) return reply({ base_sha: older, head_sha: sha, files_complete: false, commits_complete: true, incomplete_reasons: ["pagination"], files: [{ filename: "src/auth.py", previous_filename: "auth.py", status: "renamed", patch: "@@ -1 +1 @@\n-before\n+after", patch_truncated: true }] });
@@ -38,7 +49,9 @@ for (const width of [320, 390, 1280, 1440]) {
         await page.setViewportSize({ width, height: 1000 }); const reads = await workspaceApi(page);
         const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
         await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&path=src%2Fauth.py&line=11&end=13`);
-        await expect(page.getByLabel("Код src/auth.py")).toContainText("repo1: Привет");
+        await expect(page.locator(".monaco-editor .view-lines").first()).toContainText("repo1: Привет");
+        await expect(page.getByRole("region", { name: "Каталог файлов" })).toBeVisible();
+        await expect(page.locator(".repository-source-language")).toHaveText("Python");
         expect(reads.some(path => path.includes("children=true"))).toBe(true);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: info.outputPath(`files-${width}.png`), animations: "disabled" });
@@ -47,7 +60,7 @@ for (const width of [320, 390, 1280, 1440]) {
             await expect(page.getByRole("button", { name: "Табличная карта" })).toBeVisible();
             await expect(page.locator(".react-flow__node").first()).toBeVisible();
             expect(await page.locator(".react-flow__node").count()).toBeLessThanOrEqual(100);
-            await expect(page.getByText(/не более 100 узлов и 500 связей/)).toBeVisible();
+            await expect(page.getByText(/100 узлов и 500 связей/)).toBeVisible();
             await page.getByRole("button", { name: "Табличная карта" }).click();
             await expect(page.getByRole("table")).toContainText("candidate");
             await page.getByRole("button", { name: "auth.check_1", exact: true }).click();
@@ -56,7 +69,18 @@ for (const width of [320, 390, 1280, 1440]) {
             await expect(page.getByText("Явные связи с задачами", { exact: true })).toBeVisible();
             if (width < 900) await page.getByRole("navigation", { name: "Панели кода" }).getByRole("button", { name: "Карта" }).click();
             await page.getByRole("button", { name: "Графическая карта" }).click();
+            await expect.poll(async () => new Set(await page.locator(".react-flow__node").evaluateAll(nodes => nodes.map(node => (node as HTMLElement).style.transform))).size).toBeGreaterThan(1);
+            await expect.poll(async () => (await page.locator(".repository-graph-card").first().boundingBox())?.width ?? 0).toBeGreaterThan(140);
             await page.screenshot({ path: info.outputPath(`${label}-${width}.png`), animations: "disabled" });
+            if (width === 1440 && label === "Иерархия") {
+                await page.getByLabel("Акценты карты").selectOption("changes");
+                await expect(page.locator(".repository-changed-node").first()).toBeAttached();
+                const epoch = Number(await page.locator(".repository-graph").getAttribute("data-layout-ready"));
+                await page.getByRole("button", { name: "Сбросить", exact: true }).click();
+                await expect.poll(async () => Number(await page.locator(".repository-graph").getAttribute("data-layout-ready"))).toBeGreaterThan(epoch);
+                await expect(page.locator(".repository-changed-node").first()).toBeAttached();
+                await page.getByLabel("Акценты карты").selectOption("structure");
+            }
         }
         await page.emulateMedia({ reducedMotion: "reduce", forcedColors: "active" });
         await page.getByRole("button", { name: "Табличная карта" }).click();
@@ -73,21 +97,25 @@ test("more than twenty repositories, independent identical paths, URL Back and d
     await page.getByRole("navigation", { name: "Страницы репозиториев" }).getByRole("button", { name: "Дальше" }).click();
     await page.getByRole("button", { name: "Открыть Repo 23" }).click();
     await page.getByRole("treeitem", { name: "src", exact: true }).click(); await page.getByRole("treeitem", { name: /auth.py/ }).click();
-    await expect(page.getByLabel("Код src/auth.py")).toContainText("repo23");
+    await expect(page.locator(".monaco-editor .view-lines").first()).toContainText("repo23");
     await page.getByRole("button", { name: "Изменения", exact: true }).click();
     await page.getByLabel("Базовая версия").selectOption(older);
     await expect(page.getByText("Прежний путь: auth.py", { exact: true })).toBeVisible();
     await expect(page.getByText("Patch обрезан.", { exact: true })).toBeVisible();
-    await page.goBack(); await expect(page.getByLabel("Код src/auth.py")).toContainText("repo23");
+    await page.goBack(); await expect(page.locator(".monaco-editor .view-lines").first()).toContainText("repo23");
     await expect(page).toHaveURL(/connection=23/);
 });
 
 test("Monaco and its workers are local and lazy, with plain source always available", async ({ page }) => {
     await workspaceApi(page); const urls: string[] = []; const workers: string[] = []; const errors: string[] = [];
     page.on("request", request => urls.push(request.url())); page.on("worker", worker => workers.push(worker.url())); page.on("pageerror", error => errors.push(error.message));
+    await page.goto("/projects/DEMO/knowledge?view=code");
+    await expect(page.getByRole("button", { name: "Открыть Repo 1", exact: true })).toBeVisible();
+    expect(urls.some(url => url.includes("editor.api") || url.includes("MonacoSource"))).toBe(false);
     await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&path=src%2Fauth.py`);
-    await expect(page.getByLabel("Код src/auth.py")).toBeVisible(); expect(urls.some(url => url.includes("editor.api") || url.includes("MonacoSource"))).toBe(false);
-    await page.getByRole("button", { name: "Подсветка кода" }).click();
+    await expect(page.locator(".monaco-editor").first()).toBeVisible();
+    expect(urls.some(url => url.includes("MonacoSource"))).toBe(true);
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText("def");
     await expect(page.locator(".monaco-editor").first()).toBeVisible();
     // Read-only syntax highlighting does not itself require a language service worker.
     await page.evaluate(() => {
@@ -111,3 +139,98 @@ test("settings request only connection management, while all-repository roots ex
     await expect(page).toHaveURL(/connection=2/);
     await expect(page.getByLabel("Версия репозитория")).toHaveValue(sha);
 });
+
+
+test("a branching hierarchy stays readable and folders progressively reveal the received slice", async ({ page }, info) => {
+    const folders = ["backend/api", "backend/services", "frontend/components", "frontend/pages", "mcp", "docs", "tests", "scripts"];
+    const nodes = folders.flatMap((folder, folderIndex) => Array.from({ length: 4 }, (_, fileIndex) => Array.from({ length: 3 }, (_, memberIndex) => ({ ...symbol(folderIndex * 12 + fileIndex * 3 + memberIndex + 1), path: `${folder}/module_${fileIndex}.py` }))).flat());
+    await workspaceApi(page, 3, { ...graph, nodes });
+    await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&code_view=hierarchy`);
+    await expect(page.locator(".repository-graph-card-repository")).toContainText("7 объектов каталога");
+    await expect.poll(async () => new Set(await page.locator(".react-flow__node").evaluateAll(elements => elements.map(node => (node as HTMLElement).style.transform))).size).toBeGreaterThan(1);
+    await expect.poll(async () => (await page.locator(".repository-graph-card-repository").boundingBox())?.width ?? 0).toBeGreaterThan(140);
+    await expect(page.locator(".repository-graph-card-repository")).toBeInViewport();
+    await page.screenshot({ path: info.outputPath("hierarchy-branching.png"), animations: "disabled" });
+    await page.getByRole("button", { name: "Вписать", exact: true }).click();
+    const canvas = page.locator(".repository-graph-canvas");
+    await expect.poll(async () => {
+        const area = await canvas.boundingBox();
+        const cards = await page.locator(".repository-graph-card").evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { left: box.left, right: box.right, top: box.top, bottom: box.bottom }; }));
+        return cards.every(card => card.left >= area!.x - 1 && card.right <= area!.x + area!.width + 1 && card.top >= area!.y - 1 && card.bottom <= area!.y + area!.height + 1);
+    }).toBe(true);
+    // Choose a genuine directory from the lazy tree to focus the same graph response.
+    await page.getByRole("treeitem", { name: "backend", exact: true }).click();
+    await page.getByRole("treeitem", { name: "services", exact: true }).click();
+    await expect(page.locator(".repository-graph-scope")).toContainText("backend/services");
+    await expect(page.locator(".repository-graph-card-file")).toHaveCount(4);
+    await expect(page.locator(".repository-graph-card-file").first()).toContainText("3 символов");
+    await page.getByRole("button", { name: "Раскрыть символы module_0.py" }).click();
+    await expect(page.locator(".repository-graph-card-symbol")).toHaveCount(3);
+    await page.screenshot({ path: info.outputPath("hierarchy-focused.png"), animations: "disabled" });
+});
+
+
+test("hierarchy traverses catalogue directories outside the current symbol slice and opens source", async ({ page }) => {
+    const reads = await workspaceApi(page, 3, graph, ["other/api/ping.py"]);
+    await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&code_view=hierarchy`);
+    const other = page.locator(".repository-graph-card-directory").filter({ hasText: "other" });
+    await expect(other).toBeVisible();
+    await other.click();
+    await expect(page).toHaveURL(/directory=other/);
+    await page.locator(".repository-graph-card-directory").filter({ hasText: "api" }).click();
+    await expect(page).toHaveURL(/directory=other%2Fapi/);
+    const file = page.locator(".repository-graph-card-file").filter({ hasText: "ping.py" });
+    await expect(file).toContainText("Символы вне полученного среза");
+    await page.getByRole("button", { name: "Табличная карта" }).click();
+    await expect(page.getByRole("table")).toContainText("other/api/ping.py");
+    await page.getByRole("table").getByRole("button", { name: "ping.py", exact: true }).click();
+    await expect(page).toHaveURL(/code_view=files/);
+    await expect(page.locator(".repository-source-filename")).toHaveText("ping.py");
+    await expect(page.locator(".monaco-editor").first()).toBeVisible();
+    expect(reads.some(read => read.includes("/file?") && read.includes("path=other%2Fapi%2Fping.py"))).toBe(true);
+});
+
+test("selecting Monaco line numbers updates the permalink without jumping to a new fragment", async ({ page }) => {
+    const reads = await workspaceApi(page);
+    await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&path=src%2Fauth.py&line=11&end=13`);
+    const lines = page.locator(".monaco-editor .line-numbers");
+    await expect(lines).toHaveCount(3);
+    const before = reads.filter(read => read.includes("/file?")).length;
+    await lines.nth(1).click();
+    await expect(page).toHaveURL(/line=12/);
+    await lines.nth(2).click({ modifiers: ["Shift"] });
+    await expect(page).toHaveURL(/end=13/);
+    await expect(lines.first()).toHaveText("11");
+    expect(reads.filter(read => read.includes("/file?")).length).toBe(before);
+    // Multiple syntax token colors are present, not just a single plain text block.
+    const colors = await page.locator(".monaco-editor .view-lines span").evaluateAll(elements => [...new Set(elements.filter(element => element.textContent?.trim()).map(element => getComputedStyle(element).color))]);
+    expect(colors.length).toBeGreaterThan(2);
+});
+
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 720 }]) {
+    test(`source and paging remain reachable below a long catalogue at ${viewport.width}px`, async ({ page }, info) => {
+        await page.setViewportSize(viewport);
+        await workspaceApi(page, 3, graph, Array.from({ length: 26 }, (_, index) => `src/file_${index}.py`));
+        await page.goto(`/projects/DEMO/knowledge?view=code&connection=1&sha=${sha}&directory=src&path=src%2Fauth.py&line=11&end=13`);
+        const editor = page.locator(".repository-source-editor");
+        await expect(page.locator(".monaco-editor").first()).toBeVisible();
+        await editor.scrollIntoViewIfNeeded();
+        await expect.poll(async () => (await page.locator(".repository-source-viewer").boundingBox())?.height ?? 0).toBeGreaterThan(150);
+        await expect(editor).toBeInViewport();
+        const more = page.getByRole("button", { name: "Читать дальше", exact: true });
+        await more.scrollIntoViewIfNeeded();
+        await expect(more).toBeInViewport();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath(`long-catalogue-${viewport.width}.png`), animations: "disabled" });
+        await page.getByRole("button", { name: "Иерархия", exact: true }).click();
+        const warning = page.getByText(/Область ограничена: до 100 узлов/);
+        await expect(warning).toBeAttached();
+        await page.getByRole("region", { name: "Область кода" }).evaluate(element => { element.scrollTop = element.scrollHeight; });
+        await expect(warning).toBeInViewport();
+        const graphElement = page.locator(".repository-graph");
+        expect(await graphElement.evaluate(element => element.scrollTop)).toBe(0);
+        const bounds = await graphElement.boundingBox(), note = await warning.boundingBox();
+        expect(note!.y + note!.height).toBeLessThanOrEqual(bounds!.y + bounds!.height + 1);
+    });
+}

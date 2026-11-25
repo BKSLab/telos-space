@@ -5,10 +5,11 @@ import { Code2, GitBranch, RefreshCw, Search } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/States";
 import { api, ApiError } from "@/lib/api";
-import { contextApi, GIT_METADATA_REASONS, type GitConnection, type GitConnectionPage, type GitGraph, type GitSnapshotInfo, type GitSourceHit, type GitSymbol, type GitTreeEntry } from "@/lib/projectKnowledge";
+import { contextApi, GIT_METADATA_REASONS, type GitConnection, type GitConnectionPage, type GitGraph, type GitSnapshotInfo, type GitSourceHit, type GitSymbol, type GitTreeEntry, type GitTreePage } from "@/lib/projectKnowledge";
 import { GitIndexBadge, GitIndexDetails, GitIndexSummary } from "@/components/projects/GitIndexStatus";
 import { RepositoryAccess, repositoryPrefix, repositoryKey, repositoryPath, useRepositoryQuery } from "./repositoryApi";
 import { RepositoryTree } from "./RepositoryTree";
+import { RepositoryCatalog } from "./RepositoryCatalog";
 import { SourceViewer, type SourceSelection } from "./SourceViewer";
 import { RepositorySearch } from "./RepositorySearch";
 import { RepositoryInspector } from "./RepositoryInspector";
@@ -59,9 +60,9 @@ export function RepositoryWorkspace({ projectId }: { projectId: number }) {
     const [metadata, setMetadata] = useState<{ entry: GitTreeEntry; connection: number; sha: string } | null>(null);
     const [overlay, setOverlay] = useState<RepositoryOverlay>("structure");
     const [depth, setDepth] = useState(1);
-    const [leftWidth, setLeftWidth] = useState(260);
-    const [rightWidth, setRightWidth] = useState(340);
-    const [inspector, setInspector] = useState(false);
+    const [leftWidth, setLeftWidth] = useState(220);
+    const [rightWidth, setRightWidth] = useState(280);
+    const [inspector, setInspector] = useState(() => window.innerWidth >= 1200);
     const root = useRef<HTMLDivElement>(null);
     const onQuery = useCallback((query: string) => update({ code_q: query }, true), [update]);
     const selectSymbol = (symbol: GitSymbol) => { setMetadata(null); update({ path: symbol.path, symbol: symbol.id, line: symbol.line_start, end: symbol.line_end, source_offset: null, directory: symbol.path.split("/").slice(0, -1).join("/") }); setInspector(true); };
@@ -108,7 +109,7 @@ export function RepositoryWorkspace({ projectId }: { projectId: number }) {
                 pane={pane} setPane={setPane} metadata={metadata?.entry.path === selection.path && metadata.connection === connectionId && metadata.sha === sha ? metadata.entry : null} overlay={overlay} setOverlay={setOverlay} depth={depth} setDepth={setDepth} inspector={inspector} setInspector={setInspector}
                 style={{ "--repository-tree-width": `${leftWidth}px`, "--repository-inspector-width": `${rightWidth}px` } as CSSProperties} leftSeparator={separator("left")} rightSeparator={separator("right")}
                 query={params.get("code_q") ?? ""} onQuery={onQuery} onOpen={openHit} onSymbol={selectSymbol} update={update}
-                onEntry={entry => { setMetadata(entry.index_state === "metadata" || entry.index_state === "error" ? { entry, connection: connectionId, sha } : null); update({ path: entry.path, symbol: null, line: null, end: null, source_offset: null }); setPane("source"); }} />)}
+                onEntry={entry => { setMetadata(entry.index_state === "metadata" || entry.index_state === "error" ? { entry, connection: connectionId, sha } : null); update({ code_view: "files", path: entry.path, directory: entry.path.split("/").slice(0, -1).join("/"), symbol: null, line: null, end: null, source_offset: null }); setPane("source"); }} />)}
         {connections.data && !connections.error && (offset > 0 || connections.data.next_offset !== null) && <nav aria-label="Страницы репозиториев" className="flex shrink-0 flex-wrap items-center gap-2 text-[12px] text-muted"><span>На странице: {connections.data.items.length}{connections.data.total !== null ? ` из ${connections.data.total}` : ""}</span><Button size="sm" disabled={!offset} onClick={() => update({ repo_offset: previousOffsets.current.get(offset) ?? 0 })}>Назад</Button><Button size="sm" disabled={connections.data.next_offset === null} onClick={() => { const next = connections.data?.next_offset; if (next != null) { previousOffsets.current.set(next, offset); update({ repo_offset: next }); } }}>Дальше</Button></nav>}
     </section></RepositoryAccess>;
 }
@@ -125,36 +126,47 @@ function RepositoryContent(p: ContentProps) {
     const [snapshotOffset, setSnapshotOffset] = useState(0);
     const snapshots = useRepositoryQuery<{ items: GitSnapshotInfo[]; next_offset: number | null }>({ project, connection: connection.id, sha: selection.sha, kind: "snapshots", params: { offset: String(snapshotOffset), limit: "20" } });
     const isGraph = ["hierarchy", "layers", "radial"].includes(mode);
+    const [catalogPage, setCatalogPage] = useState({ directory: p.directory, offset: 0 });
+    const catalogOffset = catalogPage.directory === p.directory ? catalogPage.offset : 0;
+    const catalog = useRepositoryQuery<GitTreePage>({ project, connection: connection.id, sha: selection.sha, kind: "tree", params: { children: "true", prefix: p.directory, offset: String(catalogOffset), limit: "40" }, enabled: isGraph });
     const graph = useRepositoryQuery<GitGraph>({ project, connection: connection.id, sha: selection.sha, kind: "graph", params: { depth: String(p.depth), limit: "100", direction: "both", relation: "all", ...(p.rootId ? { root_id: String(p.rootId) } : {}) }, enabled: isGraph });
     const impact = useRepositoryQuery<GitGraph>({ project, connection: connection.id, sha: selection.sha, kind: "impact", params: { symbol_id: String(p.symbolId), depth: "1", limit: "100" }, enabled: isGraph && p.symbolId > 0 });
     const coverage = snapshots.data?.items.find(item => item.commit_sha === selection.sha);
     return <>
         <div className="flex shrink-0 flex-wrap items-center gap-2 text-[12px] text-muted"><GitIndexBadge connection={connection} /><span className="break-all">{connection.ref}</span>
-            <label className="flex min-w-0 max-w-full items-center gap-2">Версия<select aria-label="Версия репозитория" className="control-surface min-w-0 max-w-64 rounded p-1 font-mono" value={selection.sha} onChange={event => update({ sha: event.target.value, symbol: null, root: null, source_offset: null })}>
-                {!snapshots.data?.items.some(item => item.commit_sha === selection.sha) && <option value={selection.sha}>{selection.sha || "Нет версии"}</option>}{snapshots.data?.items.map(item => <option key={item.commit_sha} value={item.commit_sha}>{item.commit_sha} · {item.analysis_state}</option>)}
+            <label className="flex min-w-0 max-w-full items-center gap-2">Версия<select aria-label="Версия репозитория" title={selection.sha} className="control-surface min-w-0 max-w-64 rounded p-1 font-mono" value={selection.sha} onChange={event => update({ sha: event.target.value, symbol: null, root: null, source_offset: null })}>
+                {!snapshots.data?.items.some(item => item.commit_sha === selection.sha) && <option value={selection.sha}>{selection.sha.slice(0, 8) || "Нет версии"}</option>}{snapshots.data?.items.map(item => <option key={item.commit_sha} value={item.commit_sha}>{item.commit_sha.slice(0, 8)} · {item.analysis_state === "published" ? "готова" : item.analysis_state}</option>)}
             </select></label>
             {snapshotOffset > 0 && <Button size="sm" onClick={() => setSnapshotOffset(Math.max(0, snapshotOffset - 20))}>Новые версии</Button>}{snapshots.data?.next_offset != null && <Button size="sm" onClick={() => setSnapshotOffset(snapshots.data!.next_offset!)}>Предыдущие версии</Button>}
-            {coverage && <span>Текст {coverage.coverage.indexed_files}/{coverage.coverage.total_files} · структура {coverage.coverage.analyzed_files}/{coverage.coverage.total_files} · {coverage.analysis_state}</span>}
+
             <Button size="sm" className="repository-inspector-toggle ml-auto" aria-pressed={p.inspector} onClick={() => p.setInspector(!p.inspector)}>Сведения</Button>
         </div>
+        {coverage && <dl className="repository-metrics" aria-label="Покрытие версии">{[
+            ["Файлы", coverage.coverage.total_files], ["Текст", coverage.coverage.indexed_files], ["Структура", coverage.coverage.analyzed_files], ["Символы", coverage.coverage.symbols],
+        ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{Number(value).toLocaleString("ru")}</dd></div>)}</dl>}
         {snapshots.error && <ErrorMessage message={snapshots.error.message} />}
         {coverage && (!coverage.complete || coverage.analysis_state !== "published") && <p className="text-[12px] text-warning">Неполный охват версии или структуры. {coverage.coverage.reasons.map(reason => reason === "unsupported_syntax" ? "Часть синтаксиса не поддерживается." : reason).join(" ")}</p>}
         <nav aria-label="Панели кода" className="repository-pane-tabs flex shrink-0 gap-2">{[{ id: "tree", label: "Дерево" }, { id: "source", label: isGraph ? "Карта" : "Содержимое" }, { id: "inspector", label: "Сведения" }].map(pane => <Button size="sm" key={pane.id} aria-pressed={p.pane === pane.id} onClick={() => p.setPane(pane.id)}>{pane.label}</Button>)}</nav>
         <div className={`repository-panes ${p.inspector ? "repository-show-inspector" : ""}`} data-pane={p.pane} style={p.style}>
-            <div className="repository-tree scrollbar-thin min-h-0 min-w-0 overflow-y-auto rounded-md border border-line-subtle p-3"><RepositoryTree key={p.directory} project={project} connection={connection.id} sha={selection.sha} directory={p.directory} selectedPath={selection.path} onDirectory={directory => update({ directory })} onSelect={p.onEntry} /></div>
+            <div className="repository-tree scrollbar-thin min-h-0 min-w-0 overflow-y-auto rounded-md border border-line-subtle p-3"><RepositoryTree project={project} connection={connection.id} sha={selection.sha} directory={p.directory} selectedPath={selection.path} onDirectory={directory => update({ directory })} onSelect={p.onEntry} /></div>
             {p.leftSeparator}
             <div role="region" aria-label="Область кода" className="repository-source scrollbar-thin flex min-h-0 min-w-0 flex-col gap-3 overflow-auto rounded-md border border-line-subtle p-3">
                 {mode === "search" ? <RepositorySearch key={`${connection.id}:${selection.sha}`} project={project} connection={connection.id} sha={selection.sha} value={p.query} onQuery={p.onQuery} onOpen={p.onOpen} />
                     : mode === "changes" ? <RepositoryChanges project={project} connection={connection.id} sha={selection.sha} snapshots={snapshots.data?.items ?? []} onOpen={(path, sha) => update({ path, sha, code_view: "files", line: null, end: null, source_offset: null })} />
                     : isGraph ? <>
                         <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted"><label>Акценты <select aria-label="Акценты карты" className="control-surface rounded p-1" value={p.overlay} onChange={event => p.setOverlay(event.target.value as RepositoryOverlay)}><option value="structure">Структура</option><option value="changes">Изменения</option><option value="risks">Риски</option><option value="dependencies">Зависимости</option></select></label><label>Глубина <select aria-label="Глубина карты" className="control-surface rounded p-1" value={p.depth} onChange={event => p.setDepth(Number(event.target.value))}>{[1, 2, 3].map(depth => <option key={depth}>{depth}</option>)}</select></label>{p.rootId > 0 && <Button size="sm" onClick={() => update({ root: null })}>Корень карты</Button>}</div>
-                        {mode === "layers" && <p className="text-[12px] text-muted">Слои зависимостей опубликованного графа. Архитектурные роли без подтверждённого источника не присваиваются.</p>}
+                        {mode === "layers" && <p className="text-[12px] text-muted">Группы каталогов в доступной области. Выберите папку слева, чтобы уточнить карту.</p>}
                         {p.overlay === "risks" && <p className="text-[12px] text-muted">Оценки рисков кода не предоставлены. Отсутствие оценки не означает отсутствие рисков.</p>}
                         {p.overlay === "changes" && <p className="text-[12px] text-muted">Явные связи изменений с задачами доступны в сведениях выбранного символа. Для полного diff откройте «Изменения».</p>}
+                        {catalog.error && <ErrorMessage message={catalog.error.message} />}
+                        {catalog.data && !catalog.error && (catalogOffset > 0 || catalog.data.next_offset !== null) && <nav aria-label="Страницы каталога карты" className="flex gap-2"><Button size="sm" disabled={!catalogOffset} onClick={() => setCatalogPage({ directory: p.directory, offset: Math.max(0, catalogOffset - 40) })}>Предыдущие файлы</Button><Button size="sm" disabled={catalog.data.next_offset === null} onClick={() => catalog.data?.next_offset != null && setCatalogPage({ directory: p.directory, offset: catalog.data.next_offset })}>Следующие файлы</Button></nav>}
                         {graph.isFetching && <p role="status" className="text-muted">Читаем структурную область…</p>}{graph.error && <ErrorMessage message={graph.error.message} />}
-                        {graph.data && !graph.error && <Suspense fallback={<p role="status">Загружаем карту…</p>}><RepositoryGraph graph={{ ...graph.data, task_links: !impact.error ? impact.data?.task_links : undefined }} name={connection.name} layout={mode as RepositoryLayout} overlay={p.overlay} selected={p.symbolId} onSelect={p.onSymbol} onPath={path => graph.data.nodes.some(node => node.path === path) ? update({ path, code_view: "files", symbol: null, line: null, end: null, source_offset: null, directory: path.split("/").slice(0, -1).join("/") }) : update({ directory: path })} /></Suspense>}
-                    </> : p.metadata ? <div className="space-y-2 text-[13px] text-secondary"><h3 className="break-all font-mono">{p.metadata.path}</h3><p>{p.metadata.index_state === "error" ? "Ошибка чтения" : "Только метаданные"}: {GIT_METADATA_REASONS[p.metadata.index_reason ?? ""] ?? p.metadata.index_reason ?? "Содержимое не представлено текстом"}</p><p className="break-all font-mono text-[12px] text-muted">{selection.sha}</p></div>
-                        : selection.path ? <SourceViewer key={`${selection.sha}:${selection.path}`} project={project} selection={selection} onPage={source_offset => update({ source_offset })} /> : <div className="m-auto flex max-w-md flex-col items-center gap-3 py-12 text-center text-[13px] text-muted"><Search size={28} aria-hidden="true" /><p>Выберите файл в дереве или найдите символ. Исходники открываются в закреплённой версии SHA.</p></div>}
+                        {graph.data && !graph.error && <Suspense fallback={<p role="status">Загружаем карту…</p>}><RepositoryGraph graph={{ ...graph.data, task_links: !impact.error ? impact.data?.task_links : undefined }} name={connection.name} catalogEntries={!catalog.error ? catalog.data?.items : undefined} catalogIncomplete={Boolean(catalog.data?.truncated || catalogOffset > 0 || catalog.data?.next_offset != null)} focusPath={p.directory} layout={mode as RepositoryLayout} overlay={p.overlay} selected={p.symbolId} onSelect={p.onSymbol} onPath={path => { const entry = catalog.data?.items.find(item => item.path === path); if (entry && entry.type !== "tree") p.onEntry(entry); else if (!entry && graph.data.nodes.some(node => node.path === path)) { update({ path, code_view: "files", symbol: null, line: null, end: null, source_offset: null, directory: path.split("/").slice(0, -1).join("/") }); p.setPane("source"); } else update({ directory: path }); }} /></Suspense>}
+                    </> : <>
+                        <RepositoryCatalog key={p.directory} project={project} connection={connection.id} sha={selection.sha} directory={p.directory} selectedPath={selection.path} onDirectory={directory => update({ directory })} onSelect={p.onEntry} />
+                        {p.metadata ? <div className="space-y-2 p-3 text-[13px] text-secondary"><h3 className="break-all font-mono">{p.metadata.path}</h3><p>{p.metadata.index_state === "error" ? "Ошибка чтения" : "Только метаданные"}: {GIT_METADATA_REASONS[p.metadata.index_reason ?? ""] ?? p.metadata.index_reason ?? "Содержимое не представлено текстом"}</p><p className="break-all font-mono text-[12px] text-muted">{selection.sha}</p></div>
+                            : selection.path ? <SourceViewer key={`${selection.sha}:${selection.path}`} project={project} selection={selection} onPage={source_offset => update({ source_offset })} onRange={({ line, end }) => update({ line, end, symbol: null }, true)} /> : <div className="m-auto flex max-w-md flex-col items-center gap-3 py-8 text-center text-[13px] text-muted"><Search size={28} aria-hidden="true" /><p>Выберите файл в каталоге или дереве. Код откроется с подсветкой и номерами строк.</p></div>}
+                    </>}
             </div>
             {p.rightSeparator}
             <div className="repository-inspector scrollbar-thin min-h-0 min-w-0 overflow-auto rounded-md border border-line-subtle p-3"><RepositoryInspector key={`${selection.path}:${selection.sha}`} project={project} selection={selection} symbolId={p.symbolId} onSelect={p.onSymbol} onExpand={() => { update({ code_view: "hierarchy", root: p.symbolId }); p.setPane("source"); }} /></div>

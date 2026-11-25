@@ -1,59 +1,88 @@
 import { useState, type KeyboardEvent } from "react";
-import { ChevronRight, FileText, Folder } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { ErrorMessage } from "@/components/ui/States";
-import { GIT_METADATA_REASONS, type GitTreeEntry, type GitTreePage } from "@/lib/projectKnowledge";
+import { type GitTreeEntry, type GitTreePage } from "@/lib/projectKnowledge";
 import { useRepositoryQuery } from "./repositoryApi";
 
-export function RepositoryTree({ project, connection, sha, directory, selectedPath, onDirectory, onSelect }: {
+interface TreeProps {
     project: number; connection: number; sha: string; directory: string; selectedPath: string;
     onDirectory: (path: string) => void; onSelect: (entry: GitTreeEntry) => void;
-}) {
-    const [offset, setOffset] = useState(0);
-    const [draft, setDraft] = useState(directory);
-    const query = useRepositoryQuery<GitTreePage>({ project, connection, sha, kind: "tree", params: { children: "true", prefix: directory, offset: String(offset), limit: "40" } });
-    function navigate(path: string) { setOffset(0); setDraft(path); onDirectory(path); }
+}
+
+export function RepositoryTree(props: TreeProps) {
+    const [draft, setDraft] = useState("");
+    const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
+        const ancestors = props.selectedPath.split("/").slice(0, -1);
+        return Object.fromEntries(ancestors.map((_, index) => [ancestors.slice(0, index + 1).join("/"), true]));
+    });
+    const activeDirectory = props.directory;
+    function toggle(path: string, open: boolean) {
+        setExpanded(current => ({ ...current, [path]: open }));
+        props.onDirectory(open ? path : path.split("/").slice(0, -1).join("/"));
+    }
     function keyboard(event: KeyboardEvent<HTMLElement>) {
         const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="treeitem"]'));
-        const index = items.indexOf(document.activeElement as HTMLElement);
+        const item = document.activeElement as HTMLElement;
+        const index = items.indexOf(item);
         if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
             event.preventDefault();
             items[event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : Math.max(0, Math.min(items.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))]?.focus();
+        } else if (event.key === "ArrowRight" && item.getAttribute("aria-expanded") === "false") {
+            event.preventDefault(); item.click();
+        } else if (event.key === "ArrowRight" && item.getAttribute("aria-expanded") === "true") {
+            event.preventDefault(); items[index + 1]?.focus();
+        } else if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            if (item.getAttribute("aria-expanded") === "true") item.click();
+            else items.find(candidate => candidate.dataset.path === item.dataset.parent)?.focus();
         }
-        if (event.key === "ArrowLeft" && directory) { event.preventDefault(); navigate(directory.split("/").slice(0, -1).join("/")); }
-        if (event.key === "ArrowRight") { event.preventDefault(); (document.activeElement as HTMLElement)?.click(); }
     }
     return <div className="flex min-h-0 min-w-0 flex-col gap-3">
-        <form className="flex gap-1" onSubmit={event => { event.preventDefault(); navigate(draft.trim().replace(/\/$/, "")); }}>
-            <Input aria-label="Файл или папка" className="min-w-0" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Путь от корня" />
-            <Button type="submit" size="sm">Показать</Button>
+        <div className="flex items-center justify-between gap-2"><h3 className="text-[13px] font-semibold text-primary">Файлы</h3><Button size="sm" onClick={() => { setExpanded({}); props.onDirectory(""); }}>Корень</Button></div>
+        <form className="flex gap-1" onSubmit={event => { event.preventDefault(); const path = draft.trim().replace(/^\/+|\/+$/g, ""); setExpanded({}); props.onDirectory(path); }}>
+            <Input aria-label="Файл или папка" className="min-w-0" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Перейти к папке…" />
+            <Button type="submit" size="sm">Перейти</Button>
         </form>
-        <nav aria-label="Путь в репозитории" className="flex flex-wrap items-center gap-1 text-[12px]">
-            <Button size="sm" onClick={() => navigate("")}>Корень</Button>
-            {directory.split("/").filter(Boolean).map((part, index, all) => <Button key={index} size="sm" onClick={() => navigate(all.slice(0, index + 1).join("/"))}>{part}</Button>)}
-        </nav>
-        {query.isFetching && <p role="status" className="text-[12px] text-muted">Читаем каталог…</p>}
+        <div role="tree" aria-label="Файлы репозитория" onKeyDown={keyboard} className="repository-file-tree">
+            <TreeBranch {...props} prefix="" level={1} expanded={expanded} activeDirectory={activeDirectory} onToggle={toggle} />
+        </div>
+    </div>;
+}
+
+function TreeBranch({ prefix, level, expanded, activeDirectory, onToggle, ...props }: TreeProps & {
+    prefix: string; level: number; expanded: Record<string, boolean>; activeDirectory: string; onToggle: (path: string, open: boolean) => void;
+}) {
+    const [offset, setOffset] = useState(0);
+    const query = useRepositoryQuery<GitTreePage>({ project: props.project, connection: props.connection, sha: props.sha, kind: "tree", params: { children: "true", prefix, offset: String(offset), limit: "40" } });
+    return <>
+        {query.isFetching && <p role="status" className="px-2 text-[12px] text-muted">Читаем каталог…</p>}
         {query.error && <ErrorMessage message={query.error.message} action={<Button onClick={() => void query.refetch()}>Повторить каталог</Button>} />}
         {query.data && !query.error && <>
-            <p className="text-[12px] text-muted">Файлов в каталоге: {query.data.total_files}. Текст и структура обрабатываются отдельно.</p>
-            {(query.data.truncated || query.data.stale) && <p className="text-[12px] text-warning">Каталог или версия неполны.</p>}
-            {query.data.items.length === 0 && <p className="text-[12px] text-muted">В доступном каталоге нет элементов.</p>}
-            <div role="tree" aria-label="Файлы репозитория" onKeyDown={keyboard} className="scrollbar-thin min-h-0 space-y-1 overflow-y-auto">
-                {query.data.items.map(entry => <button key={entry.path} type="button" role="treeitem" aria-selected={entry.path === selectedPath}
-                    aria-expanded={entry.type === "tree" ? false : undefined} aria-level={directory.split("/").filter(Boolean).length + 1}
-                    className="touch-target flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-2 text-left text-[12px] text-secondary hover:bg-hover aria-selected:bg-accent/15 focus-visible:outline-2 focus-visible:outline-accent"
-                    onClick={() => entry.type === "tree" ? navigate(entry.path) : onSelect(entry)}>
-                    {entry.type === "tree" ? <Folder size={15} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" /> : <FileText size={15} className="mt-0.5 shrink-0" aria-hidden="true" />}
-                    <span className="min-w-0 flex-1 break-all">{entry.path.startsWith(`${directory}/`) ? entry.path.slice(directory.length + 1) : entry.path}
-                        {entry.type !== "tree" && <span className="block text-[11px] text-muted">{entry.index_state === "metadata" ? GIT_METADATA_REASONS[entry.index_reason ?? ""] ?? entry.index_reason : entry.index_state === "error" ? "Ошибка чтения" : entry.index_state === "pending" ? "Ожидает обработки" : "Текст готов"}{entry.size !== null ? ` · ${entry.size} Б` : ""}</span>}
-                    </span>{entry.type === "tree" && <ChevronRight size={14} aria-hidden="true" />}
-                </button>)}
-            </div>
-            {(offset > 0 || query.data.next_offset !== null) && <nav aria-label="Страницы каталога файлов" className="flex flex-wrap gap-2">
+            {(query.data.truncated || query.data.stale) && <p className="px-2 text-[12px] text-warning">Каталог или версия неполны.</p>}
+            {query.data.items.length === 0 && <p className="px-2 text-[12px] text-muted">В каталоге нет элементов.</p>}
+            {query.data.items.map(entry => {
+                const folder = entry.type === "tree";
+                const open = activeDirectory === entry.path || activeDirectory.startsWith(`${entry.path}/`) || expanded[entry.path] === true;
+                const Icon = folder ? open ? FolderOpen : Folder : FileText;
+                return <div key={entry.path}>
+                    <button type="button" role="treeitem" aria-label={entry.path.slice(prefix ? prefix.length + 1 : 0)} aria-selected={folder ? entry.path === props.directory : entry.path === props.selectedPath}
+                        aria-expanded={folder ? open : undefined} aria-level={level} data-path={entry.path} data-parent={prefix}
+                        className="repository-tree-entry" style={{ paddingLeft: `${8 + (level - 1) * 16}px` }} title={entry.path}
+                        onClick={() => folder ? onToggle(entry.path, !open) : props.onSelect(entry)}>
+                        {folder ? open ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" /> : <span className="w-[13px] shrink-0" />}
+                        <Icon size={16} className={folder ? "text-accent" : "text-muted"} aria-hidden="true" />
+                        <span className="min-w-0 truncate">{entry.path.slice(prefix ? prefix.length + 1 : 0)}</span>
+                        {entry.index_state === "error" && <span className="ml-auto text-warning" title="Ошибка чтения">!</span>}
+                    </button>
+                    {folder && open && <div role="group"><TreeBranch {...props} prefix={entry.path} level={level + 1} expanded={expanded} activeDirectory={activeDirectory} onToggle={onToggle} /></div>}
+                </div>;
+            })}
+            {(offset > 0 || query.data.next_offset !== null) && <nav aria-label={`Страницы каталога файлов ${prefix || "корень"}`} className="flex flex-wrap gap-1 py-2">
                 <Button size="sm" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 40))}>Назад</Button>
                 <Button size="sm" disabled={query.data.next_offset === null} onClick={() => query.data?.next_offset != null && setOffset(query.data.next_offset)}>Дальше</Button>
             </nav>}
         </>}
-    </div>;
+    </>;
 }
