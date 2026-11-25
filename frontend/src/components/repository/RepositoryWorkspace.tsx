@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { Drawer } from "@/components/ui/Drawer";
-import { Code2, GitBranch, PanelRight, RefreshCw, Search } from "lucide-react";
+import { Code2, Files, GitBranch, GitCompareArrows, Layers, Network, Orbit, PanelRight, RefreshCw, Search } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { ErrorMessage } from "@/components/ui/States";
 import { api, ApiError } from "@/lib/api";
@@ -20,10 +20,10 @@ import "./repository.css";
 
 const RepositoryGraph = lazy(() => import("./RepositoryGraph"));
 const RepositoryRoots = lazy(() => import("./RepositoryGraph").then(module => ({ default: module.RepositoryRoots })));
-const modes = [{ value: "files", label: "Файлы" }, { value: "hierarchy", label: "Иерархия" }, { value: "layers", label: "Слои" }, { value: "radial", label: "Радиальная" }, { value: "changes", label: "Изменения" }, { value: "search", label: "Поиск" }];
+const modes = [{ value: "files", label: "Файлы", icon: Files }, { value: "hierarchy", label: "Иерархия", icon: Network }, { value: "layers", label: "Слои", icon: Layers }, { value: "radial", label: "Радиальная", icon: Orbit }, { value: "changes", label: "Изменения", icon: GitCompareArrows }, { value: "search", label: "Поиск", icon: Search }];
 const positive = (value: string | null, fallback = 0) => value && /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) ? Math.max(fallback, Number(value)) : fallback;
 
-export function RepositoryWorkspace({ projectId, toolbarTarget }: { projectId: number; toolbarTarget?: HTMLElement | null }) {
+export function RepositoryWorkspace({ projectId }: { projectId: number }) {
     const client = useQueryClient();
     const [params, setParams] = useSearchParams();
     const [revoked, setRevoked] = useState<number[]>([]);
@@ -78,9 +78,11 @@ export function RepositoryWorkspace({ projectId, toolbarTarget }: { projectId: n
     }
     const separator = <div role="separator" tabIndex={0} aria-orientation="vertical" aria-label="Ширина дерева" aria-valuemin={200} aria-valuemax={420} aria-valuenow={leftWidth}
         className="repository-separator" onPointerDown={resize} onKeyDown={event => { if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return; event.preventDefault(); setLeftWidth(current => Math.max(200, Math.min(420, current + (event.key === "ArrowRight" ? 20 : -20)))); }} />;
-    const controlsButton = <Button size="sm" icon={<PanelRight size={15} aria-hidden="true" />} aria-label="Панель кода" aria-haspopup="dialog" aria-expanded={controlsOpen} onClick={() => { setInspector(false); setControlsOpen(true); }}><span className="hidden sm:inline">Панель кода</span></Button>;
+    const controlsButton = <Button size="sm" variant="ghost" className="repository-mode-button repository-parameters-button" aria-haspopup="dialog" aria-expanded={controlsOpen} onClick={() => { setInspector(false); setControlsOpen(true); }}><PanelRight size={21} strokeWidth={1.7} aria-hidden="true" /><span>Панель кода</span></Button>;
     return <RepositoryAccess value={revoke}><section ref={root} className="repository-workspace flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Код и репозитории">
-        {toolbarTarget ? createPortal(controlsButton, toolbarTarget) : <div className="flex shrink-0 justify-end pb-2">{controlsButton}</div>}
+        <div className="repository-workspace-body">
+            <aside aria-label="Навигация по коду" className="repository-mode-rail"><nav aria-label="Представления кода" className="repository-mode-list">{modes.map(({ value, label, icon: Icon }) => <Button key={value} size="sm" variant="ghost" className="repository-mode-button" aria-pressed={mode === value} onClick={() => { update({ code_view: value }); setControlsOpen(false); }}><Icon size={21} strokeWidth={1.7} aria-hidden="true" /><span>{label}</span></Button>)}</nav><div className="repository-mode-settings">{controlsButton}</div></aside>
+            <div className="repository-mode-content">
         {connections.isPending && <p role="status" className="text-muted">Читаем доступные репозитории…</p>}
         {connections.error && <ErrorMessage message={connections.error.message} action={<Button onClick={() => void connections.refetch()}>Повторить репозитории</Button>} />}
         {connections.data?.incomplete_reasons?.length ? <p role="status" className="text-[12px] text-warning">Список доступных репозиториев неполон. Проверка источников ограничена; обновите данные для повторной проверки.</p> : null}
@@ -106,6 +108,8 @@ export function RepositoryWorkspace({ projectId, toolbarTarget }: { projectId: n
                 query={params.get("code_q") ?? ""} onQuery={onQuery} onOpen={openHit} onSymbol={selectSymbol} update={update}
                 onEntry={entry => { setInspector(false); setControlsOpen(false); setMetadata(entry.index_state === "metadata" || entry.index_state === "error" ? { entry, connection: connectionId, sha } : null); update({ code_view: "files", path: entry.path, directory: entry.path.split("/").slice(0, -1).join("/"), symbol: null, line: null, end: null, source_offset: null }); setPane("source"); }} />)}
 
+            </div>
+        </div>
         <Drawer label="Панель кода" header={<h2 className="text-base font-semibold text-primary">Код и репозитории</h2>} closeLabel="Закрыть панель кода" isOpen={controlsOpen} onClose={() => setControlsOpen(false)}>
             <nav aria-label="Разделы панели кода" className="flex gap-2 border-b border-line-subtle p-4"><Button size="sm" aria-pressed={!inspector} onClick={() => setInspector(false)}>Репозиторий</Button>{connectionId > 0 && !denied && selection.path && <Button size="sm" aria-pressed={inspector} onClick={() => setInspector(true)}>Источник</Button>}</nav>
             <div hidden={inspector} className="space-y-4 p-4">
@@ -117,7 +121,6 @@ export function RepositoryWorkspace({ projectId, toolbarTarget }: { projectId: n
             <Button size="sm" aria-label="Обновить данные" icon={<RefreshCw size={14} aria-hidden="true" />} disabled={connections.isFetching} onClick={() => { setRevoked([]); void client.invalidateQueries({ queryKey: repositoryPrefix(projectId) }); }}><span className="hidden sm:inline">Обновить данные</span></Button>
             <LinkButton size="sm" to="../settings">Управление</LinkButton>
         </header>
-        <nav aria-label="Представления кода" className="flex shrink-0 gap-1 flex-wrap border-b border-line-subtle">{modes.map(item => <Button key={item.value} size="sm" variant="ghost" aria-pressed={mode === item.value} className="shrink-0 aria-pressed:border-accent aria-pressed:text-accent" onClick={() => { update({ code_view: item.value }); setControlsOpen(false); }}>{item.label}</Button>)}</nav>
                 {!connectionId && connections.data && !connections.error && !revoked.includes(0) && <GitIndexSummary page={connections.data} />}
                 <div ref={setControlsTarget} className="space-y-4" />
         {connections.data && !connections.error && (offset > 0 || connections.data.next_offset !== null) && <nav aria-label="Страницы репозиториев" className="flex shrink-0 flex-wrap items-center gap-2 text-[12px] text-muted"><span>На странице: {connections.data.items.length}{connections.data.total !== null ? ` из ${connections.data.total}` : ""}</span><Button size="sm" disabled={!offset} onClick={() => update({ repo_offset: previousOffsets.current.get(offset) ?? 0 })}>Назад</Button><Button size="sm" disabled={connections.data.next_offset === null} onClick={() => { const next = connections.data?.next_offset; if (next != null) { previousOffsets.current.set(next, offset); update({ repo_offset: next }); } }}>Дальше</Button></nav>}

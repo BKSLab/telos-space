@@ -16,7 +16,7 @@
 .repository-source-code { font: inherit; }
 .repository-source-line { white-space: pre; }
 .repository-source-gutter { grid-column: 1; grid-row: 1; position: sticky; left: 0; align-self: start; background: var(--color-surface); user-select: none; }
-.repository-source-line-number { display: block; width: 100%; min-width: 54px; height: 21px; padding: 0 14px 0 6px; border: 0; background: transparent; color: var(--color-text-muted); font: inherit; text-align: right; user-select: none; }
+.repository-source-line-number { display: block; width: 100%; min-width: 54px; height: 21px; min-height: 21px; padding: 0 14px 0 6px; border: 0; background: transparent; color: var(--color-text-muted); font: inherit; text-align: right; user-select: none; }
 button.repository-source-line-number { cursor: pointer; }
 button.repository-source-line-number:hover { color: var(--color-accent); }
 button.repository-source-line-number:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }

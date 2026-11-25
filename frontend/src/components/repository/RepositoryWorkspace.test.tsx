@@ -167,6 +167,22 @@ it("keeps the file area for source and opens symbol details only on request", as
     expect(await screen.findByRole("complementary", { name: "Сведения об источнике" })).toBeTruthy();
 });
 
+it("exposes all modes as named icon buttons outside the closed control panel", async () => {
+    vi.spyOn(api, "get").mockImplementation(async path => respond(path));
+    mount();
+    const navigation = screen.getByRole("navigation", { name: "Представления кода" });
+    expect(navigation.querySelectorAll("button")).toHaveLength(6);
+    for (const button of navigation.querySelectorAll("button")) {
+        expect(button.textContent?.trim()).toBeTruthy();
+        expect(button.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Поиск" }));
+    await screen.findByRole("searchbox");
+    expect(screen.getByTestId("location").textContent).toContain("code_view=search");
+    expect(screen.getByRole("button", { name: "Поиск" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("dialog", { name: "Панель кода" })).toBeNull();
+});
+
 const snapshotCoverage = { total_files: 1200, cataloged_files: 1200, indexed_files: 1199, metadata_files: 1, failed_files: 0, symbols: 10, relations: 12, unsupported_files: 0, analyzed_files: 1199, reasons: ["metadata_only", "source_stale"] };
 it("explains a historical SHA once and changes version only after an explicit action", async () => {
     const latest = "b".repeat(40);

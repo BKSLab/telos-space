@@ -1,4 +1,14 @@
 .repository-workspace { min-height: 360px; }
+.repository-workspace-body { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; min-height: 0; min-width: 0; flex: 1; }
+.repository-mode-content { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.repository-mode-rail { display: flex; flex-direction: column; gap: 5px; min-height: 0; overflow-y: auto; padding: 3px 4px 3px 0; border-right: 1px solid var(--color-line-subtle); }
+.repository-mode-button { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; flex-shrink: 0; width: 100%; min-height: 64px; padding: 8px 3px; border-color: transparent; color: var(--color-text-muted); font-size: 11px; line-height: 14px; text-align: center; white-space: normal; }
+.repository-mode-list { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+.repository-mode-settings { margin-top: auto; padding-top: 8px; }
+.repository-mode-button > svg { flex-shrink: 0; }
+.repository-mode-button:hover { color: var(--color-text-primary); background: var(--color-hover); }
+.repository-mode-button[aria-pressed="true"], .repository-mode-button[aria-expanded="true"] { color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 12%, transparent); border-color: var(--color-accent-border); }
+.repository-mode-button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .repository-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .repository-metrics > div { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; border: 1px solid var(--color-line-subtle); background: var(--color-surface-2); border-radius: 8px; padding: 9px 12px; }
 .repository-metrics dt { color: var(--color-text-muted); font-size: 11px; }
@@ -20,6 +30,8 @@
 .repository-workspace .react-flow__edge-textbg { fill: var(--color-surface-2); }
 .repository-workspace .react-flow__edge-text { fill: var(--color-text-secondary); font-size: 10px; }
 @media (max-width: 899px) {
+    .repository-workspace-body { grid-template-columns: 66px minmax(0, 1fr); gap: 6px; }
+    .repository-mode-button { min-height: 60px; font-size: 10px; line-height: 13px; padding-inline: 1px; }
     .repository-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
     .repository-metrics > div { padding: 6px 9px; }
     .repository-metrics dd { font-size: 14px; }

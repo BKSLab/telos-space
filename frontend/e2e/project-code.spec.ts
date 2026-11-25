@@ -62,9 +62,8 @@ async function closeCodePanel(page: Page) {
     await expect(panel).not.toBeVisible();
 }
 async function chooseMode(page: Page, name: string) {
-    const panel = await openCodePanel(page);
-    await panel.getByRole("navigation", { name: "Представления кода" }).getByRole("button", { name, exact: true }).click();
-    await expect(panel).not.toBeVisible();
+    await closeCodePanel(page);
+    await page.getByRole("navigation", { name: "Представления кода" }).getByRole("button", { name, exact: true }).click();
 }
 
 for (const width of [320, 390, 1280, 1440]) {
@@ -78,6 +77,19 @@ for (const width of [320, 390, 1280, 1440]) {
         await expect(page.getByRole("complementary", { name: "Сведения об источнике" })).toHaveCount(0);
         await expect(page.getByRole("combobox", { name: "Репозиторий", exact: true })).toHaveCount(0);
         await expect(page.locator(".repository-source-language")).toHaveText("Python");
+        const modes = page.getByRole("navigation", { name: "Представления кода" });
+        await expect(modes.getByRole("button")).toHaveCount(6);
+        for (const button of await modes.getByRole("button").all()) {
+            await expect(button.locator("svg")).toBeVisible();
+            await expect(button.locator("span")).toBeVisible();
+        }
+        const rail = await modes.boundingBox(), content = await page.getByRole("region", { name: "Область кода" }).boundingBox();
+        expect(rail!.x + rail!.width).toBeLessThanOrEqual(content!.x);
+        await expect(modes.getByRole("button", { name: "Файлы", exact: true })).toHaveAttribute("aria-pressed", "true");
+        const sourceRows = page.locator(".repository-source-line"), numbers = page.locator(".repository-source-line-number");
+        const firstRow = await sourceRows.nth(0).boundingBox(), secondRow = await sourceRows.nth(1).boundingBox();
+        const firstNumber = await numbers.nth(0).boundingBox(), secondNumber = await numbers.nth(1).boundingBox();
+        expect(Math.abs((secondRow!.y - firstRow!.y) - (secondNumber!.y - firstNumber!.y))).toBeLessThan(1);
         if (width >= 900) {
             const navigation = await page.getByRole("navigation", { name: "Виды знаний" }).boundingBox();
             const area = await page.getByRole("region", { name: "Область кода" }).boundingBox();

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BookOpen, GitBranch, History } from "lucide-react";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
@@ -21,7 +21,6 @@ export function ProjectKnowledgePage() {
     for (const field of fields) if (params.has(field)) scrollParams.set(field, params.get(field)!);
     const positionKey = `${project.id}:${view}:${scrollParams}`;
     const scroll = useRef<HTMLElement>(null);
-    const [codeToolbar, setCodeToolbar] = useState<HTMLDivElement | null>(null);
     useLayoutEffect(() => {
         const element = scroll.current;
         if (!element) return;
@@ -68,14 +67,14 @@ export function ProjectKnowledgePage() {
                             <Icon size={15} aria-hidden="true" className={view === "code" ? "hidden sm:block" : undefined} />{label}
                         </Link>;
                     })}
-                </nav>{view === "code" && <div ref={setCodeToolbar} />}</div>
+                </nav></div>
             </header>
             {view === "history" ? <ProjectHistoryTimeline key={project.id} projectId={project.id} projectKey={project.key} />
                 : view === "map" ? <>
                         <ProjectKnowledgePanel key={project.id} projectId={project.id} projectKey={project.key} ownerId={project.owner_id ?? null} />
                         <CollapsibleSection title="Диагностика индекса"><IndexDiagnostics projectId={project.id} /></CollapsibleSection>
                     </> : null}
-            {view === "code" && <Suspense fallback={<p role="status">Загружаем код проекта…</p>}><RepositoryWorkspace key={project.id} projectId={project.id} toolbarTarget={codeToolbar} /></Suspense>}
+            {view === "code" && <Suspense fallback={<p role="status">Загружаем код проекта…</p>}><RepositoryWorkspace key={project.id} projectId={project.id} /></Suspense>}
         </div>
     </section>;
 }
