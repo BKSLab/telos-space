@@ -5,7 +5,14 @@
 Перед продолжением проверь рабочее дерево и согласованный объём.
 
 TELOS-41 выложена 25.11.2026 по `docs/TELOS-41_IMPLEMENTATION_PLAN.md`;
-код и образы — `2201a3a`, server checkout `/projects/telos-space`.
+backend/индекс — `2201a3a`, обновлённый frontend — `d3a5d88`, сервер
+`/projects/telos-space`. После сверки с исходными HTML/PDF исправлены
+файловая композиция, вложенное дерево, просмотр кода с подсветкой по умолчанию,
+карточки иерархии, контейнеры каталогов и радиальные группы. Каталог дополняет
+ограниченный срез символов, поэтому можно пройти к остальным файлам. Исправлены
+Back/URL, прокрутка к коду/легенде, полный fit, сохранение overlay после reset
+и пути каталога в табличной карте. Ручная визуальная приёмка на авторизованном
+production API остаётся пользователю; успешные E2E её не заменяют.
 25.11 пользователь разрешил commit/push в origin/main и обновление сервера
 через стандартные Git/Docker без deploy-скриптов; изменения трекера не разрешены.
 Рабочая область —
@@ -13,7 +20,8 @@ TELOS-41 выложена 25.11.2026 по `docs/TELOS-41_IMPLEMENTATION_PLAN.md`
 Структура Python AST / Tree-sitter JS/TS, independent analysis generations
 поверх существующих Git snapshots; миграция c34 поверх c33 только добавляет
 схему. Embeddings Git, смысловой поиск и LLM-обогащение остаются TELOS-40.
-Frontend: 1269 passed / 2 skipped, lint/build, 27 Edge E2E на управляемом API.
+Frontend после доработки: 1290 passed / 2 skipped, 31 адресная проверка,
+lint/build passed, 12 Edge E2E на итоговой сборке с управляемым API.
 Backend: 1885 passed в полном наборе, два старых ожидания числа MCP исправлены
 и прошли `--lf`; покрытие 86,94%. Поздние адресные проверки прошли. RealPG
 проверил populated upgrade, поколения, ACL/owner/revoke, checkpoint, impact и
@@ -26,6 +34,11 @@ assets/workers HTTP200, auth/me без сессии401. Основные кол�
 Проверенная копия БД/uploads/config перед миграцией:
 `/root/backups/telos-space/20261125T081136Z-before-telos41` (pg_restore list,
 tar list, SHA256); прежние образы сохранены как before-telos41-20261125.
+Визуальная доработка выложена только пересборкой/перезапуском frontend;
+nginx test/reload passed, HTML и 8 новых chunks/styles/workers HTTP200,
+auth/me без сессии401, backend healthy. Остальные 10 контейнеров сохранили ID;
+backend/схема/данные не обновлялись. Образ до визуальной правки сохранён как
+`telos-space-frontend:before-telos41-visual-20261125`.
 Новые snapshot/symbol/graph MCP проверены; точный git_structure.py на SHA2201a3a
 прочитан, SHA256 совпал с Git. Индекс repo1 на этом SHA опубликован штатным
 worker: 1584 файла, 1559 с текстом / 25 metadata-only, ошибок 0; 10926 символов,
