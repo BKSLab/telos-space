@@ -51,7 +51,7 @@ def test_map_suffix_index_preserves_import_targets_and_ambiguity():
         suffix = relation["import_name"].replace(".", "/").lstrip("/")
         candidates = [
             other for other in components
-            if other.file_id != relation["source_file_id"] and suffix
+            if other.connection_id == relation["source_connection_id"] and other.file_id != relation["source_file_id"] and suffix
             and (other.path.rsplit(".", 1)[0].endswith("/" + suffix)
                  or other.path.rsplit(".", 1)[0] == suffix)
         ]

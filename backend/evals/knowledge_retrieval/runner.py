@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-RETRIEVAL_KINDS = frozenset({"semantic", "hybrid"})
+RETRIEVAL_KINDS = frozenset({"semantic", "hybrid", "exact", "textual"})
 RUNNABLE_APPROVALS = frozenset({"APPROVED", "TEST_FIXTURE"})
 
 
@@ -29,7 +29,7 @@ class RetrievalMetrics:
 
 
 def load_retrieval_examples(path: Path) -> list[RetrievalExample]:
-    """Читает runnable semantic/hybrid-примеры согласованного формата."""
+    """Читает утверждённые примеры, включая точный/текстовый Git-поиск."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     examples: list[RetrievalExample] = []
     for item in payload.get("examples", []):
@@ -48,7 +48,7 @@ def load_retrieval_examples(path: Path) -> list[RetrievalExample]:
             )
         )
     if not examples:
-        raise ValueError("В наборе нет runnable semantic/hybrid-примеров.")
+        raise ValueError("В наборе нет runnable retrieval-примеров.")
     return examples
 
 

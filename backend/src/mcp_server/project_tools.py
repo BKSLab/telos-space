@@ -22,8 +22,12 @@ from src.mcp_server.registry import telos_tool
 from src.schemas.agent_context import (
     ContextInput,
     ContextPageInput,
+    GitGraphInput,
+    GitImpactInput,
     GitReadInput,
     GitSearchInput,
+    GitSnapshotsInput,
+    GitSymbolsInput,
     TaskGitLinksInput,
     WebSaveInput,
     WebTopicInput,
@@ -451,6 +455,46 @@ async def read_git_file(context: Context, project_key: str, arguments: GitReadIn
 async def get_git_map(context: Context, project_key: str) -> dict:
     """Компоненты/импорты/символы и отдельный manifest каждого репозитория."""
     return await _context_action(context, project_key, "telos_get_git_map", ContextInput())
+
+
+@telos_tool(
+    name="telos_list_git_snapshots", scope=SCOPE_KNOWLEDGE_READ,
+    title="Версии репозитория", strict_arguments=True,
+    description="Доступные закреплённые SHA подключения и охват анализа с пагинацией. Без запуска индексации.",
+)
+async def list_git_snapshots(context: Context, project_key: str, arguments: GitSnapshotsInput) -> dict:
+    """Читает версии через общий proof-gated сервис."""
+    return await _context_action(context, project_key, "telos_list_git_snapshots", arguments)
+
+
+@telos_tool(
+    name="telos_list_git_symbols", scope=SCOPE_KNOWLEDGE_READ,
+    title="Символы кода", strict_arguments=True,
+    description="Точные объявления, qualified names и диапазоны одного подключения/SHA. Исходник читать telos_read_git_file.",
+)
+async def list_git_symbols(context: Context, project_key: str, arguments: GitSymbolsInput) -> dict:
+    """Читает символы с текущими доменными правами."""
+    return await _context_action(context, project_key, "telos_list_git_symbols", arguments)
+
+
+@telos_tool(
+    name="telos_get_git_graph", scope=SCOPE_KNOWLEDGE_READ,
+    title="Связи кода", strict_arguments=True,
+    description="Ограниченный граф символов exact repository/SHA. Containment отдельно от dependency; candidate/unresolved не доказанные runtime calls.",
+)
+async def get_git_graph(context: Context, project_key: str, arguments: GitGraphInput) -> dict:
+    """Читает ограниченную область графа через общий сервис."""
+    return await _context_action(context, project_key, "telos_get_git_graph", arguments)
+
+
+@telos_tool(
+    name="telos_get_git_impact", scope=SCOPE_KNOWLEDGE_READ,
+    title="Влияние изменения кода", strict_arguments=True,
+    description="Потенциальные входящие зависимости символа с evidence и ограничениями. Не подтверждает дефект или завершение задачи.",
+)
+async def get_git_impact(context: Context, project_key: str, arguments: GitImpactInput) -> dict:
+    """Проверяет потенциальное влияние без изменения задач."""
+    return await _context_action(context, project_key, "telos_get_git_impact", arguments)
 
 
 @telos_tool(

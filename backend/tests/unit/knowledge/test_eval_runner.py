@@ -74,6 +74,22 @@ def test_eval_fixture_is_valid_and_unapproved_candidates_are_blocked(tmp_path: P
     assert all("gold_source_ids" not in item for item in payload["examples"])
 
 
+def test_exact_and_textual_code_examples_preserve_repository_sha_and_ranges(tmp_path):
+    dataset = tmp_path / "code.json"
+    examples = [
+        {"id": "symbol", "kind": "exact", "approval_status": "TEST_FIXTURE",
+         "question": "Auth.login", "gold_source_ids": ["1:aaa:src/auth.py:4:8"]},
+        {"id": "path", "kind": "textual", "approval_status": "TEST_FIXTURE",
+         "question": "src/auth.py", "gold_source_ids": ["2:bbb:src/auth.py:1:9"]},
+    ]
+    dataset.write_text(json.dumps({"examples": examples}), encoding="utf-8")
+    loaded = load_retrieval_examples(dataset)
+    metrics = calculate_metrics(loaded, {"symbol": ["2:aaa:src/auth.py:4:8"],
+                                         "path": ["2:bbb:src/auth.py:1:9"]})
+    assert metrics.recall_at_k["10"] == 0.5
+    assert metrics.mrr == 0.5
+
+
 def test_metrics_are_computed_on_a_known_fixture() -> None:
     """Recall@k и MRR считаются по эталону, дубликаты предсказаний не учитываются дважды."""
 

@@ -1,6 +1,8 @@
 """Аргументы инструментов контекста; actor, ACL и proofs модель не задаёт."""
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.schemas.web_context import MAX_WEB_QUERY_CHARS, WebSearchRequest
 
@@ -18,6 +20,43 @@ class GitSearchInput(ContextInput):
     query: str = Field(min_length=1, max_length=1000)
     connection_ids: list[int] = Field(default_factory=list, max_length=10)
     limit: int = Field(default=5, ge=1, le=10)
+    sha: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+
+    @model_validator(mode="after")
+    def pinned_repository(self):
+        """SHA всегда относится к одному явно выбранному подключению."""
+        if self.sha is not None and len(self.connection_ids) != 1:
+            raise ValueError("Для SHA выберите ровно одно подключение.")
+        return self
+
+
+class GitSnapshotsInput(ContextPageInput):
+    connection_id: int = Field(gt=0)
+
+
+class GitSymbolsInput(GitSnapshotsInput):
+    sha: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    path: str | None = Field(default=None, min_length=1, max_length=4096)
+    query: str | None = Field(default=None, min_length=1, max_length=512)
+    symbol_id: int | None = Field(default=None, gt=0)
+
+
+class GitGraphInput(ContextInput):
+    connection_id: int = Field(gt=0)
+    sha: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    root_id: int | None = Field(default=None, gt=0)
+    direction: Literal["in", "out", "both"] = "both"
+    depth: int = Field(default=1, ge=1, le=3)
+    limit: int = Field(default=50, ge=1, le=100)
+    relation: Literal["all", "dependency", "containment"] = "all"
+
+
+class GitImpactInput(ContextInput):
+    connection_id: int = Field(gt=0)
+    sha: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    symbol_id: int = Field(gt=0)
+    depth: int = Field(default=1, ge=1, le=3)
+    limit: int = Field(default=50, ge=1, le=100)
 
 
 class GitReadInput(ContextInput):

@@ -13,7 +13,7 @@ from src.exceptions.access import ResourceNotAvailableError
 from src.exceptions.base import ServiceError
 from src.exceptions.context_selection import ContextSelectionChangedError
 from src.knowledge.catalog import build_catalog
-from src.schemas.git_sources import GitSourceProof
+from src.schemas.git_sources import GitConnectionProof, GitSourceProof
 from src.schemas.knowledge import (
     AssertionReferenceSchema,
     ExternalSourceReferenceSchema,
@@ -150,6 +150,31 @@ async def test_all_used_sources_are_checked_even_without_selected_handles_and_re
     assert "Private" not in str(public)
     # No reader identity in common live broadcast is never proof of a private repo grant.
     assert (await service.present(values, user_id=None))[1] is False
+
+
+async def test_empty_structure_retains_connection_guard_across_serialization_and_revoke():
+    """Даже отсутствие символов раскрывает metadata и требует late access gate."""
+    _, service, principal, _, git, _ = evidence_environment()
+    proof = GitConnectionProof(
+        source_id="git_connection:2", entity_id=2, project_id=1,
+        connection_id=2, repository_id=101, generation=3,
+        credential_revision=2, ref="main",
+    )
+    evidence = ContextEvidence()
+    evidence.register(ContextReadResult({"items": []}, project_id=1, git_proofs=(proof,)))
+    assert evidence.has_materials
+    inherited = ContextEvidence()
+    inherited.inherit(type(evidence.saved).model_validate_json(evidence.saved.model_dump_json()))
+    assert inherited.saved.git_connections == [proof]
+    answer = KnowledgeAnswerSchema(answer="Символы не найдены в доступном поколении", sources=[])
+    answer._context_evidence = inherited, principal
+    values = encode_answer_sources(answer)
+    assert "git_connection:2" not in str(decode_answer_sources(values))
+    assert (await service.present(values, user_id=1))[1]
+    assert git.validate_sources.await_args.kwargs["sources"] == [proof]
+    git.validate_sources.side_effect = ResourceNotAvailableError(resource="repository", resource_id=2)
+    public, available = await service.present(values, user_id=1)
+    assert not available and not any(public.values())
 
 
 @pytest.mark.parametrize("change", ["edit", "delete"])

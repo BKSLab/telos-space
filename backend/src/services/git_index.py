@@ -1,15 +1,14 @@
 """Статическая, ограниченная обработка Git; код и ссылки никогда не исполняются."""
 
-import ast
 import hashlib
 import json
 import re
 from bisect import bisect_right
 from pathlib import PurePosixPath
 
+from src.services.git_structure import extract_structure
+
 POLICY_VERSION = 3
-SYMBOL_LIMIT = 200
-IMPORT_LIMIT = 100
 
 
 def policy_hash(*, ref: str = "") -> str:
@@ -39,85 +38,70 @@ def prepare_text(content: bytes) -> tuple[str | None, str | None]:
 
 
 def analyze_file(path: str, text: str) -> dict:
-    """Строит только объявленные символы/imports; поведения и продуктовых целей не выдумывает."""
+    """Возвращает полный статический анализ; relations не доказывают runtime-поведение."""
     suffix = PurePosixPath(path).suffix.lower()
-    result = {"kind": "text", "symbols": [], "imports": [], "partial": False}
+    result = extract_structure(path, text)
+    result["kind"] = "text"
     if suffix in {".py", ".pyi"}:
         result["kind"] = "python_module"
-        try:
-            tree = ast.parse(text)
-        except (SyntaxError, ValueError, RecursionError):
-            return {**result, "partial": True, "reason": "syntax_not_parsed"}
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                result["symbols"].append(
-                    {
-                        "name": node.name,
-                        "kind": "class" if isinstance(node, ast.ClassDef) else "function",
-                        "line": node.lineno,
-                    }
-                )
-            elif isinstance(node, ast.Import):
-                result["imports"].extend(
-                    {"name": item.name, "line": node.lineno} for item in node.names
-                )
-            elif isinstance(node, ast.ImportFrom):
-                result["imports"].append(
-                    {"name": "." * node.level + (node.module or ""), "line": node.lineno}
-                )
-    elif suffix in {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte"}:
+    elif suffix in {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"}:
         result["kind"] = "javascript_module"
-        result["partial"] = True
-        result["reason"] = "lexical_only"
-        for number, line in enumerate(text.splitlines(), 1):
-            symbol = re.search(
-                r"\b(?:export\s+)?(?:async\s+)?(?:function|class|interface|type)\s+([A-Za-z_$][A-Za-z0-9_$]*)",
-                line,
-            )
-            if symbol:
-                result["symbols"].append({"name": symbol[1], "kind": "candidate", "line": number})
-            imported = re.search(
-                r"\b(?:from\s*|import\s*|require\(\s*)['\"]([^'\"]{1,256})['\"]", line
-            )
-            if imported:
-                result["imports"].append(
-                    {"name": imported[1], "line": number, "confidence": "candidate"}
-                )
     elif suffix in {".md", ".mdx", ".rst", ".txt", ".adoc"}:
         result["kind"] = "documentation"
     elif suffix in {".json", ".toml", ".yaml", ".yml", ".ini", ".cfg"}:
         result["kind"] = "configuration"
-    if len(result["symbols"]) > SYMBOL_LIMIT or len(result["imports"]) > IMPORT_LIMIT:
-        result["partial"] = True
-    result["symbols"] = result["symbols"][:SYMBOL_LIMIT]
-    result["imports"] = result["imports"][:IMPORT_LIMIT]
     return result
 
 
-def text_fragments(text: str, *, max_chars: int = 8000) -> list[dict]:
-    """Разбивает текст на bounded Unicode fragments с точными исходными offset/lines."""
+def text_fragments(
+    text: str, *, max_chars: int = 8000, path: str | None = None,
+    structure: dict | None = None,
+) -> list[dict]:
+    """Делит оригинал по декларациям/секциям, затем строкам; контекст хранит отдельно."""
     if max_chars < 500:
         raise ValueError("Фрагмент слишком мал.")
     newlines = [index for index, char in enumerate(text) if char == "\n"]
     result = []
     start = 0
-    overlap = min(400, max_chars // 4)
+    symbols = (structure or {}).get("symbols", [])
+    if structure is None and path:
+        symbols = extract_structure(path, text)["symbols"]
+    declarations = [symbol for symbol in symbols if symbol["id"] != "$file"]
+    boundaries = {symbol[key] for symbol in declarations for key in ("offset", "end_offset")}
+    # Sections are evidence from syntax only, including SQL statements and config tables.
+    for match in re.finditer(r'(?m)^(?:#{1,6}\s|\[[^\r\n]+\]|[A-Za-z_][\w.-]*\s*[:=]|\s{0,2}"[^"\r\n]+"\s*:|(?:CREATE|ALTER|INSERT|SELECT|WITH)\b)', text):
+        boundaries.add(match.start())
     while start < len(text):
         end = min(len(text), start + max_chars)
         if end < len(text):
-            boundary = text.rfind("\n", start + max_chars // 2, end)
-            if boundary >= 0:
-                end = boundary + 1
+            structural = [boundary for boundary in boundaries if start < boundary <= end]
+            # Avoid cutting a small declaration that starts within this window.
+            crossing = [symbol["offset"] for symbol in declarations if
+                        start < symbol["offset"] < end < symbol["end_offset"] and
+                        symbol["end_offset"] - symbol["offset"] <= max_chars]
+            if crossing:
+                end = min(crossing)
+            elif structural:
+                end = max(structural)
+            else:
+                boundary = text.rfind("\n", start + max_chars // 2, end)
+                if boundary >= 0:
+                    end = boundary + 1
+        owners = [symbol for symbol in declarations if symbol["offset"] <= start < end <= symbol["end_offset"]]
+        owner = min(owners, key=lambda symbol: symbol["end_offset"] - symbol["offset"], default=None)
         result.append(
             {
                 "ordinal": len(result),
                 "offset": start,
+                "end_offset": end,
                 "line_start": bisect_right(newlines, start - 1) + 1,
                 "line_end": bisect_right(newlines, end - 1) + 1,
                 "text": text[start:end],
+                "symbol_id": owner["id"] if owner else None,
+                "context": {"qualified_name": owner["qualified_name"], "signature": owner["signature"]} if owner else None,
             }
         )
         if end == len(text):
             break
-        start = end - overlap
+        start = end
     return result

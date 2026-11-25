@@ -121,6 +121,8 @@ CONTEXT_READ_SERVICES = {
     **{("GET", f"/api/v1/projects/{{project_id}}/git{suffix}"): "get_git_source_service"
        for suffix in ("/connections", "/connections/{connection_id}", "/connections/{connection_id}/tree",
                       "/connections/{connection_id}/file", "/connections/{connection_id}/compare",
+                      "/connections/{connection_id}/snapshots", "/connections/{connection_id}/symbols",
+                      "/connections/{connection_id}/graph", "/connections/{connection_id}/impact",
                       "/search", "/map", "/tasks/{task_id}/links", "/tasks/{task_id}/candidates")},
 }
 CONTEXT_WRITE_SERVICES = {

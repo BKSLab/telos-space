@@ -3,8 +3,22 @@
 from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import and_, delete, exists, func, insert, or_, select, update
+from sqlalchemy import (
+    and_,
+    cast,
+    delete,
+    exists,
+    func,
+    insert,
+    literal,
+    or_,
+    select,
+    text,
+    true,
+    update,
+)
 from sqlalchemy import case as sa_case
+from sqlalchemy.dialects.postgresql import JSONPATH
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +33,7 @@ from src.db.models.git_sources import (
     GitSyncJob,
     GitTaskChangeLink,
 )
+from src.db.models.git_structure import GitAnalysis, GitRelation, GitSymbol
 from src.db.models.project_members import ProjectMember, ProjectRole
 from src.db.models.project_stages import ProjectStage
 from src.db.models.projects import Project
@@ -40,6 +55,9 @@ C, S, F, R, J, D, G, L = (
     )
 )
 P, T, U, M = (model.__table__ for model in (Project, Task, User, ProjectMember))
+
+
+A, Y, E = (model.__table__ for model in (GitAnalysis, GitSymbol, GitRelation))
 
 
 class GitSourcesRepository:
@@ -103,8 +121,9 @@ class GitSourcesRepository:
         self, *, project_id: int, connection_id: int, for_update: bool = False
     ) -> dict | None:
         """Читает подключение только внутри проекта, при необходимости блокирует его."""
-        statement = select(C).where(C.c.id == connection_id, C.c.project_id == project_id)
-        return await self._one(statement.with_for_update() if for_update else statement)
+        statement = select(C, P.c.owner_id.label("project_owner_id")).join(P, P.c.id == C.c.project_id).where(
+            C.c.id == connection_id, C.c.project_id == project_id)
+        return await self._one(statement.with_for_update(of=(P, C)) if for_update else statement)
 
     async def get_connections(
         self, *, project_id: int, connection_ids: set[int]
@@ -131,6 +150,14 @@ class GitSourcesRepository:
             .limit(limit)
             .offset(offset)
         )
+
+    async def verification_candidates(self, *, project_id: int, after_id: int, limit: int) -> list[dict]:
+        """Кандидаты на live proof. Курсор задаётся уже видимым ID подключения."""
+        return await self._many(select(C.c.id).where(
+            C.c.project_id == project_id, C.c.id > after_id, C.c.enabled,
+            or_(~C.c.is_private, C.c.share_private_with_project),
+            C.c.state.not_in(("access_lost", "disabled", "error")),
+        ).order_by(C.c.id).limit(limit))
 
     async def count_connections(self, *, project_id: int, is_owner: bool) -> int:
         """Считает разрешённые подключения SQL-агрегатом."""
@@ -289,8 +316,9 @@ class GitSourcesRepository:
         )
 
     @staticmethod
-    def _file_statement(*, include_text: bool = True):
-        columns = [column for column in F.c if include_text or column.name != "text"]
+    def _file_statement(*, include_text: bool = True, include_analysis: bool = True):
+        columns = [column for column in F.c if (include_text or column.name != "text")
+                   and (include_analysis or column.name != "analysis")]
         return select(
             *columns,
             S.c.commit_sha,
@@ -386,7 +414,7 @@ class GitSourcesRepository:
         rows = [
             {
                 "file_id": file_id,
-                **fragment,
+                **{field: fragment[field] for field in ("ordinal", "offset", "line_start", "line_end", "text")},
                 "search_vector": func.to_tsvector("simple", fragment["text"]),
             }
             for fragment in fragments
@@ -417,13 +445,82 @@ class GitSourcesRepository:
         )
 
     async def search(
-        self, *, project_id: int, connection_ids: tuple[int, ...], query: str, limit: int
+        self, *, project_id: int, connection_ids: tuple[int, ...], query: str, limit: int,
+        sha: str | None = None, analyzer_version: str | None = None,
     ) -> list[dict]:
         """FTS кандидатов только live-proof проверенных connections, с immutable координатами."""
+        filter_scope = (
+            C.c.project_id == project_id,
+            C.c.id.in_(connection_ids),
+            C.c.enabled,
+            S.c.scope_hash == C.c.scope_hash,
+            S.c.commit_sha == (sha or func.coalesce(C.c.indexed_sha, C.c.observed_sha)),
+            F.c.state == "ready",
+        )
+        # PostgreSQL computes all offsets from original Unicode text. A small
+        # candidate set for each strategy keeps the merged ranking deterministic.
+        exact = await self._many(
+            self._file_statement(include_text=False, include_analysis=False)
+            .add_columns(
+                func.left(F.c.text, 2000).label("excerpt"),
+                literal(0).label("fragment_offset"),
+                literal(1).label("line_start"),
+            )
+            .where(*filter_scope, F.c.path == query)
+            .order_by(C.c.id, F.c.id)
+            .limit(limit)
+        )
+        normalized = "".join(ch for ch in query.lower() if ch.isalnum())[:256]
+        matches = []
+        if analyzer_version and normalized:
+            grams = list(dict.fromkeys(normalized[i : i + 3] for i in range(len(normalized) - 2)))[
+                :16
+            ]
+            start = Y.c.search_name.startswith(normalized, autoescape=True)
+            gram_votes = sum(
+                sa_case((Y.c.search_name.contains(gram, autoescape=True), 1), else_=0)
+                for gram in grams
+            )
+            fuzzy = gram_votes >= max(2, (len(grams) + 1) // 2) if grams else False
+            rank = sa_case(
+                (Y.c.qualified_name == query, 0),
+                (Y.c.name == query, 1),
+                (Y.c.search_name == normalized, 2),
+                (start, 3),
+                else_=4,
+            )
+            published = (
+                select(A.c.id)
+                .where(A.c.snapshot_id == S.c.id, A.c.state == "published")
+                .order_by((A.c.version == analyzer_version).desc(), A.c.id.desc())
+                .limit(1)
+                .correlate(S)
+                .scalar_subquery()
+            )
+            stmt = (
+                self._file_statement(include_text=False, include_analysis=False)
+                .join(A, A.c.id == published)
+                .join(Y, and_(Y.c.analysis_id == A.c.id, Y.c.path == F.c.path))
+                .add_columns(
+                    Y.c.id.label("symbol_id"),
+                    Y.c.qualified_name,
+                    Y.c.kind,
+                    Y.c.offset.label("fragment_offset"),
+                    Y.c.line_start,
+                    func.substr(
+                        F.c.text, Y.c.offset + 1, func.least(2000, Y.c.end_offset - Y.c.offset)
+                    ).label("excerpt"),
+                )
+                .where(
+                    *filter_scope, or_(Y.c.qualified_name == query, Y.c.name == query, start, fuzzy)
+                )
+            )
+            ordering = [rank, -gram_votes] if grams else [rank]
+            matches = await self._many(stmt.order_by(*ordering, C.c.id, F.c.path, Y.c.offset, Y.c.id).limit(limit))
         terms = func.plainto_tsquery("simple", query)
         rank = func.ts_rank_cd(R.c.search_vector, terms)
         base = (
-            self._file_statement(include_text=False)
+            self._file_statement(include_text=False, include_analysis=False)
             .add_columns(
                 R.c.text.label("excerpt"),
                 R.c.offset.label("fragment_offset"),
@@ -438,22 +535,46 @@ class GitSourcesRepository:
                 C.c.id.in_(connection_ids),
                 C.c.enabled,
                 S.c.scope_hash == C.c.scope_hash,
-                S.c.commit_sha == func.coalesce(C.c.indexed_sha, C.c.observed_sha),
+                S.c.commit_sha == (sha or func.coalesce(C.c.indexed_sha, C.c.observed_sha)),
                 F.c.state == "ready",
                 R.c.search_vector.op("@@")(terms),
             )
             .subquery()
         )
-        return await self._many(
+        fragments = await self._many(
             select(base).where(base.c.rn == 1).order_by(base.c.rank.desc(), base.c.id).limit(limit)
         )
+        seen = set()
+        result = []
+        for item in [*exact, *matches, *fragments]:
+            key = (
+                item["connection_id"],
+                item["commit_sha"],
+                item["id"],
+                item["fragment_offset"],
+                len(item["excerpt"]),
+            )
+            if key not in seen:
+                result.append(item)
+                seen.add(key)
+        return result[:limit]
 
     async def map_files(
         self, *, project_id: int, connection_ids: tuple[int, ...], limit: int
     ) -> list[dict]:
         """Читает bounded карту без загрузки полного текста файлов."""
+        summary = func.jsonb_build_object(
+            "kind",
+            F.c.analysis["kind"],
+            "partial",
+            F.c.analysis["partial"],
+            "symbols",
+            func.jsonb_path_query_array(F.c.analysis, cast("$.symbols[0 to 20]", JSONPATH)),
+            "imports",
+            func.jsonb_path_query_array(F.c.analysis, cast("$.imports[0 to 20]", JSONPATH)),
+        )
         return await self._many(
-            self._file_statement(include_text=False)
+            self._file_statement(include_text=False, include_analysis=False).add_columns(summary.label("analysis"))
             .where(
                 C.c.project_id == project_id,
                 C.c.id.in_(connection_ids),
@@ -497,6 +618,278 @@ class GitSourcesRepository:
                 S.c.scope_hash == C.c.scope_hash,
                 F.c.id.in_(file_ids),
             )
+        )
+
+    async def recorded_snapshots(
+        self, *, connection_id: int, scope_hash: str, version: str, offset: int, limit: int
+    ) -> list[dict]:
+        """Возвращает страницу метаданных, исключая manifest и содержимое файлов."""
+        chosen = (
+            select(A)
+            .where(A.c.snapshot_id == S.c.id, or_(A.c.version == version, A.c.state == "published"))
+            .order_by(
+                (A.c.state == "published").desc(), (A.c.version == version).desc(), A.c.id.desc()
+            )
+            .limit(1)
+            .lateral()
+        )
+        return await self._many(
+            select(
+                S.c.id,
+                S.c.connection_id,
+                S.c.commit_sha,
+                S.c.complete,
+                S.c.coverage,
+                chosen.c.state,
+                chosen.c.version,
+                chosen.c.coverage.label("analysis_coverage"),
+            )
+            .select_from(S.outerjoin(chosen, true()))
+            .where(S.c.connection_id == connection_id, S.c.scope_hash == scope_hash)
+            .order_by(S.c.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+    async def snapshot_metadata(
+        self, *, connection_id: int, sha: str, scope_hash: str
+    ) -> dict | None:
+        return await self._one(
+            select(
+                S.c.id,
+                S.c.commit_sha,
+                S.c.coverage,
+                S.c.complete,
+                S.c.tree_loaded,
+                S.c.tree_truncated,
+            ).where(
+                S.c.connection_id == connection_id,
+                S.c.commit_sha == sha,
+                S.c.scope_hash == scope_hash,
+            )
+        )
+
+    async def directory_children(
+        self, *, snapshot_id: int, prefix: str, offset: int, limit: int
+    ) -> list[dict]:
+        """Сводит manifest в прямых детей на стороне PostgreSQL, включая старые снимки."""
+        statement = text("""
+            WITH paths AS (
+                SELECT entry, substr(entry->>'path', length(:prefix) + 1) AS relative
+                FROM git_snapshots s CROSS JOIN LATERAL jsonb_array_elements(s.manifest) AS entry
+                WHERE s.id = :snapshot_id AND starts_with(entry->>'path', :prefix)
+            ), children AS (
+                SELECT split_part(relative, '/', 1) AS name,
+                       bool_or(strpos(relative, '/') > 0) AS directory,
+                       (jsonb_agg(entry) FILTER (WHERE strpos(relative, '/') = 0))->0 AS leaf
+                FROM paths WHERE relative <> '' GROUP BY split_part(relative, '/', 1)
+            )
+            SELECT name, directory, leaf, count(*) OVER () AS total FROM children
+            ORDER BY directory DESC, name COLLATE "C" LIMIT :limit OFFSET :offset
+        """).bindparams(
+            snapshot_id=snapshot_id,
+            prefix=prefix + "/" if prefix else "",
+            offset=offset,
+            limit=limit,
+        )
+        return await self._many(statement)
+
+    async def analysis(self, *, snapshot_id: int, version: str) -> dict | None:
+        return await self._one(
+            select(A).where(A.c.snapshot_id == snapshot_id, A.c.version == version)
+        )
+
+    async def published_analysis(self, *, snapshot_id: int, version: str) -> dict | None:
+        return await self._one(
+            select(A)
+            .where(A.c.snapshot_id == snapshot_id, A.c.state == "published")
+            .order_by((A.c.version == version).desc(), A.c.id.desc())
+            .limit(1)
+        )
+
+    async def import_targets(
+        self, *, analysis_id: int, paths: list[str], name: str | None
+    ) -> list[dict]:
+        parents = Y.alias("parents")
+        roots = select(Y.c.id, Y.c.path).where(
+            Y.c.analysis_id == analysis_id, Y.c.path.in_(paths), Y.c.parent_id.is_(None)
+        )
+        if name and name != "*":
+            matches = (
+                select(Y.c.id, Y.c.path)
+                .join(parents, Y.c.parent_id == parents.c.id)
+                .where(
+                    Y.c.analysis_id == analysis_id,
+                    Y.c.path.in_(paths),
+                    Y.c.name == name,
+                    parents.c.parent_id.is_(None),
+                )
+            )
+            declared = matches.subquery()
+            roots = roots.where(~exists(select(1).where(declared.c.path == Y.c.path)))
+            roots = roots.union_all(matches)
+        return await self._many(roots.limit(2))
+
+    async def start_analysis(self, *, snapshot_id: int, version: str) -> dict:
+        return await self._one(
+            insert(A).values(snapshot_id=snapshot_id, version=version).returning(A)
+        )
+
+    async def advance_analysis(self, *, analysis_id: int, data: dict) -> None:
+        await self._execute(
+            update(A).where(A.c.id == analysis_id, A.c.state != "published").values(**data)
+        )
+
+    async def analysis_files(self, *, snapshot_id: int, cursor: int, limit: int) -> list[dict]:
+        return await self._many(
+            select(F.c.id, F.c.path, F.c.analysis, F.c.text)
+            .where(F.c.snapshot_id == snapshot_id, F.c.state == "ready", F.c.id > cursor)
+            .order_by(F.c.id)
+            .limit(limit)
+        )
+
+    async def insert_symbols(self, *, rows: list[dict]) -> list[dict]:
+        return await self._many(insert(Y).values(rows).returning(Y.c.id, Y.c.key_hash))
+
+    async def set_symbol_parents(self, *, analysis_id: int, parents: dict[int, int]) -> None:
+        await self._execute(
+            update(Y)
+            .where(Y.c.analysis_id == analysis_id, Y.c.id.in_(parents))
+            .values(parent_id=sa_case(parents, value=Y.c.id))
+        )
+
+    async def insert_relations(self, *, rows: list[dict]) -> None:
+        await self._execute(insert(E).values(rows))
+
+    async def pending_relations(self, *, analysis_id: int, cursor: int, limit: int) -> list[dict]:
+        return await self._many(
+            select(E)
+            .where(
+                E.c.analysis_id == analysis_id,
+                E.c.id > cursor,
+                E.c.target_id.is_(None),
+                func.jsonb_array_length(E.c.candidates) > 0,
+            )
+            .order_by(E.c.id)
+            .limit(limit)
+        )
+
+    async def resolve_relation(self, *, analysis_id: int, edge_id: int, target_id: int) -> None:
+        await self._execute(
+            update(E)
+            .where(E.c.analysis_id == analysis_id, E.c.id == edge_id)
+            .values(target_id=target_id, confidence="resolved")
+        )
+
+    async def mark_ambiguous(self, *, analysis_id: int, edge_id: int) -> None:
+        await self._execute(
+            update(E)
+            .where(E.c.analysis_id == analysis_id, E.c.id == edge_id)
+            .values(confidence="candidate")
+        )
+
+    async def count_structure(self, *, analysis_id: int) -> dict:
+        symbols = (
+            select(func.count())
+            .select_from(Y)
+            .where(Y.c.analysis_id == analysis_id)
+            .scalar_subquery()
+        )
+        return await self._one(
+            select(
+                symbols.label("symbols"),
+                func.count().label("relations"),
+                func.count().filter(E.c.target_id.is_(None)).label("unresolved"),
+            )
+            .select_from(E)
+            .where(E.c.analysis_id == analysis_id)
+        )
+
+    async def structure_symbols(
+        self,
+        *,
+        analysis_id: int,
+        offset: int = 0,
+        limit: int = 100,
+        ids: set[int] | None = None,
+        paths: list[str] | None = None,
+        query: str | None = None,
+        roots: bool = False,
+    ) -> list[dict]:
+        statement = (
+            select(Y, F.c.id.label("file_id"), F.c.blob_sha, F.c.text_hash)
+            .join(F, and_(Y.c.snapshot_id == F.c.snapshot_id, Y.c.path == F.c.path))
+            .where(Y.c.analysis_id == analysis_id)
+        )
+        if ids is not None:
+            statement = statement.where(Y.c.id.in_(ids))
+        if paths is not None:
+            statement = statement.where(Y.c.path.in_(paths))
+        if roots:
+            statement = statement.where(Y.c.parent_id.is_(None))
+        if query:
+            normalized = "".join(ch for ch in query.lower() if ch.isalnum())[:256]
+            statement = statement.where(
+                or_(
+                    Y.c.qualified_name == query,
+                    Y.c.name == query,
+                    Y.c.search_name.startswith(normalized, autoescape=True)
+                    if normalized
+                    else False,
+                )
+            )
+            statement = statement.order_by(
+                sa_case((Y.c.qualified_name == query, 0), (Y.c.name == query, 1), else_=2)
+            )
+        return await self._many(
+            statement.order_by(Y.c.path, Y.c.offset, Y.c.id).offset(offset).limit(limit)
+        )
+
+    async def graph_edges(
+        self,
+        *,
+        analysis_id: int,
+        frontier: set[int],
+        direction: str,
+        relation: str,
+        confirmed: bool,
+        limit: int,
+        exclude: set[int],
+    ) -> list[dict]:
+        conditions = []
+        if direction in {"in", "both"}:
+            conditions.append(E.c.target_id.in_(frontier))
+        if direction in {"out", "both"}:
+            conditions.append(E.c.source_id.in_(frontier))
+        statement = (
+            select(E, Y.c.path)
+            .join(Y, Y.c.id == E.c.source_id)
+            .where(E.c.analysis_id == analysis_id, or_(*conditions), E.c.id.not_in(exclude))
+        )
+        if relation != "all":
+            statement = statement.where(
+                E.c.kind == "contains" if relation == "containment" else E.c.kind != "contains"
+            )
+        if confirmed:
+            statement = statement.where(
+                E.c.confidence.in_(("resolved", "declared")), E.c.target_id.is_not(None)
+            )
+        return await self._many(statement.order_by(E.c.id).limit(limit))
+
+    async def snapshot_changes(
+        self, *, project_id: int, connection_id: int, sha: str, limit: int
+    ) -> list[dict]:
+        return await self._many(
+            select(G, L.c.id.label("link_id"), L.c.task_id)
+            .join(L, L.c.change_id == G.c.id)
+            .join(T, T.c.id == L.c.task_id)
+            .where(
+                T.c.project_id == project_id,
+                G.c.connection_id == connection_id,
+                or_(G.c.head_sha == sha, G.c.merge_sha == sha),
+            )
+            .order_by(G.c.id, L.c.id)
+            .limit(limit)
         )
 
     async def get_delivery(self, *, connection_id: int, delivery_id: str) -> dict | None:

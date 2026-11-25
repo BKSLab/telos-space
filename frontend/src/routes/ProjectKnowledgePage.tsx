@@ -1,4 +1,4 @@
-import { Activity, useLayoutEffect, useRef } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { BookOpen, GitBranch, History } from "lucide-react";
 import { useProjectOutlet } from "@/lib/useProjectOutlet";
@@ -6,7 +6,7 @@ import { CollapsibleSection } from "@/components/ui/Card";
 import { ProjectKnowledgePanel as IndexDiagnostics } from "@/components/knowledge/ProjectKnowledgePanel";
 import { ProjectKnowledgePanel } from "@/components/projects/ProjectKnowledgePanel";
 import { ProjectHistoryTimeline } from "@/components/projects/ProjectHistoryTimeline";
-import { ProjectGitSources } from "@/components/projects/ProjectGitSources";
+const RepositoryWorkspace = lazy(() => import("@/components/repository/RepositoryWorkspace").then(module => ({ default: module.RepositoryWorkspace })));
 
 const positions = new Map<string, number>();
 
@@ -49,8 +49,8 @@ export function ProjectKnowledgePage() {
             if (positions.size > 80) positions.delete(positions.keys().next().value!);
         };
     }, [positionKey]);
-    return <section ref={scroll} className="scrollbar-thin h-full min-h-0 overflow-y-auto" aria-label="Знания проекта">
-        <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-4 px-3 py-3 sm:px-5 sm:py-4">
+    return <section ref={scroll} className={`scrollbar-thin h-full min-h-0 ${view === "code" ? "flex flex-col overflow-hidden" : "overflow-y-auto"}`} aria-label="Знания проекта">
+        <div className={`mx-auto flex w-full flex-col gap-4 px-3 py-3 sm:px-5 sm:py-4 ${view === "code" ? "min-h-0 flex-1" : "max-w-[1440px]"}`}>
             <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line-subtle">
                 <h2 className="text-lg font-semibold tracking-tight text-primary">Знания</h2>
                 <nav aria-label="Виды знаний" className="flex w-full gap-1 sm:w-auto">
@@ -74,9 +74,7 @@ export function ProjectKnowledgePage() {
                         <ProjectKnowledgePanel key={project.id} projectId={project.id} projectKey={project.key} ownerId={project.owner_id ?? null} />
                         <CollapsibleSection title="Диагностика индекса"><IndexDiagnostics projectId={project.id} /></CollapsibleSection>
                     </> : null}
-            <Activity mode={view === "code" ? "visible" : "hidden"}>
-                <div className="min-w-0"><h3 className="mb-3 text-sm font-semibold text-primary">Код и репозитории</h3><ProjectGitSources key={project.id} projectId={project.id} canEdit={false} /></div>
-            </Activity>
+            {view === "code" && <Suspense fallback={<p role="status">Загружаем код проекта…</p>}><RepositoryWorkspace key={project.id} projectId={project.id} /></Suspense>}
         </div>
     </section>;
 }

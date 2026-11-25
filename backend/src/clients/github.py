@@ -328,13 +328,15 @@ class GitHubClient:
     async def get_commit_details(self, owner: str, repo: str, sha: str) -> GitCommitDetails:
         """Читает immutable commit identity и ограниченный заголовок, без авторских PII."""
         value = _input(_SHA, sha)
-        data, _ = await self._get_json(f"{self._repository_path(owner, repo)}/commits/{value}")
+        data, paginated = await self._get_json(f"{self._repository_path(owner, repo)}/commits/{value}")
         result = _parsed(
             lambda: GitCommitDetails(
                 sha=data["sha"],
                 tree_sha=data["commit"]["tree"]["sha"],
                 message=data["commit"]["message"][:4000],
                 message_truncated=len(data["commit"]["message"]) > 4000,
+                changed_paths=tuple(item["filename"] for item in data.get("files", [])[:self.max_compare_files]),
+                files_partial=paginated or "files" not in data or len(data.get("files", [])) > self.max_compare_files,
             )
         )
         if result.sha != value:
@@ -716,6 +718,7 @@ class GitHubClient:
                 GitFileChange(
                     filename=change["filename"],
                     previous_filename=change.get("previous_filename"),
+                    additions=change.get("additions"), deletions=change.get("deletions"),
                     status=change["status"],
                     sha=change["sha"],
                     patch=patch[: self.max_patch_chars] if patch is not None else None,

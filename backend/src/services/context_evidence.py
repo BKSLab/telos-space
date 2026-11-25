@@ -12,7 +12,7 @@ from src.exceptions.base import ServiceError
 from src.exceptions.context_selection import ContextSelectionChangedError
 from src.knowledge.catalog import build_catalog, digest
 from src.schemas.document_catalog import DocumentCatalogItemSchema
-from src.schemas.git_sources import GitChangeProof, GitSourceProof
+from src.schemas.git_sources import GitChangeProof, GitConnectionProof, GitSourceProof
 from src.schemas.knowledge import (
     AssertionReferenceSchema,
     ExternalSourceReferenceSchema,
@@ -139,6 +139,7 @@ class SavedContextGuard(BaseModel):
     observations: list[ProjectKnowledgeObservationSchema] = Field(default_factory=list)
     git_files: list[GitSourceProof] = Field(default_factory=list)
     git_changes: list[GitChangeProof] = Field(default_factory=list)
+    git_connections: list[GitConnectionProof] = Field(default_factory=list)
     tasks: list[TaskObservation] = Field(default_factory=list)
     documents: list[DocumentObservation] = Field(default_factory=list)
 
@@ -162,6 +163,7 @@ class ContextEvidence:
             or self.saved.observations
             or self.saved.git_files
             or self.saved.git_changes
+            or self.saved.git_connections
             or self.saved.tasks
             or self.saved.documents
             or self.saved.project_reads
@@ -227,6 +229,8 @@ class ContextEvidence:
             target = (
                 self.saved.git_files
                 if isinstance(proof, GitSourceProof)
+                else self.saved.git_connections
+                if isinstance(proof, GitConnectionProof)
                 else self.saved.git_changes
             )
             if proof not in target:
@@ -265,6 +269,7 @@ class ContextEvidence:
             "observations",
             "git_files",
             "git_changes",
+            "git_connections",
             "tasks",
             "documents",
         ):
@@ -388,7 +393,7 @@ class ContextEvidenceService:
         for project_id in saved.projects:
             proofs = [
                 proof
-                for proof in [*saved.git_files, *saved.git_changes]
+                for proof in [*saved.git_files, *saved.git_changes, *saved.git_connections]
                 if proof.project_id == project_id
             ]
             if proofs:

@@ -41,7 +41,7 @@ export function GitIndexSummary({ page }: { page: GitConnectionPage }) {
     const counts = { success: 0, accent: 0, warning: 0, danger: 0, muted: 0 };
     page.items.forEach(connection => { counts[statusOf(connection).tone]++; });
     return <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-line-subtle pb-3 text-[12px]" aria-label="Сводка индексации">
-        <span className="font-medium text-secondary">{page.items.length < page.total ? `На странице: ${page.items.length} из ${page.total}` : `Источников: ${page.total}`}</span>
+        <span className="font-medium text-secondary">{page.total === null ? `На странице: ${page.items.length}` : page.items.length < page.total ? `На странице: ${page.items.length} из ${page.total}` : `Источников: ${page.total}`}</span>
         {counts.success > 0 && <span className="flex items-center gap-1.5 text-success"><CheckCircle2 size={14} aria-hidden="true" />Актуальны: {counts.success}</span>}
         {counts.accent > 0 && <span className="flex items-center gap-1.5 text-accent"><Clock3 size={14} aria-hidden="true" />В работе: {counts.accent}</span>}
         {counts.warning + counts.danger > 0 && <span className="flex items-center gap-1.5 text-warning"><TriangleAlert size={14} aria-hidden="true" />Требуют внимания: {counts.warning + counts.danger}</span>}

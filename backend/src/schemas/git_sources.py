@@ -183,6 +183,8 @@ class GitFileChange(GitSnapshot):
     """Изменение одного пути; отсутствие patch не означает отсутствие изменения."""
 
     filename: GitPath = Field(description="Путь после изменения.", examples=["src/app.py"])
+    additions: int | None = Field(default=None, ge=0)
+    deletions: int | None = Field(default=None, ge=0)
     previous_filename: GitPath | None = Field(
         default=None, description="Прежний путь при rename.", examples=["src/old.py"]
     )
@@ -243,6 +245,8 @@ class GitComparison(GitSnapshot):
 class GitCommitDetails(GitCommit):
     message: str = Field(repr=False)
     message_truncated: bool = False
+    changed_paths: tuple[GitPath, ...] = ()
+    files_partial: bool = True
 
 
 class GitPullRequestSnapshot(GitSnapshot):
@@ -410,6 +414,14 @@ class GitCoverage(BaseModel):
     generation: int | None = None
 
 
+class GitStructureCoverage(GitCoverage):
+    analyzed_files: int = 0
+    unsupported_files: int = 0
+    symbols: int = 0
+    relations: int = 0
+    unresolved: int = 0
+
+
 class GitConnection(BaseModel):
     """Безопасное публичное состояние project binding без credentials/ciphertext."""
 
@@ -452,8 +464,10 @@ class GitConnection(BaseModel):
 
 
 class GitConnectionPage(BaseModel):
+    incomplete_reasons: list[str] = Field(default_factory=list)
+    sources: list["GitConnectionProof"] = Field(default_factory=list, exclude=True)
     items: list[GitConnection]
-    total: int
+    total: int | None
     offset: int
     limit: int
     next_offset: int | None
@@ -479,6 +493,90 @@ class GitSourceProof(BaseModel):
     credential_revision: int = Field(ge=0)
 
 
+class GitConnectionProof(BaseModel):
+    """Identity текущей привязки для поздней проверки metadata в ответе Ариса."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    source_id: str = Field(pattern=r"^git_connection:[1-9][0-9]*$")
+    entity_type: Literal["git_connection"] = "git_connection"
+    entity_id: int = Field(gt=0)
+    project_id: int = Field(gt=0)
+    connection_id: int = Field(gt=0)
+    repository_id: int = Field(gt=0)
+    ref: str
+    generation: int = Field(ge=1)
+    credential_revision: int = Field(ge=0)
+
+
+class GitRecordedSnapshot(BaseModel):
+    connection_id: int
+    commit_sha: GitSha
+    complete: bool
+    analyzer_version: str | None = None
+    analysis_state: Literal["absent", "extracting", "resolving", "published"] = "absent"
+    coverage: GitStructureCoverage
+
+
+class GitSnapshotPage(BaseModel):
+    items: list[GitRecordedSnapshot]
+    next_offset: int | None
+    sources: list[GitConnectionProof] = Field(default_factory=list, exclude=True)
+
+
+class GitStructureSymbol(BaseModel):
+    id: int
+    file_id: int
+    path: str
+    qualified_name: str
+    name: str
+    kind: str
+    parent_id: int | None
+    signature: str | None
+    line_start: int
+    line_end: int
+    offset: int
+    end_offset: int
+
+
+class GitStructureEdge(BaseModel):
+    id: int
+    source_id: int
+    target_id: int | None
+    kind: str
+    confidence: Literal["declared", "resolved", "candidate", "unresolved"]
+    label: str
+    path: str
+    line_start: int
+    line_end: int
+
+
+class GitStructureResult(BaseModel):
+    connection_id: int
+    commit_sha: GitSha
+    analyzer_version: str | None
+    coverage: GitStructureCoverage
+    sources: list[GitConnectionProof | GitSourceProof] = Field(default_factory=list, exclude=True)
+
+
+class GitSymbolPage(GitStructureResult):
+    items: list[GitStructureSymbol]
+    next_offset: int | None
+
+
+class GitGraph(GitStructureResult):
+    nodes: list[GitStructureSymbol]
+    edges: list[GitStructureEdge]
+    truncated: bool
+
+
+class GitImpactLink(BaseModel):
+    task_id: int
+    change_id: int
+    kind: str
+    provider_id: str
+    path: str
+
+
 class GitFileRead(GitSourceProof):
     title: str
     source_url: str
@@ -493,6 +591,9 @@ class GitFileRead(GitSourceProof):
 
 
 class GitSearchHit(GitSourceProof):
+    symbol_id: int | None = None
+    qualified_name: str | None = None
+    kind: str | None = None
     title: str
     source_url: str
     excerpt: str
@@ -510,11 +611,23 @@ class GitSearchResult(BaseModel):
     incomplete_reasons: list[str] = Field(default_factory=list)
 
 
+class GitDirectoryEntry(BaseModel):
+    """Каталог, восстановленный по записанным путям старого manifest."""
+
+    path: GitPath
+    sha: GitSha | None = None
+    type: Literal["tree"] = "tree"
+    mode: Literal["040000"] = "040000"
+    size: None = None
+    index_state: Literal["metadata"] = "metadata"
+    index_reason: None = None
+
+
 class GitTreePage(BaseModel):
     connection_id: int
     repository_id: int
     commit_sha: str
-    items: list[GitTreeEntry]
+    items: list[GitTreeEntry | GitDirectoryEntry]
     offset: int
     limit: int
     next_offset: int | None
@@ -539,7 +652,7 @@ class GitProjectMap(BaseModel):
     manifest: list[GitConnection]
     components: list[GitComponent]
     relations: list[dict] = Field(default_factory=list)
-    sources: list[GitSourceProof] = Field(default_factory=list)
+    sources: list[GitSourceProof | GitConnectionProof] = Field(default_factory=list)
     total_components: int = 0
     components_truncated: bool = False
     partial: bool
@@ -620,6 +733,11 @@ class GitTaskLink(BaseModel):
     evidence: list[GitEvidence] = Field(default_factory=list)
     evidence_partial: bool = True
     last_error_code: str | None = None
+
+
+class GitImpact(GitGraph):
+    task_links: list[GitImpactLink] = Field(default_factory=list)
+    sources: list[GitConnectionProof | GitSourceProof | GitChangeProof] = Field(default_factory=list, exclude=True)
 
 
 class GitTaskLinks(BaseModel):

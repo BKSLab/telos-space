@@ -52,7 +52,7 @@ export function GitFileCatalog({ connection, onRead }: { connection: GitConnecti
                 <ul className="divide-y divide-line-subtle rounded-md border border-line-subtle px-3" aria-label="Файлы репозитория">
                     {query.data.items.map(entry => <li key={entry.path} className="min-w-0 space-y-1 py-3 text-[12px]">
                         <div className="flex flex-wrap items-start justify-between gap-2"><span className="min-w-0 break-all font-mono text-secondary">{entry.path}</span><span className={cn("shrink-0", entry.index_state === "error" ? "text-warning" : entry.index_state === "ready" ? "text-success" : "text-muted")}>{states[entry.index_state]}</span></div>
-                        <p className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted"><code title={entry.sha}>{entry.sha.slice(0, 8)}</code>{entry.size !== null && <span>{entry.size.toLocaleString("ru-RU")} Б</span>}{reason(entry) && <span>{reason(entry)}</span>}</p>
+                        <p className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted"><code title={entry.sha ?? undefined}>{entry.sha?.slice(0, 8) ?? "SHA не указан"}</code>{entry.size !== null && <span>{entry.size.toLocaleString("ru-RU")} Б</span>}{reason(entry) && <span>{reason(entry)}</span>}</p>
                         {entry.index_state === "ready" && <Button size="sm" aria-label={`Читать ${entry.path}`} icon={<FileText size={13} aria-hidden="true" />} onClick={() => onRead({ connection_id: connection.id, commit_sha: query.data!.commit_sha, path: entry.path })}>Читать текст</Button>}
                     </li>)}
                 </ul>

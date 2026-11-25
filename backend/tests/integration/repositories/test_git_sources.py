@@ -453,7 +453,9 @@ async def test_index_restart_three_repositories_search_text_and_catalog_metadata
             ],
         )
         map_result = await service.get_map(project_id=env.project, principal=env.member)
-        assert len(map_result.manifest) == 3 and len(map_result.sources) == 18
+        assert len(map_result.manifest) == 3
+        assert len([proof for proof in map_result.sources if isinstance(proof, GitSourceProof)]) == 18
+        assert len([proof for proof in map_result.sources if proof.entity_type == "git_connection"]) == 3
         assert any(component.kind == "python_module" for component in map_result.components)
         assert all(
             relation["confidence"] in {"declared", "candidate"} for relation in map_result.relations
@@ -688,10 +690,18 @@ async def test_private_binding_owner_session_current_scopes_and_immediate_revoke
                 connection_id=source.id,
                 path="README.md",
             )
-        assert (
-            len(env.remote.requests) == count
-            and revoked.credential_revision > source.credential_revision
-        )
+        assert revoked.credential_revision > source.credential_revision
+        owner_settings = await env.service.list_connections(project_id=env.project, principal=env.principal)
+        assert [item.id for item in owner_settings.items] == [source.id]
+        diagnostic = await env.service.get_connection(project_id=env.project, connection_id=source.id, principal=env.principal)
+        assert diagnostic.is_private and not diagnostic.share_private_with_project
+        for reader in (env.principal, env.member):
+            verified = await env.service.list_connections(project_id=env.project, principal=reader, verified=True)
+            assert verified.items == [] and verified.total == 0 and verified.next_offset is None
+            assert not verified.sources
+            with pytest.raises(GitSourceNotAvailableError):
+                await env.service.list_snapshots(project_id=env.project, connection_id=source.id, principal=reader)
+        assert len(env.remote.requests) == count
 
 
 async def test_task_many_to_many_exact_sha_ci_deployment_rollback_and_hmac_dedup(engine):
@@ -1023,7 +1033,8 @@ async def test_bounded_map_keeps_complete_source_catalog(engine):
 
         await converge(env, indexed)
         result = await env.service.get_map(project_id=env.project, principal=env.principal)
-        assert len(result.components) == len(result.sources) == 100
+        assert len(result.components) == len([p for p in result.sources if isinstance(p, GitSourceProof)]) == 100
+        assert [p.connection_id for p in result.sources if p.entity_type == "git_connection"] == [source.id]
         assert result.total_components == 105 and result.components_truncated and result.partial
         assert sum("/git/blobs/" in path for path in env.remote.requests) == 1
 

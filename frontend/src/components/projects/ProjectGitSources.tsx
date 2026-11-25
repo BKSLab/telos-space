@@ -4,19 +4,17 @@ import { GitBranch } from "lucide-react";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Card, Section, SettingsPanel } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
-import { Modal } from "@/components/ui/Modal";
 import { ErrorMessage, Skeleton } from "@/components/ui/States";
 import { api, ApiError, endpoints, queryKeys } from "@/lib/api";
 import type { ProjectStage } from "@/lib/types";
 import { validRepositoryDrafts, type RepositoryDraft } from "@/lib/github";
-import { contextApi, type GitConnection, type GitConnectionPage, type GitFilePage, type GitSourceHit } from "@/lib/projectKnowledge";
+import { contextApi, type GitConnection, type GitConnectionPage } from "@/lib/projectKnowledge";
 import { useGitHubPause } from "@/lib/useGitHubPause";
 import { useRepositoryConnections } from "@/lib/useRepositoryConnections";
 import { GitHubRepositoryPicker } from "./GitHubRepositoryPicker";
 import { RepositoryConnectionProgress } from "./RepositoryConnectionProgress";
 import { GitIndexBadge, GitIndexDetails, GitIndexSummary } from "./GitIndexStatus";
 import { GitWebhookSettings } from "./GitWebhookSettings";
-import { GitFileCatalog } from "./GitFileCatalog";
 
 const gitConnectionsKey = (projectId: number) => [...queryKeys.project(projectId), "git", "connections"];
 const connectionPath = (projectId: number, id: number) => `${contextApi.git(projectId)}/connections/${id}`;
@@ -33,11 +31,11 @@ function RepositoryPreview({ page }: { page: GitConnectionPage }) {
             </div>
             <GitIndexBadge connection={connection} />
         </li>)}
-        {page.total > displayed.length && <li className="pt-2 text-muted">Ещё {page.total - displayed.length}</li>}
+        {page.total !== null && page.total > displayed.length && <li className="pt-2 text-muted">Ещё {page.total - displayed.length}</li>}
     </ul>;
 }
 
-function GitConnectionCard({ connection, canEdit, refresh, onRead }: { connection: GitConnection; canEdit: boolean; refresh: () => Promise<unknown>; onRead: (hit: Pick<GitSourceHit, "connection_id" | "commit_sha" | "path">) => void }) {
+function GitConnectionCard({ connection, canEdit, refresh }: { connection: GitConnection; canEdit: boolean; refresh: () => Promise<unknown> }) {
     const [draft, setDraft] = useState<{ name: string; purpose: string; ref: string; expected_revision: number; share_private_with_project: boolean; sync_stage_ids: number[] } | null>(null);
     const [notice, setNotice] = useState("");
     const rateLimited = connection.last_error_code === "rate_limited";
@@ -88,7 +86,7 @@ function GitConnectionCard({ connection, canEdit, refresh, onRead }: { connectio
         {notice && <p role="status" className="text-[12px] text-secondary">{notice}</p>}
         {mutation.error && <ErrorMessage message={mutation.error.message} />}
         {mutation.error instanceof ApiError && mutation.error.status === 409 && <Button size="sm" onClick={async () => { await refresh(); setDraft(null); mutation.reset(); }}>Загрузить актуальные настройки</Button>}
-        <GitFileCatalog key={connection.observed_sha ?? "pending"} connection={connection} onRead={onRead} />
+        <LinkButton size="sm" to={`../knowledge?view=code&connection=${connection.id}`}>Исследовать код</LinkButton>
         {canEdit && <>
             <div className="flex flex-wrap gap-2">
                 <Button size="sm" disabled={mutation.isPending} onClick={beginEdit}>Настроить</Button>
@@ -128,10 +126,6 @@ export function ProjectGitSources({ projectId, canEdit, collapsible = false }: {
     const [adding, setAdding] = useState(false);
     const [repositories, setRepositories] = useState<RepositoryDraft[]>([]);
     const git = useRepositoryConnections();
-    const [queryText, setQueryText] = useState("");
-    const [searchText, setSearchText] = useState("");
-    const [mapOpen, setMapOpen] = useState(false);
-    const [selected, setSelected] = useState<{ hit: Pick<GitSourceHit, "connection_id" | "commit_sha" | "path">; offset: number } | null>(null);
     const refresh = () => Promise.all([
         queryClient.invalidateQueries({ queryKey: gitConnectionsKey(projectId) }),
         queryClient.invalidateQueries({ queryKey: [...queryKeys.project(projectId), "git", "search"] }),
@@ -140,17 +134,6 @@ export function ProjectGitSources({ projectId, canEdit, collapsible = false }: {
         queryClient.invalidateQueries({ queryKey: [...queryKeys.project(projectId), "git", "tree"] }),
     ]);
     const connections = useQuery({ queryKey: [...gitConnectionsKey(projectId), offset], queryFn: () => api.get<GitConnectionPage>(`${contextApi.git(projectId)}/connections?offset=${offset}&limit=20`), refetchInterval: 15000 });
-    const search = useQuery({ queryKey: [...queryKeys.project(projectId), "git", "search", searchText], queryFn: () => api.get<{ items: GitSourceHit[]; partial: boolean }>(`${contextApi.git(projectId)}/search?q=${encodeURIComponent(searchText)}&limit=10`), enabled: Boolean(searchText) });
-    const codeMap = useQuery({
-        queryKey: [...queryKeys.project(projectId), "git", "map"],
-        queryFn: () => api.get<{ manifest: GitConnection[]; components: { connection_id: number; repository_id: number; commit_sha: string; file_id: number; path: string; kind: string }[]; partial: boolean }>(`${contextApi.git(projectId)}/map`),
-        enabled: mapOpen,
-    });
-    const file = useQuery({
-        queryKey: [...queryKeys.project(projectId), "git", "file", selected?.hit.connection_id, selected?.hit.commit_sha, selected?.hit.path, selected?.offset],
-        queryFn: () => api.get<GitFilePage>(`${connectionPath(projectId, selected!.hit.connection_id)}/file?sha=${selected!.hit.commit_sha}&path=${encodeURIComponent(selected!.hit.path)}&offset=${selected!.offset}&max_chars=8000`),
-        enabled: selected !== null, staleTime: 0,
-    });
     async function connect(retry: boolean) {
         if (retry) await git.retry(projectId);
         else await git.start(projectId, repositories);
@@ -174,39 +157,8 @@ export function ProjectGitSources({ projectId, canEdit, collapsible = false }: {
         </Card>}
         {!connections.error && connections.data?.total === 0 && <p className="text-[13px] text-muted">Репозитории не подключены. Контекст из паспорта и документов доступен без Git.</p>}
         {connections.data && !connections.error && <GitIndexSummary page={connections.data} />}
-        <div className="grid min-w-0 gap-3">{!connections.error && connections.data?.items.map(connection => <GitConnectionCard key={connection.id} connection={connection} canEdit={canEdit} refresh={refresh} onRead={hit => setSelected({ hit, offset: 0 })} />)}</div>
+        <div className="grid min-w-0 gap-3">{!connections.error && connections.data?.items.map(connection => <GitConnectionCard key={connection.id} connection={connection} canEdit={canEdit} refresh={refresh} />)}</div>
         {connections.data && !connections.error && (offset > 0 || connections.data.next_offset !== null) && <nav aria-label="Страницы репозиториев" className="flex gap-2"><Button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>Назад</Button><Button disabled={connections.data.next_offset === null} onClick={() => connections.data.next_offset !== null && setOffset(connections.data.next_offset)}>Дальше</Button></nav>}
-        <details onToggle={event => setMapOpen(event.currentTarget.open)}>
-            <summary className="touch-target cursor-pointer text-accent">Карта компонентов репозиториев</summary>
-            {codeMap.isFetching && mapOpen && <p role="status" className="text-[13px] text-muted">Читаем доступную карту…</p>}
-            {codeMap.error && <ErrorMessage message={codeMap.error.message} />}
-            {codeMap.data && !codeMap.error && <div className="mt-2 flex min-w-0 flex-col gap-2 text-[13px]">
-                <p className="text-muted">Набор версий состоит из {codeMap.data.manifest.length} независимых подключений. Имя файла указывает на возможную роль; поведение проверяйте по исходнику.</p>
-                {codeMap.data.partial && <p className="text-warning">Карта неполная: часть источников или компонентов не обработана.</p>}
-                <ul className="space-y-1">{codeMap.data.components.slice(0, 50).map(component => <li key={`${component.connection_id}-${component.file_id}`}><Button size="sm" className="max-w-full justify-start whitespace-normal text-left" onClick={() => setSelected({ hit: component, offset: 0 })}>{connections.data?.items.find(connection => connection.id === component.connection_id)?.name ?? `Репозиторий ${component.repository_id}`} · {component.path}</Button><p className="break-all text-[11px] text-muted">{component.kind} · {component.commit_sha}</p></li>)}</ul>
-                {codeMap.data.components.length > 50 && <p className="text-muted">Показаны первые 50 компонентов. Используйте поиск для точного отбора.</p>}
-            </div>}
-        </details>
-        <form className="flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); const value = queryText.trim(); if (value) { if (value === searchText) void search.refetch(); else setSearchText(value); } }}>
-            <Field className="min-w-0 flex-1" label="Найти код и документацию">{id => <Input id={id} value={queryText} maxLength={500} onChange={event => setQueryText(event.target.value)} />}</Field><Button type="submit" disabled={!queryText.trim()}>Найти в репозиториях</Button>
-        </form>
-        {search.isFetching && <p role="status" className="text-[13px] text-muted">Ищем доступные фрагменты…</p>}
-        {search.error && <ErrorMessage message={search.error.message} />}
-        {search.data && !search.error && !connections.error && <>
-            {search.data.partial && <p className="text-[12px] text-warning">Поиск неполный: часть репозиториев не готова или недоступна.</p>}
-            {search.data.items.length === 0 && <p className="text-[13px] text-muted">В доступной части индекса совпадений нет.</p>}
-            <ul className="space-y-2">{search.data.items.map(hit => <li key={`${hit.connection_id}-${hit.file_id}`}><Button className="max-w-full justify-start whitespace-normal text-left" onClick={() => setSelected({ hit, offset: 0 })}>{connections.data?.items.find(c => c.id === hit.connection_id)?.name ?? `Репозиторий ${hit.repository_id}`} · {hit.path}</Button><p className="mt-1 break-words text-[12px] text-muted">{hit.excerpt}</p></li>)}</ul>
-        </>}
-        <Modal isOpen={selected !== null} onOpenChange={open => { if (!open) setSelected(null); }} title={selected?.hit.path ?? "Исходный файл"}>
-            {file.isFetching && <p role="status">Читаем выбранную версию…</p>}
-            {file.error && <ErrorMessage message={file.error.message} />}
-            {file.data && !file.error && !file.isFetching && <div className="flex min-w-0 flex-col gap-3">
-                <p className="break-all font-mono text-[12px] text-muted">{file.data.commit_sha} · строки {file.data.line_start}–{file.data.line_end}</p>
-                {(file.data.partial || file.data.stale) && <p className="text-[12px] text-warning">Версия или охват индекса неполны. Вывод относится только к прочитанному фрагменту.</p>}
-                <pre className="max-h-[55vh] overflow-auto whitespace-pre-wrap break-all rounded-md border border-line p-3 text-[12px] text-secondary">{file.data.text}</pre>
-                {file.data.next_offset !== null && <Button onClick={() => selected && file.data.next_offset !== null && setSelected({ ...selected, offset: file.data.next_offset })}>Читать дальше</Button>}
-            </div>}
-        </Modal>
     </>;
     if (!collapsible) return <Section title="Репозитории проекта" action={action}>{content}</Section>;
     return <SettingsPanel title="Репозитории проекта" icon={<GitBranch size={16} aria-hidden="true" />}

@@ -46,6 +46,7 @@ from .git_sources import (
     GitSyncJob,
     GitTaskChangeLink,
 )
+from .git_structure import GitAnalysis, GitRelation, GitSymbol
 from .knowledge_attachment_texts import KnowledgeAttachmentText
 from .knowledge_index_jobs import (
     KnowledgeEntityType,
@@ -110,6 +111,9 @@ __all__ = [
     "Base",
     "FileCommentSubmission",
     "FileProcessingJob",
+    "GitAnalysis",
+    "GitRelation",
+    "GitSymbol",
     "GitChange",
     "GitConnection",
     "GitDelivery",

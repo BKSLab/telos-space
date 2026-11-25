@@ -1,6 +1,6 @@
 """Git HTTP использует тот же сервис и ACL, что MCP/Арис; credentials только из owner UI."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -18,12 +18,16 @@ from src.schemas.git_sources import (
     GitConnectionUpdate,
     GitEventAccepted,
     GitFileRead,
+    GitGraph,
     GitHubProfile,
     GitHubProfileUpdate,
+    GitImpact,
     GitProjectMap,
     GitQueued,
     GitRepositoryPage,
     GitSearchResult,
+    GitSnapshotPage,
+    GitSymbolPage,
     GitTaskCandidates,
     GitTaskLink,
     GitTaskLinkCreate,
@@ -102,10 +106,11 @@ async def list_git_connections(
     principal: GitSourcePrincipalDep,
     limit: Annotated[int, Query(ge=1, le=50)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    verified: bool = False,
 ) -> GitConnectionPage:
     """Возвращает безопасные метаданные доступных привязок проекта."""
     return await service.list_connections(
-        project_id=project_id, principal=principal, limit=limit, offset=offset
+        project_id=project_id, principal=principal, limit=limit, offset=offset, **({"verified": True} if verified else {})
     )
 
 
@@ -254,6 +259,7 @@ async def get_git_tree(
     principal: GitSourcePrincipalDep,
     sha: Annotated[str | None, Query(max_length=40)] = None,
     prefix: Annotated[str, Query(max_length=4096)] = "",
+    children: bool = False,
     limit: Annotated[int, Query(ge=1, le=200)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> GitTreePage:
@@ -264,6 +270,7 @@ async def get_git_tree(
         principal=principal,
         sha=sha,
         prefix=prefix,
+        **({"children": True} if children else {}),
         limit=limit,
         offset=offset,
     )
@@ -287,6 +294,7 @@ async def read_git_file(
     sha: Annotated[str | None, Query(max_length=40)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
     max_chars: Annotated[int, Query(ge=1, le=8000)] = 8000,
+    line_start: Annotated[int | None, Query(ge=1)] = None,
 ) -> GitFileRead:
     """Читает страницу проверенного исходника, никогда не серверный filesystem path."""
     return await service.read_file(
@@ -297,6 +305,7 @@ async def read_git_file(
         sha=sha,
         offset=offset,
         max_chars=max_chars,
+        **({"line_start": line_start} if line_start is not None else {}),
     )
 
 
@@ -342,6 +351,7 @@ async def search_git_sources(
     principal: GitSourcePrincipalDep,
     q: Annotated[str, Query(min_length=1, max_length=2000)],
     connection_id: Annotated[int | None, Query(gt=0)] = None,
+    sha: Annotated[str | None, Query(max_length=40)] = None,
     limit: Annotated[int, Query(ge=1, le=30)] = 10,
 ) -> GitSearchResult:
     """Ищет по одному или доступным репозиториям текущего проекта."""
@@ -350,6 +360,135 @@ async def search_git_sources(
         principal=principal,
         query=q,
         connection_ids=(connection_id,) if connection_id is not None else (),
+        **({"sha": sha} if sha is not None else {}),
+        limit=limit,
+    )
+
+
+@router.get(
+    "/connections/{connection_id}/snapshots",
+    operation_id="listGitSnapshots",
+    response_model=GitSnapshotPage,
+    responses=RESPONSES,
+    summary="Доступные версии репозитория",
+    description="Снимки разрешённого подключения после текущей проверки GitHub.",
+    response_description="Страница записанных версий с состоянием анализа.",
+)
+async def list_git_snapshots(
+    project_id: ProjectId,
+    connection_id: ConnectionId,
+    service: GitSourceServiceDep,
+    principal: GitSourcePrincipalDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 30,
+) -> GitSnapshotPage:
+    """Возвращает страницу снимков выбранного подключения."""
+    return await service.list_snapshots(
+        project_id=project_id,
+        connection_id=connection_id,
+        principal=principal,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/connections/{connection_id}/symbols",
+    operation_id="listGitSymbols",
+    response_model=GitSymbolPage,
+    responses=RESPONSES,
+    summary="Найти объявления Git",
+    description="Чтение опубликованного структурного индекса закреплённого снимка.",
+    response_description="Страница символов с координатами и охватом.",
+)
+async def list_git_symbols(
+    project_id: ProjectId,
+    connection_id: ConnectionId,
+    service: GitSourceServiceDep,
+    principal: GitSourcePrincipalDep,
+    sha: Annotated[str | None, Query(max_length=40)] = None,
+    path: Annotated[str | None, Query(max_length=4096)] = None,
+    query: Annotated[str | None, Query(max_length=512)] = None,
+    symbol_id: Annotated[int | None, Query(gt=0)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> GitSymbolPage:
+    """Возвращает объявления внутри точного SHA."""
+    return await service.list_symbols(
+        project_id=project_id,
+        connection_id=connection_id,
+        principal=principal,
+        sha=sha,
+        path=path,
+        query=query,
+        symbol_id=symbol_id,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/connections/{connection_id}/graph",
+    operation_id="getGitGraph",
+    response_model=GitGraph,
+    responses=RESPONSES,
+    summary="Прочитать граф структуры Git",
+    description="Ограниченный граф одного снимка с доказательствами.",
+    response_description="Узлы, связи, координаты и граница охвата.",
+)
+async def get_git_graph(
+    project_id: ProjectId,
+    connection_id: ConnectionId,
+    service: GitSourceServiceDep,
+    principal: GitSourcePrincipalDep,
+    sha: Annotated[str | None, Query(max_length=40)] = None,
+    root_id: Annotated[int | None, Query(gt=0)] = None,
+    direction: Literal["in", "out", "both"] = "both",
+    relation: Literal["all", "dependency", "containment"] = "all",
+    depth: Annotated[int, Query(ge=1, le=4)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> GitGraph:
+    """Читает типизированные связи указанной версии."""
+    return await service.get_graph(
+        project_id=project_id,
+        connection_id=connection_id,
+        principal=principal,
+        sha=sha,
+        root_id=root_id,
+        direction=direction,
+        relation=relation,
+        depth=depth,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/connections/{connection_id}/impact",
+    operation_id="getCodeImpact",
+    response_model=GitImpact,
+    responses=RESPONSES,
+    summary="Оценить потенциальное влияние",
+    description="Входящие подтверждённые зависимости и задачи с доказанными изменениями путей.",
+    response_description="Ограниченный граф зависимости и проверенные связи задач.",
+)
+async def get_git_impact(
+    project_id: ProjectId,
+    connection_id: ConnectionId,
+    service: GitSourceServiceDep,
+    principal: GitSourcePrincipalDep,
+    symbol_id: Annotated[int, Query(gt=0)],
+    sha: Annotated[str | None, Query(max_length=40)] = None,
+    depth: Annotated[int, Query(ge=1, le=4)] = 2,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> GitImpact:
+    """Показывает потенциальное влияние в пределах одного поколения."""
+    return await service.get_impact(
+        project_id=project_id,
+        connection_id=connection_id,
+        principal=principal,
+        sha=sha,
+        symbol_id=symbol_id,
+        depth=depth,
         limit=limit,
     )
 

@@ -47,7 +47,13 @@ for (const width of [320, 1440]) {
                 { path: "assets/cover.png", sha: "e".repeat(40), mode: "100644", type: "blob", size: 12000, index_state: "metadata", index_reason: "binary_file" },
                 { path: "large-file.log", sha: "f".repeat(40), mode: "100644", type: "blob", size: 100000000, index_state: "error", index_reason: "transport_limit" },
             ] } });
-            if (request.method() === "GET") return route.fulfill({ headers, json: { items: [item], total: 1, next_offset: null } });
+            if (request.method() === "GET") {
+                const path = new URL(request.url()).pathname;
+                if (path.endsWith("/snapshots") || path.endsWith("/symbols")) return route.fulfill({ headers, json: { items: [], next_offset: null } });
+                if (path.endsWith("/1")) return route.fulfill({ headers, json: item });
+                if (path.endsWith("/file")) return route.fulfill({ headers, json: { path: ".env.example", commit_sha: "a".repeat(40), text: "EXAMPLE=value", line_start: 1, line_end: 1, offset: 0, next_offset: null, total_chars: 13, source_url: "", partial: false, stale: false } });
+                return route.fulfill({ headers, json: { items: [item], total: 1, next_offset: null } });
+            }
             const body = request.postDataJSON(); writes.push(body);
             if (request.method() === "PATCH") item = { ...item, ...body, revision: item.revision + 1 };
             if (request.method() === "PUT") item = { ...item, has_webhook_secret: Boolean(body.webhook_secret), revision: item.revision + 1 };
@@ -58,16 +64,18 @@ for (const width of [320, 1440]) {
         await expect(page.getByText("Раз в час", { exact: true })).toBeVisible();
         await page.getByText("Почему только метаданные", { exact: true }).click();
         await expect(page.getByText("Двоичные файлы", { exact: true })).toBeVisible();
-        await page.getByText("Каталог файлов", { exact: true }).click();
-        await expect(page.getByText(".env.example", { exact: true })).toBeVisible();
-        await expect(page.getByRole("button", { name: "Читать .env.example", exact: true })).toBeVisible();
-        await expect(page.getByRole("button", { name: "Читать assets/cover.png", exact: true })).toHaveCount(0);
-        await expect(page.getByText("Ошибка чтения", { exact: true })).toBeVisible();
+        await page.goto("/projects/DEMO/knowledge?view=code&connection=1");
+        if (width < 900) await page.getByRole("button", { name: "Дерево", exact: true }).click();
+        await expect(page.getByRole("treeitem", { name: /\.env\.example/ })).toBeVisible();
+        await expect(page.getByRole("treeitem", { name: /package-lock.json/ })).toBeVisible();
+        await expect(page.getByRole("treeitem", { name: /cover.png.*Двоичные файлы/ })).toBeVisible();
+        await expect(page.getByRole("treeitem", { name: /large-file.log.*Ошибка чтения/ })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: info.outputPath(`git-file-catalog-${width}.png`), animations: "disabled" });
-        await page.getByRole("list", { name: "Файлы репозитория" }).scrollIntoViewIfNeeded();
-        await page.screenshot({ path: info.outputPath(`git-file-catalog-rows-${width}.png`), animations: "disabled" });
-        await page.getByText("Каталог файлов", { exact: true }).click();
+        await page.getByRole("treeitem", { name: /\.env\.example/ }).click();
+        await expect(page.getByLabel("Код .env.example")).toContainText("EXAMPLE=value");
+        await page.goto("/projects/DEMO/settings");
+        await page.locator("summary").getByText("Управлять репозиториями", { exact: true }).click();
         await page.getByRole("button", { name: "Настроить", exact: true }).click();
         await page.getByLabel("Тестирование", { exact: true }).check();
         await page.getByLabel("Готово", { exact: true }).check();
@@ -132,6 +140,9 @@ async function sourcesApi(page: Page) {
             return reply(historyPage(items, url));
         }
         if (path === "/git/connections" && request.method() === "GET") return reply({ items: connections, total: 3, offset: 0, limit: 20, next_offset: null });
+        if (/^\/git\/connections\/\d+$/.test(path) && request.method() === "GET") return reply(connections.find(item => item.id === Number(path.split("/").pop())));
+        if (/\/(snapshots|symbols)$/.test(path)) return reply({ items: [], next_offset: null });
+        if (path.endsWith("/tree")) return reply({ items: [], commit_sha: "a".repeat(40), next_offset: null, total_files: 0, truncated: false, stale: false });
         if (path === "/git/connections/1" && request.method() === "PATCH") {
             const body = request.postDataJSON();
             patches++;
@@ -296,11 +307,11 @@ for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: 
         await expect(page.getByRole("heading", { name: "Frontend", exact: true })).toBeVisible();
         await expect(page.getByRole("heading", { name: "Auth", exact: true })).toBeVisible();
         await expect(page.getByRole("heading", { name: "Gateway", exact: true })).toBeVisible();
+        await page.goto("/projects/DEMO/knowledge?view=code&code_view=search");
         await page.getByLabel("Найти код и документацию", { exact: true }).fill("main");
         await page.getByRole("button", { name: "Найти в репозиториях" }).click();
-        await page.getByRole("button", { name: "Frontend · src/main.py", exact: true }).click();
-        const dialog = page.getByRole("dialog", { name: "src/main.py", exact: true });
-        await expect(dialog.getByText(/def main\(\):/)).toBeVisible();
+        await page.getByRole("button", { name: "Открыть", exact: true }).click();
+        await expect(page.getByLabel("Код src/main.py")).toContainText("def main():");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
         await page.screenshot({ path: info.outputPath(`git-file-${viewport.name}.png`) });
     });
@@ -387,6 +398,7 @@ for (const width of [320, 1440]) {
         await expect(page.getByText("В работе: 2", { exact: true })).toBeVisible();
         await expect(page.getByText("Требуют внимания: 2", { exact: true })).toBeVisible();
         await expect(page.getByText("Индекс актуален", { exact: true })).toBeVisible();
+        for (const item of items) await page.getByText(`Диагностика ${item.name}`, { exact: true }).click();
         await expect(page.getByRole("list", { name: "Этапы индексации" })).toHaveCount(5);
         await expect(page.getByRole("progressbar")).toHaveCount(0);
         await expect(page.getByText(/100%/)).toHaveCount(0);

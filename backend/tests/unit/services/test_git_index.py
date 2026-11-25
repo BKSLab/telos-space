@@ -55,18 +55,17 @@ def test_static_map_reports_only_declarations_and_explicit_parse_limits():
         "import os\nfrom .api import run\nclass App:\n    def start(self):\n        pass\n",
     )
     assert analysis["kind"] == "python_module" and not analysis["partial"]
-    assert analysis["symbols"] == [
-        {"name": "App", "kind": "class", "line": 3},
-        {"name": "start", "kind": "function", "line": 4},
+    assert [(item["name"], item["kind"], item["line"]) for item in analysis["symbols"][1:]] == [
+        ("App", "class", 3),
+        ("start", "method", 4),
     ]
     assert analysis["imports"] == [{"name": "os", "line": 1}, {"name": ".api", "line": 2}]
     assert analyze_file("bad.py", "class App:\n  !")["partial"]
     limited = analyze_file("many.py", "\n".join(f"def fn{i}(): pass" for i in range(201)))
-    assert limited["partial"] and len(limited["symbols"]) == 200
-    lexical = analyze_file("sample.ts", "// import 'example'; function commentOnly() {}\n")
-    assert lexical["partial"] and lexical["reason"] == "lexical_only"
-    assert lexical["symbols"][0]["kind"] == "candidate"
-    assert lexical["imports"][0]["confidence"] == "candidate"
+    assert not limited["partial"] and len(limited["symbols"]) == 202
+    parsed = analyze_file("sample.ts", "// import 'example'; function commentOnly() {}\n")
+    assert not parsed["partial"] and parsed["coverage"]["parser"] == "tree_sitter"
+    assert len(parsed["symbols"]) == 1 and parsed["imports"] == []
 
 
 def test_independent_credential_encryption_has_no_plaintext_or_fallback():

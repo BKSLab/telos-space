@@ -110,8 +110,12 @@ class AgentContextToolsService:
                 assertions=(claim_reference(project_id, value),),
             )
         if name == "telos_list_git_connections":
-            value = await self.git.list_connections(**scope, **args)
-            return ContextReadResult(value.model_dump(mode="json"), project_id=project_id)
+            value = await self.git.list_connections(**scope, **args, verified=True)
+            return ContextReadResult(
+                value.model_dump(mode="json", exclude={"sources"}),
+                project_id=project_id,
+                git_proofs=tuple(value.sources),
+            )
         if name == "telos_search_git_sources":
             args["connection_ids"] = tuple(args["connection_ids"])
             value = await self.git.search(**scope, **args)
@@ -140,6 +144,19 @@ class AgentContextToolsService:
             )
         if name == "telos_get_git_map":
             value = await self.git.get_map(**scope)
+            return ContextReadResult(
+                value.model_dump(mode="json", exclude={"sources"}),
+                project_id=project_id,
+                git_proofs=tuple(value.sources),
+            )
+        structural_reads = {
+            "telos_list_git_snapshots": "list_snapshots",
+            "telos_list_git_symbols": "list_symbols",
+            "telos_get_git_graph": "get_graph",
+            "telos_get_git_impact": "get_impact",
+        }
+        if name in structural_reads:
+            value = await getattr(self.git, structural_reads[name])(**scope, **args)
             return ContextReadResult(
                 value.model_dump(mode="json", exclude={"sources"}),
                 project_id=project_id,

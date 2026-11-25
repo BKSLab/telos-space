@@ -1,6 +1,6 @@
 """Публичный контракт MCP: имена инструментов, входные схемы и форма ответа.
 
-Каталог содержит ровно 59 канонических telos_<действие>_<сущность> имён.
+Каталог содержит ровно 63 канонических telos_<действие>_<сущность> имени.
 Входные схемы и единые ответы с метаданными превью зафиксированы явно;
 представления принимают DTO общих сервисов.
 """
@@ -39,6 +39,10 @@ EXPECTED_REQUIRED = {
     "telos_search_git_sources": {"project_key", "arguments"},
     "telos_read_git_file": {"project_key", "arguments"},
     "telos_get_git_map": {"project_key"},
+    "telos_list_git_snapshots": {"project_key", "arguments"},
+    "telos_list_git_symbols": {"project_key", "arguments"},
+    "telos_get_git_graph": {"project_key", "arguments"},
+    "telos_get_git_impact": {"project_key", "arguments"},
     "telos_list_task_git_links": {"project_key", "arguments"},
     "telos_request_web_search": {"project_key", "arguments", "request_id"},
     "telos_request_web_page": {"project_key", "arguments", "request_id"},
@@ -108,7 +112,7 @@ async def test_tool_names_are_frozen() -> None:
     """Набор публичных инструментов не меняется рефакторингом."""
     tools = await mcp_server.list_tools()
 
-    assert len(EXPECTED_TOOLS) == 59
+    assert len(EXPECTED_TOOLS) == 63
     assert EXPECTED_TOOLS == {tool.name for tool in tools}
 
 

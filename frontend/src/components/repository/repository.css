@@ -1,0 +1,30 @@
+.repository-workspace { min-height: 360px; }
+.repository-panes { display: grid; min-height: 0; flex: 1; grid-template-columns: var(--repository-tree-width) 8px minmax(0, 1fr); }
+.repository-separator { cursor: col-resize; touch-action: none; border-radius: 4px; }
+.repository-separator:hover, .repository-separator:focus-visible { background: var(--color-accent); outline: 2px solid var(--color-accent); }
+.repository-pane-tabs, .repository-inspector, .repository-right-separator { display: none; }
+.repository-show-inspector { grid-template-columns: var(--repository-tree-width) 8px minmax(0, 1fr) 8px var(--repository-inspector-width); }
+.repository-show-inspector .repository-inspector, .repository-show-inspector .repository-right-separator { display: block; }
+.repository-map-node { width: 210px; min-height: 64px; border: 1px solid var(--color-line-strong) !important; background: var(--color-surface-2) !important; color: var(--color-text-primary) !important; border-radius: 8px !important; font-size: 12px; overflow-wrap: anywhere; }
+.repository-map-node.selected { border: 2px solid var(--color-accent) !important; }
+.repository-map-node.repository-changed-node { outline: 2px dashed var(--color-success); outline-offset: 3px; }
+.repository-source-range { background: color-mix(in srgb, var(--color-accent) 16%, transparent); }
+.repository-workspace .react-flow__controls-button { background: var(--color-surface-2); fill: var(--color-text-primary); border-color: var(--color-line); }
+.repository-workspace .react-flow__edge-textbg { fill: var(--color-surface-2); }
+.repository-workspace .react-flow__edge-text { fill: var(--color-text-secondary); font-size: 10px; }
+@media (min-width: 900px) and (max-width: 1399px) {
+    .repository-panes { position: relative; grid-template-columns: minmax(200px, 240px) 8px minmax(0, 1fr); }
+    .repository-show-inspector .repository-inspector { position: absolute; z-index: 10; right: 0; top: 0; bottom: 0; width: min(90%, 360px); background: var(--color-surface-2); box-shadow: var(--shadow-card); }
+    .repository-right-separator { display: none !important; }
+}
+@media (max-width: 899px) {
+    .repository-inspector-toggle { display: none; }
+    .repository-pane-tabs { display: flex; }
+    .repository-panes { display: flex; flex-direction: column; }
+    .repository-separator, .repository-tree, .repository-source, .repository-inspector { display: none !important; }
+    .repository-panes[data-pane="tree"] .repository-tree, .repository-panes[data-pane="source"] .repository-source, .repository-panes[data-pane="inspector"] .repository-inspector { display: flex !important; flex: 1; flex-direction: column; }
+}
+@media (forced-colors: active) {
+    .repository-map-node, .repository-map-node.selected, .repository-separator { border-color: CanvasText !important; }
+    .repository-map-node.selected { outline: 2px solid Highlight; }
+}

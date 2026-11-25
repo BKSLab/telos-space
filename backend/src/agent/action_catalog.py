@@ -8,8 +8,12 @@ from src.schemas import project_tool_inputs as p
 from src.schemas.agent_context import (
     ContextInput,
     ContextPageInput,
+    GitGraphInput,
+    GitImpactInput,
     GitReadInput,
     GitSearchInput,
+    GitSnapshotsInput,
+    GitSymbolsInput,
     TaskGitLinksInput,
     WebSaveInput,
     WebTopicInput,
@@ -43,7 +47,7 @@ CONTEXT_ACTIONS = tuple(
         context_handler=context_handler(name),
         mutating=False,
         required_scopes=CONTEXT_READ_SCOPES
-        | ({"tasks:read"} if name == "telos_list_task_git_links" else set()),
+        | ({"tasks:read"} if name in {"telos_list_task_git_links", "telos_get_git_impact"} else set()),
         requires_confirmation=external,
         external_effect=external,
     )
@@ -102,6 +106,34 @@ CONTEXT_ACTIONS = tuple(
             "Прочитать изменения задачи",
             "Все связанные PR/commits и фактически проверенные CI/deploy с exact repository/SHA/environment. Proposed, merged, checked и deployed не взаимозаменяемы; разные PR не сливаются в один статус.",
             TaskGitLinksInput,
+            False,
+        ),
+        (
+            "telos_list_git_snapshots",
+            "Прочитать версии репозитория",
+            "Доступные закреплённые SHA одного подключения и полнота структурного анализа, с пагинацией. Чтение не запускает индексацию.",
+            GitSnapshotsInput,
+            False,
+        ),
+        (
+            "telos_list_git_symbols",
+            "Найти символы Git",
+            "Точные объявления, qualified name, сигнатуры и исходные строки одного подключения/SHA. next_offset продолжает список; исходник прочитай telos_read_git_file.",
+            GitSymbolsInput,
+            False,
+        ),
+        (
+            "telos_get_git_graph",
+            "Прочитать связи кода",
+            "Ограниченный граф символов одного подключения/SHA. dependency: потребитель → зависимость; containment отдельно. Уровни declared/resolved/candidate/unresolved не равнозначны runtime вызовам. truncated не доказывает отсутствия связей.",
+            GitGraphInput,
+            False,
+        ),
+        (
+            "telos_get_git_impact",
+            "Исследовать влияние символа",
+            "Потенциально затронутые входящие зависимости с evidence и ограничением глубины. Не доказательство дефекта, успешного CI или выполнения задачи.",
+            GitImpactInput,
             False,
         ),
         (

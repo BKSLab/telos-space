@@ -273,6 +273,9 @@ POLICIES = (
 POLICY_BY_TABLE = {item.table: item for item in POLICIES}
 POLICY_BY_TYPE = {item.kind: item for item in POLICIES if item.kind}
 EXCLUDED_TABLES = {
+    "git_analyses": "Состояние анализа требует текущей проверки Git-доступа.",
+    "git_symbols": "Объявления читает GitSourceService после проверки источника.",
+    "git_relations": "Граф выдаётся только для разрешённого снимка Git.",
     "project_history_events": "Неизменяемые снимки действий читает общий ProjectHistoryService с проектными правами; не дублируются в семантическом индексе.",
     "git_connections": "Credential binding и private repo: только GitSourceService с текущим Contents proof, не generic SQL reader.",
     "git_snapshots": "Git версии и coverage выдаются через proof-gated GitSourceService.",

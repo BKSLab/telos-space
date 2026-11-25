@@ -56,17 +56,25 @@ from src.schemas.git_sources import (
     GitConnection,
     GitConnectionCreate,
     GitConnectionPage,
+    GitConnectionProof,
     GitConnectionUpdate,
+    GitDirectoryEntry,
     GitEventAccepted,
     GitEvidence,
     GitFileRead,
+    GitGraph,
     GitHubProfile,
+    GitImpact,
     GitProjectMap,
     GitQueued,
+    GitRecordedSnapshot,
     GitRepositoryPage,
     GitSearchHit,
     GitSearchResult,
+    GitSnapshotPage,
     GitSourceProof,
+    GitStructureCoverage,
+    GitSymbolPage,
     GitTaskCandidate,
     GitTaskCandidates,
     GitTaskLink,
@@ -86,6 +94,12 @@ from src.services.git_index import (
     policy_hash,
     prepare_text,
     text_fragments,
+)
+from src.services.git_structure import (
+    ANALYZER_VERSION,
+    candidate_import_paths,
+    extract_structure,
+    resolve_snapshot,
 )
 from src.services.knowledge_events import KnowledgeEvents
 
@@ -271,6 +285,8 @@ class GitSourceService:
         if row is None:
             raise GitSourceNotAvailableError()
         self._connection_visible(row, read=read, allow_unverified=allow_unverified)
+        if read and not allow_unverified and row["credential_owner_id"] != row.get("project_owner_id", project.owner_id):
+            raise GitSourceNotAvailableError()
         return row, current, project, grant
 
     def _scope_hash(self, row: dict) -> str:
@@ -278,6 +294,9 @@ class GitSourceService:
 
     def _dto(self, row: dict) -> GitConnection:
         fields = {name: row[name] for name in GitConnection.model_fields if name in row}
+        if "live_sha" in row and row["live_sha"] != (row["indexed_sha"] or row["observed_sha"]):
+            coverage = dict(row.get("coverage") or {})
+            fields["coverage"] = {**coverage, "reasons": sorted(set(coverage.get("reasons", [])) | {"source_stale"})}
         return GitConnection(
             **fields,
             has_credential=row.get("credential_owner_id") is not None,
@@ -594,6 +613,7 @@ class GitSourceService:
         connection_id: int,
         principal: Principal,
         lease_id: UUID | None = None,
+        observe: bool = True,
     ) -> AsyncIterator[tuple[dict, GitHubClient]]:
         async with self.scope() as db:
             # Only a fresh remote proof may recover a previously failed binding.
@@ -652,32 +672,57 @@ class GitSourceService:
                     raise GitSourceBudgetError()
                 await self._remote_failure(row, failure)
                 raise GitSourceNotAvailableError()
-            updated = await self._observe(
-                row, commit, metadata, principal=current, lease_id=lease_id
-            )
+            if observe:
+                updated = await self._observe(
+                    row, commit, metadata, principal=current, lease_id=lease_id
+                )
+            else:
+                if metadata.id != row["repository_id"] or (
+                    metadata.private and not row["share_private_with_project"]
+                ):
+                    raise GitSourceNotAvailableError()
+                await self._current_rows([row], project_id=project_id, principal=current)
+                updated = {**row, "live_sha": commit.sha}
             yield updated, client
 
+    @_bounded_read
     async def list_connections(
-        self, *, project_id: int, principal: Principal, limit: int = 50, offset: int = 0
+        self, *, project_id: int, principal: Principal, limit: int = 50, offset: int = 0, verified: bool = False
     ) -> GitConnectionPage:
         """Возвращает bounded метаданные доступных project connections, без secret fields."""
         if not 1 <= limit <= 50 or offset < 0:
             raise GitSourceValidationError()
         async with self.scope() as db:
             _, _, grant = await self._authorize(db, project_id=project_id, principal=principal)
-            rows = await db.sources.list_connections(
-                project_id=project_id, is_owner=grant.is_owner, limit=limit, offset=offset
-            )
-            total = await db.sources.count_connections(
-                project_id=project_id, is_owner=grant.is_owner
-            )
-        return GitConnectionPage(
-            items=[self._dto(row) for row in rows],
-            total=total,
-            offset=offset,
-            limit=limit,
-            next_offset=offset + len(rows) if offset + len(rows) < total else None,
-        )
+            if not verified and grant.is_owner:
+                rows = await db.sources.list_connections(project_id=project_id, is_owner=True, limit=limit, offset=offset)
+                total = await db.sources.count_connections(project_id=project_id, is_owner=True)
+                return GitConnectionPage(items=[self._dto(row) for row in rows], total=total, offset=offset, limit=limit,
+                    next_offset=offset + len(rows) if offset + len(rows) < total else None)
+            scan_limit = max(1, self.limits.max_foreground_requests // 2)
+            rows = await db.sources.verification_candidates(project_id=project_id, after_id=offset, limit=scan_limit + 1)
+        page_limit = min(10, limit)
+        visible, reasons = [], []
+        for entry in rows[:scan_limit]:
+            try:
+                async with self._open(project_id=project_id, connection_id=entry["id"], principal=principal,
+                                      observe=False) as (current, _):
+                    visible.append(current)
+                    if len(visible) > page_limit:
+                        break
+            except GitSourceBudgetError:
+                reasons.append("request_budget")
+                break
+            except (GitSourceNotAvailableError, GitSourceIncompleteError, GitProfileRequiredError, GitCredentialUnavailableError):
+                continue
+        if len(rows) > scan_limit and len(visible) <= page_limit:
+            reasons.append("verification_limit")
+        has_next = len(visible) > page_limit
+        visible = visible[:page_limit]
+        await self._current_rows(visible, project_id=project_id, principal=principal)
+        return GitConnectionPage(items=[self._dto(row) for row in visible], sources=[self._connection_proof(row) for row in visible],
+            total=len(visible) if not (offset or has_next or reasons) else None, limit=page_limit, offset=offset,
+            next_offset=visible[-1]["id"] if has_next else None, incomplete_reasons=reasons)
 
     async def get_connection(
         self, *, project_id: int, connection_id: int, principal: Principal
@@ -693,6 +738,14 @@ class GitSourceService:
             )
             if row["is_private"] and not row["share_private_with_project"] and not grant.is_owner:
                 raise GitSourceNotAvailableError()
+        if not grant.is_owner:
+            async with self._open(
+                project_id=project_id,
+                connection_id=connection_id,
+                principal=principal,
+                observe=False,
+            ) as (current, _):
+                return self._dto(current)
         return self._dto(row)
 
     async def create_connection(
@@ -1009,6 +1062,373 @@ class GitSourceService:
             await db.unit_of_work.commit()
         return self._dto(updated)
 
+    @staticmethod
+    def _connection_proof(row):
+        return GitConnectionProof(
+            source_id=f"git_connection:{row['id']}",
+            entity_id=row["id"],
+            connection_id=row["id"],
+            **{
+                key: row[key]
+                for key in (
+                    "project_id",
+                    "repository_id",
+                    "generation",
+                    "credential_revision",
+                    "ref",
+                )
+            },
+        )
+
+    async def _recorded(self, row, sha):
+        selected = sha or row["indexed_sha"] or row["observed_sha"]
+        if selected is None:
+            raise GitSourceIncompleteError()
+        try:
+            validate_git_sha(selected)
+        except ValueError:
+            raise GitSourceValidationError() from None
+        async with self.scope() as db:
+            snapshot = await db.sources.snapshot_metadata(
+                connection_id=row["id"], sha=selected, scope_hash=row["scope_hash"]
+            )
+        if snapshot is None:
+            raise GitSourceNotAvailableError()
+        return snapshot
+
+    @staticmethod
+    def _coverage(snapshot, analysis, *, live_sha):
+        source = dict(snapshot.get("coverage") or {})
+        detail = dict((analysis or {}).get("coverage") or {})
+        reasons = set(source.get("reasons", [])) | set(detail.get("reasons", []))
+        if snapshot["commit_sha"] != live_sha:
+            reasons.add("source_stale")
+        if not analysis or analysis["state"] != "published":
+            reasons.add("structure_pending")
+        elif analysis.get("version") != ANALYZER_VERSION:
+            reasons.add("analyzer_upgrade_pending")
+        return GitStructureCoverage.model_validate({**source, **detail, "reasons": sorted(reasons)})
+
+    @_bounded_read
+    async def list_snapshots(self, *, project_id, connection_id, principal, offset=0, limit=30):
+        """Страница ранее наблюдавшихся SHA в текущей разрешённой области."""
+        if offset < 0 or not 1 <= limit <= 100:
+            raise GitSourceValidationError()
+        async with self._open(
+            project_id=project_id, connection_id=connection_id, principal=principal, observe=False
+        ) as (row, _):
+            async with self.scope() as db:
+                entries = await db.sources.recorded_snapshots(
+                    connection_id=connection_id,
+                    scope_hash=row["scope_hash"],
+                    version=ANALYZER_VERSION,
+                    offset=offset,
+                    limit=limit + 1,
+                )
+            await self._current_rows([row], project_id=project_id, principal=principal)
+            return GitSnapshotPage(
+                items=[
+                    GitRecordedSnapshot(
+                        connection_id=connection_id,
+                        commit_sha=item["commit_sha"],
+                        complete=item["complete"],
+                        analyzer_version=item["version"],
+                        analysis_state=item["state"] or "absent",
+                        coverage=self._coverage(
+                            item,
+                            {
+                                "state": item["state"],
+                                "version": item["version"],
+                                "coverage": item["analysis_coverage"],
+                            },
+                            live_sha=row["live_sha"],
+                        ),
+                    )
+                    for item in entries[:limit]
+                ],
+                next_offset=offset + limit if len(entries) > limit else None,
+                sources=[self._connection_proof(row)],
+            )
+
+    @asynccontextmanager
+    async def _structure_read(self, project_id, connection_id, principal, sha):
+        async with self._open(
+            project_id=project_id, connection_id=connection_id, principal=principal, observe=False
+        ) as (row, client):
+            snapshot = await self._recorded(row, sha)
+            async with self.scope() as db:
+                current = await db.sources.analysis(
+                    snapshot_id=snapshot["id"], version=ANALYZER_VERSION
+                )
+                analysis = (
+                    current
+                    if current and current["state"] == "published"
+                    else await db.sources.published_analysis(
+                        snapshot_id=snapshot["id"], version=ANALYZER_VERSION
+                    )
+                )
+            coverage = self._coverage(snapshot, analysis, live_sha=row["live_sha"])
+            # Пока новое поколение строится, продолжаем выдавать последнее опубликованное.
+            common = dict(
+                connection_id=connection_id,
+                commit_sha=snapshot["commit_sha"],
+                analyzer_version=analysis["version"] if analysis else None,
+                coverage=coverage,
+                sources=[self._connection_proof(row)],
+            )
+            yield (
+                row,
+                common,
+                analysis["id"] if analysis and analysis["state"] == "published" else None,
+                client,
+            )
+            await self._current_rows([row], project_id=project_id, principal=principal)
+
+    def _symbol_proofs(self, row, common, symbols):
+        files = {s["file_id"]: s for s in symbols}
+        common["sources"].extend(
+            self._proof(row, {**item, "id": identifier, "commit_sha": common["commit_sha"]})
+            for identifier, item in files.items()
+        )
+
+    @_bounded_read
+    async def list_symbols(
+        self,
+        *,
+        project_id,
+        connection_id,
+        principal,
+        sha=None,
+        path=None,
+        query=None,
+        symbol_id=None,
+        offset=0,
+        limit=50,
+    ):
+        """Символы точного опубликованного поколения с координатами исходника."""
+        if offset < 0 or not 1 <= limit <= 100 or (query and len(query) > 512):
+            raise GitSourceValidationError()
+        async with self._structure_read(project_id, connection_id, principal, sha) as (
+            row,
+            common,
+            analysis_id,
+            _,
+        ):
+            items = []
+            if analysis_id:
+                async with self.scope() as db:
+                    items = await db.sources.structure_symbols(
+                        analysis_id=analysis_id,
+                        paths=[path] if path else None,
+                        query=query,
+                        ids={symbol_id} if symbol_id is not None else None,
+                        offset=offset,
+                        limit=limit + 1,
+                    )
+                if symbol_id is not None and not items and offset == 0:
+                    raise GitSourceNotAvailableError()
+            self._symbol_proofs(row, common, items[:limit])
+            return GitSymbolPage(
+                **common,
+                items=items[:limit],
+                next_offset=offset + limit if len(items) > limit else None,
+            )
+
+    async def _graph_slice(
+        self, repo, analysis_id, root_id, direction, relation, depth, limit, confirmed=False
+    ):
+        root_limit = 1 if root_id else max(1, limit // 3)
+        roots = await repo.structure_symbols(
+            analysis_id=analysis_id,
+            ids={root_id} if root_id else None,
+            roots=root_id is None,
+            limit=1 if root_id else root_limit + 1,
+        )
+        if root_id and not roots:
+            raise GitSourceNotAvailableError()
+        truncated = len(roots) > root_limit
+        nodes = {s["id"]: s for s in roots[:root_limit]}
+        frontier, edges = set(nodes), {}
+        for _ in range(depth):
+            if not frontier:
+                break
+            remaining = limit * 3 - len(edges)
+            batch = await repo.graph_edges(
+                analysis_id=analysis_id,
+                frontier=frontier,
+                direction=direction,
+                relation=relation,
+                confirmed=confirmed,
+                limit=remaining + 1,
+                exclude=set(edges),
+            )
+            truncated |= len(batch) > remaining
+            added = set()
+            for edge in batch[:remaining]:
+                identifiers = {i for i in (edge["source_id"], edge["target_id"]) if i is not None}
+                missing = identifiers - nodes.keys() - added
+                if len(nodes) + len(added) + len(missing) > limit:
+                    truncated = True
+                    continue
+                added.update(missing)
+                edges[edge["id"]] = edge
+            if added:
+                nodes.update(
+                    {
+                        s["id"]: s
+                        for s in await repo.structure_symbols(
+                            analysis_id=analysis_id, ids=added, limit=limit
+                        )
+                    }
+                )
+            frontier = added
+        if frontier and not truncated:
+            truncated = bool(
+                await repo.graph_edges(
+                    analysis_id=analysis_id,
+                    frontier=frontier,
+                    direction=direction,
+                    relation=relation,
+                    confirmed=confirmed,
+                    limit=1,
+                    exclude=set(edges),
+                )
+            )
+        return list(nodes.values()), list(edges.values()), truncated
+
+    @_bounded_read
+    async def get_graph(
+        self,
+        *,
+        project_id,
+        connection_id,
+        principal,
+        sha=None,
+        root_id=None,
+        direction="both",
+        relation="all",
+        depth=1,
+        limit=50,
+    ):
+        """Ограниченный граф одной версии, с явной неполнотой при достижении границы."""
+        if (
+            direction not in {"in", "out", "both"}
+            or relation not in {"all", "containment", "dependency"}
+            or not 1 <= depth <= 4
+            or not 1 <= limit <= 100
+        ):
+            raise GitSourceValidationError()
+        async with self._structure_read(project_id, connection_id, principal, sha) as (
+            row,
+            common,
+            analysis_id,
+            _,
+        ):
+            nodes, edges, truncated = [], [], False
+            if analysis_id:
+                async with self.scope() as db:
+                    nodes, edges, truncated = await self._graph_slice(
+                        db.sources, analysis_id, root_id, direction, relation, depth, limit
+                    )
+            self._symbol_proofs(row, common, nodes)
+            return GitGraph(**common, nodes=nodes, edges=edges, truncated=truncated)
+
+    @_bounded_read
+    async def get_impact(
+        self, *, project_id, connection_id, principal, symbol_id, sha=None, depth=2, limit=50
+    ):
+        """Потенциальное влияние по входящим доказанным связям и подтверждённым путям изменений."""
+        if not 1 <= depth <= 4 or not 1 <= limit <= 100 or symbol_id < 1:
+            raise GitSourceValidationError()
+        async with self._structure_read(project_id, connection_id, principal, sha) as (
+            row,
+            common,
+            analysis_id,
+            client,
+        ):
+            nodes, edges, truncated = [], [], False
+            links, proofs = [], []
+            async with self.scope() as db:
+                actor, _, _ = await self._authorize(db, project_id=project_id, principal=principal)
+                if not actor.allows("tasks:read"):
+                    raise GitSourceScopeRequiredError()
+                if analysis_id:
+                    nodes, edges, truncated = await self._graph_slice(
+                        db.sources, analysis_id, symbol_id, "in", "dependency", depth, limit, True
+                    )
+                changes = (
+                    await db.sources.snapshot_changes(
+                        project_id=project_id,
+                        connection_id=connection_id,
+                        sha=common["commit_sha"],
+                        limit=11,
+                    )
+                    if nodes
+                    else []
+                )
+            paths = {s["path"] for s in nodes}
+            checked_files = {}
+            for change in changes[:10]:
+                change_id = change["id"]
+                if change_id not in checked_files:
+                    try:
+                        if change["kind"] == "commit":
+                            details = await client.get_commit_details(
+                                row["owner"], row["repo"], change["provider_id"]
+                            )
+                            changed = details.changed_paths
+                            truncated |= details.files_partial
+                        else:
+                            pr = await client.get_pull_request(
+                                row["owner"], row["repo"], int(change["provider_id"])
+                            )
+                            if (
+                                pr.head_sha != common["commit_sha"]
+                                or pr.base_repository_id != row["repository_id"]
+                            ):
+                                truncated = True
+                                continue
+                            comparison = await client.compare_commits(
+                                row["owner"], row["repo"], pr.base_sha, pr.head_sha
+                            )
+                            changed = [f.filename for f in comparison.files]
+                            truncated |= not comparison.files_complete
+                        checked_files[change_id] = paths.intersection(changed)
+                    except (GitHubBudgetExceededError, GitHubRateLimitError):
+                        truncated = True
+                        break
+                    except GitHubClientError:
+                        raise GitSourceIncompleteError() from None
+                for path in sorted(checked_files[change_id]):
+                    links.append(
+                        dict(
+                            task_id=change["task_id"],
+                            change_id=change_id,
+                            kind=change["kind"],
+                            provider_id=change["provider_id"],
+                            path=path,
+                        )
+                    )
+                if checked_files[change_id]:
+                    proofs.append(
+                        self._change_proof(
+                            row, change, link_id=change["link_id"], task_id=change["task_id"]
+                        )
+                    )
+            if proofs:
+                await self.validate_sources(
+                    project_id=project_id, principal=principal, sources=[self._connection_proof(row), *proofs]
+                )
+            self._symbol_proofs(row, common, nodes)
+            common["sources"].extend(proofs)
+            return GitImpact(
+                **common,
+                nodes=nodes,
+                edges=edges,
+                truncated=truncated or len(changes) > 10,
+                task_links=links,
+            )
+
     async def _snapshot(self, row: dict, *, sha: str | None = None) -> dict:
         selected = sha or row["indexed_sha"] or row["observed_sha"]
         if selected is None:
@@ -1077,6 +1497,7 @@ class GitSourceService:
         prefix: str = "",
         offset: int = 0,
         limit: int = 200,
+        children: bool = False,
     ) -> GitTreePage:
         """Читает все объекты recorded snapshot после проверки доступа, явно сохраняя неполноту."""
         if not 1 <= limit <= 200 or offset < 0:
@@ -1087,8 +1508,51 @@ class GitSourceService:
             except ValueError:
                 raise GitSourceValidationError() from None
         async with self._open(
-            project_id=project_id, connection_id=connection_id, principal=principal
+            project_id=project_id, connection_id=connection_id, principal=principal, **({"observe": False} if children else {})
         ) as (row, client):
+            if children:
+                snapshot = await self._recorded(row, sha)
+                async with self.scope() as db:
+                    rows = await db.sources.directory_children(
+                        snapshot_id=snapshot["id"], prefix=prefix, offset=offset, limit=limit
+                    )
+                    states = await db.sources.snapshot_file_states(
+                        snapshot_id=snapshot["id"],
+                        paths=[item["leaf"]["path"] for item in rows if item["leaf"]],
+                    )
+                states = {item["path"]: item for item in states}
+                items = []
+                for item in rows:
+                    if item["directory"]:
+                        items.append(
+                            GitDirectoryEntry(path="/".join(filter(None, [prefix, item["name"]])))
+                        )
+                    else:
+                        leaf = item["leaf"]
+                        state = states.get(leaf["path"], {})
+                        items.append(
+                            GitTreeEntry.model_validate(
+                                {
+                                    **leaf,
+                                    "index_state": state.get("state", "pending"),
+                                    "index_reason": state.get("reason"),
+                                }
+                            )
+                        )
+                await self._current_rows([row], project_id=project_id, principal=principal)
+                total = rows[0]["total"] if rows else 0
+                return GitTreePage(
+                    connection_id=connection_id,
+                    repository_id=row["repository_id"],
+                    commit_sha=snapshot["commit_sha"],
+                    items=items,
+                    offset=offset,
+                    limit=limit,
+                    next_offset=offset + len(items) if offset + len(items) < total else None,
+                    truncated=snapshot["tree_truncated"] or not snapshot["tree_loaded"],
+                    stale=snapshot["commit_sha"] != row.get("live_sha", row["observed_sha"]),
+                    total_files=total,
+                )
             snapshot = await self._tree(row, await self._snapshot(row, sha=sha), client, principal)
             allowed = [
                 entry
@@ -1171,7 +1635,13 @@ class GitSourceService:
         if reason is None and reusable is not None:
             text, reason = reusable["text"], reusable["reason"]
             if text is not None:
-                analysis = analyze_file(entry["path"], text)
+                if (
+                    reusable["path"] == entry["path"]
+                    and reusable["analysis"].get("analyzer_version") == ANALYZER_VERSION
+                ):
+                    analysis = reusable["analysis"]
+                else:
+                    analysis = await asyncio.to_thread(analyze_file, entry["path"], text)
         elif reason is None:
             try:
                 blob = await client.read_blob(row["owner"], row["repo"], entry["sha"])
@@ -1188,7 +1658,7 @@ class GitSourceService:
                     raise GitSourceConflictError()
                 text, reason = prepare_text(blob.content)
                 if text is not None:
-                    analysis = analyze_file(entry["path"], text)
+                    analysis = await asyncio.to_thread(analyze_file, entry["path"], text)
         values = {
             "snapshot_id": snapshot["id"],
             "connection_id": row["id"],
@@ -1222,7 +1692,7 @@ class GitSourceService:
                     snapshot_id=snapshot["id"], path=entry["path"]
                 )
             elif text is not None:
-                fragments = text_fragments(text, max_chars=self.limits.max_fragment_chars)
+                fragments = text_fragments(text, max_chars=self.limits.max_fragment_chars, structure=analysis)
                 for offset in range(0, len(fragments), 250):
                     await db.sources.insert_fragments(
                         file_id=file["id"], fragments=fragments[offset:offset + 250]
@@ -1241,6 +1711,7 @@ class GitSourceService:
         path: str,
         offset: int = 0,
         max_chars: int = 8000,
+        line_start: int | None = None,
     ) -> GitFileRead:
         """Проверяет current ACL/remote access и читает bounded страницу точного Git source."""
         if offset < 0 or not 1 <= max_chars <= self.limits.max_fragment_chars:
@@ -1275,6 +1746,14 @@ class GitSourceService:
                 raise GitSourceIncompleteError()
             if file["state"] != "ready" or file["text"] is None:
                 raise GitSourceNotAvailableError()
+            if line_start is not None:
+                if line_start < 1 or offset:
+                    raise GitSourceValidationError()
+                for _ in range(line_start - 1):
+                    newline = file["text"].find("\n", offset)
+                    if newline < 0:
+                        raise GitSourceValidationError()
+                    offset = newline + 1
             if offset > len(file["text"]):
                 raise GitSourceValidationError()
             async with self.scope() as db:
@@ -1297,7 +1776,7 @@ class GitSourceService:
                 next_offset=offset + len(text) if offset + len(text) < len(file["text"]) else None,
                 total_chars=len(file["text"]),
                 line_start=file["text"][:offset].count("\n") + 1,
-                line_end=file["text"][: offset + len(text)].count("\n") + 1,
+                line_end=file["text"][:offset + max(0, len(text) - 1)].count("\n") + 1,
                 stale=snapshot["commit_sha"] != row["observed_sha"],
                 partial=not snapshot["complete"]
                 or snapshot["tree_truncated"]
@@ -1305,7 +1784,8 @@ class GitSourceService:
             )
 
     async def _readable_connections(
-        self, *, project_id: int, principal: Principal, connection_ids: tuple[int, ...] = ()
+        self, *, project_id: int, principal: Principal, connection_ids: tuple[int, ...] = (),
+        observe: bool = True,
     ) -> tuple[list[dict], list[int], bool]:
         if len(connection_ids) > 10:
             raise GitSourceValidationError()
@@ -1335,7 +1815,8 @@ class GitSourceService:
                 continue
             try:
                 async with self._open(
-                    project_id=project_id, connection_id=row["id"], principal=principal
+                    project_id=project_id, connection_id=row["id"], principal=principal,
+                    **({"observe": False} if not observe else {}),
                 ) as (current, _):
                     readable.append(current)
             except (
@@ -1371,19 +1852,29 @@ class GitSourceService:
         query: str,
         connection_ids: tuple[int, ...] = (),
         limit: int = 10,
+        sha: str | None = None,
     ) -> GitSearchResult:
         """FTS даёт кандидатов; текст возвращается лишь после live remote proof/current ACL."""
+        if sha:
+            try:
+                validate_git_sha(sha)
+            except ValueError:
+                raise GitSourceValidationError() from None
+            if len(connection_ids) != 1:
+                raise GitSourceValidationError()
         if not query.strip() or len(query) > 2000 or not 1 <= limit <= 30:
             raise GitSourceValidationError()
         rows, inaccessible, capped = await self._readable_connections(
-            project_id=project_id, principal=principal, connection_ids=connection_ids
+            project_id=project_id, principal=principal, connection_ids=connection_ids,
+            **({"observe": False} if sha is not None else {}),
         )
         by_id = {row["id"]: row for row in rows}
         async with self.scope() as db:
             await self._authorize(db, project_id=project_id, principal=principal)
             hits = (
                 await db.sources.search(
-                    project_id=project_id, connection_ids=tuple(by_id), query=query, limit=limit
+                    project_id=project_id, connection_ids=tuple(by_id), query=query, limit=limit,
+                    sha=sha, analyzer_version=ANALYZER_VERSION,
                 )
                 if rows
                 else []
@@ -1395,13 +1886,14 @@ class GitSourceService:
             items.append(
                 GitSearchHit(
                     **self._proof(row, hit).model_dump(),
-                    title=hit["path"],
+                    title=hit["path"], symbol_id=hit.get("symbol_id"),
+                    qualified_name=hit.get("qualified_name"), kind=hit.get("kind"),
                     source_url=self._file_url(row, hit),
                     excerpt=hit["excerpt"][:2000],
                     offset=hit["fragment_offset"],
                     line_start=hit["line_start"],
-                    line_end=hit["line_start"] + hit["excerpt"][:2000].count("\n"),
-                    stale=hit["commit_sha"] != row["observed_sha"],
+                    line_end=hit["line_start"] + hit["excerpt"][:2000][:-1].count("\n"),
+                    stale=hit["commit_sha"] != row.get("live_sha", row["observed_sha"]),
                     partial=not hit["snapshot_complete"]
                     or hit["tree_truncated"]
                     or bool(row["coverage"].get("failed_files")),
@@ -1412,10 +1904,11 @@ class GitSourceService:
             partial=capped
             or bool(inaccessible)
             or any(
-                row["indexed_sha"] != row["observed_sha"] or row["state"] != "ready" for row in rows
+                row["indexed_sha"] != row.get("live_sha", row["observed_sha"]) or row["state"] != "ready"
+                for row in rows
             )
             or any(item.partial or item.stale for item in items),
-            inaccessible_connection_ids=inaccessible,
+            inaccessible_connection_ids=[identifier for identifier in inaccessible if identifier in connection_ids],
             incomplete_reasons=self._budget_reasons(),
         )
 
@@ -1470,13 +1963,14 @@ class GitSourceService:
                 row["indexed_sha"] != row["observed_sha"] or row["state"] != "ready" for row in rows
             )
         )
-        manifest = (await self.list_connections(project_id=project_id, principal=principal)).items
+        manifest = [self._dto(row) for row in rows]
         return GitProjectMap(
             project_id=project_id,
             manifest=manifest,
             components=components,
             relations=relations[:500],
-            sources=[self._proof(by_id[file["connection_id"]], file) for file in files],
+            sources=[*(self._connection_proof(row) for row in rows),
+                     *(self._proof(by_id[file["connection_id"]], file) for file in files)],
             total_components=total,
             components_truncated=total > len(files),
             partial=partial,
@@ -1487,13 +1981,13 @@ class GitSourceService:
     def _map_relations(components: list[GitComponent]) -> list[dict]:
         # Каждый import прежде сканировал все файлы с повторным разбором path.
         # Индекс сохраняет те же suffix-match, порядок и неоднозначные цели.
-        by_suffix: dict[str, list[GitComponent]] = {}
+        by_suffix: dict[tuple[int, str, str], list[GitComponent]] = {}
         for component in components:
             parts = component.path.rsplit(".", 1)[0].split("/")
             for index in range(len(parts)):
                 suffix = "/".join(parts[index:])
                 if suffix:
-                    by_suffix.setdefault(suffix, []).append(component)
+                    by_suffix.setdefault((component.connection_id, component.commit_sha, suffix), []).append(component)
         relations = []
         for component in components:
             for imported in component.imports:
@@ -1501,7 +1995,7 @@ class GitSourceService:
                 suffix = name.replace(".", "/").lstrip("/")
                 candidates = [
                     other
-                    for other in by_suffix.get(suffix, [])
+                    for other in by_suffix.get((component.connection_id, component.commit_sha, suffix), [])
                     if other.file_id != component.file_id
                 ]
                 target = candidates[0] if len(candidates) == 1 else None
@@ -1559,7 +2053,7 @@ class GitSourceService:
         *,
         project_id: int,
         principal: Principal,
-        sources: Sequence[GitSourceProof | GitChangeProof],
+        sources: Sequence[GitSourceProof | GitChangeProof | GitConnectionProof],
     ) -> None:
         """Повторно проверяет все прочитанные источники, включая не выбранные моделью handles."""
         if len(sources) > 200 or any(source.project_id != project_id for source in sources):
@@ -1569,13 +2063,25 @@ class GitSourceService:
             grouped.setdefault(source.connection_id, []).append(source)
         checked = {}
         for connection_id, proofs in grouped.items():
+            metadata = any(isinstance(proof, GitConnectionProof) for proof in proofs)
             async with self._open(
-                project_id=project_id, connection_id=connection_id, principal=principal
+                project_id=project_id, connection_id=connection_id, principal=principal,
+                **({"observe": False} if metadata else {}),
             ) as (row, _):
                 if any(
                     proof.repository_id != row["repository_id"]
                     or proof.generation != row["generation"]
                     or proof.credential_revision != row["credential_revision"]
+                    for proof in proofs
+                ):
+                    raise GitSourceConflictError()
+                if any(
+                    isinstance(proof, GitConnectionProof)
+                    and (
+                        proof.source_id != f"git_connection:{connection_id}"
+                        or proof.entity_id != connection_id
+                        or proof.ref != row["ref"]
+                    )
                     for proof in proofs
                 ):
                     raise GitSourceConflictError()
@@ -2402,6 +2908,187 @@ class GitSourceService:
         )
         return True
 
+    async def _worker_lock(self, db, row, principal, lease_id):
+        current, _, project, _ = await self._load(
+            db,
+            project_id=row["project_id"],
+            connection_id=row["id"],
+            principal=principal,
+            for_update=True,
+        )
+        owner_id = current.get("project_owner_id", project.owner_id)
+        if owner_id != principal.user_id or owner_id != current["credential_owner_id"]:
+            raise GitSourceNotAvailableError()
+        if (
+            any(
+                current[key] != row[key]
+                for key in ("generation", "credential_revision", "observed_sha", "scope_hash")
+            )
+            or current["lease_id"] != lease_id
+        ):
+            raise GitSourceConflictError()
+        return current
+
+    @staticmethod
+    def _prepare_structure(file):
+        structure = file["analysis"]
+        if structure.get("analyzer_version") != ANALYZER_VERSION:
+            structure = extract_structure(file["path"], file["text"])
+        return resolve_snapshot({file["path"]: structure})[file["path"]]
+
+    async def _write_structure_file(self, repo, analysis, file, structure):
+        """Вставка одного файла и его checkpoint используют одну транзакцию."""
+        identifiers = {}
+        symbols = structure["symbols"]
+        for start in range(0, len(symbols), 250):
+            group = symbols[start : start + 250]
+            rows = []
+            for symbol in group:
+                rows.append(
+                    {
+                        **{
+                            field: symbol[field]
+                            for field in (
+                                "name",
+                                "qualified_name",
+                                "kind",
+                                "signature",
+                                "line_start",
+                                "line_end",
+                                "offset",
+                                "end_offset",
+                            )
+                        },
+                        "key_hash": hashlib.sha256(symbol["id"].encode()).hexdigest(),
+                        "search_name": "".join(ch for ch in symbol["name"].lower() if ch.isalnum())[
+                            :256
+                        ],
+                        "analysis_id": analysis["id"],
+                        "snapshot_id": analysis["snapshot_id"],
+                        "path": file["path"],
+                    }
+                )
+            stored = {item["key_hash"]: item["id"] for item in await repo.insert_symbols(rows=rows)}
+            identifiers.update(
+                {s["id"]: stored[r["key_hash"]] for s, r in zip(group, rows, strict=True)}
+            )
+        parents = [
+            (identifiers[s["id"]], identifiers[s["parent_id"]])
+            for s in symbols
+            if s["parent_id"] is not None
+        ]
+        for start in range(0, len(parents), 250):
+            await repo.set_symbol_parents(
+                analysis_id=analysis["id"], parents=dict(parents[start : start + 250])
+            )
+        rows = []
+        for edge in structure["relations"]:
+            target = (
+                identifiers.get(edge["target_symbol_id"])
+                if edge["target_path"] == file["path"]
+                else None
+            )
+            candidates = (
+                candidate_import_paths(file["path"], edge, structure["language"])
+                if edge["kind"] == "imports"
+                else []
+            )
+            # Imports must be resolved again with the entire snapshot available.
+            if candidates:
+                target = None
+            confidence = (
+                ("declared" if edge["kind"] == "contains" else "resolved")
+                if target and edge["resolution"] == "exact"
+                else ("candidate" if edge["resolution"] == "candidate" else "unresolved")
+            )
+            rows.append(
+                {
+                    "analysis_id": analysis["id"],
+                    "kind": edge["kind"],
+                    "confidence": confidence,
+                    "source_id": identifiers[edge["source_symbol_id"]],
+                    "target_id": target,
+                    "label": edge["target_name"],
+                    "line_start": edge["line_start"],
+                    "line_end": edge["line_end"],
+                    "imported_name": edge.get("imported_name"),
+                    "candidates": candidates,
+                }
+            )
+        for start in range(0, len(rows), 250):
+            await repo.insert_relations(rows=rows[start : start + 250])
+
+    async def _structure_batch(self, row, snapshot, principal, lease_id):
+        """Проверяет lease перед каждой транзакцией, CPU разбор выполняется вне DB."""
+        async with self.scope() as db:
+            await self._worker_lock(db, row, principal, lease_id)
+            analysis = await db.sources.analysis(
+                snapshot_id=snapshot["id"], version=ANALYZER_VERSION
+            )
+            if analysis is None:
+                analysis = await db.sources.start_analysis(
+                    snapshot_id=snapshot["id"], version=ANALYZER_VERSION
+                )
+            if analysis["state"] == "published":
+                return True
+            if analysis["state"] == "resolving":
+                edges = await db.sources.pending_relations(
+                    analysis_id=analysis["id"], cursor=analysis["cursor"], limit=100
+                )
+                for edge in edges:
+                    targets = await db.sources.import_targets(
+                        analysis_id=analysis["id"],
+                        paths=edge["candidates"],
+                        name=edge["imported_name"],
+                    )
+                    if len(targets) == 1:
+                        await db.sources.resolve_relation(
+                            analysis_id=analysis["id"],
+                            edge_id=edge["id"],
+                            target_id=targets[0]["id"],
+                        )
+                    elif targets:
+                        await db.sources.mark_ambiguous(
+                            analysis_id=analysis["id"], edge_id=edge["id"]
+                        )
+                data = {"cursor": edges[-1]["id"]} if edges else {}
+                finished = len(edges) < 100
+                if finished:
+                    counts = await db.sources.count_structure(analysis_id=analysis["id"])
+                    data.update(state="published", coverage={**analysis["coverage"], **counts})
+                await db.sources.advance_analysis(analysis_id=analysis["id"], data=data)
+                await db.unit_of_work.commit()
+                return finished
+            files = await db.sources.analysis_files(
+                snapshot_id=snapshot["id"], cursor=analysis["cursor"], limit=self.limits.batch_files
+            )
+            await db.unit_of_work.commit()
+        cursor, coverage = analysis["cursor"], dict(analysis["coverage"])
+        for file in files:
+            structure = await asyncio.to_thread(self._prepare_structure, file)
+            async with self.scope() as db:
+                await self._worker_lock(db, row, principal, lease_id)
+                await self._write_structure_file(db.sources, analysis, file, structure)
+                coverage["analyzed_files"] = coverage.get("analyzed_files", 0) + 1
+                reason = structure["coverage"].get("reason")
+                if reason:
+                    coverage["reasons"] = sorted(set(coverage.get("reasons", [])) | {reason})
+                    if reason == "structural_parser_unsupported":
+                        coverage["unsupported_files"] = coverage.get("unsupported_files", 0) + 1
+                cursor = file["id"]
+                await db.sources.advance_analysis(
+                    analysis_id=analysis["id"], data={"cursor": cursor, "coverage": coverage}
+                )
+                await db.unit_of_work.commit()
+        if len(files) < self.limits.batch_files:
+            async with self.scope() as db:
+                await self._worker_lock(db, row, principal, lease_id)
+                await db.sources.advance_analysis(
+                    analysis_id=analysis["id"], data={"state": "resolving", "cursor": 0}
+                )
+                await db.unit_of_work.commit()
+        return False
+
     async def _checkpoint(
         self,
         row: dict,
@@ -2482,6 +3169,54 @@ class GitSourceService:
             )
             await db.unit_of_work.commit()
 
+    async def _walk_tree(self, row, snapshot, client, principal, lease_id, job):
+        """Checkpoint одного незавершённого каталога на точном SHA дерева."""
+        coverage = dict(snapshot["coverage"])
+        pending = list(coverage.pop("tree_frontier", [("", snapshot["tree_sha"])]))
+        prefix, tree_sha = pending.pop(0)
+        try:
+            directory = await client.get_tree(row["owner"], row["repo"], tree_sha, recursive=False)
+        except GitHubClientError as error:
+            if isinstance(error, GitHubBudgetExceededError):
+                raise
+            await self._remote_failure(row, error)
+            raise GitSourceIncompleteError() from None
+        files = {item["path"]: item for item in snapshot["manifest"]}
+        for entry in directory.entries:
+            path = f"{prefix}/{entry.path}" if prefix else entry.path
+            if entry.type == "tree":
+                pending.append((path, entry.sha))
+            else:
+                files[path] = {**entry.model_dump(), "path": path}
+        incomplete = directory.truncated or "upstream_directory_truncated" in coverage.get(
+            "reasons", []
+        )
+        reasons = ["upstream_directory_truncated"] if incomplete else []
+        reasons.append("tree_walk" if pending else "preparing")
+        coverage.update(
+            total_files=len(files), truncated=incomplete or bool(pending), reasons=reasons
+        )
+        async with self.scope() as db:
+            await self._worker_lock(db, row, principal, lease_id)
+            await db.sources.update_snapshot(
+                snapshot_id=snapshot["id"],
+                data={
+                    "tree_truncated": coverage["truncated"],
+                    "manifest": list(files.values()),
+                    "coverage": {**coverage, "tree_frontier": pending},
+                },
+            )
+            await db.sources.update_job(job_id=job["id"], data={"cursor": 0, "bytes_processed": 0})
+            await db.sources.update_connection(
+                project_id=row["project_id"],
+                connection_id=row["id"],
+                expected_generation=row["generation"],
+                lease_id=lease_id,
+                data={"state": "partial", "coverage": coverage},
+            )
+            await db.unit_of_work.commit()
+        await self._release(row, lease_id=lease_id, soon=True)
+
     async def _index_batch(
         self, row: dict, client: GitHubClient, principal: Principal, lease_id: UUID
     ) -> bool:
@@ -2489,9 +3224,15 @@ class GitSourceService:
         async with self.scope() as db:
             job = await db.sources.get_job(connection_id=row["id"], generation=row["generation"])
         if snapshot["complete"]:
-            await self._publish(row, snapshot, job, principal=principal, lease_id=lease_id)
-            return False
+            if await self._structure_batch(row, snapshot, principal, lease_id):
+                await self._publish(row, snapshot, job, principal=principal, lease_id=lease_id)
+                return False
+            await self._release(row, lease_id=lease_id, soon=True)
+            return True
         snapshot = await self._tree(row, snapshot, client, principal)
+        if snapshot["tree_truncated"] and snapshot["coverage"].get("tree_frontier") != []:
+            await self._walk_tree(row, snapshot, client, principal, lease_id, job)
+            return True
         cursor, byte_count = job["cursor"], job["bytes_processed"]
         if cursor >= len(snapshot["manifest"]) and snapshot["coverage"].get("failed_files"):
             # Retry failed objects on a later reconciliation; cached successful files do no HTTP.
@@ -2535,15 +3276,7 @@ class GitSourceService:
                 error_code=error_code,
             )
         async with self.scope() as db:
-            current, _, _, _ = await self._load(
-                db,
-                project_id=row["project_id"],
-                connection_id=row["id"],
-                principal=principal,
-                for_update=True,
-            )
-            if current["generation"] != row["generation"] or current["lease_id"] != lease_id:
-                raise GitSourceConflictError()
+            await self._worker_lock(db, row, principal, lease_id)
             counts = await db.sources.snapshot_coverage(snapshot_id=snapshot["id"])
             finished = cursor >= len(snapshot["manifest"])
             truncated = snapshot["tree_truncated"]
@@ -2559,6 +3292,7 @@ class GitSourceService:
                     reason
                     for reason, present in (
                         ("tree_limit", snapshot["tree_truncated"]),
+                        ("upstream_directory_truncated", "upstream_directory_truncated" in snapshot["coverage"].get("reasons", [])),
                         ("metadata_only", counts["metadata_files"] > 0),
                         ("file_errors", counts["failed_files"] > 0),
                         ("read_error", error_code is not None),
@@ -2571,7 +3305,8 @@ class GitSourceService:
             }
             complete = finished and not truncated and error_code is None and not counts["failed_files"]
             await db.sources.update_snapshot(
-                snapshot_id=snapshot["id"], data={"complete": complete, "coverage": coverage}
+                snapshot_id=snapshot["id"], data={"complete": complete,
+                    "coverage": {**coverage, "tree_frontier": []} if truncated and not finished else coverage}
             )
             await db.sources.update_job(
                 job_id=job["id"],
@@ -2607,8 +3342,8 @@ class GitSourceService:
             more_due = bool(await db.sources.due_changes(connection_id=row["id"], limit=1))
             await db.unit_of_work.commit()
         await self._release(
-            row, lease_id=lease_id, soon=error_code is None and (not finished or more_due),
-            complete=complete and not more_due,
+            row, lease_id=lease_id, soon=error_code is None and (complete or not finished or more_due),
+            complete=False,
         )
         return not finished
 
@@ -2616,19 +3351,8 @@ class GitSourceService:
         self, row: dict, snapshot: dict, job: dict, *, principal: Principal, lease_id: UUID
     ) -> None:
         async with self.scope() as db:
-            current, _, _, _ = await self._load(
-                db,
-                project_id=row["project_id"],
-                connection_id=row["id"],
-                principal=principal,
-                for_update=True,
-            )
-            if (
-                current["generation"] != row["generation"]
-                or current["credential_revision"] != row["credential_revision"]
-                or current["observed_sha"] != snapshot["commit_sha"]
-                or current["lease_id"] != lease_id
-            ):
+            current = await self._worker_lock(db, row, principal, lease_id)
+            if current["observed_sha"] != snapshot["commit_sha"]:
                 raise GitSourceConflictError()
             await db.sources.update_job(job_id=job["id"], data={"state": "complete"})
             await db.sources.update_connection(

@@ -126,3 +126,12 @@ it("участнику недоступны настройка стадий и �
     expect(screen.queryByRole("button", { name: "Настроить" })).toBeNull();
     expect(screen.queryByLabelText("Новый секрет webhook")).toBeNull();
 });
+
+it("settings manage connections without requesting tree, source, search or maps", async () => {
+    const get = vi.spyOn(api, "get").mockResolvedValue({ items: [connection(1, "Frontend", "main")], total: 1, next_offset: null });
+    render(wrap(<ProjectGitSources projectId={7} canEdit collapsible />));
+    fireEvent.click(await screen.findByText("Управлять репозиториями"));
+    await screen.findByRole("heading", { name: "Frontend" });
+    expect(screen.getByRole("link", { name: "Исследовать код" }).getAttribute("href")).toContain("view=code&connection=1");
+    expect(get.mock.calls.every(([path]) => !/\/(tree|file|search|map|graph)[?/]?/.test(path))).toBe(true);
+});

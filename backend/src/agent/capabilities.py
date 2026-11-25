@@ -231,6 +231,10 @@ WORKFLOWS = (
                 "telos_search_git_sources",
                 "telos_read_git_file",
                 "telos_get_git_map",
+                "telos_list_git_snapshots",
+                "telos_list_git_symbols",
+                "telos_get_git_graph",
+                "telos_get_git_impact",
                 "telos_list_task_git_links",
             }
         ),

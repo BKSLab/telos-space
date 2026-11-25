@@ -56,11 +56,37 @@ export interface GitConnection {
     coverage: { total_files: number; cataloged_files: number; indexed_files: number; metadata_files: number; metadata_counts: Record<string, number>; failed_files: number; truncated: boolean };
 }
 export interface GitConnectionPage {
-    items: GitConnection[]; total: number; offset: number; limit: number; next_offset: number | null;
+    items: GitConnection[]; total: number | null; offset: number; limit: number; next_offset: number | null;
+    incomplete_reasons?: string[];
 }
 export interface GitSourceHit {
     connection_id: number; repository_id: number; commit_sha: string; path: string;
     source_url: string; title: string; excerpt: string; file_id: number; stale: boolean; partial: boolean;
+    symbol_id?: number; qualified_name?: string; kind?: string; line_start?: number; line_end?: number; offset?: number;
+}
+export interface GitStructureCoverage {
+    total_files: number; indexed_files: number; cataloged_files: number; metadata_files: number;
+    failed_files: number; symbols: number; relations: number; unsupported_files: number;
+    analyzed_files: number; reasons: string[];
+}
+export interface GitSnapshotInfo {
+    connection_id: number; commit_sha: string; complete: boolean; analyzer_version: string | null;
+    analysis_state: "absent" | "extracting" | "resolving" | "published"; coverage: GitStructureCoverage;
+}
+export interface GitSymbol {
+    id: number; file_id: number; path: string; qualified_name: string; name: string; kind: string;
+    parent_id: number | null; signature: string | null; line_start: number; line_end: number;
+    offset: number; end_offset: number;
+}
+export interface GitGraphEdge {
+    id: number; source_id: number; target_id: number | null; kind: string;
+    confidence: "declared" | "resolved" | "candidate" | "unresolved";
+    label: string; path: string; line_start: number; line_end: number;
+}
+export interface GitGraph {
+    connection_id: number; commit_sha: string; analyzer_version: string | null;
+    nodes: GitSymbol[]; edges: GitGraphEdge[]; truncated: boolean; coverage: GitStructureCoverage;
+    task_links?: { task_id: number; change_id: number; kind: string; provider_id: string; path: string }[];
 }
 export interface GitFilePage {
     text: string; source_url: string; path: string; commit_sha: string;
@@ -68,7 +94,7 @@ export interface GitFilePage {
     total_chars: number; stale: boolean; partial: boolean;
 }
 export interface GitTreeEntry {
-    path: string; sha: string; type: "blob" | "tree" | "commit";
+    path: string; sha: string | null; type: "blob" | "tree" | "commit";
     mode: "100644" | "100755" | "040000" | "120000" | "160000";
     size: number | null;
     index_state: "pending" | "ready" | "metadata" | "error";

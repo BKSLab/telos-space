@@ -2324,6 +2324,172 @@
       "write": false
     },
     {
+      "description": "Ограниченный граф символов одного подключения/SHA. dependency: потребитель → зависимость; containment отдельно. Уровни declared/resolved/candidate/unresolved не равнозначны runtime вызовам. truncated не доказывает отсутствия связей.",
+      "group": "tasks",
+      "id": "mcp-action-daefcd1011765a9a",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_id": {
+            "exclusiveMinimum": 0,
+            "title": "Connection Id",
+            "type": "integer"
+          },
+          "depth": {
+            "default": 1,
+            "maximum": 3,
+            "minimum": 1,
+            "title": "Depth",
+            "type": "integer"
+          },
+          "direction": {
+            "default": "both",
+            "enum": [
+              "in",
+              "out",
+              "both"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "relation": {
+            "default": "all",
+            "enum": [
+              "all",
+              "dependency",
+              "containment"
+            ],
+            "title": "Relation",
+            "type": "string"
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Root Id"
+          },
+          "sha": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{40}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sha"
+          }
+        },
+        "required": [
+          "connection_id"
+        ],
+        "title": "GitGraphInput",
+        "type": "object"
+      },
+      "kind": "action",
+      "name": "telos_get_git_graph",
+      "needsProject": true,
+      "ownerOnly": false,
+      "projectOptional": false,
+      "requiresConfirmation": false,
+      "scopes": [
+        "projects:read",
+        "knowledge:read"
+      ],
+      "summary": "Прочитать связи кода",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
+      "description": "Потенциально затронутые входящие зависимости с evidence и ограничением глубины. Не доказательство дефекта, успешного CI или выполнения задачи.",
+      "group": "tasks",
+      "id": "mcp-action-520c8774fe63f323",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_id": {
+            "exclusiveMinimum": 0,
+            "title": "Connection Id",
+            "type": "integer"
+          },
+          "depth": {
+            "default": 1,
+            "maximum": 3,
+            "minimum": 1,
+            "title": "Depth",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 50,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "sha": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{40}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sha"
+          },
+          "symbol_id": {
+            "exclusiveMinimum": 0,
+            "title": "Symbol Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connection_id",
+          "symbol_id"
+        ],
+        "title": "GitImpactInput",
+        "type": "object"
+      },
+      "kind": "action",
+      "name": "telos_get_git_impact",
+      "needsProject": true,
+      "ownerOnly": false,
+      "projectOptional": false,
+      "requiresConfirmation": false,
+      "scopes": [
+        "projects:read",
+        "knowledge:read",
+        "tasks:read"
+      ],
+      "summary": "Исследовать влияние символа",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
       "description": "Фактические компоненты, импорты и символы с manifest каждого репозитория. Не выводит цели проекта из названий файлов.",
       "group": "tasks",
       "id": "mcp-action-0d3348c4f801b160",
@@ -3235,6 +3401,158 @@
         "knowledge:read"
       ],
       "summary": "Найти репозитории проекта",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
+      "description": "Доступные закреплённые SHA одного подключения и полнота структурного анализа, с пагинацией. Чтение не запускает индексацию.",
+      "group": "tasks",
+      "id": "mcp-action-51c42e04c91316af",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_id": {
+            "exclusiveMinimum": 0,
+            "title": "Connection Id",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connection_id"
+        ],
+        "title": "GitSnapshotsInput",
+        "type": "object"
+      },
+      "kind": "action",
+      "name": "telos_list_git_snapshots",
+      "needsProject": true,
+      "ownerOnly": false,
+      "projectOptional": false,
+      "requiresConfirmation": false,
+      "scopes": [
+        "projects:read",
+        "knowledge:read"
+      ],
+      "summary": "Прочитать версии репозитория",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
+      "description": "Точные объявления, qualified name, сигнатуры и исходные строки одного подключения/SHA. next_offset продолжает список; исходник прочитай telos_read_git_file.",
+      "group": "tasks",
+      "id": "mcp-action-c46a9dca6c4e6ecf",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_id": {
+            "exclusiveMinimum": 0,
+            "title": "Connection Id",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Query"
+          },
+          "sha": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{40}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sha"
+          },
+          "symbol_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol Id"
+          }
+        },
+        "required": [
+          "connection_id"
+        ],
+        "title": "GitSymbolsInput",
+        "type": "object"
+      },
+      "kind": "action",
+      "name": "telos_list_git_symbols",
+      "needsProject": true,
+      "ownerOnly": false,
+      "projectOptional": false,
+      "requiresConfirmation": false,
+      "scopes": [
+        "projects:read",
+        "knowledge:read"
+      ],
+      "summary": "Найти символы Git",
       "tokens": [
         "READ",
         "WRITE"
@@ -4989,6 +5307,19 @@
             "minLength": 1,
             "title": "Query",
             "type": "string"
+          },
+          "sha": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{40}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sha"
           }
         },
         "required": [
@@ -24602,6 +24933,16 @@
           }
         },
         {
+          "in": "query",
+          "name": "verified",
+          "required": false,
+          "schema": {
+            "default": false,
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        {
           "in": "header",
           "name": "Authorization",
           "required": false,
@@ -25450,6 +25791,23 @@
           }
         },
         {
+          "in": "query",
+          "name": "line_start",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Start"
+          }
+        },
+        {
           "in": "header",
           "name": "Authorization",
           "required": false,
@@ -25522,6 +25880,695 @@
         "projects:read"
       ],
       "summary": "Прочитать точный Git-файл",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ]
+    },
+    {
+      "access": "authenticated",
+      "description": "Ограниченный граф одного снимка с доказательствами.",
+      "group": "git-sources",
+      "id": "api-9891ba4c2550d288",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/git/connections/{connection_id}/graph",
+      "operationId": "getGitGraph",
+      "parameters": [
+        {
+          "description": "ID доступного проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "ID доступного проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "ID подключения внутри этого проекта.",
+          "in": "path",
+          "name": "connection_id",
+          "required": true,
+          "schema": {
+            "description": "ID подключения внутри этого проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Connection Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "sha",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha"
+          }
+        },
+        {
+          "in": "query",
+          "name": "root_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id"
+          }
+        },
+        {
+          "in": "query",
+          "name": "direction",
+          "required": false,
+          "schema": {
+            "default": "both",
+            "enum": [
+              "in",
+              "out",
+              "both"
+            ],
+            "title": "Direction",
+            "type": "string"
+          }
+        },
+        {
+          "in": "query",
+          "name": "relation",
+          "required": false,
+          "schema": {
+            "default": "all",
+            "enum": [
+              "all",
+              "dependency",
+              "containment"
+            ],
+            "title": "Relation",
+            "type": "string"
+          }
+        },
+        {
+          "in": "query",
+          "name": "depth",
+          "required": false,
+          "schema": {
+            "default": 1,
+            "maximum": 4,
+            "minimum": 1,
+            "title": "Depth",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "default": 50,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/git/connections/{connection_id}/graph",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitGraph"
+              }
+            }
+          },
+          "description": "Узлы, связи, координаты и граница охвата."
+        },
+        "401": {
+          "description": "Требуется действующая локальная аутентификация."
+        },
+        "403": {
+          "description": "Недостаточно текущих scopes/прав владельца."
+        },
+        "404": {
+          "description": "Объект отсутствует или недоступен."
+        },
+        "409": {
+          "description": "Изменились версия, generation или связь."
+        },
+        "422": {
+          "description": "Недопустимые параметры без отражения secret input."
+        },
+        "500": {
+          "description": "Ошибка обработки Git."
+        },
+        "503": {
+          "description": "Источник/credentials не готовы либо исчерпан ограниченный бюджет."
+        }
+      },
+      "scopes": null,
+      "summary": "Прочитать граф структуры Git",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ]
+    },
+    {
+      "access": "authenticated",
+      "description": "Входящие подтверждённые зависимости и задачи с доказанными изменениями путей.",
+      "group": "git-sources",
+      "id": "api-542b17bf52169e27",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/git/connections/{connection_id}/impact",
+      "operationId": "getCodeImpact",
+      "parameters": [
+        {
+          "description": "ID доступного проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "ID доступного проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "ID подключения внутри этого проекта.",
+          "in": "path",
+          "name": "connection_id",
+          "required": true,
+          "schema": {
+            "description": "ID подключения внутри этого проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Connection Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "symbol_id",
+          "required": true,
+          "schema": {
+            "exclusiveMinimum": 0,
+            "title": "Symbol Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "sha",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha"
+          }
+        },
+        {
+          "in": "query",
+          "name": "depth",
+          "required": false,
+          "schema": {
+            "default": 2,
+            "maximum": 4,
+            "minimum": 1,
+            "title": "Depth",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "default": 50,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/git/connections/{connection_id}/impact",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitImpact"
+              }
+            }
+          },
+          "description": "Ограниченный граф зависимости и проверенные связи задач."
+        },
+        "401": {
+          "description": "Требуется действующая локальная аутентификация."
+        },
+        "403": {
+          "description": "Недостаточно текущих scopes/прав владельца."
+        },
+        "404": {
+          "description": "Объект отсутствует или недоступен."
+        },
+        "409": {
+          "description": "Изменились версия, generation или связь."
+        },
+        "422": {
+          "description": "Недопустимые параметры без отражения secret input."
+        },
+        "500": {
+          "description": "Ошибка обработки Git."
+        },
+        "503": {
+          "description": "Источник/credentials не готовы либо исчерпан ограниченный бюджет."
+        }
+      },
+      "scopes": null,
+      "summary": "Оценить потенциальное влияние",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ]
+    },
+    {
+      "access": "authenticated",
+      "description": "Снимки разрешённого подключения после текущей проверки GitHub.",
+      "group": "git-sources",
+      "id": "api-7b9fa3be80637009",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/git/connections/{connection_id}/snapshots",
+      "operationId": "listGitSnapshots",
+      "parameters": [
+        {
+          "description": "ID доступного проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "ID доступного проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "ID подключения внутри этого проекта.",
+          "in": "path",
+          "name": "connection_id",
+          "required": true,
+          "schema": {
+            "description": "ID подключения внутри этого проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Connection Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "offset",
+          "required": false,
+          "schema": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "default": 30,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/git/connections/{connection_id}/snapshots",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitSnapshotPage"
+              }
+            }
+          },
+          "description": "Страница записанных версий с состоянием анализа."
+        },
+        "401": {
+          "description": "Требуется действующая локальная аутентификация."
+        },
+        "403": {
+          "description": "Недостаточно текущих scopes/прав владельца."
+        },
+        "404": {
+          "description": "Объект отсутствует или недоступен."
+        },
+        "409": {
+          "description": "Изменились версия, generation или связь."
+        },
+        "422": {
+          "description": "Недопустимые параметры без отражения secret input."
+        },
+        "500": {
+          "description": "Ошибка обработки Git."
+        },
+        "503": {
+          "description": "Источник/credentials не готовы либо исчерпан ограниченный бюджет."
+        }
+      },
+      "scopes": null,
+      "summary": "Доступные версии репозитория",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ]
+    },
+    {
+      "access": "authenticated",
+      "description": "Чтение опубликованного структурного индекса закреплённого снимка.",
+      "group": "git-sources",
+      "id": "api-74c2fc2593ed9988",
+      "kind": "http",
+      "method": "GET",
+      "name": "GET /api/v1/projects/{project_id}/git/connections/{connection_id}/symbols",
+      "operationId": "listGitSymbols",
+      "parameters": [
+        {
+          "description": "ID доступного проекта.",
+          "in": "path",
+          "name": "project_id",
+          "required": true,
+          "schema": {
+            "description": "ID доступного проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Project Id",
+            "type": "integer"
+          }
+        },
+        {
+          "description": "ID подключения внутри этого проекта.",
+          "in": "path",
+          "name": "connection_id",
+          "required": true,
+          "schema": {
+            "description": "ID подключения внутри этого проекта.",
+            "exclusiveMinimum": 0,
+            "title": "Connection Id",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "sha",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha"
+          }
+        },
+        {
+          "in": "query",
+          "name": "path",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          }
+        },
+        {
+          "in": "query",
+          "name": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          }
+        },
+        {
+          "in": "query",
+          "name": "symbol_id",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol Id"
+          }
+        },
+        {
+          "in": "query",
+          "name": "offset",
+          "required": false,
+          "schema": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "query",
+          "name": "limit",
+          "required": false,
+          "schema": {
+            "default": 50,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Authorization",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        },
+        {
+          "in": "cookie",
+          "name": "telos_session",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telos Session"
+          }
+        }
+      ],
+      "path": "/api/v1/projects/{project_id}/git/connections/{connection_id}/symbols",
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitSymbolPage"
+              }
+            }
+          },
+          "description": "Страница символов с координатами и охватом."
+        },
+        "401": {
+          "description": "Требуется действующая локальная аутентификация."
+        },
+        "403": {
+          "description": "Недостаточно текущих scopes/прав владельца."
+        },
+        "404": {
+          "description": "Объект отсутствует или недоступен."
+        },
+        "409": {
+          "description": "Изменились версия, generation или связь."
+        },
+        "422": {
+          "description": "Недопустимые параметры без отражения secret input."
+        },
+        "500": {
+          "description": "Ошибка обработки Git."
+        },
+        "503": {
+          "description": "Источник/credentials не готовы либо исчерпан ограниченный бюджет."
+        }
+      },
+      "scopes": null,
+      "summary": "Найти объявления Git",
       "tokens": [
         "READ",
         "WRITE"
@@ -25699,6 +26746,16 @@
             "maxLength": 4096,
             "title": "Prefix",
             "type": "string"
+          }
+        },
+        {
+          "in": "query",
+          "name": "children",
+          "required": false,
+          "schema": {
+            "default": false,
+            "title": "Children",
+            "type": "boolean"
           }
         },
         {
@@ -26065,6 +27122,23 @@
               }
             ],
             "title": "Connection Id"
+          }
+        },
+        {
+          "in": "query",
+          "name": "sha",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha"
           }
         },
         {
@@ -44468,6 +45542,206 @@
       "write": false
     },
     {
+      "description": "Ограниченный граф символов exact repository/SHA. Containment отдельно от dependency; candidate/unresolved не доказанные runtime calls. Требует право knowledge:read.",
+      "group": "tasks",
+      "id": "mcp-daefcd1011765a9a",
+      "inputSchema": {
+        "$defs": {
+          "GitGraphInput": {
+            "additionalProperties": false,
+            "properties": {
+              "connection_id": {
+                "exclusiveMinimum": 0,
+                "title": "Connection Id",
+                "type": "integer"
+              },
+              "depth": {
+                "default": 1,
+                "maximum": 3,
+                "minimum": 1,
+                "title": "Depth",
+                "type": "integer"
+              },
+              "direction": {
+                "default": "both",
+                "enum": [
+                  "in",
+                  "out",
+                  "both"
+                ],
+                "title": "Direction",
+                "type": "string"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "relation": {
+                "default": "all",
+                "enum": [
+                  "all",
+                  "dependency",
+                  "containment"
+                ],
+                "title": "Relation",
+                "type": "string"
+              },
+              "root_id": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Root Id"
+              },
+              "sha": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{40}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Sha"
+              }
+            },
+            "required": [
+              "connection_id"
+            ],
+            "title": "GitGraphInput",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "$ref": "#/$defs/GitGraphInput"
+          },
+          "project_key": {
+            "title": "Project Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_key",
+          "arguments"
+        ],
+        "title": "get_git_graphArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "name": "telos_get_git_graph",
+      "outputSchema": null,
+      "scopes": [
+        "knowledge:read",
+        "projects:read"
+      ],
+      "summary": "Связи кода",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
+      "description": "Потенциальные входящие зависимости символа с evidence и ограничениями. Не подтверждает дефект или завершение задачи. Требует право knowledge:read.",
+      "group": "tasks",
+      "id": "mcp-520c8774fe63f323",
+      "inputSchema": {
+        "$defs": {
+          "GitImpactInput": {
+            "additionalProperties": false,
+            "properties": {
+              "connection_id": {
+                "exclusiveMinimum": 0,
+                "title": "Connection Id",
+                "type": "integer"
+              },
+              "depth": {
+                "default": 1,
+                "maximum": 3,
+                "minimum": 1,
+                "title": "Depth",
+                "type": "integer"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "sha": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{40}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Sha"
+              },
+              "symbol_id": {
+                "exclusiveMinimum": 0,
+                "title": "Symbol Id",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "connection_id",
+              "symbol_id"
+            ],
+            "title": "GitImpactInput",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "$ref": "#/$defs/GitImpactInput"
+          },
+          "project_key": {
+            "title": "Project Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_key",
+          "arguments"
+        ],
+        "title": "get_git_impactArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "name": "telos_get_git_impact",
+      "outputSchema": null,
+      "scopes": [
+        "knowledge:read",
+        "projects:read",
+        "tasks:read"
+      ],
+      "summary": "Влияние изменения кода",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
       "description": "Компоненты/импорты/символы и отдельный manifest каждого репозитория. Требует право knowledge:read.",
       "group": "tasks",
       "id": "mcp-0d3348c4f801b160",
@@ -44939,6 +46213,192 @@
         "projects:read"
       ],
       "summary": "Репозитории проекта",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
+      "description": "Доступные закреплённые SHA подключения и охват анализа с пагинацией. Без запуска индексации. Требует право knowledge:read.",
+      "group": "tasks",
+      "id": "mcp-51c42e04c91316af",
+      "inputSchema": {
+        "$defs": {
+          "GitSnapshotsInput": {
+            "additionalProperties": false,
+            "properties": {
+              "connection_id": {
+                "exclusiveMinimum": 0,
+                "title": "Connection Id",
+                "type": "integer"
+              },
+              "limit": {
+                "default": 20,
+                "maximum": 50,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "offset": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Offset",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "connection_id"
+            ],
+            "title": "GitSnapshotsInput",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "$ref": "#/$defs/GitSnapshotsInput"
+          },
+          "project_key": {
+            "title": "Project Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_key",
+          "arguments"
+        ],
+        "title": "list_git_snapshotsArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "name": "telos_list_git_snapshots",
+      "outputSchema": null,
+      "scopes": [
+        "knowledge:read",
+        "projects:read"
+      ],
+      "summary": "Версии репозитория",
+      "tokens": [
+        "READ",
+        "WRITE"
+      ],
+      "write": false
+    },
+    {
+      "description": "Точные объявления, qualified names и диапазоны одного подключения/SHA. Исходник читать telos_read_git_file. Требует право knowledge:read.",
+      "group": "tasks",
+      "id": "mcp-c46a9dca6c4e6ecf",
+      "inputSchema": {
+        "$defs": {
+          "GitSymbolsInput": {
+            "additionalProperties": false,
+            "properties": {
+              "connection_id": {
+                "exclusiveMinimum": 0,
+                "title": "Connection Id",
+                "type": "integer"
+              },
+              "limit": {
+                "default": 20,
+                "maximum": 50,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "offset": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Offset",
+                "type": "integer"
+              },
+              "path": {
+                "anyOf": [
+                  {
+                    "maxLength": 4096,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Path"
+              },
+              "query": {
+                "anyOf": [
+                  {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Query"
+              },
+              "sha": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{40}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Sha"
+              },
+              "symbol_id": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Symbol Id"
+              }
+            },
+            "required": [
+              "connection_id"
+            ],
+            "title": "GitSymbolsInput",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "$ref": "#/$defs/GitSymbolsInput"
+          },
+          "project_key": {
+            "title": "Project Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_key",
+          "arguments"
+        ],
+        "title": "list_git_symbolsArguments",
+        "type": "object"
+      },
+      "kind": "mcp",
+      "name": "telos_list_git_symbols",
+      "outputSchema": null,
+      "scopes": [
+        "knowledge:read",
+        "projects:read"
+      ],
+      "summary": "Символы кода",
       "tokens": [
         "READ",
         "WRITE"
@@ -46516,6 +47976,19 @@
                 "minLength": 1,
                 "title": "Query",
                 "type": "string"
+              },
+              "sha": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{40}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Sha"
               }
             },
             "required": [
@@ -57556,6 +59029,13 @@
     },
     "GitConnectionPage": {
       "properties": {
+        "incomplete_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Incomplete Reasons",
+          "type": "array"
+        },
         "items": {
           "items": {
             "$ref": "#/components/schemas/GitConnection"
@@ -57583,8 +59063,15 @@
           "type": "integer"
         },
         "total": {
-          "title": "Total",
-          "type": "integer"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Total"
         }
       },
       "required": [
@@ -57595,6 +59082,69 @@
         "next_offset"
       ],
       "title": "GitConnectionPage",
+      "type": "object"
+    },
+    "GitConnectionProof": {
+      "additionalProperties": false,
+      "description": "Identity текущей привязки для поздней проверки metadata в ответе Ариса.",
+      "properties": {
+        "connection_id": {
+          "exclusiveMinimum": 0.0,
+          "title": "Connection Id",
+          "type": "integer"
+        },
+        "credential_revision": {
+          "minimum": 0.0,
+          "title": "Credential Revision",
+          "type": "integer"
+        },
+        "entity_id": {
+          "exclusiveMinimum": 0.0,
+          "title": "Entity Id",
+          "type": "integer"
+        },
+        "entity_type": {
+          "const": "git_connection",
+          "default": "git_connection",
+          "title": "Entity Type",
+          "type": "string"
+        },
+        "generation": {
+          "minimum": 1.0,
+          "title": "Generation",
+          "type": "integer"
+        },
+        "project_id": {
+          "exclusiveMinimum": 0.0,
+          "title": "Project Id",
+          "type": "integer"
+        },
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        },
+        "repository_id": {
+          "exclusiveMinimum": 0.0,
+          "title": "Repository Id",
+          "type": "integer"
+        },
+        "source_id": {
+          "pattern": "^git_connection:[1-9][0-9]*$",
+          "title": "Source Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "entity_id",
+        "project_id",
+        "connection_id",
+        "repository_id",
+        "ref",
+        "generation",
+        "credential_revision"
+      ],
+      "title": "GitConnectionProof",
       "type": "object"
     },
     "GitConnectionUpdate": {
@@ -57767,6 +59317,57 @@
       "title": "GitCoverage",
       "type": "object"
     },
+    "GitDirectoryEntry": {
+      "description": "Каталог, восстановленный по записанным путям старого manifest.",
+      "properties": {
+        "index_reason": {
+          "title": "Index Reason",
+          "type": "null"
+        },
+        "index_state": {
+          "const": "metadata",
+          "default": "metadata",
+          "title": "Index State",
+          "type": "string"
+        },
+        "mode": {
+          "const": "040000",
+          "default": "040000",
+          "title": "Mode",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sha"
+        },
+        "size": {
+          "title": "Size",
+          "type": "null"
+        },
+        "type": {
+          "const": "tree",
+          "default": "tree",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "GitDirectoryEntry",
+      "type": "object"
+    },
     "GitEventAccepted": {
       "properties": {
         "accepted": {
@@ -57896,6 +59497,30 @@
       "additionalProperties": false,
       "description": "Изменение одного пути; отсутствие patch не означает отсутствие изменения.",
       "properties": {
+        "additions": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Additions"
+        },
+        "deletions": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Deletions"
+        },
         "filename": {
           "description": "Путь после изменения.",
           "examples": [
@@ -58120,6 +59745,61 @@
       "title": "GitFileRead",
       "type": "object"
     },
+    "GitGraph": {
+      "properties": {
+        "analyzer_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Analyzer Version"
+        },
+        "commit_sha": {
+          "title": "Commit Sha",
+          "type": "string"
+        },
+        "connection_id": {
+          "title": "Connection Id",
+          "type": "integer"
+        },
+        "coverage": {
+          "$ref": "#/components/schemas/GitStructureCoverage"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/components/schemas/GitStructureEdge"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/components/schemas/GitStructureSymbol"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "connection_id",
+        "commit_sha",
+        "analyzer_version",
+        "coverage",
+        "nodes",
+        "edges",
+        "truncated"
+      ],
+      "title": "GitGraph",
+      "type": "object"
+    },
     "GitHubProfile": {
       "properties": {
         "account": {
@@ -58159,6 +59839,101 @@
         "token"
       ],
       "title": "GitHubProfileUpdate",
+      "type": "object"
+    },
+    "GitImpact": {
+      "properties": {
+        "analyzer_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Analyzer Version"
+        },
+        "commit_sha": {
+          "title": "Commit Sha",
+          "type": "string"
+        },
+        "connection_id": {
+          "title": "Connection Id",
+          "type": "integer"
+        },
+        "coverage": {
+          "$ref": "#/components/schemas/GitStructureCoverage"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/components/schemas/GitStructureEdge"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/components/schemas/GitStructureSymbol"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "task_links": {
+          "items": {
+            "$ref": "#/components/schemas/GitImpactLink"
+          },
+          "title": "Task Links",
+          "type": "array"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "connection_id",
+        "commit_sha",
+        "analyzer_version",
+        "coverage",
+        "nodes",
+        "edges",
+        "truncated"
+      ],
+      "title": "GitImpact",
+      "type": "object"
+    },
+    "GitImpactLink": {
+      "properties": {
+        "change_id": {
+          "title": "Change Id",
+          "type": "integer"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "change_id",
+        "kind",
+        "provider_id",
+        "path"
+      ],
+      "title": "GitImpactLink",
       "type": "object"
     },
     "GitProjectMap": {
@@ -58207,7 +59982,14 @@
         },
         "sources": {
           "items": {
-            "$ref": "#/components/schemas/GitSourceProof"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitSourceProof"
+              },
+              {
+                "$ref": "#/components/schemas/GitConnectionProof"
+              }
+            ]
           },
           "title": "Sources",
           "type": "array"
@@ -58236,6 +60018,55 @@
         }
       },
       "title": "GitQueued",
+      "type": "object"
+    },
+    "GitRecordedSnapshot": {
+      "properties": {
+        "analysis_state": {
+          "default": "absent",
+          "enum": [
+            "absent",
+            "extracting",
+            "resolving",
+            "published"
+          ],
+          "title": "Analysis State",
+          "type": "string"
+        },
+        "analyzer_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Analyzer Version"
+        },
+        "commit_sha": {
+          "title": "Commit Sha",
+          "type": "string"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "connection_id": {
+          "title": "Connection Id",
+          "type": "integer"
+        },
+        "coverage": {
+          "$ref": "#/components/schemas/GitStructureCoverage"
+        }
+      },
+      "required": [
+        "connection_id",
+        "commit_sha",
+        "complete",
+        "coverage"
+      ],
+      "title": "GitRecordedSnapshot",
       "type": "object"
     },
     "GitRepositoryPage": {
@@ -58376,6 +60207,17 @@
           "title": "Generation",
           "type": "integer"
         },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Kind"
+        },
         "line_end": {
           "title": "Line End",
           "type": "integer"
@@ -58401,6 +60243,17 @@
           "title": "Project Id",
           "type": "integer"
         },
+        "qualified_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Qualified Name"
+        },
         "ref": {
           "title": "Ref",
           "type": "string"
@@ -58422,6 +60275,17 @@
         "stale": {
           "title": "Stale",
           "type": "boolean"
+        },
+        "symbol_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Symbol Id"
         },
         "text_hash": {
           "pattern": "^[0-9a-f]{64}$",
@@ -58492,6 +60356,34 @@
         "partial"
       ],
       "title": "GitSearchResult",
+      "type": "object"
+    },
+    "GitSnapshotPage": {
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/components/schemas/GitRecordedSnapshot"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Offset"
+        }
+      },
+      "required": [
+        "items",
+        "next_offset"
+      ],
+      "title": "GitSnapshotPage",
       "type": "object"
     },
     "GitSourceProof": {
@@ -58582,6 +60474,305 @@
         "credential_revision"
       ],
       "title": "GitSourceProof",
+      "type": "object"
+    },
+    "GitStructureCoverage": {
+      "properties": {
+        "analyzed_files": {
+          "default": 0,
+          "title": "Analyzed Files",
+          "type": "integer"
+        },
+        "cataloged_files": {
+          "default": 0,
+          "title": "Cataloged Files",
+          "type": "integer"
+        },
+        "commit_sha": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Commit Sha"
+        },
+        "failed_files": {
+          "default": 0,
+          "title": "Failed Files",
+          "type": "integer"
+        },
+        "generation": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Generation"
+        },
+        "indexed_files": {
+          "default": 0,
+          "title": "Indexed Files",
+          "type": "integer"
+        },
+        "metadata_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Metadata Counts",
+          "type": "object"
+        },
+        "metadata_files": {
+          "default": 0,
+          "title": "Metadata Files",
+          "type": "integer"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "relations": {
+          "default": 0,
+          "title": "Relations",
+          "type": "integer"
+        },
+        "symbols": {
+          "default": 0,
+          "title": "Symbols",
+          "type": "integer"
+        },
+        "total_files": {
+          "default": 0,
+          "title": "Total Files",
+          "type": "integer"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "unresolved": {
+          "default": 0,
+          "title": "Unresolved",
+          "type": "integer"
+        },
+        "unsupported_files": {
+          "default": 0,
+          "title": "Unsupported Files",
+          "type": "integer"
+        }
+      },
+      "title": "GitStructureCoverage",
+      "type": "object"
+    },
+    "GitStructureEdge": {
+      "properties": {
+        "confidence": {
+          "enum": [
+            "declared",
+            "resolved",
+            "candidate",
+            "unresolved"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "line_end": {
+          "title": "Line End",
+          "type": "integer"
+        },
+        "line_start": {
+          "title": "Line Start",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "integer"
+        },
+        "target_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Target Id"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "target_id",
+        "kind",
+        "confidence",
+        "label",
+        "path",
+        "line_start",
+        "line_end"
+      ],
+      "title": "GitStructureEdge",
+      "type": "object"
+    },
+    "GitStructureSymbol": {
+      "properties": {
+        "end_offset": {
+          "title": "End Offset",
+          "type": "integer"
+        },
+        "file_id": {
+          "title": "File Id",
+          "type": "integer"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "line_end": {
+          "title": "Line End",
+          "type": "integer"
+        },
+        "line_start": {
+          "title": "Line Start",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "offset": {
+          "title": "Offset",
+          "type": "integer"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Id"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "qualified_name": {
+          "title": "Qualified Name",
+          "type": "string"
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Signature"
+        }
+      },
+      "required": [
+        "id",
+        "file_id",
+        "path",
+        "qualified_name",
+        "name",
+        "kind",
+        "parent_id",
+        "signature",
+        "line_start",
+        "line_end",
+        "offset",
+        "end_offset"
+      ],
+      "title": "GitStructureSymbol",
+      "type": "object"
+    },
+    "GitSymbolPage": {
+      "properties": {
+        "analyzer_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Analyzer Version"
+        },
+        "commit_sha": {
+          "title": "Commit Sha",
+          "type": "string"
+        },
+        "connection_id": {
+          "title": "Connection Id",
+          "type": "integer"
+        },
+        "coverage": {
+          "$ref": "#/components/schemas/GitStructureCoverage"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/components/schemas/GitStructureSymbol"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Offset"
+        }
+      },
+      "required": [
+        "connection_id",
+        "commit_sha",
+        "analyzer_version",
+        "coverage",
+        "items",
+        "next_offset"
+      ],
+      "title": "GitSymbolPage",
       "type": "object"
     },
     "GitTaskCandidate": {
@@ -59012,7 +61203,14 @@
         },
         "items": {
           "items": {
-            "$ref": "#/components/schemas/GitTreeEntry"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitTreeEntry"
+              },
+              {
+                "$ref": "#/components/schemas/GitDirectoryEntry"
+              }
+            ]
           },
           "title": "Items",
           "type": "array"
